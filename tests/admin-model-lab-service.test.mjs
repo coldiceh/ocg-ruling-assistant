@@ -2561,6 +2561,10 @@ test("provided closed scope accepts verified retrieval identities without admitt
       name: "正式卡名",
       aliases: ["用户新译名", "正式卡名"],
       identityVerificationStatus: "verified_external_replacement",
+      externalSurfaceResolution: "unique_exact_provider_alias",
+      externalSurfaceMatchKind: "provider_alias_exact",
+      externalSurfaceCompatible: true,
+      externalIdentityUniqueConvergence: true,
       resolutionSource: "external_identity_verification",
     }, {
       input: "本地精确卡",
@@ -2604,6 +2608,165 @@ test("provided closed scope accepts verified retrieval identities without admitt
   assert.deepEqual(resolution.unresolvedMentions, []);
   assert.equal(resolution.resolvedCards[0].cid, "24680");
   assert.equal(resolution.resolvedCards[1].name, "本地精确卡");
+});
+
+test("provided closed scope accepts one externally verified resolution of an initial ambiguity", async () => {
+  const fixture = makeFixture();
+  const userSurface = "匿名初始歧义名";
+  fixture.preparationCardNameCandidates = [{ name: userSurface, originalText: userSurface }];
+  fixture.preparedCardResolution = {
+    resolvedCards: [],
+    unresolvedMentions: [],
+    ambiguousMentions: [{
+      input: userSurface,
+      reason: "local_card_identity_ambiguous",
+      candidateCards: [{ id: "old-a" }, { id: "old-b" }],
+    }],
+    omittedResolvedCards: [],
+    userProvidedCardTexts: [],
+    modelCardNameCandidates: fixture.preparationCardNameCandidates,
+  };
+  fixture.data.cards.push({ id: "card-canonical-ambiguous", name: "匿名规范卡", text: "完整卡文。" });
+  fixture.retrieval.cardResolution = {
+    ...fixture.preparedCardResolution,
+    resolvedCards: [{
+      input: userSurface,
+      matchedQuery: userSurface,
+      id: "card-canonical-ambiguous",
+      cardId: "card-canonical-ambiguous",
+      cid: "24681",
+      passcode: "12345679",
+      name: "匿名规范卡",
+      aliases: [userSurface, "匿名规范卡"],
+      identityVerificationStatus: "verified_external_resolution",
+      identityVerificationSource: "provider_surface_unique_identity",
+      externalSurfaceResolution: "unique_exact_provider_alias",
+      externalSurfaceMatchKind: "provider_alias_exact",
+      externalSurfaceCompatible: true,
+      externalIdentityUniqueConvergence: true,
+    }],
+    unresolvedMentions: [],
+    ambiguousMentions: [],
+  };
+  fixture.retrieval.retrievedCards = fixture.retrieval.cardResolution.resolvedCards;
+  const service = makeService(fixture);
+  const created = await service.createRun({
+    body: {
+      question: "初始歧义名对应的匿名裁定问题。",
+      cardNameCandidates: [userSurface],
+      finalAttemptPolicy: "single",
+    },
+  });
+
+  const execution = await service.executeRun({ runId: created.runId });
+  const resolution = execution.run.evidenceSnapshot.evidence.cardResolution;
+
+  assert.deepEqual(resolution.resolvedCards.map((card) => card.id), ["card-canonical-ambiguous"]);
+  assert.deepEqual(resolution.unresolvedMentions, []);
+  assert.deepEqual(resolution.ambiguousMentions, []);
+});
+
+test("provided closed scope replaces a provisional local edit only after external verification", async () => {
+  const fixture = makeFixture();
+  const userSurface = "匿名近似译名";
+  fixture.preparationCardNameCandidates = [{ name: userSurface, originalText: userSurface }];
+  fixture.preparedCardResolution = {
+    resolvedCards: [{
+      input: userSurface,
+      id: "wrong-local-edit",
+      cardId: "wrong-local-edit",
+      name: "匿名近似错误候选",
+      identityMatchKind: "edit_distance",
+      requiresExternalIdentityVerification: true,
+    }],
+    unresolvedMentions: [],
+    ambiguousMentions: [],
+    omittedResolvedCards: [],
+    userProvidedCardTexts: [],
+    modelCardNameCandidates: fixture.preparationCardNameCandidates,
+  };
+  fixture.data.cards.push(
+    { id: "wrong-local-edit", name: "匿名近似错误候选", text: "错误候选卡文。" },
+    { id: "verified-canonical", name: "匿名外部规范卡", text: "验证后的完整卡文。" },
+  );
+  fixture.retrieval.cardResolution = {
+    ...fixture.preparedCardResolution,
+    resolvedCards: [{
+      input: userSurface,
+      matchedQuery: userSurface,
+      id: "verified-canonical",
+      cardId: "verified-canonical",
+      cid: "24682",
+      passcode: "12345680",
+      name: "匿名外部规范卡",
+      identityVerificationStatus: "verified_external_replacement",
+      externalSurfaceResolution: "unique_exact_provider_alias",
+      externalSurfaceMatchKind: "provider_alias_exact",
+      externalSurfaceCompatible: true,
+      externalIdentityUniqueConvergence: true,
+    }],
+    unresolvedMentions: [],
+    ambiguousMentions: [],
+  };
+  fixture.retrieval.retrievedCards = fixture.retrieval.cardResolution.resolvedCards;
+  const service = makeService(fixture);
+  const created = await service.createRun({
+    body: {
+      question: "近似译名对应的匿名裁定问题。",
+      cardNameCandidates: [userSurface],
+      finalAttemptPolicy: "single",
+    },
+  });
+
+  const execution = await service.executeRun({ runId: created.runId });
+  const resolution = execution.run.evidenceSnapshot.evidence.cardResolution;
+
+  assert.deepEqual(resolution.resolvedCards.map((card) => card.id), ["verified-canonical"]);
+  assert.equal(resolution.resolvedCards.some((card) => card.id === "wrong-local-edit"), false);
+});
+
+test("provided closed scope preserves a failed provisional identity as unresolved", async () => {
+  const fixture = makeFixture();
+  const userSurface = "匿名待验证译名";
+  fixture.preparationCardNameCandidates = [{ name: userSurface, originalText: userSurface }];
+  fixture.preparedCardResolution = {
+    resolvedCards: [{
+      input: userSurface,
+      id: "provisional-local",
+      cardId: "provisional-local",
+      name: "匿名近似本地候选",
+      identityMatchKind: "edit_distance",
+      requiresExternalIdentityVerification: true,
+    }],
+    unresolvedMentions: [],
+    ambiguousMentions: [],
+    omittedResolvedCards: [],
+    userProvidedCardTexts: [],
+    modelCardNameCandidates: fixture.preparationCardNameCandidates,
+  };
+  fixture.retrieval.cardResolution = {
+    ...fixture.preparedCardResolution,
+    resolvedCards: [],
+    unresolvedMentions: [],
+    ambiguousMentions: [],
+  };
+  fixture.retrieval.retrievedCards = [];
+  const service = makeService(fixture);
+  const created = await service.createRun({
+    body: {
+      question: "待验证译名对应的匿名裁定问题。",
+      cardNameCandidates: [userSurface],
+      finalAttemptPolicy: "single",
+    },
+  });
+
+  await assert.rejects(
+    service.executeRun({ runId: created.runId }),
+    (error) => (
+      error?.code === "admin_final_evidence_not_ready"
+      && error?.details?.unresolvedCandidates?.includes(userSurface)
+    ),
+  );
 });
 
 test("provided closed scope never promotes an unverified external identity", async () => {
@@ -2656,6 +2819,9 @@ test("provided closed scope fails closed for missing verification, conflicts, we
     "明确未验证",
     "身份冲突",
     "缺少强标识",
+    "仅有模糊唯一结果",
+    "证明字段互相矛盾",
+    "仅有字符串身份",
   ];
   const allNames = [...unresolvedNames, "不在未解决集合"];
   fixture.preparationCardNameCandidates = allNames.map((name) => ({
@@ -2695,6 +2861,37 @@ test("provided closed scope fails closed for missing verification, conflicts, we
       matchedQuery: "缺少强标识",
       name: "只有名称的外部卡",
       identityVerificationStatus: "verified_external_replacement",
+    }, {
+      input: "仅有模糊唯一结果",
+      matchedQuery: "仅有模糊唯一结果",
+      id: "fuzzy-singleton-card",
+      name: "模糊命中的另一张卡",
+      identityVerificationStatus: "verified_external_resolution",
+      externalSurfaceResolution: "single_eligible_identity",
+      externalSurfaceMatchKind: "fuzzy_singleton",
+      externalSurfaceCompatible: true,
+      externalIdentityUniqueConvergence: true,
+    }, {
+      input: "仅有字符串身份",
+      matchedQuery: "仅有字符串身份",
+      id: "not-a-stable-id",
+      cardId: "not-a-stable-id",
+      name: "字符串身份的外部卡",
+      identityVerificationStatus: "verified_external_resolution",
+      externalSurfaceResolution: "unique_exact_provider_alias",
+      externalSurfaceMatchKind: "provider_alias_exact",
+      externalSurfaceCompatible: true,
+      externalIdentityUniqueConvergence: true,
+    }, {
+      input: "证明字段互相矛盾",
+      matchedQuery: "证明字段互相矛盾",
+      id: "contradictory-proof-card",
+      name: "字段矛盾的外部卡",
+      identityVerificationStatus: "verified_external_resolution",
+      externalSurfaceResolution: "single_eligible_identity",
+      externalSurfaceMatchKind: "provider_alias_exact",
+      externalSurfaceCompatible: true,
+      externalIdentityUniqueConvergence: true,
     }, {
       input: "不在未解决集合",
       matchedQuery: "不在未解决集合",

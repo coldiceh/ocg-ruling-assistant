@@ -3,6 +3,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildCardAliasIndex, buildQaIndex } from "../backend/dataIndex.mjs";
 import { normalizeCardMetadata } from "../backend/liveOfficialQaProvider.mjs";
+import { projectOfficialQaQuestion } from "../backend/officialQaQuestionProjection.mjs";
 import {
   detectTranslationPlaceholder,
   formatRulingDataQualityIssue,
@@ -68,18 +69,45 @@ async function main() {
     currentQaDiscovery,
     { authoritative: cardSnapshotAuthoritative },
   );
+  const discoveredQaIds = collectDiscoveredQaIds(qaDiscoveryRecords);
+  const manifest = await loadManifest(previousMeta.sourceRevision);
+  let retiredQaIds = updateKnownRetiredQaIds({
+    previousRetiredQaIds: previousMeta.retiredQaIds,
+    changedQaIds: manifest.changedQaIds,
+    discoveredQaIds,
+  });
+  const retiredQaIdSet = new Set(retiredQaIds);
   const indexedQaIds = new Set((previousQaIndex.records || [])
-    .filter(isYgoresourcesQaRecord)
+    .filter(hasCompleteYgoresourcesQaBody)
     .map(qaSourceId)
     .filter(Boolean));
-  const unindexedQaIds = collectDiscoveredQaIds(qaDiscoveryRecords)
-    .filter((qaId) => !indexedQaIds.has(qaId));
-  const manifest = await loadManifest(previousMeta.sourceRevision);
+  const unindexedQaIds = discoveredQaIds
+    .filter((qaId) => !indexedQaIds.has(qaId) && !retiredQaIdSet.has(qaId));
+  const pendingQaDetailIds = uniqueIds([
+    ...unindexedQaIds,
+    ...(previousMeta.qaDetailStaleIds || []),
+  ]).filter((qaId) => !retiredQaIdSet.has(qaId));
   let cards = cardPayloads.map(({ record }) => record);
   const rulingSync = await loadRulings(cards, cardPayloads, manifest.changedQaIds, {
     qaDiscoveryRecords,
     detailCursor: previousMeta.qaDetailCursor,
-    unindexedQaIds,
+    priorityCursor: previousMeta.qaPriorityCursor,
+    unindexedQaIds: pendingQaDetailIds,
+    qaMissingObservations: previousMeta.qaMissingObservations,
+  });
+  retiredQaIds = updateKnownRetiredQaIds({
+    previousRetiredQaIds: retiredQaIds,
+    removedQaIds: rulingSync.removedQaIds,
+    recoveredQaIds: rulingSync.successfulQaIds,
+    discoveredQaIds,
+  });
+  const qaDetailStaleIds = updateQaDetailStaleIds({
+    previousStaleQaIds: previousMeta.qaDetailStaleIds,
+    changedQaIds: manifest.changedQaIds,
+    failedQaIds: rulingSync.failedQaIds,
+    successfulQaIds: rulingSync.successfulQaIds,
+    retiredQaIds,
+    discoveredQaIds,
   });
   let rulings = rulingSync.records;
   if (!cardSnapshotAuthoritative) {
@@ -121,6 +149,13 @@ async function main() {
     buildQaIndex(rulings, cards),
     { removedQaIds: rulingSync.removedQaIds },
   );
+  const qaDetailCoverage = buildQaDetailCoverageStatus({
+    discoveredQaIds,
+    indexedQaIds: qaIndex.filter(hasCompleteYgoresourcesQaBody).map(qaSourceId),
+    retiredQaIds,
+    staleQaIds: qaDetailStaleIds,
+    qaMissingObservations: rulingSync.qaMissingObservations,
+  });
 
   const generatedAt = new Date().toISOString();
   const sourceFreshness = sourceSyncWarnings.length ? "stale" : "fresh";
@@ -178,7 +213,6 @@ async function main() {
   if (Number.isFinite(maxQaIndexBytes) && maxQaIndexBytes > 0 && qaIndexBytes > maxQaIndexBytes) {
     throw new Error(`QA index size ${qaIndexBytes} exceeds deployment guard ${maxQaIndexBytes}`);
   }
-  const discoveredQaIds = collectDiscoveredQaIds(qaDiscoveryRecords);
   await writeJson(join(dataDir, "qa-discovery-index.json"), {
     schemaVersion: 1,
     generatedAt,
@@ -213,6 +247,15 @@ async function main() {
     changedItems: Number(previousMeta.changedItems || 0),
     removedItems: Number(previousMeta.removedItems || 0),
     qaDetailCursor: rulingSync.nextDetailCursor,
+    qaPriorityCursor: rulingSync.nextPriorityCursor,
+    retiredQaIds,
+    qaMissingObservations: rulingSync.qaMissingObservations,
+    qaDetailComplete: qaDetailCoverage.complete,
+    qaDetailIndexedCount: qaDetailCoverage.indexedCount,
+    qaDetailRetiredCount: qaDetailCoverage.retiredCount,
+    qaDetailIncompleteCount: qaDetailCoverage.incompleteCount,
+    qaDetailIncompleteIds: qaDetailCoverage.incompleteIds,
+    qaDetailStaleIds,
     qaDiscoveryCardCount: qaDiscoveryRecords.length,
     qaDiscoveryQaCount: discoveredQaIds.length,
     qaDiscoveryComplete: cardSnapshotAuthoritative,
@@ -257,6 +300,13 @@ async function main() {
     qaDiscoveryQaCount: discoveredQaIds.length,
     qaDiscoveryRelationCount: qaDiscoveryRecords.reduce((sum, record) => sum + record.qaIds.length, 0),
     qaDiscoveryComplete: cardSnapshotAuthoritative,
+    qaDetailComplete: qaDetailCoverage.complete,
+    qaDetailIndexedCount: qaDetailCoverage.indexedCount,
+    qaDetailRetiredCount: qaDetailCoverage.retiredCount,
+    qaDetailIncompleteCount: qaDetailCoverage.incompleteCount,
+    qaDetailIncompleteIds: qaDetailCoverage.incompleteIds,
+    qaDetailStaleIds,
+    retiredQaIds,
     qaDetailSnapshotAuthoritative,
     warnings,
     sourceRetirementWarnings,
@@ -357,10 +407,15 @@ async function loadCards(cards, nameIndexes, monsterPropertyMetadata = []) {
 async function loadRulings(cards, cardPayloads, changedQaIds = [], {
   qaDiscoveryRecords = [],
   detailCursor = 0,
+  priorityCursor = 0,
   unindexedQaIds = [],
+  qaMissingObservations = {},
 } = {}) {
   const records = [];
-  const removedQaIds = [];
+  const immediateRemovedQaIds = [];
+  const successfulQaIds = [];
+  const failedQaIds = [];
+  const missingQaFailures = new Map();
   records.push(...buildCardTextRecords(cardPayloads));
   records.push(...buildFaqRecords(cardPayloads));
   let recentQaIds = [];
@@ -379,6 +434,7 @@ async function loadRulings(cards, cardPayloads, changedQaIds = [], {
     cardQaIds: rankCardQaIds(cardPayloads, maxCardQaPerCard),
     coverageQaIds: buildFairQaCoverageOrder(qaDiscoveryRecords),
     cursor: detailCursor,
+    priorityCursor,
     limit: qaLimit,
   });
   qaSyncSelectionStats = {
@@ -392,40 +448,79 @@ async function loadRulings(cards, cardPayloads, changedQaIds = [], {
     coverageSelectedCount: selection.coverageSelectedCount,
     detailCursor: selection.cursor,
     nextDetailCursor: selection.nextCursor,
+    priorityCursor: selection.priorityCursor,
+    nextPriorityCursor: selection.nextPriorityCursor,
   };
   let detailSnapshotComplete = true;
   for (const id of selection.ids) {
     try {
       const payload = await fetchJson(`/data/qa/${id}`);
       const record = normalizeQa(payload, id, cards);
-      if (record) records.push(record);
-      else detailSnapshotComplete = false;
+      if (record) {
+        records.push(record);
+        successfulQaIds.push(String(id));
+      }
+      else {
+        detailSnapshotComplete = false;
+        failedQaIds.push(String(id));
+      }
     } catch (error) {
       const failure = classifyRemoteItemFetchFailure(error);
       if (failure.kind === "removed") {
-        removedQaIds.push(String(id));
+        immediateRemovedQaIds.push(String(id));
         addSourceRetirementWarning(`Q&A ${id} was removed upstream (${failure.status})`);
+      } else if (failure.kind === "missing") {
+        detailSnapshotComplete = false;
+        failedQaIds.push(String(id));
+        missingQaFailures.set(String(id), { status: failure.status, error });
       } else {
         detailSnapshotComplete = false;
+        failedQaIds.push(String(id));
         addSourceWarning(`Q&A ${id} failed: ${formatError(error)}`);
       }
+    }
+  }
+
+  const missingState = updateQaMissingObservations({
+    previousObservations: qaMissingObservations,
+    discoveredQaIds: collectDiscoveredQaIds(qaDiscoveryRecords),
+    changedQaIds,
+    successfulQaIds,
+    removedQaIds: immediateRemovedQaIds,
+    failedQaIds: uniqueIds(failedQaIds),
+    missingQaIds: [...missingQaFailures.keys()],
+  });
+  const removedQaIds = uniqueIds([
+    ...immediateRemovedQaIds,
+    ...missingState.confirmedRemovedQaIds,
+  ]);
+  for (const [id, failure] of missingQaFailures) {
+    if (missingState.confirmedRemovedQaIds.includes(id)) {
+      addSourceRetirementWarning(`Q&A ${id} was missing upstream twice (${failure.status})`);
+    } else {
+      addSourceWarning(`Q&A ${id} was temporarily missing (${failure.status}): ${formatError(failure.error)}`);
     }
   }
 
   return {
     records,
     removedQaIds,
+    successfulQaIds,
+    failedQaIds: uniqueIds(failedQaIds),
+    qaMissingObservations: missingState.observations,
     selectedQaIds: selection.ids,
     nextDetailCursor: selection.nextCursor,
+    nextPriorityCursor: selection.nextPriorityCursor,
     detailSnapshotComplete,
   };
 }
 
 export function classifyRemoteItemFetchFailure(error = {}) {
   const status = Number(error?.status);
-  if (status === 404 || status === 410) {
+  if (status === 410) {
     return { kind: "removed", fatal: false, status };
   }
+  if (status === 404) return { kind: "missing", fatal: false, status };
   return {
     kind: "source_failure",
     fatal: true,
@@ -569,6 +664,7 @@ export function selectQaIdsForSync({
   cardQaIds = [],
   coverageQaIds = cardQaIds,
   cursor = 0,
+  priorityCursor = 0,
   limit = Infinity,
 } = {}) {
   const changed = uniqueIds(changedQaIds);
@@ -578,12 +674,23 @@ export function selectQaIdsForSync({
   const coverage = uniqueIds(coverageQaIds);
   const discovered = uniqueIds([...changed, ...recent, ...priority, ...hot, ...coverage]);
   const safeLimit = Number.isFinite(Number(limit)) && Number(limit) >= 0 ? Math.floor(Number(limit)) : discovered.length;
-  const ids = uniqueIds([...changed, ...recent, ...priority]).slice(0, safeLimit);
+  const ids = uniqueIds([...changed, ...recent]).slice(0, safeLimit);
   const selected = new Set(ids);
   const safeCursor = normalizeCircularCursor(cursor, coverage.length);
+  const safePriorityCursor = normalizeCircularCursor(priorityCursor, priority.length);
   let nextCursor = safeCursor;
+  let nextPriorityCursor = safePriorityCursor;
   let coverageSelectedCount = 0;
   let hotSelectedCount = 0;
+  let prioritySelectedCount = 0;
+
+  if (ids.length < safeLimit && priority.length) {
+    const result = takeCircularQaIds(priority, nextPriorityCursor, safeLimit - ids.length, selected);
+    ids.push(...result.ids);
+    result.ids.forEach((id) => selected.add(id));
+    prioritySelectedCount += result.ids.length;
+    nextPriorityCursor = result.nextCursor;
+  }
 
   const available = Math.max(0, safeLimit - ids.length);
   const minimumCoverageSlots = coverage.length && available
@@ -620,12 +727,118 @@ export function selectQaIdsForSync({
     truncatedCount: Math.max(0, discovered.length - ids.length),
     changedSelectedCount: changed.filter((id) => selected.has(id)).length,
     recentSelectedCount: recent.filter((id) => selected.has(id)).length,
-    prioritySelectedCount: priority.filter((id) => selected.has(id)).length,
+    prioritySelectedCount,
     hotSelectedCount,
     coverageSelectedCount,
     cursor: safeCursor,
     nextCursor,
+    priorityCursor: safePriorityCursor,
+    nextPriorityCursor,
   };
+}
+
+export function updateKnownRetiredQaIds({
+  previousRetiredQaIds = [],
+  changedQaIds = [],
+  removedQaIds = [],
+  recoveredQaIds = [],
+  discoveredQaIds = [],
+} = {}) {
+  const discovered = new Set(uniqueIds(discoveredQaIds));
+  const changed = new Set(uniqueIds(changedQaIds));
+  const recovered = new Set(uniqueIds(recoveredQaIds));
+  const retired = new Set(uniqueIds(previousRetiredQaIds)
+    .filter((id) => discovered.has(id) && !changed.has(id) && !recovered.has(id)));
+  for (const id of uniqueIds(removedQaIds)) {
+    if (discovered.has(id)) retired.add(id);
+  }
+  return [...retired].sort(compareNumericIds);
+}
+
+export function updateQaMissingObservations({
+  previousObservations = {},
+  discoveredQaIds = [],
+  changedQaIds = [],
+  successfulQaIds = [],
+  removedQaIds = [],
+  missingQaIds = [],
+  confirmationsRequired = 2,
+} = {}) {
+  const discovered = new Set(uniqueIds(discoveredQaIds));
+  const changed = new Set(uniqueIds(changedQaIds));
+  const successful = new Set(uniqueIds(successfulQaIds));
+  const removed = new Set(uniqueIds(removedQaIds));
+  const reset = new Set([...changed, ...successful, ...removed]);
+  const observations = new Map();
+  for (const [rawId, rawCount] of Object.entries(
+    previousObservations && typeof previousObservations === "object"
+      ? previousObservations
+      : {},
+  )) {
+    const id = uniqueIds([rawId])[0];
+    const count = Math.max(0, Math.floor(Number(rawCount) || 0));
+    if (id && count > 0 && discovered.has(id) && !reset.has(id)) observations.set(id, count);
+  }
+  for (const id of uniqueIds(missingQaIds)) {
+    // A manifest change clears historical observations, but a 404 from the
+    // current refresh is still the first observation. Successful refreshes and
+    // explicit 410 removals suppress a same-run missing observation entirely.
+    if (!discovered.has(id) || successful.has(id) || removed.has(id)) continue;
+    observations.set(id, (observations.get(id) || 0) + 1);
+  }
+  const threshold = Math.max(2, Math.floor(Number(confirmationsRequired) || 2));
+  const confirmedRemovedQaIds = [...observations]
+    .filter(([, count]) => count >= threshold)
+    .map(([id]) => id)
+    .sort(compareNumericIds);
+  return {
+    observations: Object.fromEntries([...observations].sort(([left], [right]) => compareNumericIds(left, right))),
+    confirmedRemovedQaIds,
+  };
+}
+
+export function buildQaDetailCoverageStatus({
+  discoveredQaIds = [],
+  indexedQaIds = [],
+  retiredQaIds = [],
+  staleQaIds = [],
+} = {}) {
+  const discovered = uniqueIds(discoveredQaIds).sort(compareNumericIds);
+  const indexed = new Set(uniqueIds(indexedQaIds));
+  const retired = new Set(uniqueIds(retiredQaIds));
+  const stale = new Set(uniqueIds(staleQaIds));
+  const incompleteIds = discovered.filter((id) => (
+    (!indexed.has(id) || stale.has(id)) && !retired.has(id)
+  ));
+  return {
+    complete: incompleteIds.length === 0,
+    discoveredCount: discovered.length,
+    indexedCount: discovered.filter((id) => indexed.has(id)).length,
+    retiredCount: discovered.filter((id) => retired.has(id) && !indexed.has(id)).length,
+    incompleteCount: incompleteIds.length,
+    incompleteIds,
+  };
+}
+
+export function updateQaDetailStaleIds({
+  previousStaleQaIds = [],
+  changedQaIds = [],
+  failedQaIds = [],
+  successfulQaIds = [],
+  retiredQaIds = [],
+  discoveredQaIds = [],
+} = {}) {
+  const discovered = new Set(uniqueIds(discoveredQaIds));
+  const successful = new Set(uniqueIds(successfulQaIds));
+  const retired = new Set(uniqueIds(retiredQaIds));
+  const stale = new Set(uniqueIds([
+    ...previousStaleQaIds,
+    ...changedQaIds,
+    ...failedQaIds,
+  ]));
+  return [...stale]
+    .filter((id) => discovered.has(id) && !successful.has(id) && !retired.has(id))
+    .sort(compareNumericIds);
 }
 
 function normalizeCardQaDiscoveryRecords(records = []) {
@@ -1178,6 +1391,13 @@ function isYgoresourcesQaRecord(record = {}) {
   return String(record?.recordType || "") === "qa"
     && (String(record?.sourceName || "") === "YGOResources DB"
       || /^ygoresources-qa-\d+$/u.test(String(record?.id || "")));
+}
+
+export function hasCompleteYgoresourcesQaBody(record = {}) {
+  if (!isYgoresourcesQaRecord(record)) return false;
+  const projection = projectOfficialQaQuestion(record);
+  return projection.principalSurfaces.length > 0
+    && Boolean(String(projection.answerText || "").trim());
 }
 
 function qaSourceId(record = {}) {

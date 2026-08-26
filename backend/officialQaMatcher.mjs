@@ -8,6 +8,7 @@ import {
   extractInlineOfficialCardIds,
   projectOfficialQaQuestion,
 } from "./officialQaQuestionProjection.mjs";
+import { getOfficialQaDiscoveryCardIds } from "./officialQaDiscoveryRelations.mjs";
 
 const officialQaRecordFeatureCache = new WeakMap();
 
@@ -328,6 +329,7 @@ function scoreRecord({
     recordIds,
     recordQuestionIds,
     recordRelatedMetadataIds,
+    recordDiscoveryCardIds,
     recordIdentityText,
     questionIdentityText,
   } = officialQaRecordFeatures(record);
@@ -427,6 +429,8 @@ function scoreRecord({
     .filter((id) => relatedQuestionCardIds.has(id));
   const matchedRelatedMetadataCardIds = [...resolvedIds]
     .filter((id) => recordRelatedMetadataIds.has(id));
+  const matchedDiscoveryCardIds = [...resolvedIds]
+    .filter((id) => recordDiscoveryCardIds.has(id));
   const matchedRelatedCardIds = [...resolvedIds]
     .filter((id) => relatedIdentityCardIds.has(id));
   const matchedCardIds = [...new Set([
@@ -572,6 +576,7 @@ function scoreRecord({
     matchedQuestionCardIds,
     matchedRelatedQuestionCardIds,
     matchedRelatedMetadataCardIds,
+    matchedDiscoveryCardIds,
     matchedRelatedCardIds,
     branchRelevant,
     branchMatchedCardIds,
@@ -659,6 +664,7 @@ function scoreRecord({
       cardNameMatch && "card_name",
       questionAliasCardIds.size && "related_question_exact_alias",
       matchedRelatedMetadataCardIds.length && "related_source_metadata_card_id",
+      matchedDiscoveryCardIds.length && "related_discovery_card_id",
       typeCompatible && "question_type",
       phraseHits.length && "effect_phrase",
       branchRelevant && "multi_branch_related_evidence",
@@ -1156,7 +1162,14 @@ function promoteUniqueSemanticMatch(items, resolvedIds, queryType) {
 function officialQaRecordFeatures(record = {}) {
   if (record && typeof record === "object") {
     const cached = officialQaRecordFeatureCache.get(record);
-    if (cached) return cached;
+    if (cached) {
+      return {
+        ...cached,
+        recordDiscoveryCardIds: new Set(
+          getOfficialQaDiscoveryCardIds(record).map(normalizeCardIdentityId).filter(Boolean),
+        ),
+      };
+    }
   }
   const projection = projectOfficialQaQuestion(record);
   const questionText = projection.questionText;
@@ -1193,6 +1206,9 @@ function officialQaRecordFeatures(record = {}) {
     ...(record.metadataCardIds || record.cardIds || []),
     ...(record.cards || []).filter((value) => /^\d+$/u.test(String(value || "").trim())),
   ].map(normalizeCardIdentityId).filter(Boolean));
+  const recordDiscoveryCardIds = new Set(
+    getOfficialQaDiscoveryCardIds(record).map(normalizeCardIdentityId).filter(Boolean),
+  );
   const features = {
     questionText,
     scenarioQuestionText,
@@ -1238,10 +1254,21 @@ function officialQaRecordFeatures(record = {}) {
     // when a broad official question names no particular card. It is never
     // folded into recordQuestionIds and therefore cannot grant direct status.
     recordRelatedMetadataIds,
+    // Discovery-index relations are intentionally separate from every scoring
+    // and authority rail above. They only explain why a record entered the
+    // scoped candidate pool; binding one must not change score or matchLevel.
+    recordDiscoveryCardIds,
     recordIdentityText: [identityText, ...questionNames].filter(Boolean).join(" "),
     questionIdentityText: scenarioQa ? identityText : questionText,
   };
-  if (record && typeof record === "object") officialQaRecordFeatureCache.set(record, features);
+  if (record && typeof record === "object") {
+    officialQaRecordFeatureCache.set(record, {
+      ...features,
+      // Discovery relations can be rebound independently of the immutable QA
+      // body, so keep only the stable feature fields in this cache.
+      recordDiscoveryCardIds: new Set(),
+    });
+  }
   return features;
 }
 

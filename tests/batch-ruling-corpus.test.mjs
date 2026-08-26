@@ -9,6 +9,7 @@ import {
   assessSemanticTransitionAuthority,
   attachSemanticTransitionContract,
 } from "../backend/semanticAuthorityGate.mjs";
+import { normalizeCardKey } from "../backend/ragCardExtractor.mjs";
 import { loadRagData } from "../backend/ragEvidenceRetriever.mjs";
 import { answerRagRulingQuestion } from "../backend/ragRulingPipeline.mjs";
 import {
@@ -626,6 +627,14 @@ const finalReasonerEvidenceSpecs = {
       ["吞喰圣痕之龙", "吞食圣痕之龙"],
       ["冰剑龙 镜翠幻种", "冰剑龙 幻冰龙"],
     ],
+    identityProofs: {
+      "15239": {
+        externalSurfaceResolution: "model_expansion_exact_cid_intersection",
+        externalSurfaceMatchKind: "stable_cid_intersection",
+        identityCanonicalizationSource: "cid",
+        modelExpansionCidIntersectionVerified: true,
+      },
+    },
     evidenceIds: ["card-faq-15245-0", "card-faq-15245-1", "card-faq-22090-2"],
     promptSnippets: [
       "舍弃1张手牌可以发动",
@@ -699,7 +708,11 @@ const finalReasonerEvidenceSpecs = {
   },
 };
 
-test("five reported cases reach exactly one final model with complete raw card and rule evidence", async () => {
+// This is a controlled downstream test: provider identities and decisive
+// evidence are supplied explicitly so it can verify prompt completeness and
+// final-model call count. It is not a claim that the full corpus independently
+// recalls every identity or Q&A in these five cases (or in the 32-case set).
+test("five controlled downstream cases preserve complete supplied evidence and one final-model call", async () => {
   assert.equal(fiveCaseCorpus.cases.length, 5);
   const data = await loadRagData();
   const cardsById = new Map(data.cards.map((card) => [String(card.id || card.cardId), card]));
@@ -732,6 +745,7 @@ test("five reported cases reach exactly one final model with complete raw card a
       cards,
       records,
       qaRecords: [],
+      fetchImpl: createFixtureBaigeFetch({ cards, spec }),
       env: {
         MODEL_PROVIDER: "mock",
         RAG_LIVE_OFFICIAL_QA: "false",
@@ -787,10 +801,158 @@ test("five reported cases reach exactly one final model with complete raw card a
       corpusCase.id,
     );
     const resolvedIds = new Set(answer.resolvedCards.map((card) => String(card.id)));
-    assert.ok(corpusCase.expectedCardIds.every((id) => resolvedIds.has(String(id))));
+    const missingResolvedIds = corpusCase.expectedCardIds
+      .map(String)
+      .filter((id) => !resolvedIds.has(id));
+    assert.deepEqual(
+      missingResolvedIds,
+      [],
+      `${corpusCase.id} missing resolved card identities`,
+    );
+    for (const [id, expectedProof] of Object.entries(spec.identityProofs || {})) {
+      const resolvedCard = answer.resolvedCards.find((card) => String(card.id) === id);
+      assert.ok(resolvedCard, `${corpusCase.id} missing proof-bound card ${id}`);
+      for (const [field, expectedValue] of Object.entries(expectedProof)) {
+        assert.equal(
+          resolvedCard[field],
+          expectedValue,
+          `${corpusCase.id} ${id} ${field}`,
+        );
+      }
+    }
   }
 });
 
 function escapeRegExp(value) {
   return String(value).replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+}
+
+const controlledProviderIdentityFixtures = Object.freeze({
+  "阿尔白斯之落胤": {
+    cid: "15245",
+    primaryName: "阿尔白斯之落胤",
+    providerAliases: ["阿不思的落胤"],
+  },
+  "教导之圣女 艾克利西亚": {
+    cid: "15239",
+    primaryName: "教导之圣女 艾克利西亚",
+    providerAliases: [],
+    searchOnlySurfaces: ["教导的圣女 艾克莉西亚"],
+  },
+  "吞喰圣痕之龙": {
+    cid: "22090",
+    primaryName: "吞喰圣痕之龙",
+    providerAliases: ["吞食圣痕之龙"],
+  },
+  "冰剑龙 镜翠幻种": {
+    cid: "17069",
+    primaryName: "冰剑龙 镜翠幻种",
+    providerAliases: ["冰剑龙 幻冰龙"],
+  },
+  "颉颃胜负": {
+    cid: "13293",
+    primaryName: "颉颃胜负",
+    providerAliases: [],
+  },
+  "天下独歩の大義賊": {
+    cid: "23349",
+    primaryName: "天下独歩の大義賊",
+    providerAliases: ["天下独步的大义贼"],
+  },
+  "尤贝尔之精灵": {
+    cid: "19456",
+    primaryName: "尤贝尔之精灵",
+    providerAliases: ["于贝尔精灵"],
+  },
+  "纳祭魔鬼莲": {
+    cid: "19458",
+    primaryName: "纳祭魔鬼莲",
+    providerAliases: ["献祭魔界莲"],
+  },
+  "尤贝尔": {
+    cid: "7409",
+    primaryName: "尤贝尔",
+    providerAliases: ["于贝尔"],
+  },
+  "千察万别": {
+    cid: "13447",
+    primaryName: "千察万别",
+    providerAliases: ["千查万别"],
+  },
+  "闪刀姬＝零萝": {
+    cid: "21460",
+    primaryName: "闪刀姬＝零萝",
+    providerAliases: ["闪刀姬＝零露"],
+  },
+  "闪刀姬－零": {
+    cid: "13670",
+    primaryName: "闪刀姬－零",
+    providerAliases: [],
+  },
+  "闪刀姬－萝杰": {
+    cid: "14829",
+    primaryName: "闪刀姬－萝杰",
+    providerAliases: [],
+  },
+  "月光银狗": {
+    cid: "21417",
+    primaryName: "月光银狗",
+    providerAliases: [],
+  },
+});
+
+function createFixtureBaigeFetch({ cards, spec }) {
+  const identities = (spec.cardNames || []).map(([canonicalName, userSurface]) => {
+    const fixture = controlledProviderIdentityFixtures[canonicalName];
+    assert.ok(fixture, `missing controlled provider fixture for ${canonicalName}`);
+    const card = cards.find((candidate) => String(candidate.id || candidate.cardId) === fixture.cid);
+    assert.ok(card, `controlled provider fixture ${canonicalName} missing local CID ${fixture.cid}`);
+    assert.equal(
+      normalizeCardKey(card.name),
+      normalizeCardKey(canonicalName),
+      `controlled provider fixture ${fixture.cid} canonical name`,
+    );
+    assert.ok(
+      userSurface === canonicalName
+      || fixture.providerAliases.includes(userSurface)
+      || (fixture.searchOnlySurfaces || []).includes(userSurface),
+      `controlled provider fixture ${fixture.cid} does not declare surface ${userSurface}`,
+    );
+    return {
+      ...fixture,
+      card,
+      queryKeys: new Set([
+        fixture.primaryName,
+        ...(fixture.providerAliases || []),
+        ...(fixture.searchOnlySurfaces || []),
+      ].map(normalizeCardKey)),
+    };
+  });
+
+  return async (url) => {
+    const query = new URL(String(url)).searchParams.get("search") || "";
+    const queryKey = normalizeCardKey(query);
+    const identity = identities.find((item) => item.queryKeys.has(queryKey));
+    if (!identity) return jsonResponse({ result: [], next: 0 });
+    return jsonResponse({
+      result: [{
+        cid: Number(identity.cid),
+        // Provider aliases are declared independently above. The mock never
+        // copies the incoming query into an identity field, and 15239's player
+        // surface is deliberately search-only so it must use the CID
+        // intersection with the exact canonical model expansion.
+        cn_name: identity.primaryName,
+        sc_name: identity.providerAliases[0] || identity.primaryName,
+        text: { desc: identity.card.effectText || identity.card.text || "测试镜像卡文。" },
+      }],
+      next: 0,
+    });
+  };
+}
+
+function jsonResponse(payload) {
+  return new Response(JSON.stringify(payload), {
+    status: 200,
+    headers: { "content-type": "application/json" },
+  });
 }

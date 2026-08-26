@@ -625,6 +625,77 @@ test("a unique original-surface identity replaces a conflicting local fuzzy iden
   assert.ok(!evidence.cardResolution.ambiguousMentions.some((item) => item.input === userSurface));
 });
 
+test("a model expansion accepts an exact provider alias only after a unique original-surface CID intersection", async () => {
+  clearBaigeSearchCache();
+  const userSurface = "匿名民间长名甲号飞翼";
+  const canonicalExpansion = "匿名官方规范名乙号龙";
+  const localCard = {
+    id: "1911",
+    cardId: "1911",
+    name: canonicalExpansion,
+    aliases: [canonicalExpansion],
+    effectText: "匿名本地完整卡文。",
+  };
+  const calls = [];
+  const evidence = await retrieveRagEvidence({
+    userQuery: `「${userSurface}」可以发动吗？`,
+    cardResolution: {
+      resolvedCards: [],
+      unresolvedMentions: [{
+        input: userSurface,
+        reason: "model_candidate_not_found",
+        searchTexts: [canonicalExpansion],
+      }],
+      ambiguousMentions: [],
+      userProvidedCardTexts: [],
+    },
+    cards: [localCard],
+    records: [],
+    qaRecords: [],
+    fetchImpl: async (url) => {
+      const query = new URL(String(url)).searchParams.get("search");
+      calls.push(query);
+      if (query === userSurface) {
+        return jsonResponse({
+          result: [{
+            cid: 1911,
+            id: 80191111,
+            cn_name: `${userSurface}镜像`,
+            sc_name: canonicalExpansion,
+            text: { desc: "匿名镜像卡文。" },
+          }],
+          next: 0,
+        });
+      }
+      if (query === canonicalExpansion) {
+        return jsonResponse({
+          result: [{
+            cid: 1911,
+            id: 80191111,
+            cn_name: `${userSurface}镜像`,
+            sc_name: canonicalExpansion,
+            text: { desc: "匿名镜像卡文。" },
+          }],
+          next: 0,
+        });
+      }
+      return jsonResponse({ result: [], next: 0 });
+    },
+    env: { RAG_LIVE_OFFICIAL_QA: "0" },
+  });
+
+  assert.ok(calls.includes(userSurface));
+  assert.ok(calls.includes(canonicalExpansion));
+  assert.deepEqual(evidence.retrievedCards.map((card) => card.id), [localCard.id]);
+  assert.equal(
+    evidence.retrievedCards[0].externalSurfaceResolution,
+    "model_expansion_exact_cid_intersection",
+  );
+  assert.equal(evidence.retrievedCards[0].externalSurfaceMatchKind, "stable_cid_intersection");
+  assert.match(evidence.cardTexts[0].text, /匿名本地完整卡文/u);
+  assert.ok(!evidence.cardResolution.unresolvedMentions.some((item) => item.input === userSurface));
+});
+
 test("an unanchored exact canonical expansion cannot suppress a conflicting local fuzzy identity", async () => {
   clearBaigeSearchCache();
   const userSurface = "希望之星";
@@ -736,7 +807,7 @@ test("a short family nickname cannot certify an exact canonical expansion", asyn
   assert.ok(evidence.cardResolution.ambiguousMentions.some((item) => item.input === userSurface));
 });
 
-test("unquoted_colloquial_activation_subject_resolves_by_surface_before_a_wrong_model_guess", async () => {
+test("a colloquial fuzzy singleton does not override identity after a wrong model guess", async () => {
   clearBaigeSearchCache();
   const question = "看透心灵之眼的①效果适用的情况下，红指还能发出来吗";
   const redReboot = {
@@ -779,9 +850,10 @@ test("unquoted_colloquial_activation_subject_resolves_by_surface_before_a_wrong_
     },
   });
 
-  assert.equal(evidence.baigeResolvedCards[0].name, "红莲之指名者");
-  assert.ok(evidence.retrievedCards.some((card) => card.name === "红莲之指名者"));
+  assert.deepEqual(evidence.baigeResolvedCards, []);
+  assert.ok(!evidence.retrievedCards.some((card) => card.name === "红莲之指名者"));
   assert.ok(!evidence.retrievedCards.some((card) => card.name === "红色重启"));
+  assert.ok(evidence.cardResolution.unresolvedMentions.some((item) => item.input === "红指"));
   assert.ok(calls.some((url) => url.includes("红指")));
   assert.ok(!calls.some((url) => url.includes("红色重启")));
 });
@@ -840,7 +912,7 @@ test("sentence-initial unknown Chinese card name is resolved by Baige and scopes
 
 test("baige_card_text_enters_rag_context", async () => {
   clearBaigeSearchCache();
-  const question = "「谜式密码大师」被送去墓地的场合，①效果如何处理？";
+  const question = "「谜式密码大师·紧缩位压缩员」被送去墓地的场合，①效果如何处理？";
   const cardResolution = extractRagCards(question, { cards: [] });
   const evidence = await retrieveRagEvidence({
     userQuery: question,
@@ -863,7 +935,7 @@ test("baige_card_text_enters_rag_context", async () => {
   assert.equal(evidence.officialQaDirectCandidates.length, 0);
 });
 
-test("a unique eligible identity from the raw user surface can resolve without an alias containment match", async () => {
+test("a unique fuzzy raw-surface identity remains unresolved without an exact alias", async () => {
   clearBaigeSearchCache();
   const userSurface = "匿称";
   const externalCard = {
@@ -887,10 +959,12 @@ test("a unique eligible identity from the raw user surface can resolve without a
     env: { RAG_LIVE_OFFICIAL_QA: "0" },
   });
 
-  assert.deepEqual(evidence.retrievedCards.map((card) => card.id), [String(externalCard.id)]);
-  assert.equal(evidence.baigeResolvedCards[0].matchedQuery, userSurface);
-  assert.equal(evidence.baigeResolvedCards[0].externalIdentityUniqueConvergence, true);
-  assert.match(evidence.cardTexts[0].text, /匿名外部完整卡文/u);
+  assert.deepEqual(evidence.retrievedCards, []);
+  assert.deepEqual(evidence.baigeResolvedCards, []);
+  assert.deepEqual(evidence.cardTexts, []);
+  assert.ok(evidence.cardResolution.unresolvedMentions.some((mention) => (
+    mention.input === userSurface
+  )));
 });
 
 test("a raw user surface with multiple eligible external identities remains ambiguous", async () => {
@@ -1160,17 +1234,103 @@ test("an unbound local edit candidate still fails closed when external verificat
   assert.deepEqual(evidence.cardResolution.resolvedCards, []);
 });
 
-test("a canonical-name lookup can verify a translated surface alias without blessing arbitrary edit matches", async () => {
+test("an unrelated same-CID singleton cannot certify a local fuzzy identity", async () => {
   clearBaigeSearchCache();
-  const userSurface = "测试风之达维";
+  const userSurface = "匿名甲型长名错字";
+  const localCard = {
+    id: "606",
+    cardId: "606",
+    name: "匿名甲型规范卡名",
+    aliases: ["匿名甲型规范卡名"],
+    effectText: "不应由循环身份认证解锁的本地卡文。",
+  };
+  const scopedFaq = {
+    id: "anonymous-card-faq-606",
+    recordType: "card-faq",
+    cardIds: [localCard.id],
+    cards: [localCard.name],
+    title: "匿名卡片范围 FAQ",
+    question: "这张匿名卡的其他效果如何处理？",
+    answer: "不应由循环身份认证解锁的 FAQ。",
+    text: "这张匿名卡的其他效果如何处理？\n不应由循环身份认证解锁的 FAQ。",
+    sourceName: "YGOResources DB",
+    status: "current",
+  };
+  const calls = [];
+  const evidence = await retrieveRagEvidence({
+    userQuery: `「${userSurface}」可以发动吗？`,
+    cardResolution: {
+      resolvedCards: [{
+        ...localCard,
+        input: userSurface,
+        confidence: 0.94,
+        identityMatchKind: "edit_distance",
+        retrievalIdentityMatchKind: "local_fuzzy",
+        requiresExternalIdentityVerification: true,
+        resolutionSource: "query",
+      }],
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+      userProvidedCardTexts: [],
+    },
+    cards: [localCard],
+    records: [],
+    qaRecords: [scopedFaq],
+    fetchImpl: async (url) => {
+      const query = new URL(String(url)).searchParams.get("search");
+      calls.push(query);
+      if (query === userSurface) {
+        return jsonResponse({
+          result: [{
+            cid: Number(localCard.id),
+            id: 80_000_606,
+            cn_name: "完全无关乙卡",
+            text: { desc: "同 CID 的外部镜像卡文。" },
+          }],
+          next: 0,
+        });
+      }
+      if (query === localCard.name) {
+        return jsonResponse({
+          result: [{
+            cid: Number(localCard.id),
+            id: 80_000_606,
+            cn_name: localCard.name,
+            text: { desc: "同 CID 的规范名镜像卡文。" },
+          }],
+          next: 0,
+        });
+      }
+      return jsonResponse({ result: [], next: 0 });
+    },
+    env: { RAG_LIVE_OFFICIAL_QA: "0" },
+  });
+
+  assert.ok(calls.includes(userSurface), "the original user surface must be queried");
+  assert.ok(calls.includes(localCard.name), "the canonical fallback must be queried");
+  assert.deepEqual(evidence.retrievedCards, []);
+  assert.deepEqual(evidence.cardTexts, []);
+  assert.ok(!evidence.officialQaRelated.some((item) => item.id === scopedFaq.id));
+  assert.ok(evidence.cardResolution.unresolvedMentions.some((mention) => (
+    mention.input === userSurface
+    && mention.reason === "external_identity_verification_failed"
+  )));
+  assert.ok(!evidence.retrievalWarnings.some((warning) => (
+    warning.startsWith("local_approximate_identity_verified_via_original_surface_cid:")
+  )));
+});
+
+test("a unique original-surface CID and canonical-name CID intersection verifies a translated edit candidate", async () => {
+  clearBaigeSearchCache();
+  const userSurface = "匿名测试风之长名达维甲";
   const canonicalJapaneseName = "テスト風のエルダム";
   const canonicalEnglishName = "Test Wind Eldam";
   const canonicalLocalCard = {
     id: "611",
-    name: "测试风之达象",
+    name: "匿名测试风之长名达象甲",
     jaName: canonicalJapaneseName,
     enName: canonicalEnglishName,
-    aliases: ["测试风之达象", canonicalJapaneseName, canonicalEnglishName],
+    aliases: ["匿名测试风之长名达象甲", canonicalJapaneseName, canonicalEnglishName],
     effectText: "本地候选卡文。",
     sourceUrl: "https://db.ygoresources.com/data/card/611",
   };
@@ -1183,6 +1343,9 @@ test("a canonical-name lookup can verify a translated surface alias without bles
         input: userSurface,
         cardId: canonicalLocalCard.id,
         confidence: 0.94,
+        identityMatchKind: "edit_distance",
+        retrievalIdentityMatchKind: "local_fuzzy",
+        requiresExternalIdentityVerification: true,
         resolutionSource: "query",
       }],
       unresolvedMentions: [],
@@ -1195,12 +1358,24 @@ test("a canonical-name lookup can verify a translated surface alias without bles
     fetchImpl: async (url) => {
       const query = new URL(String(url)).searchParams.get("search");
       calls.push(query);
+      if (query === userSurface) {
+        return jsonResponse({
+          result: [{
+            cid: 611,
+            id: 12345611,
+            cn_name: `${userSurface}镜像`,
+            text: { types: "[怪兽|效果]", desc: "社区卡文。" },
+            data: { type: 33 },
+          }],
+          next: 0,
+        });
+      }
       if (query !== canonicalJapaneseName) return jsonResponse({ result: [], next: 0 });
       return jsonResponse({
         result: [{
           cid: 611,
           id: 12345611,
-          cn_name: userSurface,
+          cn_name: canonicalLocalCard.name,
           jp_name: canonicalJapaneseName,
           en_name: canonicalEnglishName,
           text: { types: "[怪兽|效果]", desc: "社区卡文。" },
@@ -1218,10 +1393,13 @@ test("a canonical-name lookup can verify a translated surface alias without bles
   assert.equal(evidence.retrievedCards[0].id, canonicalLocalCard.id);
   assert.equal(evidence.retrievedCards[0].identityVerificationStatus, "verified_same_identity");
   assert.equal(evidence.retrievedCards[0].identityVerificationSource, "canonical_external_lookup");
+  assert.equal(evidence.retrievedCards[0].externalSurfaceMatchKind, "stable_cid_intersection");
+  assert.equal(evidence.retrievedCards[0].externalSurfaceResolution, "canonical_lookup_exact_cid_intersection");
+  assert.equal(evidence.retrievedCards[0].canonicalLookupCidIntersectionVerified, true);
   assert.deepEqual(evidence.cardResolution.unresolvedMentions, []);
 });
 
-test("a canonical-name lookup fails closed when the provider record does not contain the user surface", async () => {
+test("a canonical-name lookup fails closed when the original surface and canonical name have different CIDs", async () => {
   clearBaigeSearchCache();
   const userSurface = "测试风之达维";
   const canonicalChineseName = "测试风之达象";
@@ -1243,6 +1421,9 @@ test("a canonical-name lookup fails closed when the provider record does not con
         input: userSurface,
         cardId: canonicalLocalCard.id,
         confidence: 0.94,
+        identityMatchKind: "edit_distance",
+        retrievalIdentityMatchKind: "local_fuzzy",
+        requiresExternalIdentityVerification: true,
         resolutionSource: "query",
       }],
       unresolvedMentions: [],
@@ -1254,6 +1435,18 @@ test("a canonical-name lookup fails closed when the provider record does not con
     qaRecords: [],
     fetchImpl: async (url) => {
       const query = new URL(String(url)).searchParams.get("search");
+      if (query === userSurface) {
+        return jsonResponse({
+          result: [{
+            cid: 613,
+            id: 12345613,
+            cn_name: "另一张外部检索卡",
+            text: { types: "[怪兽|效果]", desc: "不相关卡文。" },
+            data: { type: 33 },
+          }],
+          next: 0,
+        });
+      }
       if (query !== canonicalJapaneseName) return jsonResponse({ result: [], next: 0 });
       return jsonResponse({
         result: [{
@@ -1276,6 +1469,100 @@ test("a canonical-name lookup fails closed when the provider record does not con
   assert.ok(evidence.cardResolution.unresolvedMentions.some((mention) => (
     mention.input === userSurface
     && mention.reason === "external_identity_verification_failed"
+  )));
+});
+
+test("a unique exact provider alias resolves an unresolved surface ahead of fuzzy decoys", async () => {
+  clearBaigeSearchCache();
+  const userSurface = "匿名风辉识别者";
+  const canonicalLocalCard = {
+    id: "621",
+    name: "匿名风辉规范名",
+    aliases: ["匿名风辉规范名"],
+    effectText: "本地同步的完整卡文。",
+  };
+  const evidence = await retrieveRagEvidence({
+    userQuery: `「${userSurface}」可以发动吗？`,
+    cardResolution: {
+      resolvedCards: [],
+      unresolvedMentions: [{ input: userSurface, reason: "not_found" }],
+      ambiguousMentions: [],
+      userProvidedCardTexts: [],
+    },
+    cards: [canonicalLocalCard],
+    records: [],
+    qaRecords: [],
+    fetchImpl: async () => jsonResponse({
+      result: [{
+        cid: 621,
+        id: 12345621,
+        cn_name: "匿名风辉规范名",
+        sc_name: userSurface,
+        jp_name: "匿名風輝識別者",
+        text: { desc: "外部镜像卡文。" },
+      }, {
+        cid: 622,
+        id: 12345622,
+        cn_name: `${userSurface}改`,
+        jp_name: "匿名風輝識別者・改",
+        text: { desc: "模糊干扰候选。" },
+      }],
+      next: 0,
+    }),
+    env: { RAG_LIVE_OFFICIAL_QA: "0" },
+  });
+
+  assert.deepEqual(evidence.retrievedCards.map((card) => card.id), [canonicalLocalCard.id]);
+  assert.equal(
+    evidence.retrievedCards[0].identityVerificationStatus,
+    "verified_external_resolution",
+  );
+  assert.equal(
+    evidence.retrievedCards[0].identityVerificationSource,
+    "provider_surface_unique_identity",
+  );
+  assert.match(evidence.cardTexts[0].text, /本地同步的完整卡文/u);
+  assert.deepEqual(evidence.cardResolution.unresolvedMentions, []);
+  assert.deepEqual(evidence.cardResolution.ambiguousMentions, []);
+});
+
+test("the same exact provider alias on two stable identities remains ambiguous", async () => {
+  clearBaigeSearchCache();
+  const userSurface = "匿名共享译名";
+  const evidence = await retrieveRagEvidence({
+    userQuery: `「${userSurface}」可以发动吗？`,
+    cardResolution: {
+      resolvedCards: [],
+      unresolvedMentions: [{ input: userSurface, reason: "not_found" }],
+      ambiguousMentions: [],
+      userProvidedCardTexts: [],
+    },
+    cards: [],
+    records: [],
+    qaRecords: [],
+    fetchImpl: async () => jsonResponse({
+      result: [{
+        cid: 631,
+        id: 12345631,
+        cn_name: "匿名规范名甲",
+        sc_name: userSurface,
+        text: { desc: "候选甲。" },
+      }, {
+        cid: 632,
+        id: 12345632,
+        cn_name: "匿名规范名乙",
+        sc_name: userSurface,
+        text: { desc: "候选乙。" },
+      }],
+      next: 0,
+    }),
+    env: { RAG_LIVE_OFFICIAL_QA: "0" },
+  });
+
+  assert.deepEqual(evidence.retrievedCards, []);
+  assert.deepEqual(evidence.cardResolution.resolvedCards, []);
+  assert.ok(evidence.cardResolution.ambiguousMentions.some((mention) => (
+    mention.input === userSurface && mention.candidateCards.length === 2
   )));
 });
 

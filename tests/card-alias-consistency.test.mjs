@@ -514,7 +514,13 @@ test("equivalent short and full questions retrieve the same governing FAQ after 
       fetchImpl: async (url) => {
         fetchCalls += 1;
         const query = new URL(String(url)).searchParams.get("search");
-        if (normalizeCardKey(query) !== normalizeCardKey("异界共鸣-同调融合")) {
+        const providerSearchSurfaces = new Set([
+          "异界共鸣-同调融合",
+          "异界共鸣－同步结合",
+          "異界共鳴－シンクロ・フュージョン",
+          "Harmonic Synchro Fusion",
+        ].map(normalizeCardKey));
+        if (!providerSearchSurfaces.has(normalizeCardKey(query))) {
           return { ok: true, status: 200, json: async () => ({ result: [], next: 0 }) };
         }
         return {

@@ -11,6 +11,7 @@ import {
   normalizeInjectedData,
   retrieveRagEvidence,
 } from "../backend/ragEvidenceRetriever.mjs";
+import { bindOfficialQaDiscoveryRelations } from "../backend/officialQaDiscoveryRelations.mjs";
 import { buildRagRulingPromptBundle } from "../backend/ragRulingPrompt.mjs";
 import {
   canonicalJsonBytes,
@@ -81,6 +82,7 @@ test("explicit canonical registration prevents non-idempotent records from being
   );
   const reinjected = normalizeInjectedData(detached);
 
+  assert.strictEqual(reinjected, detached);
   assert.strictEqual(reinjected.cards, detached.cards);
   assert.strictEqual(reinjected.records, detached.records);
   assert.strictEqual(reinjected.qaRecords, detached.qaRecords);
@@ -97,6 +99,11 @@ test("precompiled RAG runtime is byte-exact with the raw loader and four real re
   const runtimeBundle = await loadRagRuntimeBundle({ dataDir });
 
   assert.equal(runtimeBundle.ok, true, runtimeFailureDiagnostic(runtimeBundle));
+  await bindOfficialQaDiscoveryRelations({
+    dataDir,
+    data: runtimeBundle.data,
+    requireTrustedData: true,
+  });
   assert.equal(fixture.cases.length, 4, "the parity gate must retain all four real dry-run cases");
 
   for (const corpus of RAG_RUNTIME_CORPORA) {

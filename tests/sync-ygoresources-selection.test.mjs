@@ -3,9 +3,11 @@ import test from "node:test";
 
 import {
   buildCardQaDiscoveryIndex,
+  buildQaDetailCoverageStatus,
   buildFairQaCoverageOrder,
   classifyRemoteItemFetchFailure,
   collectDiscoveredQaIds,
+  hasCompleteYgoresourcesQaBody,
   isAuthoritativeQaDetailSnapshot,
   isCompleteCardSnapshotRun,
   mergeCardQaDiscoveryIndex,
@@ -18,6 +20,9 @@ import {
   rankCardQaIds,
   retainBoundedQaDetails,
   selectQaIdsForSync,
+  updateKnownRetiredQaIds,
+  updateQaMissingObservations,
+  updateQaDetailStaleIds,
 } from "../scripts/sync-ygoresources.mjs";
 import { quarantineRulingData } from "../backend/rulingDataQuality.mjs";
 
@@ -68,6 +73,159 @@ test("discovered QA missing from the lightweight index is refreshed before ordin
 
   assert.deepEqual(selected.ids, ["900", "901", "902", "903"]);
   assert.equal(selected.prioritySelectedCount, 2);
+});
+
+test("unindexed QA rotates independently so a persistent failure cannot starve later IDs", () => {
+  const discovered = Array.from({ length: 10 }, (_, index) => String(index + 1));
+  const indexed = new Set();
+  let priorityCursor = 0;
+
+  for (let run = 0; run < 6; run += 1) {
+    const priorityQaIds = discovered.filter((id) => !indexed.has(id));
+    const selected = selectQaIdsForSync({
+      priorityQaIds,
+      priorityCursor,
+      limit: 3,
+    });
+    for (const id of selected.ids) {
+      if (id !== "1") indexed.add(id);
+    }
+    priorityCursor = selected.nextPriorityCursor;
+  }
+
+  assert.deepEqual([...indexed].sort((left, right) => Number(left) - Number(right)), discovered.slice(1));
+  assert.deepEqual(buildQaDetailCoverageStatus({
+    discoveredQaIds: discovered,
+    indexedQaIds: [...indexed],
+  }).incompleteIds, ["1"]);
+});
+
+test("QA detail coverage excludes explicitly retired IDs and reports every other missing body", () => {
+  const retiredQaIds = updateKnownRetiredQaIds({
+    previousRetiredQaIds: ["2", "4", "99"],
+    changedQaIds: ["2"],
+    removedQaIds: ["3"],
+    recoveredQaIds: ["4"],
+    discoveredQaIds: ["1", "2", "3", "4"],
+  });
+  const coverage = buildQaDetailCoverageStatus({
+    discoveredQaIds: ["1", "2", "3", "4"],
+    indexedQaIds: ["1"],
+    retiredQaIds,
+  });
+
+  assert.deepEqual(retiredQaIds, ["3"]);
+  assert.deepEqual(coverage, {
+    complete: false,
+    discoveredCount: 4,
+    indexedCount: 1,
+    retiredCount: 1,
+    incompleteCount: 2,
+    incompleteIds: ["2", "4"],
+  });
+});
+
+test("a transient 404 requires confirmation and a later success clears retirement state", () => {
+  const first = updateQaMissingObservations({
+    discoveredQaIds: ["1", "2"],
+    missingQaIds: ["2"],
+  });
+  assert.deepEqual(first.observations, { 2: 1 });
+  assert.deepEqual(first.confirmedRemovedQaIds, []);
+
+  const second = updateQaMissingObservations({
+    previousObservations: first.observations,
+    discoveredQaIds: ["1", "2"],
+    missingQaIds: ["2"],
+  });
+  assert.deepEqual(second.observations, { 2: 2 });
+  assert.deepEqual(second.confirmedRemovedQaIds, ["2"]);
+
+  const recovered = updateQaMissingObservations({
+    previousObservations: second.observations,
+    discoveredQaIds: ["1", "2"],
+    successfulQaIds: ["2"],
+  });
+  assert.deepEqual(recovered.observations, {});
+  assert.deepEqual(recovered.confirmedRemovedQaIds, []);
+  assert.deepEqual(updateKnownRetiredQaIds({
+    previousRetiredQaIds: ["2"],
+    recoveredQaIds: ["2"],
+    discoveredQaIds: ["1", "2"],
+  }), []);
+});
+
+test("a changed QA counts a same-run 404 as the first missing observation", () => {
+  const first = updateQaMissingObservations({
+    previousObservations: { 2: 1 },
+    discoveredQaIds: ["1", "2"],
+    changedQaIds: ["2"],
+    missingQaIds: ["2"],
+  });
+  assert.deepEqual(first.observations, { 2: 1 });
+  assert.deepEqual(first.confirmedRemovedQaIds, []);
+
+  const second = updateQaMissingObservations({
+    previousObservations: first.observations,
+    discoveredQaIds: ["1", "2"],
+    missingQaIds: ["2"],
+  });
+  assert.deepEqual(second.observations, { 2: 2 });
+  assert.deepEqual(second.confirmedRemovedQaIds, ["2"]);
+});
+
+test("an explicit 410 removal clears a prior 404 observation", () => {
+  const removed = updateQaMissingObservations({
+    previousObservations: { 2: 1 },
+    discoveredQaIds: ["1", "2"],
+    removedQaIds: ["2"],
+  });
+  assert.deepEqual(removed.observations, {});
+  assert.deepEqual(removed.confirmedRemovedQaIds, []);
+});
+
+test("a changed QA stays stale after fetch failure until a later successful refresh", () => {
+  const failed = updateQaDetailStaleIds({
+    previousStaleQaIds: ["4"],
+    changedQaIds: ["2"],
+    failedQaIds: ["2"],
+    successfulQaIds: ["4"],
+    discoveredQaIds: ["1", "2", "3", "4"],
+  });
+  assert.deepEqual(failed, ["2"]);
+  assert.deepEqual(buildQaDetailCoverageStatus({
+    discoveredQaIds: ["1", "2", "3"],
+    indexedQaIds: ["1", "2", "3"],
+    staleQaIds: failed,
+  }).incompleteIds, ["2"]);
+
+  const recovered = updateQaDetailStaleIds({
+    previousStaleQaIds: failed,
+    successfulQaIds: ["2"],
+    discoveredQaIds: ["1", "2", "3"],
+  });
+  assert.deepEqual(recovered, []);
+});
+
+test("QA detail coverage recognizes only a mechanically bounded question and answer body", () => {
+  const title = "匿名完整问题的省略标题足够长…";
+  const completeCompact = {
+    id: "ygoresources-qa-88001",
+    recordType: "qa",
+    sourceName: "YGOResources DB",
+    title,
+    text: `匿名完整问题应当如何处理？\n${title}\n按照记述处理。`,
+  };
+  const answerOnly = {
+    id: "ygoresources-qa-88002",
+    recordType: "qa",
+    sourceName: "YGOResources DB",
+    title: "匿名答案资料标题足够长",
+    text: "按照记述处理。",
+  };
+
+  assert.equal(hasCompleteYgoresourcesQaBody(completeCompact), true);
+  assert.equal(hasCompleteYgoresourcesQaBody(answerOnly), false);
 });
 
 test("card QA ranking prioritizes interactions referenced by multiple cards", () => {
@@ -402,9 +560,9 @@ test("cumulative ruling merge keeps healthy old QA and lets new records override
   assert.equal(quarantined.records.find((item) => item.id === "ygoresources-qa-updated")?.conclusion, "旧答案");
 });
 
-test("withdrawn remote QA is non-fatal and removed from the cumulative snapshot", () => {
+test("a 404 is provisional while a 410 is an immediate non-fatal retirement", () => {
   assert.deepEqual(classifyRemoteItemFetchFailure({ status: 404 }), {
-    kind: "removed",
+    kind: "missing",
     fatal: false,
     status: 404,
   });
