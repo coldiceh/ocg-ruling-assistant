@@ -56,6 +56,37 @@ test("passive alias scanning does not extract short card names from inside longe
   assert.ok(!resolution.resolvedCards.some((card) => String(card.id) === "4030"));
 });
 
+test("an internal short card-name fragment cannot become an exact identity", () => {
+  const localCards = [{
+    id: "internal-short-fragment",
+    name: "连锁除外",
+    cnName: "连锁除外",
+    aliases: ["连锁除外"],
+  }, {
+    id: "canonical-short-name",
+    name: "雷击",
+    cnName: "雷击",
+    aliases: ["雷击"],
+  }];
+  const operationResults = ["low", "medium", "high"].map((confidence) => extractRagCards(
+    "这个效果会进行“除外”处理。",
+    {
+      cards: localCards,
+      modelCardNameCandidates: [{ name: "连锁除外", originalText: "除外", confidence }],
+    },
+  ));
+  const canonical = extractRagCards("发动“雷击”。", {
+    cards: localCards,
+    modelCardNameCandidates: [{ name: "雷击", originalText: "雷击", confidence: "high" }],
+  });
+
+  for (const operation of operationResults) {
+    assert.equal(operation.resolvedCards.some((card) => card.id === "internal-short-fragment"), false);
+    assert.ok(operation.unresolvedMentions.some((mention) => mention.input === "除外"));
+  }
+  assert.equal(canonical.resolvedCards[0]?.id, "canonical-short-name");
+});
+
 test("all exact mention sources share longest non-overlapping query spans", () => {
   const cards = [{
     id: "span-long",

@@ -1541,7 +1541,7 @@ test("targeted-eight workflow keeps private evidence requirements outside the re
     workflow,
     /--requirements "\$RUNNER_TEMP\/frozen-eight-requirements\.json"/u,
   );
-  assert.match(workflow, /RAG_RULE_MODEL_TIMEOUT_MS:\s*"180000"/u);
+  assert.match(workflow, /RAG_RULE_MODEL_TIMEOUT_MS:\s*"120000"/u);
   assert.match(workflow, /workflow_dispatch:/u);
   assert.match(workflow, /private-frozen-evidence-capture-\*/u);
   assert.match(workflow, /stage="capture"/u);

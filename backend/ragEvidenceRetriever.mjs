@@ -56,6 +56,8 @@ const retrievalRecordFeatureCache = new WeakMap();
 const retrievalQuestionFeatureCache = new WeakMap();
 const recordAuthorityIdentityIndexCache = new WeakMap();
 const canonicalCardIdentityIndexCache = new WeakMap();
+const MAX_MODEL_RULE_QUERY_BRANCHES = 4;
+const MAX_INDEPENDENT_RULE_QUERY_BRANCHES = MAX_MODEL_RULE_QUERY_BRANCHES + 1;
 
 // These are atomic, card-agnostic facts used by every mechanism query. They
 // describe timing, sequence, visibility, zones, actors and activation kinds;
@@ -283,6 +285,8 @@ export async function retrieveRagEvidence({
     ...unresolvedMentionsAfterRetrieval(unresolvedResolutionCandidates, retrievalCards),
     ...identityVerificationFailures,
   ]);
+  const hasPendingCardIdentity = remainingUnresolvedMentions.length > 0
+    || (preEvidenceCardResolution.ambiguousMentions || []).length > 0;
   if (parentheticalAliasKeys.size) retrievalWarnings.push(`parenthetical_alias_mentions_collapsed:${parentheticalAliasKeys.size}`);
   if (fuzzyCards.length) retrievalWarnings.push(`unresolved_mentions_fuzzy_matched:${fuzzyCards.map((card) => card.name).join(",")}`);
   if (baigeResolvedCards.length) retrievalWarnings.push(`unresolved_mentions_baige_matched:${baigeResolvedCards.map((card) => card.name).join(",")}`);
@@ -421,7 +425,7 @@ export async function retrieveRagEvidence({
   const crossCardQuestionBranchQueries = selectIndependentRuleQueries({
     deterministicRuleQueries,
     supplementalRuleQueries: effectiveSupplementalRuleQueries,
-    limit: 4,
+    limit: MAX_INDEPENDENT_RULE_QUERY_BRANCHES,
   });
   const crossCardQuestionBranchKeys = crossCardQuestionBranchQueries
     .map(ruleSearchQueryIdentity)
@@ -490,7 +494,7 @@ export async function retrieveRagEvidence({
     mentionQueries,
     deterministicRuleQueries,
     supplementalRuleQueries: effectiveSupplementalRuleQueries,
-    independentQueryLimit: 4,
+    independentQueryLimit: MAX_INDEPENDENT_RULE_QUERY_BRANCHES,
     allowNoCardMatch: effectiveQaIdentityCards.length === 0,
   }).map((record) => officialQaNumericId(record)).filter(Boolean);
   const localCandidateQaIds = dedupeBy(
@@ -585,7 +589,7 @@ export async function retrieveRagEvidence({
     mentionQueries,
     deterministicRuleQueries,
     supplementalRuleQueries: effectiveSupplementalRuleQueries,
-    independentQueryLimit: 4,
+    independentQueryLimit: MAX_INDEPENDENT_RULE_QUERY_BRANCHES,
     allowNoCardMatch: effectiveQaIdentityCards.length === 0 && normalizedRuleQueries.length > 0,
   });
   const scopedOfficialQaRelatedSource = mergeOfficialRelatedSourceItems([
@@ -603,15 +607,22 @@ export async function retrieveRagEvidence({
   // pool with the same rule-query plan and keep a small, bounded related-only
   // reserve. This never upgrades an analogy to a direct ruling and never uses
   // the answer text to resolve card identity.
-  const crossCardOfficialPool = applyModelAssessmentsToRecords(dedupeBy([
+  const crossCardOfficialQuestionPool = applyModelAssessmentsToRecords(dedupeBy([
     ...recordBuckets.officialQa,
     ...recordBuckets.faq,
   ], stableRecordKey).filter(hasOfficialQuestionSurface), modelAssessmentById);
   const eligibleCrossCardOfficialPool = effectiveQaIdentityCards.length
-    ? crossCardOfficialPool.filter(
+    ? crossCardOfficialQuestionPool.filter(
       (record) => !recordSharesResolvedIdentity(record, effectiveQaIdentityCards),
     )
-    : [];
+    // A card-agnostic rules question has no identity anchor by design. Keep the
+    // complete official question pool eligible for the same bounded,
+    // related-only branch retrieval instead of collapsing the pool to empty.
+    // An unresolved or ambiguous card surface is different: broad retrieval
+    // must not let a guessed model expansion unlock card-scoped evidence.
+    : hasPendingCardIdentity
+      ? []
+      : crossCardOfficialQuestionPool;
   const crossCardOfficialCandidateLimit = Math.max(16, limits.maxRelatedEvidence * 4);
   const modelAssessedCrossCardCandidates = eligibleCrossCardOfficialPool
     .filter(hasEligibleModelCandidateAssessment)
@@ -629,7 +640,7 @@ export async function retrieveRagEvidence({
         // retrieval. Cross-card analogues require an explicit planner branch.
         deterministicRuleQueries: [],
         supplementalRuleQueries: effectiveSupplementalRuleQueries,
-        independentQueryLimit: 4,
+        independentQueryLimit: MAX_INDEPENDENT_RULE_QUERY_BRANCHES,
         allowNoCardMatch: true,
       })
         .filter((record) => !recordSharesResolvedIdentity(record, effectiveQaIdentityCards))
@@ -637,8 +648,8 @@ export async function retrieveRagEvidence({
     : [];
   const questionBranchCrossCardCandidates = rankOfficialQaQuestionBranches({
     records: eligibleCrossCardOfficialPool,
-    // Spend the fixed four-branch budget on model subclaims first, then fill
-    // only unused slots with deterministic user/card-text branches. The ranker
+    // Keep all four bounded model subclaims plus one deterministic user/card-
+    // text fallback branch. The ranker
     // projects every candidate to its official question before comparison.
     ruleSearchQueries: crossCardQuestionBranchQueries,
     supplementalRuleQueryKeys: independentRuleQueryKeys,
@@ -650,7 +661,7 @@ export async function retrieveRagEvidence({
   ]).map((item) => item.record || item);
   const lexicallyRankedCrossCardCandidates = eligibleCrossCardOfficialPool.length
     ? reserveSupplementalQueryCoverage(mergedLexicalCrossCardCandidates, crossCardOfficialCandidateLimit, {
-          queryKeys: independentRuleQueryKeys,
+          queryKeys: crossCardQuestionBranchKeys,
           strictOnly: false,
         })
         .slice(0, crossCardOfficialCandidateLimit)
@@ -658,12 +669,13 @@ export async function retrieveRagEvidence({
   // Merge model-assessed and independently ranked candidates, but keep the
   // evidence-derived comparator authoritative. The question-only model may
   // break a genuine tie; it cannot jump ahead of stronger mechanism evidence.
-  const crossCardOfficialQaSource = dedupeBy([
+  const crossCardQuestionSource = dedupeBy([
     ...lexicallyRankedCrossCardCandidates,
     ...modelAssessedCrossCardCandidates,
   ], stableRecordKey)
     .sort(compareRetrievedRecords)
     .slice(0, crossCardOfficialCandidateLimit);
+  const crossCardOfficialQaSource = crossCardQuestionSource;
   const scopedOfficialQaRelatedCandidates = scopedOfficialQaRelatedSource
     .map((item) => item.record
       ? evidenceFromOfficialMatch(item, "related", limits.maxEvidenceTextChars, retrievalWarnings)
@@ -728,7 +740,7 @@ export async function retrieveRagEvidence({
     mentionQueries,
     deterministicRuleQueries,
     supplementalRuleQueries: effectiveSupplementalRuleQueries,
-    independentQueryLimit: 4,
+    independentQueryLimit: MAX_INDEPENDENT_RULE_QUERY_BRANCHES,
     allowNoCardMatch: retrievalCards.length === 0 && normalizedRuleQueries.length > 0,
   });
   const faqRelatedSource = reserveRankedHeadAndSupplementalCoverage(
@@ -835,7 +847,7 @@ export async function retrieveRagEvidence({
         allocatedOfficialRelatedIds: diagnosticCandidateIds(officialQaRelated),
         allocatedCrossCardIds: diagnosticCandidateIds(
           officialQaRelated.filter((item) => (
-            item?.retrievalContext?.scope === "cross_card_official_mechanism"
+            /^cross_card_official_/u.test(String(item?.retrievalContext?.scope || ""))
           )),
         ),
         notAllocatedScopedIds: diagnosticCandidateIds(scopedOfficialQaRelatedCandidates)
@@ -2337,7 +2349,7 @@ function rankOfficialQaQuestionBranches({
 
   const queryPlans = queries.map((query) => ({
     query,
-    question: selectOfficialQaSearchBranch(query.query),
+    question: selectOfficialQaSearchBranch(query.officialQuestion || query.query),
     queryKey: ruleSearchQueryIdentity(query),
   })).filter(({ question, queryKey }) => question && queryKey);
   if (!queryPlans.length) return [];
@@ -2366,7 +2378,7 @@ function rankOfficialQaQuestionBranches({
       // synchronized corpus, while the complete planner item supplies
       // language-independent mechanism signals. Both are question-side inputs;
       // official answers never participate in discovery.
-      contextText: [query.subclaim, query.query]
+      contextText: [query.subclaim, query.scenarioQuestion || query.query]
         .filter(Boolean)
         .join(" "),
       profiles: questionProfiles,
@@ -2381,7 +2393,7 @@ function rankOfficialQaQuestionBranches({
       phraseMatches.slice(0, 2).map((match) => stableRecordKey(match.record)),
     );
     const multilingualMechanismMatches = rankOfficialQaMultilingualMechanismProfiles({
-      contextText: [query.subclaim, query.query]
+      contextText: [query.subclaim, query.scenarioQuestion || query.query]
         .filter(Boolean)
         .join(" "),
       // Apply the multilingual bound after removing records already supplied
@@ -2889,32 +2901,72 @@ export function selectIndependentRuleQueries({
   supplementalRuleQueries = [],
   limit = 0,
 } = {}) {
-  const safeLimit = Math.max(0, Math.min(4, Math.floor(Number(limit) || 0)));
+  const safeLimit = Math.max(0, Math.min(
+    MAX_INDEPENDENT_RULE_QUERY_BRANCHES,
+    Math.floor(Number(limit) || 0),
+  ));
   if (!safeLimit) return [];
-  // Prefer model-generated unresolved subclaims, but always retain one
-  // independent deterministic branch when one exists. Otherwise a full
-  // four-query model plan can silently remove the original-question fallback.
-  // The reservation stays within the same global query and evidence caps.
+  // Prefer model-generated unresolved subclaims, but retain one independent
+  // deterministic user/card-text branch when one exists. A full model plan is
+  // still fallible and must not silently remove the original-question safety
+  // net. The reservation stays inside the same four-query cap.
   const supplemental = normalizeRuleSearchQueries(supplementalRuleQueries, {
-    maxRuleSearchQueries: safeLimit,
+    maxRuleSearchQueries: 16,
   });
   const supplementalKeys = new Set(
     supplemental.map(ruleSearchQueryIdentity).filter(Boolean),
   );
   const deterministic = normalizeRuleSearchQueries(deterministicRuleQueries, {
-    maxRuleSearchQueries: safeLimit,
+    // Inspect the complete bounded deterministic plan before choosing the
+    // reserved branch. A decisive card-text operation may occur late in the
+    // printed effect and must not lose merely because broad question-derived
+    // queries appeared first.
+    maxRuleSearchQueries: 16,
   }).filter((query) => !supplementalKeys.has(ruleSearchQueryIdentity(query)));
   if (!deterministic.length) return supplemental.slice(0, safeLimit);
   const supplementalLimit = Math.max(0, safeLimit - 1);
-  const reservedSupplemental = supplemental.slice(0, supplementalLimit);
-  // Keep strict-mechanism ranking and full-question ranking on the same
-  // bounded query plan. Otherwise each path can silently preserve a different
-  // set of four branches and lose a later decision checkpoint.
-  return normalizeRuleSearchQueries([
-    ...reservedSupplemental,
-    ...deterministic,
-    ...supplemental.slice(supplementalLimit),
-  ], {
+  const selected = supplemental.slice(0, supplementalLimit);
+  const supplementalMechanismFeatures = new Set(
+    selected.flatMap((query) => [...buildRuleMechanismSignature(query.query)]
+      .filter(isStrongRuleMechanismFeature)),
+  );
+  const deterministicMechanismFeatures = deterministic.map((query) => (
+    [...buildRuleMechanismSignature(query.query)].filter(isStrongRuleMechanismFeature)
+  ));
+  const remainingDeterministic = deterministic.map((query, index) => ({
+    query,
+    index,
+    features: deterministicMechanismFeatures[index],
+  }));
+  const representedFeatures = new Set(supplementalMechanismFeatures);
+
+  while (selected.length < safeLimit && remainingDeterministic.length) {
+    remainingDeterministic.sort((left, right) => {
+      const leftFeatures = left.features;
+      const rightFeatures = right.features;
+      const novelty = (features) => features
+        .filter((feature) => !representedFeatures.has(feature))
+        .reduce((total, feature) => total + ruleMechanismFeatureWeight(feature), 0);
+      const leftNovelty = novelty(leftFeatures);
+      const rightNovelty = novelty(rightFeatures);
+      return rightNovelty - leftNovelty
+        || rightFeatures.filter((feature) => !representedFeatures.has(feature)).length
+          - leftFeatures.filter((feature) => !representedFeatures.has(feature)).length
+        || Number(/card_text/iu.test(String(right.query.source || "")))
+          - Number(/card_text/iu.test(String(left.query.source || "")))
+        || left.index - right.index;
+    });
+    const [{ query, features }] = remainingDeterministic.splice(0, 1);
+    selected.push(query);
+    for (const feature of features) representedFeatures.add(feature);
+  }
+
+  for (const query of supplemental.slice(supplementalLimit)) {
+    if (selected.length >= safeLimit) break;
+    selected.push(query);
+  }
+
+  return normalizeRuleSearchQueries(selected, {
     maxRuleSearchQueries: safeLimit,
   });
 }
@@ -3517,7 +3569,7 @@ function retrievalRankingIdentity(record = {}, preparedProjection) {
 }
 
 function inferRuleSearchMechanism(item = {}) {
-  const signature = buildRuleMechanismSignature(item?.query);
+  const signature = buildRuleMechanismSignature(item?.scenarioQuestion || item?.query);
   if (!isUsableRuleMechanismSignature(signature)) return "";
   return ruleMechanismSignatureIdentity(signature);
 }
@@ -3532,8 +3584,10 @@ function ruleMechanismSignatureIdentity(signature = new Set()) {
 }
 
 function ruleSearchQueryIdentity(item = {}) {
-  const queryKey = normalizeCardKey(item?.query);
-  if (!queryKey) return "";
+  const officialQuestionKey = normalizeCardKey(item?.officialQuestion || item?.query);
+  const scenarioQuestionKey = normalizeCardKey(item?.scenarioQuestion || item?.query);
+  if (!officialQuestionKey && !scenarioQuestionKey) return "";
+  const queryKey = `${officialQuestionKey}\u0000${scenarioQuestionKey}`;
   return `${queryKey}|${inferRuleSearchMechanism(item)}`;
 }
 
@@ -3545,6 +3599,8 @@ function normalizeRuleSearchQueries(items, limits = {}) {
       ? {
           subclaim: "",
           checkpoint: "",
+          officialQuestion: item,
+          scenarioQuestion: item,
           query: item,
           reason: "",
           confidence: "medium",
@@ -3554,24 +3610,45 @@ function normalizeRuleSearchQueries(items, limits = {}) {
       : {
           subclaim: String(item?.subclaim || item?.factToVerify || item?.ruleQuestion || "").trim(),
           checkpoint: String(item?.checkpoint || item?.stage || "").trim(),
-          query: String(item?.query || item?.searchQuery || item?.keyword || item?.topic || "").trim(),
+          officialQuestion: String(
+            item?.officialQuestion || item?.officialQaQuestion
+              || item?.query || item?.searchQuery || item?.keyword || item?.topic || "",
+          ).trim(),
+          scenarioQuestion: String(
+            item?.scenarioQuestion || item?.fullScenarioQuestion
+              || item?.query || item?.searchQuery || item?.keyword || item?.topic || "",
+          ).trim(),
+          query: String(
+            item?.query || item?.scenarioQuestion || item?.officialQuestion
+              || item?.searchQuery || item?.keyword || item?.topic || "",
+          ).trim(),
           reason: String(item?.reason || "").trim(),
           confidence: item?.confidence || "medium",
           source: item?.source || "rule_search_query",
           declaredMechanism: String(item?.declaredMechanism || item?.mechanism || "").trim(),
         })
-    .map((item) => ({
-      ...item,
-      subclaim: item.subclaim.replace(/\s+/gu, " ").slice(0, 160),
-      checkpoint: item.checkpoint.replace(/\s+/gu, " ").toLowerCase().slice(0, 64),
-      query: normalizeRuleSearchQueryText(item.query),
-      reason: item.reason.replace(/\s+/gu, " ").slice(0, 120),
-      mechanism: inferRuleSearchMechanism(item),
-    }))
+    .map((item) => {
+      const officialQuestion = normalizeRuleSearchQueryText(item.officialQuestion);
+      const scenarioQuestion = normalizeRuleSearchQueryText(item.scenarioQuestion);
+      const query = scenarioQuestion || officialQuestion || normalizeRuleSearchQueryText(item.query);
+      const normalized = {
+        ...item,
+        subclaim: item.subclaim.replace(/\s+/gu, " ").slice(0, 160),
+        checkpoint: item.checkpoint.replace(/\s+/gu, " ").toLowerCase().slice(0, 64),
+        officialQuestion: officialQuestion || query,
+        scenarioQuestion: scenarioQuestion || query,
+        query,
+        reason: item.reason.replace(/\s+/gu, " ").slice(0, 120),
+      };
+      return {
+        ...normalized,
+        mechanism: inferRuleSearchMechanism(normalized),
+      };
+    })
     .filter((item) => item.query && /[A-Za-z\u3040-\u30ff\u3400-\u9fff0-9]/u.test(item.query));
   const groupedByQuery = new Map();
   for (const item of normalized) {
-    const key = normalizeCardKey(item.query);
+    const key = `${normalizeCardKey(item.officialQuestion)}\u0000${normalizeCardKey(item.scenarioQuestion)}`;
     const group = groupedByQuery.get(key) || [];
     group.push(item);
     groupedByQuery.set(key, group);
@@ -3705,7 +3782,9 @@ function isStrictSupplementalOfficialMechanismMatch(record = {}, query = {}) {
   // Mechanism coverage is recomputed against this one supplemental query. The
   // ordinary ranked record carries aggregate signals, and a handwritten
   // question-type label is intentionally not a hard deletion gate here.
-  const queryText = typeof query === "string" ? query : query?.query;
+  const queryText = typeof query === "string"
+    ? query
+    : query?.scenarioQuestion || query?.query;
   const querySignature = buildRuleMechanismSignature(queryText);
   if (!isUsableRuleMechanismSignature(querySignature)) return false;
   const evidenceSignature = retrievalQuestionFeatures(record).evidenceMechanismSignature;

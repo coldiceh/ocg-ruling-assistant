@@ -347,6 +347,52 @@ test("card FAQ question mentions remain cross-card related-only", async () => {
   assert.equal(related.retrievalContext.relatedOnly, true);
 });
 
+test("a card-agnostic rules question keeps the bounded official question pool eligible", async () => {
+  const target = {
+    id: "qa-anonymous-cardless-target",
+    recordType: "qa",
+    question: "不受其他卡效果影响的怪兽攻击时，可以发动使那次攻击无效的效果吗？",
+    rawDetailedQuestion: "不受其他卡效果影响的怪兽攻击时，可以发动使那次攻击无效的效果吗？",
+    answer: "官方资料分别说明发动与处理。",
+    cardIds: ["cardless-reference-owner"],
+  };
+  const decoys = Array.from({ length: 12 }, (_unused, index) => ({
+    id: `qa-anonymous-cardless-decoy-${index}`,
+    recordType: "qa",
+    question: `怪兽特殊召唤成功时可以抽卡吗？资料 ${index}`,
+    rawDetailedQuestion: `怪兽特殊召唤成功时可以抽卡吗？资料 ${index}`,
+    answer: "与当前机制无关。",
+    cardIds: [`cardless-decoy-${index}`],
+  }));
+
+  const evidence = await retrieveRagEvidence({
+    userQuery: "不受卡片效果影响的怪兽攻击时，对方能否发动让该次攻击无效的效果？",
+    cardResolution: {
+      resolvedCards: [],
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+      userProvidedCardTexts: [],
+    },
+    cards: [],
+    records: [],
+    qaRecords: [...decoys, target],
+    ruleSearchQueries: [{
+      officialQuestion: "不受卡片效果影响的怪兽攻击时，可以发动使攻击无效的效果吗？",
+      scenarioQuestion: "不受卡片效果影响的怪兽攻击时，对方能否发动让该次攻击无效的效果？",
+      source: "model_rule_query_extractor",
+    }],
+    enableLiveOfficialQa: false,
+    env: { RAG_LIVE_OFFICIAL_QA: "false", RAG_MAX_RELATED_EVIDENCE: "4" },
+  });
+
+  assert.ok(evidence.debug.candidateStages.crossCardRankedPoolIds.includes(target.id));
+  const related = evidence.officialQaRelated.find((item) => item.id === target.id);
+  assert.ok(related);
+  assert.equal(related.isDirect, false);
+  assert.equal(related.retrievalContext.relatedOnly, true);
+  assert.ok(!evidence.officialQaDirectCandidates.some((item) => item.id === target.id));
+});
+
 test("independent supplemental queries preserve distinct strict mechanisms over generic decoys", async () => {
   const current = syntheticCard("55001", "虚构查询锚点", "这张卡的处理会改变当前状态。");
   const replacement = {
@@ -401,12 +447,12 @@ test("independent supplemental queries preserve distinct strict mechanisms over 
   )));
 });
 
-test("the four-query budget preserves a later distinct checkpoint across both official QA retrieval paths", async () => {
+test("four model queries plus the deterministic fallback preserve a later distinct checkpoint", async () => {
   const current = syntheticCard("57001", "虚构检查点锚点", "这张卡的发动可能被无效。");
-  const labels = ["甲", "乙", "丙", "丁", "戊"];
+  const labels = ["甲", "乙", "丙", "丁"];
   const plannerQueries = labels.map((label, index) => ({
     subclaim: `核对印${label}的卡片发动被无效后的去向`,
-    checkpoint: index === 4 ? "resolution_snapshot" : "operation_legality",
+    checkpoint: index === 3 ? "resolution_snapshot" : "operation_legality",
     query: [
       `印${label}的卡片发动被无效后能否返回手牌`,
       `印${label}のカードの発動が無効になった後、そのカードを手札に戻せますか？`,
@@ -442,7 +488,7 @@ test("the four-query budget preserves a later distinct checkpoint across both of
   const normalizedPlannerQueries = evidence.ruleSearchQueries.filter(
     (item) => item.source === "model_rule_query_extractor",
   );
-  assert.equal(normalizedPlannerQueries.length, 5);
+  assert.equal(normalizedPlannerQueries.length, 4);
   assert.equal(new Set(normalizedPlannerQueries.map((item) => item.mechanism)).size, 1);
   assert.ok(evidence.debug.candidateStages.ruleQueryQuestionBranchCandidateIds.includes(target.id));
   assert.ok(evidence.debug.candidateStages.crossCardRankedPoolIds.includes(target.id));

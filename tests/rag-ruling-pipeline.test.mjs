@@ -995,6 +995,48 @@ test("resolved cards beyond maxCards remain visible as explicit card-limit menti
   assert.equal(omitted?.resolvedCardId, "18732");
 });
 
+test("mechanical model card-name noise cannot become unresolved identity work", () => {
+  const exactCard = {
+    id: "anonymous-clause-like-card",
+    name: "连锁处理中返回手牌龙",
+    cnName: "连锁处理中返回手牌龙",
+    aliases: ["连锁处理中返回手牌龙"],
+    effectText: "这张卡的效果在连锁处理中适用。",
+  };
+  const noise = [
+    "C1",
+    "C2",
+    "正在发动的卡",
+    "场上不存在其他魔法陷阱卡时，选择并返回手牌后进行处理。",
+  ];
+  const question = `C1发动「${exactCard.name}」，C2连锁。正在发动的卡能否返回手牌？题面另写：场上不存在其他魔法陷阱卡时，选择并返回手牌后进行处理。`;
+  const resolution = extractRagCards(question, {
+    cards: [exactCard],
+    modelCardNameCandidates: [
+      { name: exactCard.name, originalText: exactCard.name, confidence: "high" },
+      ...noise.map((name) => ({ name, originalText: name, confidence: "low" })),
+    ],
+  });
+
+  assert.ok(resolution.resolvedCards.some((card) => card.id === exactCard.id));
+  for (const item of noise) {
+    assert.ok(
+      !resolution.modelCardNameCandidates.some((mention) => (
+        mention.name === item || mention.originalText === item
+      )),
+      JSON.stringify({ item, modelCandidates: resolution.modelCardNameCandidates }),
+    );
+    assert.ok(
+      !resolution.unresolvedMentions.some((mention) => mention.input === item),
+      JSON.stringify({ item, unresolved: resolution.unresolvedMentions }),
+    );
+    assert.ok(
+      !resolution.ambiguousMentions.some((mention) => mention.input === item),
+      JSON.stringify({ item, ambiguous: resolution.ambiguousMentions }),
+    );
+  }
+});
+
 test("card alias indexes and local providers are cached by source data objects", () => {
   const localCards = [{ id: "cache-1", name: "缓存测试龙", aliases: ["缓存测试龙"] }];
   const localRecords = [];
@@ -1181,6 +1223,9 @@ test("rule query extractor uses Relay Sol low", async () => {
   assert.match(requestPrompt, /输出必须是单个 JSON 对象/u);
   assert.match(requestPrompt, /ruleQueries 和 candidateAssessments/u);
   assert.match(requestPrompt, /忠实保留玩家明确给出的事件、区域、表示形式、顺序和状态/u);
+  assert.match(requestPrompt, /否定、不存在、唯一性、数量、先后顺序、区域和表里状态前提/u);
+  assert.match(requestPrompt, /officialQuestion、scenarioQuestion/u);
+  assert.match(requestPrompt, /去除具体卡名但保留实体类别与机制关系/u);
   assert.match(requestPrompt, /某一步不能执行时前序结果是否保留/u);
   assert.match(requestPrompt, /多个实体、数值或方向之间选择/u);
   assert.match(requestPrompt, /然后／那之后／根据……适用/u);
@@ -1257,7 +1302,8 @@ test("rule query lenient parsing keeps structured metadata and candidate soft ra
           ruleQueries: [{
             subclaim: "确认处理时对象改变控制权后的适用性",
             checkpoint: "resolution_snapshot",
-            query: "处理时 对象 控制权改变 | 処理時 対象 コントロール変更 | target control changes during resolution",
+            officialQuestion: "对象在处理时改变控制权后如何处理 | 処理時に対象のコントロールが変わった場合 | target changes control during resolution",
+            scenarioQuestion: "匿名对象在处理前改变控制权后，原发动者如何继续处理 | 匿名対象のコントロール変更後に元の発動者はどう処理するか | how the original activator proceeds after control changes",
             reason: "检索处理时快照",
             confidence: "high",
           }],
@@ -1275,6 +1321,9 @@ test("rule query lenient parsing keeps structured metadata and candidate soft ra
   assert.equal(result.queries.length, 1);
   assert.equal(result.queries[0].checkpoint, "resolution_snapshot");
   assert.equal(result.queries[0].subclaim, "确认处理时对象改变控制权后的适用性");
+  assert.match(result.queries[0].officialQuestion, /对象在处理时改变控制权后如何处理/u);
+  assert.match(result.queries[0].scenarioQuestion, /匿名对象在处理前改变控制权/u);
+  assert.equal(result.queries[0].query, result.queries[0].scenarioQuestion);
   assert.deepEqual(result.candidateAssessments, [{
     id: "candidate-soft-rank",
     relevance: "high",
@@ -2140,7 +2189,15 @@ test("rag pipeline resolves exact model mentions before building rule queries fr
     ruleModelInvoker: async ({ prompt }) => {
       assert.equal(cardExtractionFinished, true);
       rulePrompt = prompt;
-      return JSON.stringify({ ruleQueries: [] });
+      return JSON.stringify({
+        ruleQueries: [{
+          subclaim: "确认测试龙①效果的发动条件",
+          checkpoint: "operation_legality",
+          query: "测试龙①效果的发动条件",
+          reason: "验证规则查询在卡片身份和完整卡文之后执行。",
+          confidence: "high",
+        }],
+      });
     },
     modelInvoker: async () => JSON.stringify(modelJson("根据完整卡文回答。")),
   });
@@ -2158,7 +2215,15 @@ test("rag pipeline gives user-provided new-card text to the rule-query model", a
     qaRecords: [],
     ruleModelInvoker: async ({ prompt }) => {
       rulePrompt = prompt;
-      return JSON.stringify({ ruleQueries: [] });
+      return JSON.stringify({
+        ruleQueries: [{
+          subclaim: "确认匿名新卡效果的处理步骤",
+          checkpoint: "resolution_snapshot",
+          query: "匿名新卡效果如何处理",
+          reason: "验证用户提供的完整卡文进入规则查询。",
+          confidence: "high",
+        }],
+      });
     },
     modelInvoker: async () => JSON.stringify(modelJson("根据用户提供的完整卡文回答。")),
   });
@@ -2202,6 +2267,15 @@ test("operation_legality_plans_rule_queries_without_rule_evidence_but_does_not_o
     cards: thunderImpermanenceCards(),
     records: [],
     qaRecords: [],
+    ruleModelInvoker: async () => JSON.stringify({
+      ruleQueries: [{
+        subclaim: "确认发动中的通常陷阱能否返回手牌并满足发动条件",
+        checkpoint: "operation_legality",
+        query: "发动中的通常陷阱 返回手牌 发动条件",
+        reason: "验证本地代码不覆盖最终模型裁定。",
+        confidence: "high",
+      }],
+    }),
     modelInvoker: async () => JSON.stringify({
       answerLevel: "rule_analysis",
       shortAnswer: "可以发动并把无限泡影返回手卡。",
@@ -2607,6 +2681,15 @@ test("card text does not replace the final model's displayed plain text", async 
     cards,
     records: [],
     qaRecords: [],
+    ruleModelInvoker: async () => JSON.stringify({
+      ruleQueries: [{
+        subclaim: "确认测试龙在缺少官方直接裁定时的处理依据",
+        checkpoint: "operation_legality",
+        query: "测试龙 发动条件 处理依据",
+        reason: "保持证据准备计划有效。",
+        confidence: "medium",
+      }],
+    }),
     modelInvoker: async () => JSON.stringify({
       answerLevel: "needs_more_info",
       shortAnswer: "当前资料不足，无法给出可靠裁定分析。",
@@ -2682,6 +2765,15 @@ test("no evidence does not let local code replace the model's ruling", async () 
     cards: [],
     records: [],
     qaRecords: [],
+    ruleModelInvoker: async () => JSON.stringify({
+      ruleQueries: [{
+        subclaim: "确认无现成资料时仍由最终模型给出分析",
+        checkpoint: "operation_legality",
+        query: "缺少现成资料时如何进行规则分析",
+        reason: "保持证据准备计划有效。",
+        confidence: "low",
+      }],
+    }),
     modelInvoker: async () => JSON.stringify({
       answerLevel: "rule_analysis",
       shortAnswer: "模型试图无资料分析。",
