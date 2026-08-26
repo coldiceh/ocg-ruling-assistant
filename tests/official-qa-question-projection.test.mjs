@@ -6,7 +6,10 @@ import {
   searchOfficialQaEvidence,
 } from "../backend/officialQaMatcher.mjs";
 import { projectOfficialQaQuestion } from "../backend/officialQaQuestionProjection.mjs";
-import { retrieveRagEvidence } from "../backend/ragEvidenceRetriever.mjs";
+import {
+  hasOfficialQuestionSurface,
+  retrieveRagEvidence,
+} from "../backend/ragEvidenceRetriever.mjs";
 import { classifyMultiEntityDecisionScope } from "../backend/evidenceQuestionTypeClassifier.mjs";
 
 test("rich and compact QA shapes share one question identity projection", () => {
@@ -36,6 +39,34 @@ test("rich and compact QA shapes share one question identity projection", () => 
   assert.equal(compact.branches.length, 2);
   assert.ok(rich.branches.every((branch) => branch.startsWith("复合官方问题。")));
   assert.ok(compact.branches.every((branch) => branch.startsWith("复合官方问题。")));
+});
+
+test("a compact official QA with a proven repeated-title boundary has a question surface", () => {
+  const title = "同一时点存在多个可发动效果时如何组成连锁的省略标题…";
+  const question = "同一时点存在多个必须或任意发动的效果时，应当按照什么顺序组成连锁？";
+  const record = {
+    id: "anonymous-compact-question-boundary",
+    recordType: "qa",
+    title,
+    text: `${question}\n${title}\n按照公开的优先顺序依次组成连锁。`,
+    sourceName: "YGOResources DB",
+  };
+
+  assert.equal(hasOfficialQuestionSurface(record), true);
+  assert.equal(projectOfficialQaQuestion(record).principalSurfaces[0], question);
+});
+
+test("an answer-only official blob without a proven boundary has no question surface", () => {
+  const record = {
+    id: "anonymous-answer-only-blob",
+    recordType: "qa",
+    title: "这是一个足够长但不重复的资料标题",
+    text: "处理照常进行，之后可以适用另一个效果。",
+    sourceName: "YGOResources DB",
+  };
+
+  assert.equal(hasOfficialQuestionSurface(record), false);
+  assert.deepEqual(projectOfficialQaQuestion(record).principalSurfaces, []);
 });
 
 test("one compatible branch of a compound QA remains related without becoming direct", () => {
