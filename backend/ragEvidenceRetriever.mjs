@@ -6071,6 +6071,11 @@ export function allocateOfficialRelatedEvidence({
     || compareRetrievedRecords(left, right)
   ));
   const scoped = reserveIdentitySourceCoverage(rankedScoped, safeLimit, resolvedCards);
+  const metadataScopedHead = safeLimit > 1
+    ? rankedScoped.find((item) => (
+        isConfirmedMetadataScopedOfficialHead(item, resolvedCards)
+      ))
+    : null;
   const scopedKeys = new Set(scoped.map(stableRecordKey));
   const crossCard = dedupeEvidence((crossCardCandidates || []).map((item) => ({
     ...item,
@@ -6130,9 +6135,13 @@ export function allocateOfficialRelatedEvidence({
     for (const item of coverage) add(item, { cross });
   };
 
-  // Same-card/current-scene evidence is retained first: one ranked head plus
-  // one strict representative for each decision-plan query it can cover.
+  // Same-card/current-scene evidence is retained first: one question-side
+  // coverage head, at most one confirmed metadata-scoped official head, then
+  // one strict representative for each decision-plan query it can cover. The
+  // metadata reserve stays inside the existing global budget and never uses
+  // answer text or promotes FAQ ownership metadata into question-side scope.
   if (scoped.length) add(scoped[0]);
+  if (metadataScopedHead) add(metadataScopedHead);
   addPerQueryCoverage(scoped, { strictOnly: true });
 
   // Give same-card/current-scene evidence the first opportunity to cover a
@@ -6168,6 +6177,26 @@ export function allocateOfficialRelatedEvidence({
   for (const item of scoped) add(item);
   for (const item of crossCard) add(item, { cross: true });
   return selected;
+}
+
+function isConfirmedMetadataScopedOfficialHead(item = {}, resolvedCards = []) {
+  const record = item?.record || item;
+  if (!isOfficialQaRecord(record)) return false;
+  const resolvedIds = new Set((resolvedCards || [])
+    .map((card) => normalizeCardIdentityId(card?.id || card?.cardId))
+    .filter(Boolean));
+  if (!resolvedIds.size) return false;
+  const metadataIds = (Array.isArray(item?.matchedRelatedMetadataCardIds)
+    ? item.matchedRelatedMetadataCardIds
+    : [])
+    .map(normalizeCardIdentityId)
+    .filter(Boolean);
+  if (!metadataIds.some((id) => resolvedIds.has(id))) return false;
+  const questionSideIds = new Set([
+    ...relatedMatchedQuestionSideCardIds(item),
+    ...principalQuestionCardIds(record),
+  ].map(normalizeCardIdentityId).filter(Boolean));
+  return ![...questionSideIds].some((id) => resolvedIds.has(id));
 }
 
 function officialRelatedSceneCompatible(item = {}) {
