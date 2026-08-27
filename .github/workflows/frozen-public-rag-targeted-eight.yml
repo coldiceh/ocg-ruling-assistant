@@ -46,6 +46,7 @@ jobs:
       - name: Checkout the exact tagged preview commit
         uses: actions/checkout@v6
         with:
+          fetch-depth: 8
           persist-credentials: false
 
       - name: Resolve and validate the frozen stage
@@ -93,14 +94,47 @@ jobs:
           printf 'stage=%s\nsource_key=%s\ncase_ids=%s\n' \
             "$stage" "$source_key" "$case_ids" >> "$GITHUB_OUTPUT"
 
-      - name: Verify the tag targets the reviewed preview branch
+      - name: Verify the tag targets reviewed capture changes
+        env:
+          STAGE: ${{ steps.scope.outputs.stage }}
         shell: bash
         run: |
           set -euo pipefail
+          reviewed_ref="refs/remotes/origin/codex/e338ac5-eval-review"
           git fetch --no-tags --depth=1 origin \
             refs/heads/codex/e338ac5-eval-review:refs/remotes/origin/codex/e338ac5-eval-review
-          test "$(git rev-parse "$GITHUB_SHA^{commit}")" = \
-            "$(git rev-parse refs/remotes/origin/codex/e338ac5-eval-review)"
+          current_sha="$(git rev-parse "$GITHUB_SHA^{commit}")"
+          reviewed_sha="$(git rev-parse "$reviewed_ref^{commit}")"
+          if [ "$current_sha" = "$reviewed_sha" ]; then
+            exit 0
+          fi
+
+          test "$STAGE" = "capture"
+          test "$GITHUB_EVENT_NAME" = "push"
+          test "$GITHUB_REF_TYPE" = "tag"
+          case "$GITHUB_REF_NAME" in
+            private-frozen-evidence-capture-*) ;;
+            *) echo "Untrusted evidence-capture tag" >&2; exit 1 ;;
+          esac
+          test "$reviewed_sha" = "8131e3ad32d0c47416a90a3282b208367ed6e6c0"
+          test "$(git merge-base "$current_sha" "$reviewed_sha")" = "$reviewed_sha"
+          test -z "$(git rev-list --merges "$reviewed_sha..$current_sha")"
+
+          mapfile -t changed_paths < <(
+            git diff --name-only "$reviewed_sha" "$current_sha" -- | LC_ALL=C sort
+          )
+          expected_paths=(
+            ".github/workflows/frozen-public-rag-targeted-eight.yml"
+            "backend/ragEvidenceRetriever.mjs"
+            "tests/frozen-public-rag-final-effort.test.mjs"
+            "tests/related-evidence-allocator-metamorphic.test.mjs"
+            "tests/relay-multilingual-question-retrieval.test.mjs"
+          )
+          test "${#changed_paths[@]}" -eq "${#expected_paths[@]}"
+          for index in "${!expected_paths[@]}"; do
+            test "${changed_paths[$index]}" = "${expected_paths[$index]}"
+          done
+          git diff --check "$reviewed_sha" "$current_sha" --
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v6

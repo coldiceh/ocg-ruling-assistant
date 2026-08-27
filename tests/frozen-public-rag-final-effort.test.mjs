@@ -1603,6 +1603,32 @@ test("targeted-eight workflow keeps private evidence requirements outside the re
   assert.match(workflow, /frozen-public-rag-reusable\.tar\.gz\.enc\.hmac-sha256/u);
   assert.match(workflow, /target_sha256=/u);
   assert.match(workflow, /github\.run_attempt == 1/u);
+  assert.match(workflow, /fetch-depth:\s*8/u);
+  const captureTrustStart = workflow.indexOf("- name: Verify the tag targets reviewed capture changes");
+  const captureTrustEnd = workflow.indexOf("- name: Setup pnpm", captureTrustStart);
+  assert.ok(captureTrustStart >= 0 && captureTrustEnd > captureTrustStart);
+  const captureTrust = workflow.slice(captureTrustStart, captureTrustEnd);
+  assert.match(captureTrust, /STAGE: \$\{\{ steps\.scope\.outputs\.stage \}\}/u);
+  assert.match(captureTrust, /if \[ "\$current_sha" = "\$reviewed_sha" \]/u);
+  assert.match(captureTrust, /test "\$STAGE" = "capture"/u);
+  assert.match(captureTrust, /test "\$GITHUB_EVENT_NAME" = "push"/u);
+  assert.match(captureTrust, /test "\$GITHUB_REF_TYPE" = "tag"/u);
+  assert.match(captureTrust, /private-frozen-evidence-capture-\*/u);
+  assert.match(captureTrust, /8131e3ad32d0c47416a90a3282b208367ed6e6c0/u);
+  assert.match(captureTrust, /git merge-base "\$current_sha" "\$reviewed_sha"/u);
+  assert.match(captureTrust, /git rev-list --merges "\$reviewed_sha\.\.\$current_sha"/u);
+  assert.match(captureTrust, /mapfile -t changed_paths/u);
+  for (const allowedPath of [
+    ".github/workflows/frozen-public-rag-targeted-eight.yml",
+    "backend/ragEvidenceRetriever.mjs",
+    "tests/frozen-public-rag-final-effort.test.mjs",
+    "tests/related-evidence-allocator-metamorphic.test.mjs",
+    "tests/relay-multilingual-question-retrieval.test.mjs",
+  ]) {
+    assert.match(captureTrust, new RegExp(allowedPath.replaceAll(".", "\\."), "u"));
+  }
+  assert.match(captureTrust, /git diff --check "\$reviewed_sha" "\$current_sha" --/u);
+  assert.doesNotMatch(captureTrust, /git push|workflow_dispatch/u);
   assert.match(workflow, /mapfile -t binding_run_ids/u);
   assert.match(workflow, /test "\$\{#binding_run_ids\[@\]\}" -eq 1/u);
   assert.match(workflow, /binding_source_key="\$\{binding_run_ids\[0\]\}-\$\{binding_run_attempts\[0\]\}"/u);
