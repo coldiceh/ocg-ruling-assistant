@@ -126,6 +126,7 @@ jobs:
           expected_paths=(
             ".github/workflows/frozen-public-rag-targeted-eight.yml"
             "backend/ragEvidenceRetriever.mjs"
+            "scripts/frozen-public-rag-final-effort.mjs"
             "tests/frozen-public-rag-final-effort.test.mjs"
             "tests/related-evidence-allocator-metamorphic.test.mjs"
             "tests/relay-multilingual-question-retrieval.test.mjs"

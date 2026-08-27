@@ -415,11 +415,69 @@ async function freezePublicRagFinalInputsUnchecked({
 export function parseQuestionOnlyCaptureDatasetText(text) {
   const normalized = String(text || "").replace(/^\uFEFF/u, "").trim();
   if (!normalized) throw new TypeError("The capture dataset is empty");
+  const finalizeQuestions = (entries, sourceBlockCount) => {
+    const unique = [];
+    const byQuestion = new Map();
+    let duplicateCount = 0;
+    entries.forEach(({ question, sourceBlock }) => {
+      const key = question.normalize("NFKC").replace(/\s+/gu, " ").trim();
+      const existing = byQuestion.get(key);
+      if (existing) {
+        duplicateCount += 1;
+        existing.sourceBlocks.push(sourceBlock);
+        return;
+      }
+      const item = {
+        id: `case-${String(unique.length + 1).padStart(3, "0")}`,
+        question,
+        sourceBlocks: [sourceBlock],
+      };
+      byQuestion.set(key, item);
+      unique.push(item);
+    });
+    return Object.freeze({
+      schemaVersion: 1,
+      sourceBlockCount,
+      uniqueCaseCount: unique.length,
+      duplicateCount,
+      questionDatasetDigest: sha256(JSON.stringify(unique.map(({ question }) => ({ question })))),
+      cases: Object.freeze(unique.map((item) => Object.freeze({
+        ...item,
+        sourceBlocks: Object.freeze([...item.sourceBlocks]),
+      }))),
+    });
+  };
+
+  const hasBlankBlockSeparator = /(?:\r?\n[ \t]*){2,}/u.test(normalized);
+  if (!hasBlankBlockSeparator) {
+    const lines = normalized.split(/\r?\n/u);
+    const numberedStarts = lines.flatMap((line, lineIndex) => {
+      const match = line.trim().match(/^(\d{1,3})[.、．)）][ \t]*(.*)$/u);
+      return match ? [{ lineIndex, ordinal: Number(match[1]), firstLine: match[2].trim() }] : [];
+    });
+    if (numberedStarts.length >= 2) {
+      const sequential = numberedStarts[0].lineIndex === 0
+        && numberedStarts.every(({ ordinal }, index) => ordinal === index + 1);
+      if (!sequential) {
+        throw new TypeError("The numbered capture dataset must use contiguous ordinals starting at 1");
+      }
+      const entries = numberedStarts.map((start, index) => {
+        const end = numberedStarts[index + 1]?.lineIndex ?? lines.length;
+        const question = [
+          start.firstLine,
+          ...lines.slice(start.lineIndex + 1, end).map((line) => line.trim()).filter(Boolean),
+        ].filter(Boolean).join("\n").trim();
+        if (!question) {
+          throw new TypeError(`Capture dataset item ${start.ordinal} contains an empty question`);
+        }
+        return { question, sourceBlock: start.ordinal };
+      });
+      return finalizeQuestions(entries, numberedStarts.length);
+    }
+  }
+
   const blocks = normalized.split(/(?:\r?\n[ \t]*){2,}/u);
-  const unique = [];
-  const byQuestion = new Map();
-  let duplicateCount = 0;
-  blocks.forEach((block, index) => {
+  const entries = blocks.map((block, index) => {
     const lines = block
       .split(/\r?\n/u)
       .map((line) => line.trim())
@@ -432,32 +490,9 @@ export function parseQuestionOnlyCaptureDatasetText(text) {
     // cannot affect capture identities, deduplication, retrieval, or output.
     const question = lines.slice(0, -1).join("\n").trim();
     if (!question) throw new TypeError(`Capture dataset block ${index + 1} contains an empty question`);
-    const key = question.normalize("NFKC").replace(/\s+/gu, " ").trim();
-    const existing = byQuestion.get(key);
-    if (existing) {
-      duplicateCount += 1;
-      existing.sourceBlocks.push(index + 1);
-      return;
-    }
-    const item = {
-      id: `case-${String(unique.length + 1).padStart(3, "0")}`,
-      question,
-      sourceBlocks: [index + 1],
-    };
-    byQuestion.set(key, item);
-    unique.push(item);
+    return { question, sourceBlock: index + 1 };
   });
-  return Object.freeze({
-    schemaVersion: 1,
-    sourceBlockCount: blocks.length,
-    uniqueCaseCount: unique.length,
-    duplicateCount,
-    questionDatasetDigest: sha256(JSON.stringify(unique.map(({ question }) => ({ question })))),
-    cases: Object.freeze(unique.map((item) => Object.freeze({
-      ...item,
-      sourceBlocks: Object.freeze([...item.sourceBlocks]),
-    }))),
-  });
+  return finalizeQuestions(entries, blocks.length);
 }
 
 function isOfficialExactDirectAnswer(answer) {

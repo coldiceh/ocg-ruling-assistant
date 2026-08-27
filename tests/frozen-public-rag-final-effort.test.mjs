@@ -936,6 +936,29 @@ test("capture question projection discards and never compares reference answers"
   assert.doesNotMatch(serialized, /参考答案|冲突|答案甲|答案乙/u);
 });
 
+test("capture parses a contiguous numbered question-only dataset without retaining ordinals", () => {
+  const parsed = parseQuestionOnlyCaptureDatasetText([
+    "1. 匿名问题甲",
+    "甲的连续说明",
+    "2) 匿名问题乙",
+    "3、匿名问题丙",
+    "丙的连续说明",
+  ].join("\n"));
+
+  assert.equal(parsed.sourceBlockCount, 3);
+  assert.equal(parsed.uniqueCaseCount, 3);
+  assert.equal(parsed.duplicateCount, 0);
+  assert.deepEqual(parsed.cases.map(({ id, question, sourceBlocks }) => ({
+    id,
+    question,
+    sourceBlocks: [...sourceBlocks],
+  })), [
+    { id: "case-001", question: "匿名问题甲\n甲的连续说明", sourceBlocks: [1] },
+    { id: "case-002", question: "匿名问题乙", sourceBlocks: [2] },
+    { id: "case-003", question: "匿名问题丙\n丙的连续说明", sourceBlocks: [3] },
+  ]);
+});
+
 test("capture records exact official QA direct answers without requiring a final prompt", async () => {
   const temp = await mkdtemp(path.join(os.tmpdir(), "frozen-public-rag-capture-exact-"));
   const datasetPath = path.join(temp, "private-test.txt");
@@ -1621,6 +1644,7 @@ test("targeted-eight workflow keeps private evidence requirements outside the re
   for (const allowedPath of [
     ".github/workflows/frozen-public-rag-targeted-eight.yml",
     "backend/ragEvidenceRetriever.mjs",
+    "scripts/frozen-public-rag-final-effort.mjs",
     "tests/frozen-public-rag-final-effort.test.mjs",
     "tests/related-evidence-allocator-metamorphic.test.mjs",
     "tests/relay-multilingual-question-retrieval.test.mjs",
