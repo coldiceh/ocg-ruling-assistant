@@ -1,0 +1,13 @@
+schema_version=1
+archive_cipher=aes-256-cbc-pbkdf2-sha256-iter200000-saltlen8
+key_envelope=rsa-oaep-sha256-mgf1-sha256
+source_sha=8e3b048d7f8ee226995350d8d3e7b36c67525b00
+stage=capture
+source_key=
+case_ids=
+run_id=33085262975
+run_attempt=1
+replay_allowed=false
+runner_exit_code=1
+review_cipher_sha256=f25ba5021f14a1e58b26ec1ef6b2cc2c64c23442b4ffe2c338fda96626da79ad
+review_envelope_sha256=3bde0db18f4088cbc645e2d0c0e6960dd0cc8d2bffc631e0302fd199cdb7cc79
