@@ -847,6 +847,56 @@ test("capture saves the exact model-visible evidence prompt without requirements
   assert.doesNotMatch(snapshotText, new RegExp(privateReference, "u"));
 });
 
+test("capture leaves source presence, relevance, and sufficiency to manual review", async () => {
+  const temp = await mkdtemp(path.join(os.tmpdir(), "frozen-public-rag-manual-only-"));
+  const datasetPath = path.join(temp, "private-test.txt");
+  const snapshotPath = path.join(temp, "capture.json");
+  const prompt = "匿名模型输入，仅供人工审核。";
+  await writeFile(datasetPath, "匿名问题\n丢弃的参考行\n", "utf8");
+
+  await freezePublicRagFinalInputs({
+    datasetPath,
+    snapshotPath,
+    maxCalls: 1,
+    manualReviewOnly: true,
+    env: TEST_ENV,
+    answerPublic: async ({ payload, answerRuling }) => ({
+      answer: await answerRuling({ question: payload.question }),
+    }),
+    answerRuling: async ({ modelInvoker }) => {
+      await modelInvoker({
+        prompt,
+        provider: "relay",
+        modelName: "gpt-5.6-sol",
+        maxTokens: 32000,
+        reasoningEffort: "low",
+      });
+      return {
+        resolvedCards: [],
+        usedEvidence: [],
+        debug: {
+          route: "ordinary_rag",
+          dataRevision: "anonymous-data-revision",
+          evidenceFingerprint: sha256("anonymous-empty-evidence"),
+          finalPromptSha256: sha256(prompt),
+          promptTruncated: false,
+          retrievalCandidateStages: {},
+        },
+      };
+    },
+    log: () => {},
+  });
+
+  const snapshot = JSON.parse(await readFile(snapshotPath, "utf8"));
+  assert.equal(snapshot.status, "complete");
+  assert.equal(snapshot.finalModelCallCount, 0);
+  assert.equal(snapshot.cases[0].status, "captured_for_manual_review");
+  assert.deepEqual(snapshot.cases[0].allowedEvidenceIds, []);
+  assert.deepEqual(snapshot.cases[0].manualReviewTrace.candidateJourney, []);
+  assert.equal(Object.hasOwn(snapshot.cases[0], "evidenceAudit"), false);
+  assert.doesNotMatch(JSON.stringify(snapshot), /source.?missing|missingEvidenceIds/iu);
+});
+
 test("capture CLI accepts anonymous selections without an evidence-requirements argument", () => {
   assert.deepEqual(parseFrozenPublicRagArgs([
     "capture",

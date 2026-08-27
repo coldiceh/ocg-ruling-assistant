@@ -662,3 +662,48 @@ test("metadata-only candidates gain no reserved slot without confirmed identity 
     assert.ok(!selected.some((item) => item.id === fixture.metadataHead.id));
   }
 });
+
+test("a bounded Planner scenario head outranks scattered same-branch semantic hits", () => {
+  const candidate = (id, headlineLongestRun, headlineDistinctiveSemanticHitCount, {
+    scenarioSurfaceHead = false,
+  } = {}) => ({
+    id,
+    type: "related",
+    isDirect: false,
+    recordType: "qa",
+    question: `匿名官方问题 ${id}`,
+    text: `anonymous official evidence ${id}`,
+    retrievalScore: 0.5,
+    retrievalSignals: {
+      questionBranchHeadlineAnchored: true,
+      ...(scenarioSurfaceHead ? { questionBranchScenarioSurfaceHead: true } : {}),
+      questionBranchHeadlineLongestRun: headlineLongestRun,
+      questionBranchHeadlineDistinctiveSemanticHitCount: headlineDistinctiveSemanticHitCount,
+    },
+    retrievalContext: {
+      scope: "cross_card_official_mechanism",
+      relatedOnly: true,
+    },
+  });
+  const completeScenario = candidate("anonymous-contiguous-scenario", 11, 2, {
+    scenarioSurfaceHead: true,
+  });
+  const scatteredNeighbour = candidate("anonymous-scattered-neighbour", 10, 5);
+
+  for (const crossCardCandidates of [
+    [scatteredNeighbour, completeScenario],
+    [completeScenario, scatteredNeighbour],
+  ]) {
+    const selected = allocateOfficialRelatedEvidence({
+      scopedCandidates: [],
+      crossCardCandidates,
+      limit: 1,
+      resolvedCards: [{ id: "984300001", name: "匿名排序锚点" }],
+      supplementalRuleQueryKeys: [],
+    });
+
+    assert.deepEqual(selected.map((item) => item.id), [completeScenario.id]);
+    assert.equal(selected[0].retrievalContext.relatedOnly, true);
+    assert.equal(selected[0].isDirect, false);
+  }
+});

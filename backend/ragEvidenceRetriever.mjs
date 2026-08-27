@@ -1984,6 +1984,10 @@ function mergeRelatedRecordMetadata(left = {}, right = {}) {
       questionBranchSearch: Boolean(
         leftSignals.questionBranchSearch || rightSignals.questionBranchSearch,
       ),
+      questionBranchScenarioSurfaceHead: Boolean(
+        leftSignals.questionBranchScenarioSurfaceHead
+          || rightSignals.questionBranchScenarioSurfaceHead,
+      ),
       questionBranchMultilingualMechanismFallback: Boolean(
         leftSignals.questionBranchMultilingualMechanismFallback
           || rightSignals.questionBranchMultilingualMechanismFallback,
@@ -2347,99 +2351,39 @@ function rankOfficialQaQuestionBranches({
 
   const queryPlans = queries.map((query) => ({
     query,
-    question: selectOfficialQaSearchBranch(query.officialQuestion || query.query),
+    questions: dedupeBy([
+      selectOfficialQaSearchBranch(query.officialQuestion || query.query),
+      selectOfficialQaSearchBranch(query.scenarioQuestion || query.query),
+    ].filter(Boolean), normalizeCardKey),
+    scenarioQuestion: selectOfficialQaSearchBranch(query.scenarioQuestion || query.query),
     queryKey: ruleSearchQueryIdentity(query),
-  })).filter(({ question, queryKey }) => question && queryKey);
+  })).filter(({ questions, queryKey }) => questions.length && queryKey);
   if (!queryPlans.length) return [];
   const supplementalKeys = new Set((supplementalRuleQueryKeys || []).filter(Boolean));
   const safeCandidateLimit = Math.max(1, Math.floor(Number(candidateLimit) || 16));
   const perQueryLimit = Math.max(2, Math.min(6, Math.ceil(safeCandidateLimit / queryPlans.length)));
   const questionProfiles = prepareOfficialQaQuestionTextProfiles(records);
   const merged = new Map();
-  for (const { query, question, queryKey } of queryPlans) {
-    const searchResult = searchOfficialQaEvidence({
-      question,
-      records,
-      resolvedCards: [],
-      limit: perQueryLimit,
-      subsumptionCandidatePoolComplete: false,
-    });
-    // The ordinary matcher deliberately demotes many cross-card questions by
-    // identity, role and scenario classifiers. Those signals are useful for
-    // direct-answer certification, but they must not hide a source whose
-    // official question text closely matches the complete Japanese question
-    // written by the Relay planner. Add a bounded question-only phrase head;
-    // it never reads the answer and every result remains related-only.
-    const phraseMatches = rankOfficialQaQuestionTextProfiles({
-      question,
-      // The complete CJK question branch supplies lexical anchors for the
-      // synchronized corpus, while the complete planner item supplies
-      // language-independent mechanism signals. Both are question-side inputs;
-      // official answers never participate in discovery.
-      contextText: [query.subclaim, query.scenarioQuestion || query.query]
-        .filter(Boolean)
-        .join(" "),
-      profiles: questionProfiles,
-      limit: Math.min(4, perQueryLimit),
-    });
-    // Full-question retrieval is the higher-precision path, but even a weak
-    // same-language phrase hit must not suppress the bounded cross-language
-    // mechanism head for this same Planner branch. Both paths inspect only the
-    // official question surface, remain related-only and share the existing
-    // fixed candidate budget below.
-    const phraseMatchKeys = new Set(
-      phraseMatches.slice(0, 4).map((match) => stableRecordKey(match.record)),
+  const reservedSurfaceHeadKeys = new Set();
+  for (const { query, questions, scenarioQuestion, queryKey } of queryPlans) {
+    const branchCandidateLimit = perQueryLimit * 2;
+    // A single surface keeps the previous two-head allowance. Distinct official
+    // and complete-scenario surfaces split that same allowance instead of
+    // concatenating two full result lists and expanding the branch budget.
+    const perSurfaceCandidateLimit = Math.max(
+      1,
+      Math.floor(branchCandidateLimit / questions.length),
     );
-    const multilingualMechanismMatches = rankOfficialQaMultilingualMechanismProfiles({
-      contextText: [query.subclaim, query.scenarioQuestion || query.query]
-        .filter(Boolean)
-        .join(" "),
-      // Apply the multilingual bound after removing records already supplied
-      // by the phrase head. Otherwise two same-language mechanism matches can
-      // consume both companion slots before a cross-language record is seen.
-      profiles: questionProfiles.filter(
-        (profile) => !phraseMatchKeys.has(stableRecordKey(profile.record)),
-      ),
-      limit: Math.min(2, perQueryLimit),
-    });
-    const questionOnlyMatches = mergeOfficialQaQuestionOnlyMatches({
-      phraseMatches,
-      multilingualMechanismMatches,
-      phraseLimit: 4,
-      multilingualLimit: 2,
-    });
-    const strongQuestionMatches = [
-      ...searchResult.exact,
-      ...searchResult.near,
-      ...questionOnlyMatches,
-    ];
-    // If the ordinary matcher and the CJK full-question rescue both find
-    // nothing stronger, retain a tiny related-only head from this explicit
-    // planner query. This keeps broad but potentially useful context visible
-    // without adding unrelated tails beside an already decisive candidate.
-    const relatedFallback = strongQuestionMatches.length
-      ? []
-      : (searchResult.related || [])
-          .filter((match) => Number(match.semanticScore || 0) > 0)
-          .slice(0, 2);
-    const matches = dedupeBy([
-      // Preserve up to four same-language phrase candidates plus the separately
-      // bounded multilingual mechanism companions. The shared per-query and
-      // final evidence budgets below still cap the resulting candidate set.
-      ...questionOnlyMatches,
-      ...searchResult.exact,
-      ...searchResult.near,
-      ...relatedFallback,
-    ], (match) => stableRecordKey(match.record)).slice(0, perQueryLimit * 2);
-    const questionOnlyMatchByRecord = new Map(
-      questionOnlyMatches.map((match) => [stableRecordKey(match.record), match]),
-    );
-    matches.forEach((match, index) => {
+    const branchMerged = new Map();
+    const branchSurfaceHeadKeys = new Set();
+    const phraseMatchKeys = new Set();
+    const addCandidate = (match, index, questionOnlyMatch = null, {
+      scenarioSurfaceHead = false,
+    } = {}) => {
       const record = match.record || {};
       // A record may also appear in the ordinary near/exact head. Keep that
       // stronger candidate, but do not discard independently measured
       // question/headline metrics merely because deduplication saw it first.
-      const questionOnlyMatch = questionOnlyMatchByRecord.get(stableRecordKey(record));
       const phraseMetrics = questionOnlyMatch?.questionTextMetrics
         || match.questionTextMetrics
         || {};
@@ -2475,6 +2419,7 @@ function rankOfficialQaQuestionBranches({
             supplementalRuleQueryRanks: { [queryKey]: index + 1 },
           } : {}),
           questionBranchSearch: true,
+          ...(scenarioSurfaceHead ? { questionBranchScenarioSurfaceHead: true } : {}),
           questionBranchMultilingualMechanismFallback: Boolean(
             questionOnlyMatch?.multilingualMechanismFallback,
           ),
@@ -2512,6 +2457,107 @@ function rankOfficialQaQuestionBranches({
         },
       };
       const key = stableRecordKey(candidate);
+      const previous = branchMerged.get(key);
+      if (!previous) {
+        branchMerged.set(key, candidate);
+        return key;
+      }
+      const [lower, higher] = compareRetrievedRecords(previous, candidate) <= 0
+        ? [candidate, previous]
+        : [previous, candidate];
+      branchMerged.set(key, mergeRelatedRecordMetadata(lower, higher));
+      return key;
+    };
+
+    for (const question of questions) {
+      const isDistinctScenarioSurface = questions.length > 1
+        && normalizeCardKey(question) === normalizeCardKey(scenarioQuestion);
+      const searchResult = searchOfficialQaEvidence({
+        question,
+        records,
+        resolvedCards: [],
+        limit: perQueryLimit,
+        subsumptionCandidatePoolComplete: false,
+      });
+      // The ordinary matcher deliberately demotes many cross-card questions by
+      // identity, role and scenario classifiers. Rank both normalized Planner
+      // surfaces against the official question projection so a complete
+      // action/zone/timing scenario is not reduced to mechanism context only.
+      const phraseMatches = rankOfficialQaQuestionTextProfiles({
+        question,
+        contextText: [query.subclaim, question].filter(Boolean).join(" "),
+        profiles: questionProfiles,
+        limit: Math.min(4, perQueryLimit),
+      });
+      phraseMatches.slice(0, 4).forEach((match) => {
+        phraseMatchKeys.add(stableRecordKey(match.record));
+      });
+      const questionOnlyMatches = mergeOfficialQaQuestionOnlyMatches({
+        phraseMatches,
+        phraseLimit: 4,
+        multilingualLimit: 0,
+      });
+      const strongQuestionMatches = [
+        ...searchResult.exact,
+        ...searchResult.near,
+        ...questionOnlyMatches,
+      ];
+      const relatedFallback = strongQuestionMatches.length
+        ? []
+        : (searchResult.related || [])
+            .filter((match) => Number(match.semanticScore || 0) > 0)
+            .slice(0, 2);
+      const surfaceMatches = dedupeBy([
+        ...questionOnlyMatches,
+        ...searchResult.exact,
+        ...searchResult.near,
+        ...relatedFallback,
+      ], (match) => stableRecordKey(match.record)).slice(0, perSurfaceCandidateLimit);
+      const questionOnlyMatchByRecord = new Map(
+        questionOnlyMatches.map((match) => [stableRecordKey(match.record), match]),
+      );
+      surfaceMatches.forEach((match, index) => {
+        const key = addCandidate(
+          match,
+          index,
+          questionOnlyMatchByRecord.get(stableRecordKey(match.record)),
+          { scenarioSurfaceHead: isDistinctScenarioSurface && index === 0 },
+        );
+        if (index === 0 && key) branchSurfaceHeadKeys.add(key);
+      });
+    }
+
+    // Preserve the existing bounded cross-language mechanism companion once per
+    // Planner branch. Records already supplied by either lexical surface remain
+    // excluded so this fallback cannot displace their dedicated surface heads.
+    const multilingualMechanismMatches = rankOfficialQaMultilingualMechanismProfiles({
+      contextText: [query.subclaim, query.scenarioQuestion || query.query]
+        .filter(Boolean)
+        .join(" "),
+      // Apply the multilingual bound after removing records already supplied
+      // by the phrase head. Otherwise two same-language mechanism matches can
+      // consume both companion slots before a cross-language record is seen.
+      profiles: questionProfiles.filter(
+        (profile) => !phraseMatchKeys.has(stableRecordKey(profile.record)),
+      ),
+      limit: Math.min(2, perQueryLimit),
+    });
+    multilingualMechanismMatches.forEach((match, index) => {
+      addCandidate(match, perSurfaceCandidateLimit + index, match);
+    });
+
+    const rankedBranchCandidates = [...branchMerged.values()].sort(compareRetrievedRecords);
+    const reservedBranchHeads = [...branchSurfaceHeadKeys]
+      .map((key) => branchMerged.get(key))
+      .filter(Boolean)
+      .sort(compareRetrievedRecords);
+    const boundedBranchCandidates = dedupeBy([
+      ...reservedBranchHeads,
+      ...rankedBranchCandidates,
+    ], stableRecordKey).slice(0, branchCandidateLimit);
+    boundedBranchCandidates.forEach((candidate) => {
+      const key = stableRecordKey(candidate);
+      if (branchSurfaceHeadKeys.has(key)) reservedSurfaceHeadKeys.add(key);
       const previous = merged.get(key);
       if (!previous) {
         merged.set(key, candidate);
@@ -2523,7 +2569,15 @@ function rankOfficialQaQuestionBranches({
       merged.set(key, mergeRelatedRecordMetadata(lower, higher));
     });
   }
-  return [...merged.values()].sort(compareRetrievedRecords).slice(0, safeCandidateLimit);
+  const rankedCandidates = [...merged.values()].sort(compareRetrievedRecords);
+  const reservedSurfaceHeads = [...reservedSurfaceHeadKeys]
+    .map((key) => merged.get(key))
+    .filter(Boolean)
+    .sort(compareRetrievedRecords);
+  return dedupeBy([
+    ...reservedSurfaceHeads.slice(0, safeCandidateLimit),
+    ...rankedCandidates,
+  ], stableRecordKey).slice(0, safeCandidateLimit).sort(compareRetrievedRecords);
 }
 
 export function mergeOfficialQaQuestionOnlyMatches({
@@ -3017,6 +3071,12 @@ function compareRetrievedRecords(left = {}, right = {}) {
     || Number(rightSignals.matchedQuestionCardIdCount || 0) - Number(leftSignals.matchedQuestionCardIdCount || 0)
     || Number(rightSignals.questionBranchHeadlineAnchored === true)
       - Number(leftSignals.questionBranchHeadlineAnchored === true)
+    // A Planner scenario surface preserves the concrete action, zone and timing
+    // that its abstract official-question surface may intentionally omit. Keep
+    // that bounded lexical head ahead of same-branch semantic neighbours while
+    // leaving ordinary single-surface ranking unchanged.
+    || Number(rightSignals.questionBranchScenarioSurfaceHead === true)
+      - Number(leftSignals.questionBranchScenarioSurfaceHead === true)
     || Number(rightSignals.questionBranchHeadlineDistinctiveSemanticHitCount || 0)
       - Number(leftSignals.questionBranchHeadlineDistinctiveSemanticHitCount || 0)
     || Number(rightSignals.questionBranchHeadlineEffectPhraseHitCount || 0)
