@@ -166,6 +166,98 @@ test("Relay Japanese question branch retrieves a cross-card official QA as relat
   assert.ok(evidence.debug.candidateStages.ruleQueryQuestionBranchCandidateIds.includes(target.id));
 });
 
+test("dual Planner surfaces retrieve a bounded scenario-only cross-card question", async () => {
+  const anchor = card("card-anonymous-dual-surface-anchor", "匿名双表面锚点");
+  const officialSurface = "Can a card in the discard area be moved?";
+  const scenarioSurface = [
+    "チェーン2の効果処理時に、",
+    "相手の魔法＆罠ゾーンの表側表示カードを持ち主の手札に戻せますか？",
+  ].join("");
+  const target = qa(
+    "qa-anonymous-dual-surface-target",
+    scenarioSurface,
+    "card-anonymous-dual-surface-target",
+  );
+  const decoys = Array.from({ length: 24 }, (_unused, index) => qa(
+    `qa-anonymous-dual-surface-decoy-${index}`,
+    `Can card ${index + 1} in the discard area be moved?`,
+    `card-anonymous-dual-surface-decoy-${index}`,
+  ));
+  const retrieve = (ruleQuery, cardResolution = {
+    resolvedCards: [anchor],
+    unresolvedMentions: [],
+    ambiguousMentions: [],
+    userProvidedCardTexts: [],
+  }) => retrieveRagEvidence({
+    userQuery: "「匿名双表面锚点」的相关处理是什么？",
+    cardResolution,
+    cards: [anchor],
+    records: [],
+    qaRecords: [...decoys, target],
+    ruleSearchQueries: [{
+      subclaim: "确认完整动作、区域和处理时点",
+      checkpoint: "resolution_snapshot",
+      source: "model_rule_query_extractor",
+      ...ruleQuery,
+    }],
+    enableLiveOfficialQa: false,
+    env: { RAG_LIVE_OFFICIAL_QA: "false", RAG_MAX_RELATED_EVIDENCE: "4" },
+  });
+
+  const singleSurface = await retrieve({ query: officialSurface });
+  const duplicateSurface = await retrieve({
+    officialQuestion: officialSurface,
+    scenarioQuestion: officialSurface,
+    query: officialSurface,
+  });
+  const dualSurface = await retrieve({
+    officialQuestion: officialSurface,
+    scenarioQuestion: scenarioSurface,
+    query: scenarioSurface,
+  });
+  const singleIds = singleSurface.debug.candidateStages.ruleQueryQuestionBranchCandidateIds;
+  const duplicateIds = duplicateSurface.debug.candidateStages.ruleQueryQuestionBranchCandidateIds;
+  const dualIds = dualSurface.debug.candidateStages.ruleQueryQuestionBranchCandidateIds;
+
+  assert.deepEqual(duplicateIds, singleIds);
+  assert.equal(new Set(duplicateIds).size, duplicateIds.length);
+  const singleTarget = singleSurface.officialQaRelated.find((item) => item.id === target.id);
+  assert.notEqual(singleTarget?.retrievalSignals?.questionBranchHeadlineAnchored, true);
+  assert.equal(singleTarget?.retrievalSignals?.supplementalRuleQueryKeys?.length || 0, 0);
+  assert.ok(dualIds.includes(target.id));
+  assert.ok(dualIds.length <= 16, JSON.stringify(dualIds));
+  assert.ok(dualSurface.debug.candidateStages.crossCardRankedPoolIds.length <= 16);
+  assert.ok(dualSurface.debug.candidateStages.crossCardEvidenceCandidateIds.length <= 16);
+  const related = dualSurface.officialQaRelated.find((item) => item.id === target.id);
+  assert.ok(related, JSON.stringify(dualSurface.officialQaRelated.map((item) => item.id)));
+  assert.equal(related.retrievalContext?.relatedOnly, true);
+  assert.equal(related.retrievalContext?.scope, "cross_card_official_mechanism");
+  assert.equal(related.isDirect, false);
+  assert.equal(related.retrievalSignals?.questionBranchSearch, true);
+  assert.equal(related.retrievalSignals?.questionBranchMultilingualMechanismFallback, false);
+  assert.equal(related.retrievalSignals?.questionBranchHeadlineAnchored, true);
+  assert.equal(related.retrievalSignals?.questionBranchScenarioSurfaceHead, true);
+  assert.ok(!dualSurface.officialQaDirectCandidates.some((item) => item.id === target.id));
+
+  const ambiguousIdentity = await retrieve({
+    officialQuestion: officialSurface,
+    scenarioQuestion: scenarioSurface,
+    query: scenarioSurface,
+  }, {
+    resolvedCards: [],
+    unresolvedMentions: [],
+    ambiguousMentions: [{ input: "匿名未确认对象" }],
+    userProvidedCardTexts: [],
+  });
+  assert.deepEqual(
+    ambiguousIdentity.debug.candidateStages.ruleQueryQuestionBranchCandidateIds,
+    [],
+  );
+  assert.deepEqual(ambiguousIdentity.debug.candidateStages.crossCardRankedPoolIds, []);
+  assert.deepEqual(ambiguousIdentity.debug.candidateStages.crossCardEvidenceCandidateIds, []);
+  assert.ok(!ambiguousIdentity.officialQaDirectCandidates.some((item) => item.id === target.id));
+});
+
 test("complete Japanese question text rescues a related-only candidate below classifier heads", async () => {
   const anchor = card("87301", "虚构灵摆检索锚点");
   const targetQuestion = [
