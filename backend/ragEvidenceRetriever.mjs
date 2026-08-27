@@ -623,7 +623,7 @@ export async function retrieveRagEvidence({
       : crossCardOfficialQuestionPool;
   const crossCardOfficialCandidateLimit = Math.max(16, limits.maxRelatedEvidence * 4);
   const modelAssessedCrossCardCandidates = eligibleCrossCardOfficialPool
-    .filter(hasEligibleModelCandidateAssessment)
+    .filter((item) => hasEligibleModelCandidateAssessment(item))
     .sort(compareRetrievedRecords);
   const strictMechanismCrossCardCandidates = eligibleCrossCardOfficialPool.length
     ? rankRecordsWithSupplementalQueries({
@@ -3155,14 +3155,14 @@ function modelAssessmentRank(assessment = null) {
   return 0;
 }
 
-function hasEligibleModelCandidateAssessment(item = {}) {
+function hasEligibleModelCandidateAssessment(item = {}, allowedRelevances = ["high", "medium"]) {
   const record = item?.record || item;
   const assessment = record?.retrievalSignals?.modelCandidateAssessment
     || record?.retrievalContext?.modelCandidateAssessment
     || item?.modelCandidateAssessment;
   if (!assessment || typeof assessment !== "object") return false;
   return assessment.source === "model_rule_query_soft_ranker"
-    && ["high", "medium"].includes(String(assessment.relevance || ""))
+    && allowedRelevances.includes(String(assessment.relevance || ""))
     && ["same", "partial"].includes(String(assessment.premise || ""));
 }
 
@@ -6212,6 +6212,17 @@ export function allocateOfficialRelatedEvidence({
   // Cross-card analogies may enter only for branches still uncovered by all
   // scoped evidence, and retain the historical five-item ceiling.
   addPerQueryCoverage(crossCard, { cross: true, strictOnly: true });
+
+  // A high-confidence same/partial question-only assessment is not authority,
+  // but it remains a bounded ranking signal for same-card/current-scene
+  // official evidence. Preserve those scoped candidates after every evidence-
+  // derived branch has had first priority, before soft cross-card reserves or
+  // ordinary padding can consume the remaining global slots.
+  for (const item of rankedScoped) {
+    if (selected.length >= safeLimit) break;
+    if (!hasEligibleModelCandidateAssessment(item, ["high"])) continue;
+    add(item);
+  }
 
   // Reconnect the bounded cross-card reserve after the scoped head and strict
   // branches. Only a real uncovered query branch or a positive same/partial

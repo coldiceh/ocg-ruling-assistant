@@ -392,6 +392,66 @@ test("an unmatched high-confidence query does not fabricate a reserved passage",
   assert.deepEqual(passages, []);
 });
 
+test("partially overlapping passage windows preserve distinct matched paragraphs", () => {
+  const passages = retrieveRulebookPassages({
+    records: [{
+      id: "anonymous-overlap-rule",
+      recordType: "rule-doc",
+      title: "Anonymous overlap material",
+      text: [
+        "PRINCIPLE_CHECKPOINT principlecheckpoint.",
+        "Context paragraph one.",
+        "Context paragraph two.",
+        "Context paragraph three.",
+        "Context paragraph four.",
+        "EXAMPLE_CHECKPOINT examplealpha examplebeta examplegamma.",
+        "Context paragraph five.",
+      ].join("\n\n"),
+    }],
+    ruleSearchQueries: [{
+      query: "principlecheckpoint examplealpha examplebeta examplegamma",
+      confidence: "medium",
+      source: "model_rule_query_extractor",
+    }],
+    maxPassages: 2,
+  });
+
+  assert.equal(passages.length, 2);
+  assert.ok(passages.some((passage) => /PRINCIPLE_CHECKPOINT/u.test(passage.text)));
+  assert.ok(passages.some((passage) => /EXAMPLE_CHECKPOINT/u.test(passage.text)));
+  assert.ok(passages.every((passage) => !("matchParagraph" in passage)));
+});
+
+test("a selected passage still deduplicates matches inside its own window", () => {
+  const passages = retrieveRulebookPassages({
+    records: [{
+      id: "anonymous-covered-match-rule",
+      recordType: "rule-doc",
+      title: "Anonymous covered match material",
+      text: [
+        "Context paragraph one.",
+        "Context paragraph two.",
+        "Context paragraph three.",
+        "COVERED_CHECKPOINT coveredcheckpoint.",
+        "DOMINANT_CHECKPOINT dominantalphatoken dominantbetatoken dominantgammatoken.",
+        "Context paragraph four.",
+        "Context paragraph five.",
+      ].join("\n\n"),
+    }],
+    ruleSearchQueries: [{
+      query: "coveredcheckpoint dominantalphatoken dominantbetatoken dominantgammatoken",
+      confidence: "medium",
+      source: "model_rule_query_extractor",
+    }],
+    maxPassages: 2,
+  });
+
+  assert.equal(passages.length, 1);
+  assert.match(passages[0].text, /COVERED_CHECKPOINT/u);
+  assert.match(passages[0].text, /DOMINANT_CHECKPOINT/u);
+  assert.equal("matchParagraph" in passages[0], false);
+});
+
 test("a discarded low-priority long candidate does not emit a truncation warning", () => {
   const retained = officialQa("retained-complete-reference", 0.99, {
     question: "Short complete question",

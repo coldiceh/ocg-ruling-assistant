@@ -1644,8 +1644,10 @@ test("targeted-eight workflow keeps private evidence requirements outside the re
   for (const allowedPath of [
     ".github/workflows/frozen-public-rag-targeted-eight.yml",
     "backend/ragEvidenceRetriever.mjs",
+    "backend/rulebookPassageRetriever.mjs",
     "scripts/frozen-public-rag-final-effort.mjs",
     "tests/frozen-public-rag-final-effort.test.mjs",
+    "tests/rag-ruling-prompt-selection.test.mjs",
     "tests/related-evidence-allocator-metamorphic.test.mjs",
     "tests/relay-multilingual-question-retrieval.test.mjs",
   ]) {
