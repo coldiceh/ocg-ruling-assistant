@@ -519,3 +519,146 @@ test("same canonical card and query key do not merge distinct official-question 
 
   assert.deepEqual(selected.map((item) => item.role).sort(), ["premise-a", "premise-b"]);
 });
+
+function metadataScopedHeadFixture({
+  resolved = true,
+  reorder = false,
+  recordType = "qa",
+  metadataScore = 0.99,
+} = {}) {
+  const anchor = {
+    id: "984200001",
+    name: "匿名元数据锚点",
+    aliases: ["匿名元数据锚点"],
+  };
+  const queryKeys = Array.from({ length: 4 }, (_unused, index) => (
+    `anonymous-branch-${index}|semantic:operation:${index}`
+  ));
+  const coverage = queryKeys.map((queryKey, index) => {
+    const premiseId = String(984_201_001 + index);
+    return {
+      id: `anonymous-question-coverage-${index}`,
+      role: `coverage-${index}`,
+      type: "related",
+      recordType: "qa",
+      question: `「<<${anchor.id}>>」与「<<${premiseId}>>」的匿名问题前提 ${index}。`,
+      text: `anonymous question coverage ${index}`,
+      cardIds: [anchor.id, premiseId],
+      questionCardIds: [anchor.id, premiseId],
+      matchedQuestionCardIds: [anchor.id],
+      retrievalScore: 0.5 - index * 0.01,
+      retrievalSignals: {
+        ruleQueryKeys: [queryKey],
+        strictRuleQueryKeys: [queryKey],
+        ruleQueryRanks: { [queryKey]: 1 },
+      },
+    };
+  });
+  const metadataHead = {
+    id: "anonymous-confirmed-metadata-scoped-head",
+    role: "metadata-scoped-head",
+    type: "related",
+    isDirect: false,
+    recordType,
+    question: "不含当前身份的问题侧匿名官方记录。",
+    text: "anonymous metadata scoped official evidence",
+    cardIds: [anchor.id],
+    matchedRelatedMetadataCardIds: [anchor.id],
+    retrievalScore: metadataScore,
+    retrievalContext: { relatedOnly: true },
+  };
+  const scopedCandidates = [metadataHead, ...coverage];
+  return {
+    anchor,
+    metadataHead,
+    coverage,
+    queryKeys,
+    scopedCandidates: reorder ? deterministicShuffle(scopedCandidates) : scopedCandidates,
+    resolvedCards: resolved ? [anchor] : [],
+  };
+}
+
+test("confirmed metadata-scoped official head survives a full anonymous coverage budget", () => {
+  const fixture = metadataScopedHeadFixture();
+  const selected = allocateOfficialRelatedEvidence({
+    scopedCandidates: fixture.scopedCandidates,
+    crossCardCandidates: [],
+    limit: 4,
+    resolvedCards: fixture.resolvedCards,
+    supplementalRuleQueryKeys: fixture.queryKeys,
+  });
+
+  assert.equal(selected.length, 4);
+  assert.ok(selected.some((item) => item.id === fixture.metadataHead.id));
+  assert.ok(selected.some((item) => (
+    item.role.startsWith("coverage-")
+    && item.retrievalSignals.strictRuleQueryKeys.length === 1
+  )));
+  const retained = selected.find((item) => item.id === fixture.metadataHead.id);
+  assert.equal(retained.type, "related");
+  assert.equal(retained.isDirect, false);
+  assert.equal(retained.retrievalContext.relatedOnly, true);
+});
+
+test("metadata-scoped head allocation is reorder-stable and keeps the cross-card ceiling", () => {
+  const baseline = metadataScopedHeadFixture();
+  const shuffled = metadataScopedHeadFixture({ reorder: true });
+  const crossCard = Array.from({ length: 8 }, (_unused, index) => ({
+    id: `anonymous-cross-card-${index}`,
+    role: `cross-card-${index}`,
+    type: "related",
+    recordType: "qa",
+    question: `匿名类比问题 ${index}。`,
+    text: `anonymous cross-card evidence ${index}`,
+    retrievalScore: 0.8 - index * 0.01,
+    retrievalSignals: {
+      modelCandidateAssessment: { relevance: "high", premise: "partial" },
+    },
+    retrievalContext: {
+      scope: "cross_card_official_mechanism",
+      relatedOnly: true,
+    },
+  }));
+  const allocate = (fixture) => allocateOfficialRelatedEvidence({
+    scopedCandidates: fixture.scopedCandidates,
+    crossCardCandidates: crossCard,
+    limit: 12,
+    resolvedCards: fixture.resolvedCards,
+    supplementalRuleQueryKeys: fixture.queryKeys,
+  });
+  const first = allocate(baseline);
+  const second = allocate(shuffled);
+
+  assert.deepEqual(second.map((item) => item.id), first.map((item) => item.id));
+  for (const selected of [first, second]) {
+    assert.ok(selected.length <= 12);
+    assert.ok(selected.some((item) => item.id === baseline.metadataHead.id));
+    assert.equal(selected.filter((item) => (
+      item.retrievalContext?.scope === "cross_card_official_mechanism"
+    )).length, 5);
+  }
+});
+
+test("metadata-only candidates gain no reserved slot without confirmed identity or for FAQ records", () => {
+  const wrongResolvedIdentity = metadataScopedHeadFixture({ metadataScore: -1 });
+  wrongResolvedIdentity.resolvedCards = [{
+    id: "984299999",
+    name: "匿名不相交身份",
+    aliases: ["匿名不相交身份"],
+  }];
+  for (const fixture of [
+    metadataScopedHeadFixture({ resolved: false }),
+    metadataScopedHeadFixture({ recordType: "card-faq" }),
+    wrongResolvedIdentity,
+  ]) {
+    const selected = allocateOfficialRelatedEvidence({
+      scopedCandidates: fixture.scopedCandidates,
+      crossCardCandidates: [],
+      limit: 4,
+      resolvedCards: fixture.resolvedCards,
+      supplementalRuleQueryKeys: fixture.queryKeys,
+    });
+    assert.equal(selected.length, 4);
+    assert.ok(!selected.some((item) => item.id === fixture.metadataHead.id));
+  }
+});
