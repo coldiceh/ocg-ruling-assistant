@@ -58,13 +58,13 @@ export function retrieveRulebookPassages({
     if (seen.has(candidate.id)) continue;
     const contentKey = normalizeKey(candidate.text);
     if (contentKey && seenContent.has(contentKey)) continue;
-    if (selected.some((item) => overlaps(item, candidate))) continue;
+    if (selected.some((item) => coversCandidateMatch(item, candidate))) continue;
     seen.add(candidate.id);
     if (contentKey) seenContent.add(contentKey);
     selected.push(candidate);
     if (selected.length >= positiveInteger(maxPassages, DEFAULT_MAX_PASSAGES)) break;
   }
-  return selected;
+  return selected.map(({ matchParagraph: _matchParagraph, ...passage }) => passage);
 }
 
 export function isRulebookRecord(record = {}) {
@@ -116,6 +116,7 @@ function buildPassage(record, paragraphs, hitIndex, score, maxPassageChars) {
   const originalEnd = paragraphs[end].originalIndex + 1;
   const retrievalScore = normalizeRulebookRelevance(score);
   return {
+    matchParagraph: hit.originalIndex + 1,
     id: `${sourceId}#p${originalStart}-${originalEnd}`,
     type: "rulebook",
     recordType: "rulebook-passage",
@@ -398,9 +399,10 @@ function normalizeRulebookRelevance(score) {
   return Number((1 - Math.exp(-number / 8)).toFixed(4));
 }
 
-function overlaps(left, right) {
-  if (left.sourceRecordId !== right.sourceRecordId) return false;
-  return left.paragraphStart <= right.paragraphEnd && right.paragraphStart <= left.paragraphEnd;
+function coversCandidateMatch(selected, candidate) {
+  if (selected.sourceRecordId !== candidate.sourceRecordId) return false;
+  return selected.paragraphStart <= candidate.matchParagraph
+    && candidate.matchParagraph <= selected.paragraphEnd;
 }
 
 function joinRange(paragraphs, start, end) {

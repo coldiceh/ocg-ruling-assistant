@@ -248,6 +248,163 @@ test("a one-item related budget keeps scoped official evidence instead of a supp
   );
 });
 
+test("positively assessed scoped evidence survives ordinary padding after hard branch coverage", () => {
+  const anchor = {
+    id: "982500001",
+    name: "匿名评估锚点",
+    aliases: ["匿名评估锚点"],
+  };
+  const assessment = (relevance, premise) => ({
+    source: "model_rule_query_soft_ranker",
+    relevance,
+    premise,
+  });
+  const queryKeys = Array.from({ length: 5 }, (_unused, index) => (
+    `anonymous-hard-branch-${index + 1}`
+  ));
+  const scopedHardBranches = queryKeys.slice(0, 4).map((queryKey, index) => ({
+    id: `anonymous-scoped-hard-${index + 1}`,
+    role: `scoped-hard-${index + 1}`,
+    type: "related",
+    recordType: "qa",
+    question: `「<<${anchor.id}>>」的确定性分支 ${index + 1}。`,
+    text: `anonymous scoped hard branch ${index + 1}`,
+    cardIds: [anchor.id],
+    questionCardIds: [anchor.id],
+    retrievalScore: 0.7 - index * 0.01,
+    retrievalSignals: {
+      ruleQueryKeys: [queryKey],
+      strictRuleQueryKeys: [queryKey],
+      ruleQueryRanks: { [queryKey]: 1 },
+    },
+  }));
+  const crossHardBranch = {
+    id: "anonymous-cross-hard-branch",
+    role: "cross-hard",
+    type: "related",
+    recordType: "qa",
+    question: "匿名跨卡确定性分支。",
+    text: "anonymous cross hard branch",
+    retrievalScore: 0.65,
+    retrievalSignals: {
+      ruleQueryKeys: [queryKeys[4]],
+      strictRuleQueryKeys: [queryKeys[4]],
+      ruleQueryRanks: { [queryKeys[4]]: 1 },
+    },
+    retrievalContext: {
+      scope: "cross_card_official_mechanism",
+      relatedOnly: true,
+    },
+  };
+  const assessed = [{
+    id: "anonymous-scoped-assessed-high-same",
+    role: "assessed-high-same",
+    modelAssessment: assessment("high", "same"),
+  }, {
+    id: "anonymous-scoped-assessed-high-partial",
+    role: "assessed-high-partial",
+    modelAssessment: assessment("high", "partial"),
+  }, {
+    id: "anonymous-scoped-assessed-high-same-second",
+    role: "assessed-high-same-second",
+    modelAssessment: assessment("high", "same"),
+  }].map((item, index) => ({
+    id: item.id,
+    role: item.role,
+    type: "related",
+    recordType: "qa",
+    question: `「<<${anchor.id}>>」的正向评估前提 ${index + 1}。`,
+    text: `anonymous positively assessed scoped premise ${index + 1}`,
+    cardIds: [anchor.id],
+    questionCardIds: [anchor.id],
+    retrievalScore: 0.2 - index * 0.01,
+    retrievalSignals: { modelCandidateAssessment: item.modelAssessment },
+  }));
+  const ordinaryPadding = Array.from({ length: 6 }, (_unused, index) => ({
+    id: `anonymous-scoped-padding-${index + 1}`,
+    role: `ordinary-padding-${index + 1}`,
+    type: "related",
+    recordType: "qa",
+    question: `「<<${anchor.id}>>」与「<<${982_501_001 + index}>>」的普通前提。`,
+    text: `anonymous ordinary scoped padding ${index + 1}`,
+    cardIds: [anchor.id, String(982_501_001 + index)],
+    questionCardIds: [anchor.id, String(982_501_001 + index)],
+    retrievalScore: 0.9 - index * 0.01,
+  }));
+  const ineligible = [{
+    id: "anonymous-scoped-assessed-medium-same",
+    role: "ineligible-medium-same",
+    modelAssessment: assessment("medium", "same"),
+  }, {
+    id: "anonymous-scoped-assessed-low-same",
+    role: "ineligible-low-same",
+    modelAssessment: assessment("low", "same"),
+  }, {
+    id: "anonymous-scoped-assessed-high-different",
+    role: "ineligible-high-different",
+    modelAssessment: assessment("high", "different"),
+  }, {
+    id: "anonymous-scoped-assessed-medium-unknown",
+    role: "ineligible-medium-unknown",
+    modelAssessment: assessment("medium", "unknown"),
+  }].map((item, index) => ({
+    id: item.id,
+    role: item.role,
+    type: "related",
+    recordType: "qa",
+    question: `「<<${anchor.id}>>」的不合格评估前提 ${index + 1}。`,
+    text: `anonymous ineligible scoped assessment ${index + 1}`,
+    cardIds: [anchor.id],
+    questionCardIds: [anchor.id],
+    retrievalScore: 0.1 - index * 0.01,
+    retrievalSignals: { modelCandidateAssessment: item.modelAssessment },
+  }));
+  const scopedCandidates = [
+    ...ordinaryPadding,
+    ...assessed,
+    ...ineligible,
+    ...scopedHardBranches,
+  ];
+  const allocate = (scoped) => allocateOfficialRelatedEvidence({
+    scopedCandidates: scoped,
+    crossCardCandidates: [crossHardBranch],
+    limit: 8,
+    resolvedCards: [anchor],
+    supplementalRuleQueryKeys: queryKeys,
+  });
+  const baseline = allocate(scopedCandidates);
+  const shuffled = allocate(deterministicShuffle(scopedCandidates));
+  const expectedHardRoles = new Set([
+    ...scopedHardBranches.map((item) => item.role),
+    crossHardBranch.role,
+  ]);
+  const expectedAssessedRoles = new Set(assessed.map((item) => item.role));
+
+  for (const selected of [baseline, shuffled]) {
+    const roles = new Set(selected.map((item) => item.role));
+    assert.equal(selected.length, 8);
+    assert.equal([...expectedHardRoles].every((role) => roles.has(role)), true);
+    assert.equal([...expectedAssessedRoles].every((role) => roles.has(role)), true);
+    assert.equal(selected.some((item) => item.role.startsWith("ineligible-")), false);
+    const retainedCross = selected.find((item) => item.role === crossHardBranch.role);
+    assert.ok(retainedCross);
+    assert.equal(retainedCross.isDirect, false);
+    assert.equal(retainedCross.retrievalContext.relatedOnly, true);
+  }
+  assert.deepEqual(shuffled.map((item) => item.id), baseline.map((item) => item.id));
+
+  const smallBudget = allocateOfficialRelatedEvidence({
+    scopedCandidates: [...assessed, ...scopedHardBranches.slice(0, 3)],
+    crossCardCandidates: [],
+    limit: 4,
+    resolvedCards: [anchor],
+    supplementalRuleQueryKeys: queryKeys.slice(0, 3),
+  });
+  const smallRoles = new Set(smallBudget.map((item) => item.role));
+  assert.equal(scopedHardBranches.slice(0, 3).every((item) => smallRoles.has(item.role)), true);
+  assert.equal(smallBudget.filter((item) => expectedAssessedRoles.has(item.role)).length, 1);
+});
+
 test("a strict supplemental candidate survives a bounded head of non-strict records", async () => {
   const query = "② 破坏被代替而没有被破坏 之后能否特殊召唤";
   const lexicalHeads = Array.from({ length: 3 }, (_unused, index) => ({
