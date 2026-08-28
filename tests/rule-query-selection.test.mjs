@@ -122,3 +122,63 @@ test("checkpoint diversity keeps model branches while deterministic evidence fil
   });
   assert.deepEqual(single.map((item) => item.query), [deterministic.query]);
 });
+
+test("a primary card-text grounding branch survives novelty-only deterministic selection", () => {
+  const grounding = {
+    query: "通常陷阱卡的卡片发动后场上的魔法陷阱卡返回持有者手牌",
+    source: "card_text_derived_rule_search_query",
+  };
+  const referenceGrounding = {
+    query: "通常陷阱卡的卡片发动后场上的魔法陷阱卡返回持有者手牌并破坏",
+    source: "card_text_reference_derived_rule_search_query",
+  };
+  const novelButUnrelated = {
+    query: "怪兽效果的发动被无效后从墓地除外并特殊召唤",
+    source: "card_text_derived_rule_search_query",
+  };
+  const selected = selectIndependentRuleQueries({
+    deterministicRuleQueries: [
+      referenceGrounding,
+      novelButUnrelated,
+      grounding,
+    ],
+    supplementalRuleQueries: [{
+      query: "连锁通常陷阱卡的发动并将正在发动的卡返回持有者手牌",
+      checkpoint: "operation_legality",
+      source: "model_rule_query_extractor",
+    }, {
+      query: "通常陷阱卡处理前离开魔法陷阱区域时如何结算",
+      checkpoint: "resolution_snapshot",
+      source: "model_rule_query_extractor",
+    }],
+    limit: 3,
+  });
+  assert.equal(selected.length, 3);
+  assert.ok(selected.some((item) => item.query === grounding.query), JSON.stringify(selected));
+  assert.ok(!selected.some((item) => item.query === referenceGrounding.query));
+  assert.ok(!selected.some((item) => item.query === novelButUnrelated.query));
+});
+
+test("one treated-as relation cannot impersonate two grounding features", () => {
+  const duplicateRelation = {
+    query: "该对象不被视为原本种类",
+    source: "card_text_derived_rule_search_query",
+  };
+  const novelOperation = {
+    query: "场上的魔法陷阱卡返回持有者手牌",
+    source: "card_text_derived_rule_search_query",
+  };
+  const selected = selectIndependentRuleQueries({
+    deterministicRuleQueries: [duplicateRelation, novelOperation],
+    supplementalRuleQueries: [{
+      query: "对象不会被视为原本种类",
+      checkpoint: "classification",
+      source: "model_rule_query_extractor",
+    }],
+    limit: 2,
+  });
+
+  assert.equal(selected.length, 2);
+  assert.ok(selected.some((item) => item.query === novelOperation.query), JSON.stringify(selected));
+  assert.ok(!selected.some((item) => item.query === duplicateRelation.query));
+});

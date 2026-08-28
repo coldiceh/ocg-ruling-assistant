@@ -864,3 +864,277 @@ test("a bounded Planner scenario head outranks scattered same-branch semantic hi
     assert.equal(selected[0].isDirect, false);
   }
 });
+
+test("a pure rule allocation follows evidence rank instead of unrelated source identities", () => {
+  const decisive = {
+    id: "anonymous-ranked-rule-head",
+    type: "related",
+    isDirect: false,
+    recordType: "qa",
+    question: "「<<985000001>>」的匿名规则前提。",
+    text: "anonymous ranked rule evidence",
+    cardIds: ["985000001"],
+    questionCardIds: ["985000001"],
+    retrievalScore: 0.99,
+    retrievalContext: { relatedOnly: true },
+  };
+  const identityHeavyNoise = Array.from({ length: 6 }, (_unused, index) => {
+    const base = 985_001_000 + index * 10;
+    const ids = [base + 1, base + 2, base + 3].map(String);
+    return {
+      id: `anonymous-identity-heavy-noise-${index}`,
+      type: "related",
+      isDirect: false,
+      recordType: "qa",
+      question: ids.map((id) => `「<<${id}>>」`).join("与") + "的匿名旁支。",
+      text: `anonymous identity-heavy noise ${index}`,
+      cardIds: ids,
+      questionCardIds: ids,
+      retrievalScore: 0.5 - index * 0.01,
+      retrievalContext: { relatedOnly: true },
+    };
+  });
+  const allocate = (scopedCandidates) => allocateOfficialRelatedEvidence({
+    scopedCandidates,
+    crossCardCandidates: [],
+    limit: 4,
+    resolvedCards: [],
+    supplementalRuleQueryKeys: [],
+  });
+
+  const baseline = allocate([decisive, ...identityHeavyNoise]);
+  const shuffled = allocate(deterministicShuffle([decisive, ...identityHeavyNoise]));
+  for (const selected of [baseline, shuffled]) {
+    assert.equal(selected.length, 4);
+    assert.ok(selected.some((item) => item.id === decisive.id));
+    assert.ok(selected.every((item) => item.retrievalContext?.relatedOnly === true));
+    assert.ok(selected.every((item) => item.isDirect === false));
+  }
+  assert.deepEqual(shuffled.map((item) => item.id), baseline.map((item) => item.id));
+});
+
+test("a grounded cross-card question survives same-key scoped coverage within the existing ceiling", () => {
+  const anchor = {
+    id: "985100001",
+    name: "匿名跨卡锚点",
+    aliases: ["匿名跨卡锚点"],
+  };
+  const sharedQueryKey = "anonymous-shared-query|semantic:operation:return-hand";
+  const otherQueryKeys = [1, 2].map((index) => (
+    `anonymous-other-query-${index}|semantic:operation:${index}`
+  ));
+  const scoped = {
+    id: "anonymous-scoped-shared-query",
+    type: "related",
+    isDirect: false,
+    recordType: "qa",
+    question: `「<<${anchor.id}>>」的匿名同卡前提。`,
+    text: "anonymous scoped shared-query evidence",
+    cardIds: [anchor.id],
+    questionCardIds: [anchor.id],
+    retrievalScore: 0.9,
+    retrievalSignals: {
+      ruleQueryKeys: [sharedQueryKey],
+      strictRuleQueryKeys: [sharedQueryKey],
+      ruleQueryRanks: { [sharedQueryKey]: 1 },
+    },
+    retrievalContext: { relatedOnly: true },
+  };
+  const grounded = {
+    id: "anonymous-grounded-cross-question",
+    type: "related",
+    isDirect: false,
+    recordType: "qa",
+    question: "「<<985100101>>」的另一项完整官方问题前提。",
+    text: "anonymous grounded cross-card question",
+    cardIds: ["985100101"],
+    questionCardIds: ["985100101"],
+    retrievalScore: 0.8,
+    retrievalSignals: {
+      ruleQueryKeys: [sharedQueryKey],
+      groundedQuestionBranchRuleQueryKeys: [sharedQueryKey],
+      ruleQueryRanks: { [sharedQueryKey]: 2 },
+      questionBranchSearch: true,
+      questionBranchHeadlineAnchored: true,
+    },
+    retrievalContext: {
+      scope: "cross_card_official_mechanism",
+      relatedOnly: true,
+    },
+  };
+  const otherStrict = otherQueryKeys.map((queryKey, index) => ({
+    id: `anonymous-other-strict-cross-${index}`,
+    type: "related",
+    isDirect: false,
+    recordType: "qa",
+    question: `「<<${985_100_201 + index}>>」的其他严格分支。`,
+    text: `anonymous other strict cross ${index}`,
+    cardIds: [String(985_100_201 + index)],
+    questionCardIds: [String(985_100_201 + index)],
+    retrievalScore: 0.7 - index * 0.01,
+    retrievalSignals: {
+      ruleQueryKeys: [queryKey],
+      strictRuleQueryKeys: [queryKey],
+      ruleQueryRanks: { [queryKey]: 1 },
+    },
+    retrievalContext: {
+      scope: "cross_card_official_mechanism",
+      relatedOnly: true,
+    },
+  }));
+  const assessedPadding = Array.from({ length: 3 }, (_unused, index) => ({
+    id: `anonymous-assessed-cross-padding-${index}`,
+    type: "related",
+    isDirect: false,
+    recordType: "qa",
+    question: `「<<${985_100_301 + index}>>」的软排序旁支。`,
+    text: `anonymous assessed cross padding ${index}`,
+    cardIds: [String(985_100_301 + index)],
+    questionCardIds: [String(985_100_301 + index)],
+    retrievalScore: 0.6 - index * 0.01,
+    retrievalSignals: {
+      modelCandidateAssessment: {
+        relevance: "high",
+        premise: "partial",
+        source: "model_rule_query_soft_ranker",
+      },
+    },
+    retrievalContext: {
+      scope: "cross_card_official_mechanism",
+      relatedOnly: true,
+    },
+  }));
+  const crossCardCandidates = [grounded, ...otherStrict, ...assessedPadding];
+  const allocate = (crossCard) => allocateOfficialRelatedEvidence({
+    scopedCandidates: [scoped],
+    crossCardCandidates: crossCard,
+    limit: 6,
+    resolvedCards: [anchor],
+    supplementalRuleQueryKeys: [sharedQueryKey, ...otherQueryKeys],
+  });
+
+  const baseline = allocate(crossCardCandidates);
+  const shuffled = allocate(deterministicShuffle(crossCardCandidates));
+  for (const selected of [baseline, shuffled]) {
+    const retained = selected.find((item) => item.id === grounded.id);
+    assert.ok(retained);
+    assert.equal(retained.retrievalContext?.relatedOnly, true);
+    assert.equal(retained.isDirect, false);
+    assert.ok(selected.filter((item) => (
+      item.retrievalContext?.scope === "cross_card_official_mechanism"
+    )).length <= 5);
+  }
+  assert.deepEqual(shuffled.map((item) => item.id), baseline.map((item) => item.id));
+
+  const allocateTightBudget = (crossCard) => allocateOfficialRelatedEvidence({
+    scopedCandidates: [scoped],
+    crossCardCandidates: crossCard,
+    limit: 3,
+    resolvedCards: [anchor],
+    supplementalRuleQueryKeys: [sharedQueryKey, ...otherQueryKeys],
+  });
+  for (const selected of [
+    allocateTightBudget(crossCardCandidates),
+    allocateTightBudget(deterministicShuffle(crossCardCandidates)),
+  ]) {
+    assert.equal(selected.length, 3);
+    assert.ok(otherStrict.every((item) => selected.some((entry) => entry.id === item.id)));
+    assert.ok(!selected.some((item) => item.id === grounded.id));
+  }
+});
+
+test("selected strict branches cannot consume the later grounded reserve", () => {
+  const anchor = {
+    id: "985200001",
+    name: "匿名顺序锚点",
+    aliases: ["匿名顺序锚点"],
+  };
+  const sharedQueryKey = "anonymous-order-shared|semantic:operation:return-hand";
+  const strictQueryKeys = [1, 2, 3, 4].map((index) => (
+    `anonymous-order-strict-${index}|semantic:operation:${index}`
+  ));
+  const scoped = {
+    id: "anonymous-order-scoped",
+    type: "related",
+    isDirect: false,
+    recordType: "qa",
+    question: `「<<${anchor.id}>>」的匿名同卡前提。`,
+    text: "anonymous order scoped evidence",
+    cardIds: [anchor.id],
+    questionCardIds: [anchor.id],
+    retrievalScore: 0.99,
+    retrievalSignals: {
+      ruleQueryKeys: [sharedQueryKey],
+      strictRuleQueryKeys: [sharedQueryKey],
+      ruleQueryRanks: { [sharedQueryKey]: 1 },
+    },
+    retrievalContext: { relatedOnly: true },
+  };
+  const sharedGrounded = {
+    id: "anonymous-order-shared-grounded",
+    type: "related",
+    isDirect: false,
+    recordType: "qa",
+    question: "「<<985200101>>」的另一项完整匿名前提。",
+    text: "anonymous order shared grounded evidence",
+    cardIds: ["985200101"],
+    questionCardIds: ["985200101"],
+    retrievalScore: 0.8,
+    retrievalSignals: {
+      ruleQueryKeys: [sharedQueryKey],
+      groundedQuestionBranchRuleQueryKeys: [sharedQueryKey],
+      ruleQueryRanks: { [sharedQueryKey]: 2 },
+    },
+    retrievalContext: {
+      scope: "cross_card_official_mechanism",
+      relatedOnly: true,
+    },
+  };
+  const strictGrounded = strictQueryKeys.map((queryKey, index) => ({
+    id: `anonymous-order-strict-grounded-${index}`,
+    type: "related",
+    isDirect: false,
+    recordType: "qa",
+    question: `「<<${985_200_201 + index}>>」的严格匿名前提。`,
+    text: `anonymous order strict grounded ${index}`,
+    cardIds: [String(985_200_201 + index)],
+    questionCardIds: [String(985_200_201 + index)],
+    retrievalScore: 0.9 - index * 0.01,
+    retrievalSignals: {
+      ruleQueryKeys: [queryKey],
+      strictRuleQueryKeys: [queryKey],
+      groundedQuestionBranchRuleQueryKeys: [queryKey],
+      ruleQueryRanks: { [queryKey]: 1 },
+    },
+    retrievalContext: {
+      scope: "cross_card_official_mechanism",
+      relatedOnly: true,
+    },
+  }));
+  const allocate = (crossCardCandidates, supplementalRuleQueryKeys) => (
+    allocateOfficialRelatedEvidence({
+      scopedCandidates: [scoped],
+      crossCardCandidates,
+      limit: 6,
+      resolvedCards: [anchor],
+      supplementalRuleQueryKeys,
+    })
+  );
+
+  for (const selected of [
+    allocate(
+      [...strictGrounded, sharedGrounded],
+      [...strictQueryKeys, sharedQueryKey],
+    ),
+    allocate(
+      deterministicShuffle([...strictGrounded, sharedGrounded]),
+      [sharedQueryKey, ...strictQueryKeys],
+    ),
+  ]) {
+    assert.equal(selected.length, 6);
+    assert.ok(selected.some((item) => item.id === sharedGrounded.id));
+    assert.ok(strictGrounded.every((item) => selected.some((entry) => entry.id === item.id)));
+    assert.ok(selected.every((item) => item.retrievalContext?.relatedOnly === true));
+    assert.ok(selected.every((item) => item.isDirect === false));
+  }
+});

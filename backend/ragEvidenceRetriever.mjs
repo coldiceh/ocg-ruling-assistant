@@ -3006,19 +3006,96 @@ export function selectIndependentRuleQueries({
   if (!deterministic.length) return supplemental.slice(0, safeLimit);
   const supplementalLimit = Math.max(0, safeLimit - 1);
   const selected = supplemental.slice(0, supplementalLimit);
-  const supplementalMechanismFeatures = new Set(
-    selected.flatMap((query) => [...buildRuleMechanismSignature(query.query)]
-      .filter(isStrongRuleMechanismFeature)),
+  const mechanismFeaturesForQuery = (query) => (
+    [...buildRuleMechanismSignature([
+      query?.query,
+      query?.officialQuestion,
+      query?.scenarioQuestion,
+    ].filter(Boolean).join(" "))]
   );
-  const deterministicMechanismFeatures = deterministic.map((query) => (
-    [...buildRuleMechanismSignature(query.query)].filter(isStrongRuleMechanismFeature)
-  ));
+  const supplementalRelationFeatures = selected
+    .map((query) => new Set(mechanismFeaturesForQuery(query)));
+  const supplementalMechanismFeatures = new Set(
+    supplementalRelationFeatures
+      .flatMap((features) => [...features].filter(isStrongRuleMechanismFeature)),
+  );
+  const deterministicRelationFeatures = deterministic.map(mechanismFeaturesForQuery);
+  const deterministicMechanismFeatures = deterministicRelationFeatures
+    .map((features) => features.filter(isStrongRuleMechanismFeature));
   const remainingDeterministic = deterministic.map((query, index) => ({
     query,
     index,
     features: deterministicMechanismFeatures[index],
+    relationFeatures: deterministicRelationFeatures[index],
   }));
   const representedFeatures = new Set(supplementalMechanismFeatures);
+
+  // Novelty is useful for the remaining deterministic slots, but a primary
+  // card-text clause that grounds the model's own mechanism must not lose only
+  // because every one of its features is already represented. Reference-card
+  // clauses remain in the ordinary novelty pool and cannot take this one
+  // grounding position from the card actually named by the player.
+  const primaryCardTextGrounding = remainingDeterministic
+    .filter(({ query }) => (
+      String(query?.source || "") === "card_text_derived_rule_search_query"
+    ))
+    .map((entry) => {
+      const bestRelationOverlap = supplementalRelationFeatures
+        .map((supplementalFeatures) => {
+          const matchedFeatures = entry.relationFeatures
+            .filter((feature) => supplementalFeatures.has(feature));
+          const groundingFeatureKey = (feature) => (
+            String(feature || "").startsWith("relation:treated-as")
+              ? "relation:treated-as"
+              : feature
+          );
+          const distinctMatchedFeatures = [...new Set(
+            matchedFeatures.map(groundingFeatureKey),
+          )];
+          const distinctStrongMatchedFeatures = [...new Set(
+            matchedFeatures
+              .filter(isStrongRuleMechanismFeature)
+              .map(groundingFeatureKey),
+          )];
+          return {
+            overlapScore: distinctMatchedFeatures.reduce(
+              (total, feature) => total + ruleMechanismFeatureWeight(feature),
+              0,
+            ),
+            overlapCount: distinctMatchedFeatures.length,
+            strongOverlapCount: distinctStrongMatchedFeatures.length,
+          };
+        })
+        // One generic operation (for example, only "Special Summon"), or
+        // context without a shared operation, is not enough to override the
+        // existing novelty policy. Grounding requires a complete relation to
+        // one model subclaim; that relation may include zone or activation
+        // context in addition to its strong mechanism anchor.
+        .filter(({ overlapCount, strongOverlapCount }) => (
+          strongOverlapCount >= 1 && overlapCount >= 2
+        ))
+        .sort((left, right) => (
+          right.overlapScore - left.overlapScore
+            || right.overlapCount - left.overlapCount
+            || right.strongOverlapCount - left.strongOverlapCount
+        ))[0];
+      return bestRelationOverlap ? { ...entry, ...bestRelationOverlap } : null;
+    })
+    .filter(Boolean)
+    .sort((left, right) => (
+      right.overlapScore - left.overlapScore
+        || right.overlapCount - left.overlapCount
+        || right.strongOverlapCount - left.strongOverlapCount
+        || left.index - right.index
+    ))[0];
+  if (selected.length < safeLimit && primaryCardTextGrounding) {
+    const groundingIndex = remainingDeterministic.findIndex(
+      (entry) => entry.index === primaryCardTextGrounding.index,
+    );
+    if (groundingIndex >= 0) remainingDeterministic.splice(groundingIndex, 1);
+    selected.push(primaryCardTextGrounding.query);
+    for (const feature of primaryCardTextGrounding.features) representedFeatures.add(feature);
+  }
 
   while (selected.length < safeLimit && remainingDeterministic.length) {
     remainingDeterministic.sort((left, right) => {
@@ -6130,8 +6207,17 @@ export function allocateOfficialRelatedEvidence({
       - Number(officialRelatedSceneCompatible(left))
     || compareRetrievedRecords(left, right)
   ));
-  const scoped = reserveIdentitySourceCoverage(rankedScoped, safeLimit, resolvedCards);
-  const metadataScopedHead = safeLimit > 1
+  const hasResolvedIdentity = (resolvedCards || []).some((card) => (
+    normalizeCardIdentityId(card?.id || card?.cardId)
+      || cardIdentityNames(card).some((name) => normalizeCardKey(name))
+  ));
+  // With no confirmed identity anchor, external card ids describe unrelated
+  // examples rather than premises that deserve one slot each. Keep the actual
+  // evidence rank; strict planner branches are still reserved below.
+  const scoped = hasResolvedIdentity
+    ? reserveIdentitySourceCoverage(rankedScoped, safeLimit, resolvedCards)
+    : rankedScoped;
+  const metadataScopedHead = hasResolvedIdentity && safeLimit > 1
     ? rankedScoped.find((item) => (
         isConfirmedMetadataScopedOfficialHead(item, resolvedCards)
       ))
@@ -6209,9 +6295,48 @@ export function allocateOfficialRelatedEvidence({
   // scoped representative for that same query merely because it was reserved.
   addPerQueryCoverage(scoped);
 
-  // Cross-card analogies may enter only for branches still uncovered by all
-  // scoped evidence, and retain the historical five-item ceiling.
+  // Cover every still-unrepresented strict Planner branch before retaining a
+  // second question premise for a query already represented by scoped
+  // evidence. The later grounded reserve may use only the remaining bounded
+  // capacity and therefore cannot starve an independent strict branch.
   addPerQueryCoverage(crossCard, { cross: true, strictOnly: true });
+
+  // A headline-grounded question-only match represents an independently
+  // observed official question premise, not merely another mechanism score.
+  // Preserve at most one such cross-card premise per Planner branch even when
+  // scoped evidence carries the same query key. The existing global and five-
+  // item cross-card ceilings still apply, and every item remains related-only.
+  const groundedCrossCardCandidates = crossCard.filter((item) => {
+    const record = item?.record || item;
+    return (record?.retrievalSignals?.groundedQuestionBranchRuleQueryKeys || []).length > 0;
+  });
+  const groundedCrossCardQueryKeys = supplementalRuleQueryKeys.filter((queryKey) => (
+    groundedCrossCardCandidates.some((item) => {
+      const record = item?.record || item;
+      return (record?.retrievalSignals?.groundedQuestionBranchRuleQueryKeys || [])
+        .includes(queryKey);
+    })
+  ));
+  if (groundedCrossCardQueryKeys.length) {
+    const groundedCapacity = Math.min(
+      safeLimit - selected.length,
+      maxCrossCard - selectedCrossCardCount,
+    );
+    if (groundedCapacity > 0) {
+      const groundedCoverage = reserveSupplementalQueryCoverage(
+        groundedCrossCardCandidates.filter(
+          (item) => !selectedKeys.has(stableRecordKey(item)),
+        ),
+        groundedCapacity,
+        {
+          queryKeys: groundedCrossCardQueryKeys,
+          strictOnly: true,
+          fillRemaining: false,
+        },
+      );
+      for (const item of groundedCoverage) add(item, { cross: true });
+    }
+  }
 
   // A high-confidence same/partial question-only assessment is not authority,
   // but it remains a bounded ranking signal for same-card/current-scene
