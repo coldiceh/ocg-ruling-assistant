@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { hashOcgRuleRecords } from "./sync-ocg-rule.mjs";
+import { readRagDataSourceJson } from "../backend/ragDataSourceFile.mjs";
 
 export function checkSourceFreshness({
   snapshotMeta = {},
@@ -66,7 +67,7 @@ async function main() {
   const [snapshotMeta, ocgCorpus, evidenceIndex] = await Promise.all([
     readJson(join(dataDir, "snapshot-meta.json")),
     readJson(join(dataDir, "ocg-rule-corpus.json")),
-    readJson(join(dataDir, "evidence-index.json")),
+    readRagDataSourceJson(dataDir, "evidence-index.json"),
   ]);
   const maxAgeHours = Number(process.env.SOURCE_MAX_AGE_HOURS || 36);
   const result = checkSourceFreshness({ snapshotMeta, ocgCorpus, evidenceIndex, maxAgeHours });

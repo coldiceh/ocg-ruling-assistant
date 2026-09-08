@@ -40,6 +40,7 @@ test("preview staging excludes private inputs and copies only selected current s
     await writeFile(join(root, "backend", "selected.mjs"), "export const selected = true;\n");
     await writeFile(join(root, "backend", "automatic.mjs"), "export const automatic = true;\n");
     await writeFile(join(root, "scripts", "lib", "unselected.mjs"), "export const unselected = true;\n");
+    await writeFile(join(root, "data", "evidence-index.json.gz"), Buffer.from([31, 139, 8, 0]));
     const includeFiles = ["backend/selected.mjs"];
     const plan = await planCloudPreview({ root, includeFiles });
     for (const dependency of ["scripts/lib/manual-capture-evidence-selection.mjs",
@@ -48,10 +49,12 @@ test("preview staging excludes private inputs and copies only selected current s
     }
     assert.ok(plan.files.some((file) => file.path === "backend/selected.mjs"));
     assert.ok(plan.files.some((file) => file.path === "backend/automatic.mjs"));
+    assert.ok(plan.files.some((file) => file.path === "data/evidence-index.json.gz"));
     for (const forbidden of [".env", "data/test/private-oracle.json", "artifacts/frozen/answers.json", "backend/deleted.mjs", "scripts/lib/unselected.mjs"]) {
       assert.equal(plan.files.some((file) => file.path === forbidden), false, forbidden);
     }
     await stageCloudPreview({ root, output, includeFiles });
+    assert.deepEqual(await readFile(join(output, "data", "evidence-index.json.gz")), Buffer.from([31, 139, 8, 0]));
     assert.equal(await readFile(join(output, "public", "src", "app.js"), "utf8"), "export const version = 2;\n");
     assert.deepEqual(JSON.parse(await readFile(join(output, "public", "config.json"), "utf8")), {
       answerApiUrl: "/api/answer", budgetApiUrl: "/api/budget", deploymentLabel: "Preview · 未通过质量验收",

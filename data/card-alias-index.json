@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-12T11:40:56.595Z",
+  "generatedAt": "2026-09-08T18:16:28.130Z",
   "records": [
     {
       "alias": "“K9刑侦案件”",
@@ -8319,6 +8319,20 @@
       "language": "en"
     },
     {
+      "alias": "古の秘儀",
+      "normalizedAlias": "古の秘儀",
+      "cardId": "23497",
+      "cardName": "古の秘儀",
+      "language": "ja"
+    },
+    {
+      "alias": "Ancient Secrets",
+      "normalizedAlias": "ancient secrets",
+      "cardId": "23497",
+      "cardName": "古の秘儀",
+      "language": "en"
+    },
+    {
       "alias": "古代魔導士",
       "normalizedAlias": "古代魔導士",
       "cardId": "4265",
@@ -15676,8 +15690,8 @@
       "language": "ja"
     },
     {
-      "alias": "Astrograph Sorcerer, the Star Magician",
-      "normalizedAlias": "astrograph sorcerer, the star magician",
+      "alias": "Astrograph Sorcerer, the Starfrost Magician",
+      "normalizedAlias": "astrograph sorcerer, the starfrost magician",
       "cardId": "22704",
       "cardName": "星霜的魔术师－宙读阵魔术士",
       "language": "en"
@@ -50144,6 +50158,20 @@
       "language": "en"
     },
     {
+      "alias": "ダーク・アームド・ドラゴン・バニッシャー",
+      "normalizedAlias": "ダ-ク・ア-ムド・ドラゴン・バニッシャ-",
+      "cardId": "23500",
+      "cardName": "ダーク・アームド・ドラゴン・バニッシャー",
+      "language": "ja"
+    },
+    {
+      "alias": "Dark Armed Dragon Punisher",
+      "normalizedAlias": "dark armed dragon punisher",
+      "cardId": "23500",
+      "cardName": "ダーク・アームド・ドラゴン・バニッシャー",
+      "language": "en"
+    },
+    {
       "alias": "击灭龙 暗黑武装",
       "normalizedAlias": "击灭龙 暗黑武装",
       "cardId": "13974",
@@ -56479,6 +56507,20 @@
       "language": "en"
     },
     {
+      "alias": "宿命の決闘",
+      "normalizedAlias": "宿命の決闘",
+      "cardId": "23531",
+      "cardName": "宿命の決闘",
+      "language": "ja"
+    },
+    {
+      "alias": "Destined Duel",
+      "normalizedAlias": "destined duel",
+      "cardId": "23531",
+      "cardName": "宿命の決闘",
+      "language": "en"
+    },
+    {
       "alias": "对峙的宿命",
       "normalizedAlias": "对峙的宿命",
       "cardId": "15579",
@@ -62125,6 +62167,20 @@
       "normalizedAlias": "dominus spiral",
       "cardId": "21845",
       "cardName": "命主王之螺旋",
+      "language": "en"
+    },
+    {
+      "alias": "聖王女ローズパメラ",
+      "normalizedAlias": "聖王女ロ-ズパメラ",
+      "cardId": "23504",
+      "cardName": "聖王女ローズパメラ",
+      "language": "ja"
+    },
+    {
+      "alias": "Dominusteer Rosepamela",
+      "normalizedAlias": "dominusteer rosepamela",
+      "cardId": "23504",
+      "cardName": "聖王女ローズパメラ",
       "language": "en"
     },
     {
@@ -70388,6 +70444,20 @@
       "language": "en"
     },
     {
+      "alias": "氷結界の龍胤 エクハジャール",
+      "normalizedAlias": "氷結界の龍胤 エクハジャ-ル",
+      "cardId": "23501",
+      "cardName": "氷結界の龍胤 エクハジャール",
+      "language": "ja"
+    },
+    {
+      "alias": "Ekhajar, Descendant Dragon of the Ice Barrier",
+      "normalizedAlias": "ekhajar, descendant dragon of the ice barrier",
+      "cardId": "23501",
+      "cardName": "氷結界の龍胤 エクハジャール",
+      "language": "en"
+    },
+    {
       "alias": "疫病ウィルス ブラックダスト",
       "normalizedAlias": "疫病ウィルス ブラックダスト",
       "cardId": "5277",
@@ -73461,6 +73531,20 @@
       "language": "en"
     },
     {
+      "alias": "冥府よりの使者",
+      "normalizedAlias": "冥府よりの使者",
+      "cardId": "23499",
+      "cardName": "冥府よりの使者",
+      "language": "ja"
+    },
+    {
+      "alias": "Emissaries from Darkness",
+      "normalizedAlias": "emissaries from darkness",
+      "cardId": "23499",
+      "cardName": "冥府よりの使者",
+      "language": "en"
+    },
+    {
       "alias": "地獄からの使い",
       "normalizedAlias": "地獄からの使い",
       "cardId": "8183",
@@ -73874,8 +73958,8 @@
       "language": "ja"
     },
     {
-      "alias": "End of the World Ruler",
-      "normalizedAlias": "end of the world ruler",
+      "alias": "Ruler of the End of the World",
+      "normalizedAlias": "ruler of the end of the world",
       "cardId": "22211",
       "cardName": "世界终灭支配者",
       "language": "en"
@@ -125618,6 +125702,27 @@
       "language": "en"
     },
     {
+      "alias": "增殖的库里波！",
+      "normalizedAlias": "增殖的库里波!",
+      "cardId": "22691",
+      "cardName": "增殖的库里波！",
+      "language": "zh"
+    },
+    {
+      "alias": "増殖するクリボー！",
+      "normalizedAlias": "増殖するクリボ-!",
+      "cardId": "22691",
+      "cardName": "增殖的库里波！",
+      "language": "ja"
+    },
+    {
+      "alias": "Kuriboh - Multiply!",
+      "normalizedAlias": "kuriboh - multiply!",
+      "cardId": "22691",
+      "cardName": "增殖的库里波！",
+      "language": "en"
+    },
+    {
       "alias": "重生库里波",
       "normalizedAlias": "重生库里波",
       "cardId": "12577",
@@ -147752,6 +147857,20 @@
       "language": "en"
     },
     {
+      "alias": "聖なる心のバリア －マインドフォース－",
+      "normalizedAlias": "聖なる心のバリア -マインドフォ-ス-",
+      "cardId": "23498",
+      "cardName": "聖なる心のバリア －マインドフォース－",
+      "language": "ja"
+    },
+    {
+      "alias": "Mind Mirror Force",
+      "normalizedAlias": "mind mirror force",
+      "cardId": "23498",
+      "cardName": "聖なる心のバリア －マインドフォース－",
+      "language": "en"
+    },
+    {
       "alias": "白朗宁之力",
       "normalizedAlias": "白朗宁之力",
       "cardId": "7762",
@@ -150405,6 +150524,13 @@
       "language": "en"
     },
     {
+      "alias": "Moonlight at Dawn",
+      "normalizedAlias": "moonlight at dawn",
+      "cardId": "23414",
+      "cardName": "Moonlight at Dawn",
+      "language": "en"
+    },
+    {
       "alias": "月光蝶",
       "normalizedAlias": "月光蝶",
       "cardId": "10037",
@@ -151746,27 +151872,6 @@
       "normalizedAlias": "multiply",
       "cardId": "4805",
       "cardName": "增殖",
-      "language": "en"
-    },
-    {
-      "alias": "增殖的库里波！",
-      "normalizedAlias": "增殖的库里波!",
-      "cardId": "22691",
-      "cardName": "增殖的库里波！",
-      "language": "zh"
-    },
-    {
-      "alias": "増殖するクリボー！",
-      "normalizedAlias": "増殖するクリボ-!",
-      "cardId": "22691",
-      "cardName": "增殖的库里波！",
-      "language": "ja"
-    },
-    {
-      "alias": "Multiplying Kuriboh!",
-      "normalizedAlias": "multiplying kuriboh!",
-      "cardId": "22691",
-      "cardName": "增殖的库里波！",
       "language": "en"
     },
     {
@@ -158406,6 +158511,20 @@
       "language": "en"
     },
     {
+      "alias": "No.101 S・H・Ark Knight－ソウル・アサイラム",
+      "normalizedAlias": "no.101 s・h・ark knight-ソウル・アサイラム",
+      "cardId": "23502",
+      "cardName": "No.101 S・H・Ark Knight－ソウル・アサイラム",
+      "language": "ja"
+    },
+    {
+      "alias": "Number 101: Silent Honor ARK - Soul Asylum",
+      "normalizedAlias": "number 101: silent honor ark - soul asylum",
+      "cardId": "23502",
+      "cardName": "No.101 S・H・Ark Knight－ソウル・アサイラム",
+      "language": "en"
+    },
+    {
       "alias": "编号102 辉天使 荣光之环",
       "normalizedAlias": "编号102 辉天使 荣光之环",
       "cardId": "10656",
@@ -159267,8 +159386,8 @@
       "language": "ja"
     },
     {
-      "alias": "Number 39: Utopia the Envoy of Light",
-      "normalizedAlias": "number 39: utopia the envoy of light",
+      "alias": "Number 39: Utopia, Emissary of Light",
+      "normalizedAlias": "number 39: utopia, emissary of light",
       "cardId": "22699",
       "cardName": "编号39 光之使者 希望皇霍普",
       "language": "en"
@@ -162235,8 +162354,8 @@
       "language": "ja"
     },
     {
-      "alias": "Odd-Eyes Pendulum Dragon of the Four Heavenly Dragons",
-      "normalizedAlias": "odd-eyes pendulum dragon of the four heavenly dragons",
+      "alias": "Odd-Eyes Pendulum Dragon, Four Heavenly Dragons",
+      "normalizedAlias": "odd-eyes pendulum dragon, four heavenly dragons",
       "cardId": "22702",
       "cardName": "四天之龙 异色眼灵摆龙",
       "language": "en"
@@ -199517,6 +199636,13 @@
       "language": "en"
     },
     {
+      "alias": "Silver Belfry Battery Bastion",
+      "normalizedAlias": "silver belfry battery bastion",
+      "cardId": "23415",
+      "cardName": "Silver Belfry Battery Bastion",
+      "language": "en"
+    },
+    {
       "alias": "銀の弓矢",
       "normalizedAlias": "銀の弓矢",
       "cardId": "4318",
@@ -233348,6 +233474,20 @@
       "language": "en"
     },
     {
+      "alias": "月女神の至天",
+      "normalizedAlias": "月女神の至天",
+      "cardId": "23503",
+      "cardName": "月女神の至天",
+      "language": "ja"
+    },
+    {
+      "alias": "Ultimate Sky",
+      "normalizedAlias": "ultimate sky",
+      "cardId": "23503",
+      "cardName": "月女神の至天",
+      "language": "en"
+    },
+    {
       "alias": "究极恐兽",
       "normalizedAlias": "究极恐兽",
       "cardId": "6777",
@@ -251359,11 +251499,11 @@
       "language": "en"
     },
     {
-      "alias": "No.101 S・H・Ark Knight－ソウル・アサイラム",
-      "normalizedAlias": "no.101 s・h・ark knight-ソウル・アサイラム",
-      "cardId": "23502",
-      "cardName": "No.101 S・H・Ark Knight－ソウル・アサイラム",
-      "language": "ja"
+      "alias": "Crocodile",
+      "normalizedAlias": "crocodile",
+      "cardId": "23432",
+      "cardName": "Crocodile",
+      "language": "en"
     },
     {
       "alias": "青之眼少女",
@@ -251387,38 +251527,129 @@
       "language": "en"
     },
     {
-      "alias": "古の秘儀",
-      "normalizedAlias": "古の秘儀",
-      "cardId": "23497",
-      "cardName": "古の秘儀",
+      "alias": "光帰の旅－『セネト』",
+      "normalizedAlias": "光帰の旅-『セネト』",
+      "cardId": "23539",
+      "cardName": "光帰の旅－『セネト』",
       "language": "ja"
     },
     {
-      "alias": "聖なる心のバリア －マインドフォース－",
-      "normalizedAlias": "聖なる心のバリア -マインドフォ-ス-",
-      "cardId": "23498",
-      "cardName": "聖なる心のバリア －マインドフォース－",
+      "alias": "眠らない街の『レイズ・ムーン』",
+      "normalizedAlias": "眠らない街の『レイズ・ム-ン』",
+      "cardId": "23552",
+      "cardName": "眠らない街の『レイズ・ムーン』",
       "language": "ja"
     },
     {
-      "alias": "氷結界の龍胤 エクハジャール",
-      "normalizedAlias": "氷結界の龍胤 エクハジャ-ル",
-      "cardId": "23501",
-      "cardName": "氷結界の龍胤 エクハジャール",
+      "alias": "碧ノ異解△トゥオネラ",
+      "normalizedAlias": "碧ノ異解△トゥオネラ",
+      "cardId": "23556",
+      "cardName": "碧ノ異解△トゥオネラ",
       "language": "ja"
     },
     {
-      "alias": "冥府よりの使者",
-      "normalizedAlias": "冥府よりの使者",
-      "cardId": "23499",
-      "cardName": "冥府よりの使者",
+      "alias": "緋ノ異解△ナラカ",
+      "normalizedAlias": "緋ノ異解△ナラカ",
+      "cardId": "23557",
+      "cardName": "緋ノ異解△ナラカ",
       "language": "ja"
     },
     {
-      "alias": "月女神の至天",
-      "normalizedAlias": "月女神の至天",
-      "cardId": "23503",
-      "cardName": "月女神の至天",
+      "alias": "光器還魂の儀",
+      "normalizedAlias": "光器還魂の儀",
+      "cardId": "23540",
+      "cardName": "光器還魂の儀",
+      "language": "ja"
+    },
+    {
+      "alias": "異解△審判",
+      "normalizedAlias": "異解△審判",
+      "cardId": "23564",
+      "cardName": "異解△審判",
+      "language": "zh"
+    },
+    {
+      "alias": "異解△福音",
+      "normalizedAlias": "異解△福音",
+      "cardId": "23562",
+      "cardName": "異解△福音",
+      "language": "zh"
+    },
+    {
+      "alias": "異解△領域－ヴァルヴォルス",
+      "normalizedAlias": "異解△領域-ヴァルヴォルス",
+      "cardId": "23563",
+      "cardName": "異解△領域－ヴァルヴォルス",
+      "language": "ja"
+    },
+    {
+      "alias": "虚ノ異解△ゲヘナ",
+      "normalizedAlias": "虚ノ異解△ゲヘナ",
+      "cardId": "23554",
+      "cardName": "虚ノ異解△ゲヘナ",
+      "language": "ja"
+    },
+    {
+      "alias": "狂嵐異解△プルートニオン",
+      "normalizedAlias": "狂嵐異解△プル-トニオン",
+      "cardId": "23560",
+      "cardName": "狂嵐異解△プルートニオン",
+      "language": "ja"
+    },
+    {
+      "alias": "虚蝕異解△ジャハンナム",
+      "normalizedAlias": "虚蝕異解△ジャハンナム",
+      "cardId": "23561",
+      "cardName": "虚蝕異解△ジャハンナム",
+      "language": "ja"
+    },
+    {
+      "alias": "セネトの啓示者－アメンホテプ",
+      "normalizedAlias": "セネトの啓示者-アメンホテプ",
+      "cardId": "23533",
+      "cardName": "セネトの啓示者－アメンホテプ",
+      "language": "ja"
+    },
+    {
+      "alias": "セネトの啓示者－ネフェルタリ",
+      "normalizedAlias": "セネトの啓示者-ネフェルタリ",
+      "cardId": "23532",
+      "cardName": "セネトの啓示者－ネフェルタリ",
+      "language": "ja"
+    },
+    {
+      "alias": "セネトナクト・スフィンクス",
+      "normalizedAlias": "セネトナクト・スフィンクス",
+      "cardId": "23534",
+      "cardName": "セネトナクト・スフィンクス",
+      "language": "ja"
+    },
+    {
+      "alias": "セネトメス・ネクベト",
+      "normalizedAlias": "セネトメス・ネクベト",
+      "cardId": "23536",
+      "cardName": "セネトメス・ネクベト",
+      "language": "ja"
+    },
+    {
+      "alias": "光器の瀑布",
+      "normalizedAlias": "光器の瀑布",
+      "cardId": "23541",
+      "cardName": "光器の瀑布",
+      "language": "ja"
+    },
+    {
+      "alias": "光器の降雷",
+      "normalizedAlias": "光器の降雷",
+      "cardId": "23542",
+      "cardName": "光器の降雷",
+      "language": "ja"
+    },
+    {
+      "alias": "光帰への契り",
+      "normalizedAlias": "光帰への契り",
+      "cardId": "23538",
+      "cardName": "光帰への契り",
       "language": "ja"
     },
     {
@@ -251429,17 +251660,108 @@
       "language": "unknown"
     },
     {
-      "alias": "ダーク・アームド・ドラゴン・バニッシャー",
-      "normalizedAlias": "ダ-ク・ア-ムド・ドラゴン・バニッシャ-",
-      "cardId": "23500",
-      "cardName": "ダーク・アームド・ドラゴン・バニッシャー",
+      "alias": "葬嶺異解△ヴェルヘイム",
+      "normalizedAlias": "葬嶺異解△ヴェルヘイム",
+      "cardId": "23559",
+      "cardName": "葬嶺異解△ヴェルヘイム",
       "language": "ja"
     },
     {
-      "alias": "聖王女ローズパメラ",
-      "normalizedAlias": "聖王女ロ-ズパメラ",
-      "cardId": "23504",
-      "cardName": "聖王女ローズパメラ",
+      "alias": "天ノ異解△シェオル",
+      "normalizedAlias": "天ノ異解△シェオル",
+      "cardId": "23555",
+      "cardName": "天ノ異解△シェオル",
+      "language": "ja"
+    },
+    {
+      "alias": "タウセネト・アジャト",
+      "normalizedAlias": "タウセネト・アジャト",
+      "cardId": "23535",
+      "cardName": "タウセネト・アジャト",
+      "language": "ja"
+    },
+    {
+      "alias": "天霆異解△ヨミ",
+      "normalizedAlias": "天霆異解△ヨミ",
+      "cardId": "23558",
+      "cardName": "天霆異解△ヨミ",
+      "language": "ja"
+    },
+    {
+      "alias": "光帰葬魂の儀",
+      "normalizedAlias": "光帰葬魂の儀",
+      "cardId": "23537",
+      "cardName": "光帰葬魂の儀",
+      "language": "ja"
+    },
+    {
+      "alias": "レイズ・ムーンの灯 クルーシェ",
+      "normalizedAlias": "レイズ・ム-ンの灯 クル-シェ",
+      "cardId": "23547",
+      "cardName": "レイズ・ムーンの灯 クルーシェ",
+      "language": "ja"
+    },
+    {
+      "alias": "レイズ・ムーンの煌めき",
+      "normalizedAlias": "レイズ・ム-ンの煌めき",
+      "cardId": "23553",
+      "cardName": "レイズ・ムーンの煌めき",
+      "language": "ja"
+    },
+    {
+      "alias": "レイズ・ムーンの翼 ラピ",
+      "normalizedAlias": "レイズ・ム-ンの翼 ラピ",
+      "cardId": "23545",
+      "cardName": "レイズ・ムーンの翼 ラピ",
+      "language": "ja"
+    },
+    {
+      "alias": "レイズ・ムーンの帳 シエロ",
+      "normalizedAlias": "レイズ・ム-ンの帳 シエロ",
+      "cardId": "23543",
+      "cardName": "レイズ・ムーンの帳 シエロ",
+      "language": "ja"
+    },
+    {
+      "alias": "レイズ・ムーンの望 スクイーズ－ジャックポット",
+      "normalizedAlias": "レイズ・ム-ンの望 スクイ-ズ-ジャックポット",
+      "cardId": "23550",
+      "cardName": "レイズ・ムーンの望 スクイーズ－ジャックポット",
+      "language": "ja"
+    },
+    {
+      "alias": "レイズ・ムーンの朔 スクイーズ",
+      "normalizedAlias": "レイズ・ム-ンの朔 スクイ-ズ",
+      "cardId": "23548",
+      "cardName": "レイズ・ムーンの朔 スクイーズ",
+      "language": "ja"
+    },
+    {
+      "alias": "レイズ・ムーンの星々",
+      "normalizedAlias": "レイズ・ム-ンの星々",
+      "cardId": "23551",
+      "cardName": "レイズ・ムーンの星々",
+      "language": "ja"
+    },
+    {
+      "alias": "レイズ・ムーンの雅 キャロル",
+      "normalizedAlias": "レイズ・ム-ンの雅 キャロル",
+      "cardId": "23544",
+      "cardName": "レイズ・ムーンの雅 キャロル",
+      "language": "ja"
+    },
+    {
+      "alias": "レイズ・ムーンの刃 シェーナ",
+      "normalizedAlias": "レイズ・ム-ンの刃 シェ-ナ",
+      "cardId": "23546",
+      "cardName": "レイズ・ムーンの刃 シェーナ",
+      "language": "ja"
+    },
+    {
+      "alias": "レイズ・ムーンの天 シエロ－ノーモアベット",
+      "normalizedAlias": "レイズ・ム-ンの天 シエロ-ノ-モアベット",
+      "cardId": "23549",
+      "cardName": "レイズ・ムーンの天 シエロ－ノーモアベット",
       "language": "ja"
     }
   ]

@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   buildCardQaDiscoveryIndex,
   buildFairQaCoverageOrder,
+  buildFaqRecords,
   classifyRemoteItemFetchFailure,
   collectDiscoveredQaIds,
   isAuthoritativeQaDetailSnapshot,
@@ -18,6 +19,7 @@ import {
   rankCardQaIds,
   retainBoundedQaDetails,
   selectQaIdsForSync,
+  decodeFaqHtml,
 } from "../scripts/sync-ygoresources.mjs";
 import { quarantineRulingData } from "../backend/rulingDataQuality.mjs";
 import { buildQaIndex } from "../backend/dataIndex.mjs";
@@ -259,6 +261,39 @@ test("QA normalization falls back from translation placeholders to the Japanese 
     ja: { question: "この効果を発動できますか?" },
   });
   assert.deepEqual(record.cardIds, ["12345"]);
+});
+
+test("card FAQ adapter decodes HTML mechanically while retaining links and CID placeholders", () => {
+  const records = buildFaqRecords([
+    {
+      record: { id: "12345", name: "Fixture Card", sourceUrl: "https://example.test/card/12345" },
+      payload: {
+        faqData: {
+          entries: {
+            "1": [{
+              ja: "第一行<br>第二行 <a href=\"faq_search.action?fid=7\">参照<<12345>></a>",
+            }],
+            "2": [{ ja: "旧格式\nそのまま" }],
+          },
+        },
+      },
+    },
+  ]);
+
+  assert.deepEqual(records.map((record) => record.id), [
+    "card-faq-12345-1",
+    "card-faq-12345-2",
+  ]);
+  assert.equal(
+    records[0].conclusion,
+    "第一行\n第二行 参照<<12345>> [faq_search.action?fid=7]",
+  );
+  assert.equal(records[1].conclusion, "旧格式\nそのまま");
+});
+
+test("FAQ HTML decoder keeps literal angle text and rejects invalid numeric entities mechanically", () => {
+  assert.equal(decodeFaqHtml("数值 <3000> &lt; 4000<br>结果"), "数值 <3000> < 4000\n结果");
+  assert.equal(decodeFaqHtml("坏实体 &#x110000; 和 &#55296; 和 &#12ab;"), "坏实体 &#x110000; 和 &#55296; 和 &#12ab;");
 });
 
 test("QA normalization retains a clean non-Japanese locale when no Japanese text exists", () => {

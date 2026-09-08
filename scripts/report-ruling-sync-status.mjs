@@ -1,9 +1,10 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { readOptionalRagDataSourceJson } from "../backend/ragDataSourceFile.mjs";
 
 const dataDir = join(process.cwd(), "data");
 const [meta, index, diff, ocg] = await Promise.all([
-  readJson(join(dataDir, "snapshot-meta.json"), {}), readJson(join(dataDir, "evidence-index.json"), { records: [] }), readJson(join(dataDir, "ruling-diff-report.json"), {}), readJson(join(dataDir, "ocg-rule-corpus.json"), { records: [] }),
+  readJson(join(dataDir, "snapshot-meta.json"), {}), readOptionalRagDataSourceJson(dataDir, "evidence-index.json", { records: [] }), readJson(join(dataDir, "ruling-diff-report.json"), {}), readJson(join(dataDir, "ocg-rule-corpus.json"), { records: [] }),
 ]);
 const records = index.records || [];
 console.log(JSON.stringify({

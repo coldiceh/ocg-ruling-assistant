@@ -2,6 +2,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadRawRagData } from "../backend/ragEvidenceRetriever.mjs";
+import { readRagDataSourceBytes } from "../backend/ragDataSourceFile.mjs";
 import {
   buildRagDataRevisionManifest,
   createRagDataSourceDescriptor,
@@ -17,7 +18,7 @@ const checkOnly = process.argv.slice(2).includes("--check");
 
 const rawSources = await Promise.all(RAG_DATA_REVISION_SOURCE_FILES.map(async (path) => ({
   path,
-  content: await readFile(join(dataDir, path)),
+  content: await readRagDataSourceBytes(dataDir, path),
 })));
 const sources = rawSources.map(({ path, content }) => createRagDataSourceDescriptor(path, content));
 // A revision manifest is the trust root for the precompiled runtime bundle.

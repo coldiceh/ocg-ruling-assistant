@@ -8,7 +8,7 @@ const ROOT_FILES = new Set([
   ".gitattributes", ".nojekyll", "index.html", "package.json", "pnpm-lock.yaml", "vercel.json",
 ]);
 const DATA_FILES = new Set([
-  "cards.json", "rulings.json", "qa-index.json", "evidence-index.json",
+  "cards.json", "rulings.json", "qa-index.json", "evidence-index.json.gz",
   "ocg-rule-corpus.json", "official-responses.json", "rag-data-revision-manifest.json",
   "qa-discovery-index.json", "cards-lite.json", "snapshot-meta.json", "card-alias-index.json",
   "model-pricing.json", "deepseek-model-pricing.json", "relay-model-pricing.json",
@@ -78,12 +78,15 @@ export async function planCloudPreview({ root, includeFiles = [], assetDir }) {
   // Do not recurse: excluded directories and experimental script trees are never enumerated here.
   const backendSources = (await readdir(join(root, "backend")))
     .map((name) => `backend/${name}`).filter(isPreviewSourcePath);
+  // A first storage migration creates the gzip before it becomes tracked.
+  // The exact filename allowlist keeps this bounded to public data sources.
+  const migrationSources = ["data/evidence-index.json.gz"];
   for (const path of includeFiles) {
     if (!isPreviewSourcePath(path)) throw new Error(`Explicit source is outside the preview allowlist: ${path}`);
   }
   const explicit = new Set(includeFiles);
   const files = [];
-  for (const path of [...new Set([...tracked, ...backendSources, ...includeFiles])].sort()) {
+  for (const path of [...new Set([...tracked, ...backendSources, ...migrationSources, ...includeFiles])].sort()) {
     const entry = await selectedSource(root, path, { optional: !explicit.has(path) });
     if (entry) files.push(entry);
   }

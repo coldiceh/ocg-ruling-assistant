@@ -52,7 +52,9 @@ test("data sync rebuilds and commits the versioned RAG runtime before snapshot t
   assert.ok(evidence >= 0 && evidence < revision);
   assert.ok(revision < runtime && runtime < verifyRuntime);
   assert.ok(verifyRuntime < parity && parity < snapshotTests);
-  assert.match(workflow, /git add data\/\*\.json data\/rag-runtime-v1\/\*\*/u);
+  assert.match(workflow, /git add -u -- data/u);
+  assert.match(workflow, /git add data\/\*\.json data\/\*\.json\.gz data\/rag-runtime-v1\/\*\* data\/cloud-evidence-v1\/\*\*/u);
+  assert.match(workflow, /cp data\/cards-lite\.json data\/snapshot-meta\.json public\/data\//u);
 });
 
 test("a failed but validated synchronized snapshot is retained briefly for diagnosis", async () => {
@@ -81,18 +83,19 @@ test("the ordinary repository check rejects stale revision and runtime artifacts
   assert.ok(check.indexOf("check:rag-runtime") < check.indexOf("node --check"));
 });
 
-test("Vercel runs the revision and runtime verification as its actual build gate", async () => {
+test("Vercel verifies source, runtime, and cloud asset bindings before deployment", async () => {
   const config = JSON.parse(await readFile(new URL("../vercel.json", import.meta.url), "utf8"));
 
   assert.equal(
     config.buildCommand,
-    "pnpm run check:rag-revision && pnpm run check:rag-runtime",
+    "pnpm run check:rag-revision && pnpm run check:rag-runtime && node scripts/sync-cloud-evidence-assets.mjs --data-dir data --cloud-dir data/cloud-evidence-v1 --check-only",
   );
   assert.equal(config.outputDirectory, "public");
   assert.equal(await readFile(new URL("../public/.gitkeep", import.meta.url), "utf8"), "\n");
   for (const route of ["api/answer.js", "api/admin-model-lab.js"]) {
     const excluded = String(config.functions?.[route]?.excludeFiles || "");
     assert.match(excluded, /data\/\{cards,rulings,qa-index,evidence-index,ocg-rule-corpus,official-responses\}\.json/u);
+    assert.match(excluded, /data\/evidence-index\.json\.gz/u);
     assert.doesNotMatch(excluded, /rag-data-revision-manifest|rag-runtime-v1|legacy-lua-semantic-cache-v2/u);
   }
 });

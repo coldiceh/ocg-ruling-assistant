@@ -113,6 +113,19 @@ async function readCorpus({ dataDir, dataRevision }) {
   return corpus;
 }
 
+export async function loadCloudEvidenceAssetSnapshot({ dataDir, dataRevision } = {}) {
+  const [corpus, vectorIndex] = await Promise.all([
+    readCorpus({ dataDir, dataRevision }),
+    loadEvidenceVectorIndex({ dataDir, dataRevision }),
+  ]);
+  const orderedContentHashes = [...new Set(corpus.documents.flatMap((document) => (
+    document.views.map((view) => view.textSha256)
+  )))];
+  check(canonicalJson(orderedContentHashes) === canonicalJson(vectorIndex.manifest.orderedContentHashes),
+    "cloud_evidence_vector_corpus_binding_invalid");
+  return Object.freeze({ corpus, vectorIndex });
+}
+
 export function interleaveCloudEvidenceQueues(queues, candidateLimit) {
   const positions = queues.map(() => 0);
   const seen = new Set();
