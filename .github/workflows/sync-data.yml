@@ -62,10 +62,11 @@ jobs:
         id: data_validation
         run: |
           pnpm check:data
-          cp data/cards-lite.json data/snapshot-meta.json public/data/
 
       - name: Diff ruling snapshot
-        run: pnpm diff:rulings
+        run: |
+          pnpm diff:rulings
+          cp data/cards-lite.json data/snapshot-meta.json public/data/
 
       - name: Build current evidence index
         run: pnpm build:evidence

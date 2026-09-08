@@ -55,6 +55,13 @@ test("data sync rebuilds and commits the versioned RAG runtime before synchroniz
   assert.match(workflow, /git add -u -- data/u);
   assert.match(workflow, /git add data\/\*\.json data\/\*\.json\.gz data\/rag-runtime-v1\/\*\* data\/cloud-evidence-v1\/\*\*/u);
   assert.match(workflow, /cp data\/cards-lite\.json data\/snapshot-meta\.json public\/data\//u);
+  const snapshotDiff = workflow.indexOf("pnpm diff:rulings");
+  const publicCopy = workflow.indexOf("cp data/cards-lite.json data/snapshot-meta.json public/data/");
+  assert.ok(snapshotDiff >= 0 && snapshotDiff < publicCopy && publicCopy < snapshotTests,
+    "public metadata must be copied after the current snapshot diff is written");
+  const metadata = await readFile(new URL("../data/snapshot-meta.json", import.meta.url), "utf8");
+  const publicMetadata = await readFile(new URL("../public/data/snapshot-meta.json", import.meta.url), "utf8");
+  assert.equal(publicMetadata.replaceAll("\r\n", "\n"), metadata.replaceAll("\r\n", "\n"));
 });
 
 test("data sync runs the bounded synchronization checks and keeps the complete suite separate", async () => {
