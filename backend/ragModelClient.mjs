@@ -565,6 +565,7 @@ export async function callRelayJsonTask({
   relayChatCompletionsUrl(env.RELAY_BASE_URL);
   const modelConfig = resolveRelayAuxiliaryModelName(
     modelName || env.RELAY_JSON_TASK_MODEL,
+    env,
   );
   const resolvedModelName = modelConfig.modelName;
   const resolvedMaxTokens = optionalPositiveInteger(maxTokens)
@@ -1612,10 +1613,11 @@ function resolveRelayAuxiliaryReasoningEffort({
   };
 }
 
-function resolveRelayAuxiliaryModelName(value) {
+function resolveRelayAuxiliaryModelName(value, env = {}) {
   const requested = String(value || DEFAULT_RELAY_AUXILIARY_MODEL).trim().toLowerCase();
-  if (requested === DEFAULT_RELAY_AUXILIARY_MODEL) {
-    return { modelName: DEFAULT_RELAY_AUXILIARY_MODEL, warnings: [] };
+  if (requested === DEFAULT_RELAY_AUXILIARY_MODEL
+      || (env.RAG_EVIDENCE_PIPELINE === "cloud_evidence_v1" && requested === "gpt-6-astra")) {
+    return { modelName: requested, warnings: [] };
   }
   return {
     modelName: DEFAULT_RELAY_AUXILIARY_MODEL,
@@ -1860,7 +1862,9 @@ export function createPublicAnswerModelEnv(env = {}, profileValue) {
   // hard-disabled even if an old Vercel environment variable still says true;
   // controlled/admin experiments call the reviewer with their own environment.
   result.RAG_EVIDENCE_APPLICABILITY_ENABLED = "false";
-  result.RELAY_CARD_MODEL = DEFAULT_RELAY_AUXILIARY_MODEL;
+  const cloudEvidence = source.RAG_EVIDENCE_PIPELINE === "cloud_evidence_v1";
+  result.RELAY_CARD_MODEL = cloudEvidence ? "gpt-6-astra" : DEFAULT_RELAY_AUXILIARY_MODEL;
+  if (cloudEvidence) result.RAG_CARD_MODEL_TIMEOUT_MS = "60000";
   result.RAG_CARD_MODEL_REASONING_EFFORT = "low";
   const configuredRuleModel = String(source.RELAY_RULE_MODEL || DEFAULT_RELAY_RULE_MODEL)
     .trim()
@@ -5143,7 +5147,7 @@ function resolveConfiguredModelTier(env = {}) {
 function modelNameForCardExtractionProvider(provider, env) {
   if (provider === "deepseek") return String(env.DEEPSEEK_CARD_MODEL || env.RAG_CARD_MODEL || DEFAULT_DEEPSEEK_CARD_MODEL);
   if (provider === "relay") {
-    return resolveRelayAuxiliaryModelName(env.RELAY_CARD_MODEL).modelName;
+    return resolveRelayAuxiliaryModelName(env.RELAY_CARD_MODEL, env).modelName;
   }
   if (provider === "gemini") return String(env.GEMINI_CARD_MODEL || env.GEMINI_CARD_RESOLUTION_MODEL || env.RAG_CARD_MODEL || "gemini-1.5-flash");
   return "mock-card-extractor";
