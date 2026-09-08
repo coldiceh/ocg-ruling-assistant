@@ -17,6 +17,11 @@ import { retrieveLiveOfficialQa } from "./liveOfficialQaProvider.mjs";
 import { normalizeCardPasscode } from "./cardPasscode.mjs";
 import { projectOfficialQaQuestion } from "./officialQaQuestionProjection.mjs";
 import {
+  bindOfficialQaDiscoveryRelations,
+  getOfficialQaDiscoveryCardIds,
+  getOfficialQaDiscoveryRelationStatus,
+} from "./officialQaDiscoveryRelations.mjs";
+import {
   bindTrustedRagDataRevision,
   createRagDataSourceDescriptor,
   RAG_DATA_REVISION_MANIFEST_FILE,
@@ -24,6 +29,7 @@ import {
 } from "./ragDataRevisionManifest.mjs";
 import { loadRagRuntimeBundle } from "./ragRuntimeBundle.mjs";
 import {
+  getRegisteredCanonicalNormalizedRagData,
   isCanonicalNormalizedRagArray,
   registerCanonicalNormalizedRagData,
 } from "./ragNormalizedDataRegistry.mjs";
@@ -35,6 +41,9 @@ import {
   normalizeRuleSearchQueryText,
   selectOfficialQaSearchBranch,
 } from "./ruleSearchQueryText.mjs";
+import {
+  hasTrustedFrozenResolvedCardAttestation,
+} from "../scripts/lib/retrieval-evidence-lineage.mjs";
 
 const projectRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const defaultDataDir = join(projectRoot, "data");
@@ -48,8 +57,10 @@ const evidenceRecordBucketsCache = new WeakMap();
 const evidenceListCache = new WeakMap();
 const retrievalRecordFeatureCache = new WeakMap();
 const retrievalQuestionFeatureCache = new WeakMap();
-const recordIdentityIndexCache = new WeakMap();
+const recordAuthorityIdentityIndexCache = new WeakMap();
 const canonicalCardIdentityIndexCache = new WeakMap();
+const MAX_MODEL_RULE_QUERY_BRANCHES = 4;
+const MAX_INDEPENDENT_RULE_QUERY_BRANCHES = MAX_MODEL_RULE_QUERY_BRANCHES + 1;
 
 // These are atomic, card-agnostic facts used by every mechanism query. They
 // describe timing, sequence, visibility, zones, actors and activation kinds;
@@ -109,6 +120,7 @@ export async function retrieveRagEvidence({
   qaRecords,
   ruleSearchQueries = [],
   ruleSearchQueryProvider,
+  preparedEvidenceProvider,
   enableLiveOfficialQa = false,
   subsumptionCandidatePoolComplete = false,
   maxPerBucket = 5,
@@ -116,8 +128,10 @@ export async function retrieveRagEvidence({
   fetchImpl = globalThis.fetch,
   signal,
   onProgressStage,
+  lineageTraceSink,
 } = {}) {
   throwIfAborted(signal);
+  const traceLineage = typeof lineageTraceSink === "function";
   if (enableLiveOfficialQa && !isDisabled(env.RAG_LIVE_OFFICIAL_QA)) {
     env = { ...env, RAG_LIVE_OFFICIAL_QA: "true" };
   }
@@ -125,6 +139,14 @@ export async function retrieveRagEvidence({
   const timingsMs = {};
   let stageStartedAt = Date.now();
   const limits = readRetrievalLimits(env, maxPerBucket);
+  if (traceLineage) {
+    emitRagLineageTrace(lineageTraceSink, {
+      type: "LIMITS",
+      stage: "retrieval_config",
+      requestLimitProvenance: "RUNTIME_CONFIG",
+      limits,
+    });
+  }
   const data = cards || records || qaRecords
     ? normalizeInjectedData({ cards, records, qaRecords })
     : await loadRagData(dataDir);
@@ -168,6 +190,7 @@ export async function retrieveRagEvidence({
       fetchImpl,
       env,
       limits,
+      canonicalCards: data.cards,
       warnings: retrievalWarnings,
       debug: baigeDebug,
       signal,
@@ -176,6 +199,7 @@ export async function retrieveRagEvidence({
       fetchImpl,
       env,
       limits,
+      canonicalCards: data.cards,
       warnings: retrievalWarnings,
       debug: baigeDebug,
       signal,
@@ -199,14 +223,38 @@ export async function retrieveRagEvidence({
     data.cards,
     retrievalWarnings,
   ));
-  const canonicalBaigeCards = canonicalBaigeCandidates.filter(
-    (card) => card.identityCanonicalizationConflict !== true,
-  );
+  const canonicalBaigeCards = canonicalBaigeCandidates.filter((card) => {
+    if (card.identityCanonicalizationConflict === true) return false;
+    if (card.modelExpansionPendingIdentityReconciliation !== true) return true;
+    const surfaceCompatible = card.externalSurfaceCompatible === true;
+    const identityUniquelyConverged = card.externalIdentityUniqueConvergence === true;
+    const stableLocalIdentity = hasStableLocalIdentityCanonicalization(card);
+    if (!surfaceCompatible || !identityUniquelyConverged || !stableLocalIdentity) {
+      retrievalWarnings.push(
+        `baige_model_expansion_identity_invariant_unverified:${card.matchedQuery || card.name}->${card.name}`,
+      );
+      if (!stableLocalIdentity) {
+        retrievalWarnings.push(
+          `baige_model_expansion_stable_identity_unverified:${card.matchedQuery || card.name}->${card.name}`,
+        );
+      }
+      return false;
+    }
+    return true;
+  });
   for (const conflict of canonicalBaigeCandidates.filter((card) => card.identityCanonicalizationConflict === true)) {
     baigeDebug.ambiguousMentions.push(identityConflictMention(conflict));
   }
+  const identityVerifiedLocalCards = enrichedLocalCards.filter((card) => (
+    card.identityVerificationStatus !== "unverified"
+  ));
+  if (identityVerifiedLocalCards.length !== enrichedLocalCards.length) {
+    retrievalWarnings.push(
+      `unverified_local_identities_excluded_before_evidence:${enrichedLocalCards.length - identityVerifiedLocalCards.length}`,
+    );
+  }
   const verifiedLocalCards = suppressModelExpansionConflicts(
-    enrichedLocalCards,
+    identityVerifiedLocalCards,
     canonicalBaigeCards,
     retrievalWarnings,
   );
@@ -218,10 +266,22 @@ export async function retrieveRagEvidence({
   for (const conflict of canonicalLocalCandidates.filter((card) => card.identityCanonicalizationConflict === true)) {
     baigeDebug.ambiguousMentions.push(identityConflictMention(conflict));
   }
-  let retrievalCards = mergeCardsByStableIdentity([
+  const mergedRetrievalCards = mergeCardsByStableIdentity([
     ...canonicalLocalCandidates.filter((card) => card.identityCanonicalizationConflict !== true),
     ...canonicalBaigeCards,
-  ]).slice(0, limits.maxCards);
+  ]);
+  let retrievalCards = mergedRetrievalCards.slice(0, limits.maxCards);
+  if (traceLineage) {
+    emitRagLineageListTrace(lineageTraceSink, {
+      type: "LOCAL_TRUNCATION",
+      stage: "retrieval_cards",
+      channel: "resolved_cards",
+      beforeItems: mergedRetrievalCards,
+      afterItems: retrievalCards,
+      requestLimit: limits.maxCards,
+      requestLimitProvenance: "RUNTIME_CONFIG",
+    });
+  }
   // Resolve identity conflicts before any card text, scoped FAQ or live-QA
   // lookup is built. A model-supplied canonical expansion may remain useful
   // debug information, but it must not leak evidence into the prompt while the
@@ -242,7 +302,7 @@ export async function retrieveRagEvidence({
     retrievalWarnings.push(`qa_identity_excludes_card_text_references:${retrievalCards.length - qaIdentityCards.length}`);
   }
   let effectiveQaIdentityCards = canonicalizeQaIdentityCards(
-    qaIdentityCards.length ? qaIdentityCards : retrievalCards,
+    qaIdentityCards,
     data.cards,
     retrievalWarnings,
   );
@@ -251,6 +311,9 @@ export async function retrieveRagEvidence({
     ...unresolvedMentionsAfterRetrieval(unresolvedResolutionCandidates, retrievalCards),
     ...identityVerificationFailures,
   ]);
+  const hasPendingCardIdentity = remainingUnresolvedMentions.length > 0
+    || (preEvidenceCardResolution.ambiguousMentions || []).length > 0
+    || (retrievalCards.length > 0 && effectiveQaIdentityCards.length === 0);
   if (parentheticalAliasKeys.size) retrievalWarnings.push(`parenthetical_alias_mentions_collapsed:${parentheticalAliasKeys.size}`);
   if (fuzzyCards.length) retrievalWarnings.push(`unresolved_mentions_fuzzy_matched:${fuzzyCards.map((card) => card.name).join(",")}`);
   if (baigeResolvedCards.length) retrievalWarnings.push(`unresolved_mentions_baige_matched:${baigeResolvedCards.map((card) => card.name).join(",")}`);
@@ -259,7 +322,19 @@ export async function retrieveRagEvidence({
   const allEvidenceRecords = recordBuckets.all;
   const scopedRecordBuckets = scopeRecordBuckets(
     recordBuckets,
-    dedupeCards([...effectiveQaIdentityCards, ...retrievalCards]),
+    effectiveQaIdentityCards,
+    {
+      includeDiscovery: true,
+      allowUnscoped: retrievalCards.length === 0 && !hasPendingCardIdentity,
+    },
+  );
+  const authorityScopedRecordBuckets = scopeRecordBuckets(
+    recordBuckets,
+    effectiveQaIdentityCards,
+    {
+      includeDiscovery: false,
+      allowUnscoped: retrievalCards.length === 0 && !hasPendingCardIdentity,
+    },
   );
 
   const cardTexts = retrievalCards
@@ -276,6 +351,26 @@ export async function retrieveRagEvidence({
     (item) => item.resolutionSource === "card_text_reference",
   );
   const userProvidedCardTextEvidence = dedupeEvidence(providedTexts.map((item, index) => userProvidedTextEvidence(item, index, limits.maxCardTextChars, retrievalWarnings)));
+  if (typeof preparedEvidenceProvider === 'function') {
+    const reconciled = reconcileRetrievedCardResolution({
+      cardResolution, retrievedCards: retrievalCards, remainingUnresolvedMentions,
+      baigeAmbiguousMentions: baigeDebug.ambiguousMentions,
+    });
+    onProgressStage?.('retrieve_rulings');
+    return preparedEvidenceProvider({
+      cardTexts: dedupeEvidence(cardTexts),
+      userProvidedCardTexts: userProvidedCardTextEvidence,
+      officialQaDirectCandidates: [], officialQaRelated: [],
+      provisionalOfficialResponses: [], faqRelated: [], rawRelatedEvidence: [],
+      rulebookCandidates: [], retrievedCards: reconciled.resolvedCards,
+      cardResolution: reconciled, remainingUnresolvedMentions,
+      fuzzyResolvedCards: fuzzyCards, baigeResolvedCards,
+      baigeAmbiguousMentions: baigeDebug.ambiguousMentions,
+      ruleSearchQueries: [], retrievalWarnings,
+      debug: {baigeSearchCount:baigeDebug.searchCount, baigeCacheHitCount:baigeDebug.cacheHitCount,
+        baigeWarnings:baigeDebug.warnings, timingsMs},
+    });
+  }
   onProgressStage?.("retrieve_rulings");
   // Card text is already available before the auxiliary query planner runs.
   // Fold its deterministic operation clauses into the first discovery pass so
@@ -297,20 +392,70 @@ export async function retrieveRagEvidence({
   // model for query expansions. The model may softly rank these questions and
   // explain premise differences, but it never receives their answers and its
   // output is never an authority or a hard deletion gate.
+  const officialQaSearchLimit = effectiveQaIdentityCards.length
+    ? Math.max(256, limits.maxRelatedEvidence * 24)
+    : Math.max(20, limits.maxOfficialQa * 4);
+  if (traceLineage) {
+    emitRagLineageTrace(lineageTraceSink, {
+      type: "SOURCE_REQUEST",
+      stage: "official_qa_search",
+      channel: "authority_scoped",
+      requestLimit: officialQaSearchLimit,
+      requestLimitProvenance: "DERIVED_RUNTIME_POLICY",
+      preLimitObservable: false,
+    });
+  }
   const localOfficialMatches = searchOfficialQaEvidence({
     question: userQuery,
-    records: scopedRecordBuckets.officialQa,
+    records: authorityScopedRecordBuckets.officialQa,
     resolvedCards: effectiveQaIdentityCards,
-    limit: effectiveQaIdentityCards.length
-      ? Math.max(256, limits.maxRelatedEvidence * 24)
-      : Math.max(20, limits.maxOfficialQa * 4),
+    limit: officialQaSearchLimit,
     subsumptionCandidatePoolComplete: subsumptionCandidatePoolComplete === true
       || !(cards || records || qaRecords),
   });
+  if (traceLineage) {
+    emitRagLineageListTrace(lineageTraceSink, {
+      type: "SOURCE_RETURNED",
+      stage: "official_qa_search",
+      channel: "authority_scoped",
+      items: localOfficialMatches.all,
+      requestLimit: officialQaSearchLimit,
+      requestLimitProvenance: "DERIVED_RUNTIME_POLICY",
+      preLimitObservable: false,
+    });
+    emitRagLineageTrace(lineageTraceSink, {
+      type: "SOURCE_REQUEST",
+      stage: "official_qa_search",
+      channel: "discovery_scoped",
+      requestLimit: officialQaSearchLimit,
+      requestLimitProvenance: "DERIVED_RUNTIME_POLICY",
+      preLimitObservable: false,
+    });
+  }
+  const localRelatedOfficialMatches = searchOfficialQaEvidence({
+    question: userQuery,
+    records: scopedRecordBuckets.officialQa,
+    resolvedCards: effectiveQaIdentityCards,
+    limit: officialQaSearchLimit,
+    // Discovery relations are only a recall sidecar. They must never make the
+    // candidate pool complete enough to certify a unique/direct official Q&A.
+    subsumptionCandidatePoolComplete: false,
+  });
+  if (traceLineage) {
+    emitRagLineageListTrace(lineageTraceSink, {
+      type: "SOURCE_RETURNED",
+      stage: "official_qa_search",
+      channel: "discovery_scoped",
+      items: localRelatedOfficialMatches.all,
+      requestLimit: officialQaSearchLimit,
+      requestLimitProvenance: "DERIVED_RUNTIME_POLICY",
+      preLimitObservable: false,
+    });
+  }
   // The pre-planner pass only needs a small question-only sample. Keep this as
   // one aggregate scan; independent branch heads are built after the planner,
   // where they can use both deterministic and model-supplied queries.
-  const initialCrossCardOfficialQuestions = rankRecords({
+  const initialCrossCardRankedSource = rankRecords({
     userQuery,
     records: dedupeBy([
       ...recordBuckets.officialQa,
@@ -320,19 +465,79 @@ export async function retrieveRagEvidence({
     mentionQueries: [],
     ruleSearchQueries: deterministicRuleQueries,
     allowNoCardMatch: true,
-  })
-    .filter((record) => (
+  });
+  if (traceLineage) {
+    emitRagLineageListTrace(lineageTraceSink, {
+      type: "SOURCE_RETURNED",
+      stage: "initial_cross_card_rank",
+      channel: "cross_card",
+      items: initialCrossCardRankedSource,
+      requestLimit: null,
+      requestLimitProvenance: "NO_DIRECT_REQUEST_LIMIT",
+      preLimitObservable: true,
+    });
+  }
+  const initialCrossCardFiltered = initialCrossCardRankedSource.filter((record) => (
       !effectiveQaIdentityCards.length
       || !recordSharesResolvedIdentity(record, effectiveQaIdentityCards)
-    ))
-    .slice(0, 4);
+    ));
+  const initialCrossCardOfficialQuestions = initialCrossCardFiltered.slice(0, 4);
+  if (traceLineage) {
+    emitRagLineageListTrace(lineageTraceSink, {
+      type: "LOCAL_TRUNCATION",
+      stage: "initial_cross_card_rank",
+      channel: "cross_card",
+      beforeItems: initialCrossCardFiltered,
+      afterItems: initialCrossCardOfficialQuestions,
+      requestLimit: 4,
+      requestLimitProvenance: "STATIC_POLICY",
+    });
+  }
+  const rulePlannerInputSource = mergeOfficialRelatedSourceItems([
+    ...localOfficialMatches.all,
+    ...localRelatedOfficialMatches.all,
+  ]);
+  if (traceLineage) {
+    emitRagLineageListTrace(lineageTraceSink, {
+      type: "SOURCE_REQUEST",
+      stage: "rule_planner_safe_input",
+      channel: "question_only_candidates",
+      beforeItems: [...rulePlannerInputSource, ...initialCrossCardOfficialQuestions],
+      requestLimit: 12,
+      requestLimitProvenance: "STATIC_POLICY",
+      preLimitObservable: true,
+    });
+  }
   const ruleQueryCandidateQuestions = buildRuleQueryCandidateQuestions({
-    scopedMatches: localOfficialMatches.all,
+    scopedMatches: rulePlannerInputSource,
     crossCardRecords: initialCrossCardOfficialQuestions,
+    resolvedCards: effectiveQaIdentityCards,
     limit: 12,
   });
+  if (traceLineage) {
+    emitRagLineageListTrace(lineageTraceSink, {
+      type: "SOURCE_RETURNED",
+      stage: "rule_planner_safe_input",
+      channel: "question_only_candidates",
+      items: ruleQueryCandidateQuestions,
+      requestLimit: 12,
+      requestLimitProvenance: "STATIC_POLICY",
+      preLimitObservable: true,
+    });
+  }
   let modelCandidateAssessments = [];
   if (typeof ruleSearchQueryProvider === "function") {
+    if (traceLineage) {
+      emitRagLineageListTrace(lineageTraceSink, {
+        type: "SOURCE_REQUEST",
+        stage: "rule_planner",
+        channel: "frozen_provider",
+        beforeItems: ruleQueryCandidateQuestions,
+        requestLimit: 12,
+        requestLimitProvenance: "STATIC_POLICY",
+        preLimitObservable: true,
+      });
+    }
     const providedRulePlan = await ruleSearchQueryProvider({
       resolvedCards: retrievalCards,
       userProvidedCardTexts: providedTexts,
@@ -342,10 +547,44 @@ export async function retrieveRagEvidence({
     const providedRuleQueries = Array.isArray(providedRulePlan)
       ? providedRulePlan
       : providedRulePlan?.queries;
+    const providedCandidateAssessments = Array.isArray(providedRulePlan)
+      ? []
+      : providedRulePlan?.candidateAssessments;
+    if (traceLineage) {
+      emitRagLineageListTrace(lineageTraceSink, {
+        type: "SOURCE_RETURNED",
+        stage: "rule_planner",
+        channel: "candidate_assessments",
+        items: providedCandidateAssessments,
+        requestLimit: 12,
+        requestLimitProvenance: "STATIC_POLICY",
+        preLimitObservable: true,
+      });
+      emitRagLineageTrace(lineageTraceSink, {
+        type: "SOURCE_RETURNED",
+        stage: "rule_planner",
+        channel: "rule_queries",
+        returnedCount: Array.isArray(providedRuleQueries) ? providedRuleQueries.length : 0,
+        requestLimit: limits.maxRuleSearchQueries,
+        requestLimitProvenance: "RUNTIME_CONFIG",
+        preLimitObservable: true,
+      });
+    }
     modelCandidateAssessments = normalizeModelCandidateAssessments(
-      Array.isArray(providedRulePlan) ? [] : providedRulePlan?.candidateAssessments,
+      providedCandidateAssessments,
       ruleQueryCandidateQuestions,
     );
+    if (traceLineage) {
+      emitRagLineageListTrace(lineageTraceSink, {
+        type: "LOCAL_TRUNCATION",
+        stage: "rule_planner",
+        channel: "accepted_candidate_assessments",
+        beforeItems: providedCandidateAssessments,
+        afterItems: modelCandidateAssessments,
+        requestLimit: 12,
+        requestLimitProvenance: "STATIC_POLICY",
+      });
+    }
     supplementalRuleQueries = normalizeRuleSearchQueries([
       ...supplementalRuleQueries,
       ...(Array.isArray(providedRuleQueries) ? providedRuleQueries : []),
@@ -365,12 +604,32 @@ export async function retrieveRagEvidence({
   const independentRuleQueryKeys = effectiveSupplementalRuleQueries
     .map(ruleSearchQueryIdentity)
     .filter(Boolean);
+  const crossCardQuestionBranchQueries = selectIndependentRuleQueries({
+    deterministicRuleQueries,
+    supplementalRuleQueries: effectiveSupplementalRuleQueries,
+    limit: MAX_INDEPENDENT_RULE_QUERY_BRANCHES,
+  });
+  const crossCardQuestionBranchKeys = crossCardQuestionBranchQueries
+    .map(ruleSearchQueryIdentity)
+    .filter(Boolean);
   if (normalizedRuleQueries.length) retrievalWarnings.push(`rule_search_queries_used:${normalizedRuleQueries.length}`);
   const mentionQueries = [
     ...remainingUnresolvedMentions.map((item) => item.input),
     ...providedTexts.map((item) => item.name),
   ].filter(Boolean);
   stageStartedAt = Date.now();
+  if (traceLineage) {
+    for (const channel of ["deterministic", "supplemental"]) {
+      emitRagLineageTrace(lineageTraceSink, {
+        type: "SOURCE_REQUEST",
+        stage: "rulebook_retrieval",
+        channel,
+        requestLimit: limits.maxRulebookCandidates,
+        requestLimitProvenance: "RUNTIME_CONFIG",
+        preLimitObservable: false,
+      });
+    }
+  }
   const deterministicRulebookCandidates = retrieveRulebookPassages({
     records: allEvidenceRecords,
     userQuery,
@@ -387,10 +646,51 @@ export async function retrieveRagEvidence({
       maxPassageChars: limits.maxRulebookPassageChars,
     })
     : [];
-  const rulebookCandidates = dedupeBy(
+  if (traceLineage) {
+    emitRagLineageListTrace(lineageTraceSink, {
+      type: "SOURCE_RETURNED",
+      stage: "rulebook_retrieval",
+      channel: "deterministic",
+      items: deterministicRulebookCandidates,
+      requestLimit: limits.maxRulebookCandidates,
+      requestLimitProvenance: "RUNTIME_CONFIG",
+      preLimitObservable: false,
+    });
+    emitRagLineageListTrace(lineageTraceSink, {
+      type: "SOURCE_RETURNED",
+      stage: "rulebook_retrieval",
+      channel: "supplemental",
+      items: supplementalRulebookCandidates,
+      requestLimit: limits.maxRulebookCandidates,
+      requestLimitProvenance: "RUNTIME_CONFIG",
+      preLimitObservable: false,
+    });
+  }
+  const mergedRulebookCandidates = dedupeBy(
     [...deterministicRulebookCandidates, ...supplementalRulebookCandidates],
     stableRecordKey,
-  ).slice(0, limits.maxRulebookCandidates);
+  );
+  const rulebookCandidates = mergedRulebookCandidates.slice(0, limits.maxRulebookCandidates);
+  if (traceLineage) {
+    emitRagLineageListTrace(lineageTraceSink, {
+      type: "MERGE",
+      stage: "rulebook_merge",
+      channel: "rulebook",
+      beforeItems: [...deterministicRulebookCandidates, ...supplementalRulebookCandidates],
+      afterItems: mergedRulebookCandidates,
+      requestLimit: null,
+      requestLimitProvenance: "NO_DIRECT_REQUEST_LIMIT",
+    });
+    emitRagLineageListTrace(lineageTraceSink, {
+      type: "GLOBAL_CROP",
+      stage: "rulebook_merge",
+      channel: "rulebook",
+      beforeItems: mergedRulebookCandidates,
+      afterItems: rulebookCandidates,
+      requestLimit: limits.maxRulebookCandidates,
+      requestLimitProvenance: "RUNTIME_CONFIG",
+    });
+  }
   timingsMs.rulebook = Date.now() - stageStartedAt;
   if (rulebookCandidates.length) retrievalWarnings.push(`rulebook_passages_retrieved:${rulebookCandidates.length}`);
 
@@ -405,7 +705,10 @@ export async function retrieveRagEvidence({
     env.RAG_LIVE_QA_DISCOVERY_MAX_CANDIDATES,
     Math.max(liveQaEvidenceLimit, 48),
   );
-  const semanticCandidateQaIds = localOfficialMatches.all
+  const semanticCandidateQaIds = mergeOfficialRelatedSourceItems([
+    ...localOfficialMatches.all,
+    ...localRelatedOfficialMatches.all,
+  ])
     .map((match) => officialQaNumericId(match.record))
     .filter(Boolean);
   // A local snapshot can preserve the full Q&A body while losing the short
@@ -426,15 +729,36 @@ export async function retrieveRagEvidence({
     mentionQueries,
     deterministicRuleQueries,
     supplementalRuleQueries: effectiveSupplementalRuleQueries,
-    independentQueryLimit: 4,
+    independentQueryLimit: MAX_INDEPENDENT_RULE_QUERY_BRANCHES,
     allowNoCardMatch: effectiveQaIdentityCards.length === 0,
   }).map((record) => officialQaNumericId(record)).filter(Boolean);
-  const localCandidateQaIds = dedupeBy(
+  const mergedLocalCandidateQaIds = dedupeBy(
     effectiveQaIdentityCards.length
       ? [...semanticCandidateQaIds, ...lexicalCandidateQaIds]
       : [...lexicalCandidateQaIds, ...semanticCandidateQaIds],
     (value) => String(value),
-  ).slice(0, liveQaEvidenceLimit);
+  );
+  const localCandidateQaIds = mergedLocalCandidateQaIds.slice(0, liveQaEvidenceLimit);
+  if (traceLineage) {
+    emitRagLineageListTrace(lineageTraceSink, {
+      type: "MERGE",
+      stage: "live_qa_candidate_merge",
+      channel: "official_qa_ids",
+      beforeItems: [...semanticCandidateQaIds, ...lexicalCandidateQaIds],
+      afterItems: mergedLocalCandidateQaIds,
+      requestLimit: null,
+      requestLimitProvenance: "NO_DIRECT_REQUEST_LIMIT",
+    });
+    emitRagLineageListTrace(lineageTraceSink, {
+      type: "LOCAL_TRUNCATION",
+      stage: "live_qa_candidate_merge",
+      channel: "official_qa_ids",
+      beforeItems: mergedLocalCandidateQaIds,
+      afterItems: localCandidateQaIds,
+      requestLimit: liveQaEvidenceLimit,
+      requestLimitProvenance: "RUNTIME_CONFIG",
+    });
+  }
   let liveOfficialQa = { records: [], cardMetadata: [], warnings: [], debug: {} };
   const liveQaEnabled = !isDisabled(env.RAG_LIVE_OFFICIAL_QA)
     && (!cards && !records && !qaRecords || isEnabled(env.RAG_LIVE_OFFICIAL_QA));
@@ -443,6 +767,17 @@ export async function retrieveRagEvidence({
     && liveQaEnabled
     && (effectiveQaIdentityCards.length >= 1 || localCandidateQaIds.length)
   ) {
+    if (traceLineage) {
+      emitRagLineageListTrace(lineageTraceSink, {
+        type: "SOURCE_REQUEST",
+        stage: "live_official_qa",
+        channel: "network_provider",
+        beforeItems: localCandidateQaIds,
+        requestLimit: liveQaDiscoveryLimit,
+        requestLimitProvenance: "RUNTIME_CONFIG",
+        preLimitObservable: false,
+      });
+    }
     liveOfficialQa = await retrieveLiveOfficialQa({
       resolvedCards: effectiveQaIdentityCards,
       candidateQaIds: localCandidateQaIds,
@@ -454,6 +789,17 @@ export async function retrieveRagEvidence({
       maxConcurrentQaFetches: readPositiveNumber(env.RAG_LIVE_QA_MAX_CONCURRENCY, 6),
       signal,
     });
+    if (traceLineage) {
+      emitRagLineageListTrace(lineageTraceSink, {
+        type: "SOURCE_RETURNED",
+        stage: "live_official_qa",
+        channel: "network_provider",
+        items: liveOfficialQa.records,
+        requestLimit: liveQaDiscoveryLimit,
+        requestLimitProvenance: "RUNTIME_CONFIG",
+        preLimitObservable: false,
+      });
+    }
     retrievalWarnings.push(...(liveOfficialQa.warnings || []));
     if (liveOfficialQa.records?.length) retrievalWarnings.push(`live_official_qa_retrieved:${liveOfficialQa.records.length}`);
     const metadataById = new Map((liveOfficialQa.cardMetadata || []).map((item) => [String(item.id), item]));
@@ -462,7 +808,7 @@ export async function retrieveRagEvidence({
       (card) => card.resolutionSource !== "card_text_reference",
     );
     effectiveQaIdentityCards = canonicalizeQaIdentityCards(
-      hydratedQaIdentityCards.length ? hydratedQaIdentityCards : retrievalCards,
+      hydratedQaIdentityCards,
       data.cards,
       retrievalWarnings,
     );
@@ -476,7 +822,7 @@ export async function retrieveRagEvidence({
       // Prefer the freshly hydrated locale over a stale/local record with the
       // same stable id. Otherwise the Japanese live question is silently
       // discarded in favour of an older English-only snapshot.
-      records: dedupeBy([...liveOfficialQa.records, ...scopedRecordBuckets.officialQa], stableRecordKey),
+      records: dedupeBy([...liveOfficialQa.records, ...authorityScopedRecordBuckets.officialQa], stableRecordKey),
       resolvedCards: effectiveQaIdentityCards,
       limit: effectiveQaIdentityCards.length
         ? Math.max(256, limits.maxRelatedEvidence * 24)
@@ -488,13 +834,25 @@ export async function retrieveRagEvidence({
     modelAssessmentById,
   );
   timingsMs.officialQa = Date.now() - stageStartedAt;
-  const officialQaDirectCandidates = officialMatches.exact
+  const officialQaDirectSource = officialMatches.exact
     .filter((match) => (
       isOfficialQaRecord(match.record)
+      && match.rawSceneMatch === true
       && !hasSevereQuestionIdentityMismatch(match, effectiveQaIdentityCards.length)
     ))
-    .map((match) => evidenceFromOfficialMatch(match, "official_qa", limits.maxEvidenceTextChars, retrievalWarnings))
-    .slice(0, limits.maxOfficialQa);
+    .map((match) => evidenceFromOfficialMatch(match, "official_qa", limits.maxEvidenceTextChars, retrievalWarnings));
+  const officialQaDirectCandidates = officialQaDirectSource.slice(0, limits.maxOfficialQa);
+  if (traceLineage) {
+    emitRagLineageListTrace(lineageTraceSink, {
+      type: "LOCAL_TRUNCATION",
+      stage: "official_qa_direct",
+      channel: "direct",
+      beforeItems: officialQaDirectSource,
+      afterItems: officialQaDirectCandidates,
+      requestLimit: limits.maxOfficialQa,
+      requestLimitProvenance: "RUNTIME_CONFIG",
+    });
+  }
   const playerRoleMismatchCount = officialMatches.all.filter(
     (match) => match.playerRoleCompatibility === "mismatch",
   ).length;
@@ -510,42 +868,89 @@ export async function retrieveRagEvidence({
   const usefulScopedOfficialMatches = officialMatches.all.filter((match) => (
     isOfficialQaRecord(match.record)
   ));
-  const scopedOfficialQaRelatedSource = mergeOfficialRelatedSourceItems([
+  const usefulDiscoveryOfficialMatches = localRelatedOfficialMatches.all.filter((match) => (
+    isOfficialQaRecord(match.record)
+  ));
+  const scopedSupplementalOfficialRecords = rankRecordsWithSupplementalQueries({
+    userQuery,
+    records: applyModelAssessmentsToRecords(scopedRecordBuckets.qa, modelAssessmentById),
+    resolvedCards: effectiveQaIdentityCards,
+    mentionQueries,
+    deterministicRuleQueries,
+    supplementalRuleQueries: effectiveSupplementalRuleQueries,
+    independentQueryLimit: MAX_INDEPENDENT_RULE_QUERY_BRANCHES,
+    allowNoCardMatch: effectiveQaIdentityCards.length === 0 && normalizedRuleQueries.length > 0,
+  });
+  if (traceLineage) {
+    emitRagLineageListTrace(lineageTraceSink, {
+      type: "SOURCE_RETURNED",
+      stage: "scoped_supplemental_rank",
+      channel: "scoped_official",
+      items: scopedSupplementalOfficialRecords,
+      requestLimit: null,
+      requestLimitProvenance: "NO_DIRECT_REQUEST_LIMIT",
+      preLimitObservable: true,
+    });
+  }
+  const scopedOfficialQaMergedSource = mergeOfficialRelatedSourceItems([
     ...usefulScopedOfficialMatches,
-    ...rankRecordsWithSupplementalQueries({
-      userQuery,
-      records: applyModelAssessmentsToRecords(scopedRecordBuckets.qa, modelAssessmentById),
-      resolvedCards: effectiveQaIdentityCards,
-      mentionQueries,
-      deterministicRuleQueries,
-      supplementalRuleQueries: effectiveSupplementalRuleQueries,
-      independentQueryLimit: 4,
-      allowNoCardMatch: effectiveQaIdentityCards.length === 0 && normalizedRuleQueries.length > 0,
-    }),
-  ]).filter((item) => (
+    ...usefulDiscoveryOfficialMatches,
+    ...scopedSupplementalOfficialRecords,
+  ]);
+  const scopedOfficialQaRelatedSource = scopedOfficialQaMergedSource.filter((item) => (
     !effectiveQaIdentityCards.length
     || relatedMatchedQuestionCardIds(item).length > 0
+    || hasMatchedDiscoveryRelation(item)
     || recordSharesResolvedIdentity(item?.record || item, effectiveQaIdentityCards)
   ));
+  if (traceLineage) {
+    emitRagLineageListTrace(lineageTraceSink, {
+      type: "MERGE",
+      stage: "scoped_official_merge",
+      channel: "scoped_official",
+      beforeItems: [
+        ...usefulScopedOfficialMatches,
+        ...usefulDiscoveryOfficialMatches,
+        ...scopedSupplementalOfficialRecords,
+      ],
+      afterItems: scopedOfficialQaMergedSource,
+      requestLimit: null,
+      requestLimitProvenance: "NO_DIRECT_REQUEST_LIMIT",
+    });
+    emitRagLineageListTrace(lineageTraceSink, {
+      type: "LOCAL_FILTER",
+      stage: "scoped_official_scope_filter",
+      channel: "scoped_official",
+      beforeItems: scopedOfficialQaMergedSource,
+      afterItems: scopedOfficialQaRelatedSource,
+      requestLimit: null,
+      requestLimitProvenance: "NO_DIRECT_REQUEST_LIMIT",
+    });
+  }
   // Card-scoped lookup is the highest-signal path, but a general OCG mechanism
   // is often documented on a different card. Search the complete official QA
   // pool with the same rule-query plan and keep a small, bounded related-only
   // reserve. This never upgrades an analogy to a direct ruling and never uses
   // the answer text to resolve card identity.
-  const crossCardOfficialPool = applyModelAssessmentsToRecords(dedupeBy([
+  const crossCardOfficialQuestionPool = applyModelAssessmentsToRecords(dedupeBy([
     ...recordBuckets.officialQa,
     ...recordBuckets.faq,
   ], stableRecordKey).filter(hasOfficialQuestionSurface), modelAssessmentById);
   const eligibleCrossCardOfficialPool = effectiveQaIdentityCards.length
-    ? crossCardOfficialPool.filter(
+    ? crossCardOfficialQuestionPool.filter(
       (record) => !recordSharesResolvedIdentity(record, effectiveQaIdentityCards),
     )
-    : [];
+    // A pure rule question has no identity anchor by design. An unresolved or
+    // ambiguous card surface is different: question-only retrieval must not
+    // expose another card's FAQ through a guessed identity expansion.
+    : hasPendingCardIdentity
+      ? []
+      : crossCardOfficialQuestionPool;
   const crossCardOfficialCandidateLimit = Math.max(16, limits.maxRelatedEvidence * 4);
   const modelAssessedCrossCardCandidates = eligibleCrossCardOfficialPool
-    .filter(hasEligibleModelCandidateAssessment)
+    .filter((item) => hasEligibleModelCandidateAssessment(item))
     .sort(compareRetrievedRecords);
-  const strictMechanismCrossCardCandidates = eligibleCrossCardOfficialPool.length
+  const strictMechanismCrossCardRankedSource = eligibleCrossCardOfficialPool.length
     ? rankRecordsWithSupplementalQueries({
         userQuery,
         // Remove same-card records before the independently ranked query heads
@@ -558,37 +963,126 @@ export async function retrieveRagEvidence({
         // retrieval. Cross-card analogues require an explicit planner branch.
         deterministicRuleQueries: [],
         supplementalRuleQueries: effectiveSupplementalRuleQueries,
-        independentQueryLimit: 4,
+        independentQueryLimit: MAX_INDEPENDENT_RULE_QUERY_BRANCHES,
         allowNoCardMatch: true,
       })
-        .filter((record) => !recordSharesResolvedIdentity(record, effectiveQaIdentityCards))
-        .filter((record) => supplementalQueryKeysForItem(record, { strictOnly: true }).length > 0)
     : [];
+  if (traceLineage) {
+    emitRagLineageListTrace(lineageTraceSink, {
+      type: "SOURCE_RETURNED",
+      stage: "cross_card_mechanism_rank",
+      channel: "strict_mechanism",
+      items: strictMechanismCrossCardRankedSource,
+      requestLimit: null,
+      requestLimitProvenance: "NO_DIRECT_REQUEST_LIMIT",
+      preLimitObservable: true,
+    });
+  }
+  const strictMechanismCrossCardCandidates = strictMechanismCrossCardRankedSource
+    .filter((record) => !recordSharesResolvedIdentity(record, effectiveQaIdentityCards))
+    .filter((record) => supplementalQueryKeysForItem(record, { strictOnly: true }).length > 0);
+  if (traceLineage) {
+    emitRagLineageListTrace(lineageTraceSink, {
+      type: "SOURCE_REQUEST",
+      stage: "cross_card_question_branches",
+      channel: "question_branches",
+      beforeItems: eligibleCrossCardOfficialPool,
+      requestLimit: crossCardOfficialCandidateLimit,
+      requestLimitProvenance: "DERIVED_RUNTIME_POLICY",
+      preLimitObservable: false,
+    });
+  }
   const questionBranchCrossCardCandidates = rankOfficialQaQuestionBranches({
     records: eligibleCrossCardOfficialPool,
-    ruleSearchQueries: effectiveSupplementalRuleQueries,
+    // Keep all four bounded model subclaims plus one deterministic user/card-
+    // text fallback branch. The ranker
+    // projects every candidate to its official question before comparison.
+    ruleSearchQueries: crossCardQuestionBranchQueries,
+    supplementalRuleQueryKeys: independentRuleQueryKeys,
     candidateLimit: crossCardOfficialCandidateLimit,
   });
+  if (traceLineage) {
+    emitRagLineageListTrace(lineageTraceSink, {
+      type: "SOURCE_RETURNED",
+      stage: "cross_card_question_branches",
+      channel: "question_branches",
+      items: questionBranchCrossCardCandidates,
+      requestLimit: crossCardOfficialCandidateLimit,
+      requestLimitProvenance: "DERIVED_RUNTIME_POLICY",
+      preLimitObservable: false,
+    });
+  }
   const mergedLexicalCrossCardCandidates = mergeOfficialRelatedSourceItems([
     ...strictMechanismCrossCardCandidates,
     ...questionBranchCrossCardCandidates,
   ]).map((item) => item.record || item);
-  const lexicallyRankedCrossCardCandidates = eligibleCrossCardOfficialPool.length
+  const reservedLexicalCrossCardCandidates = eligibleCrossCardOfficialPool.length
     ? reserveSupplementalQueryCoverage(mergedLexicalCrossCardCandidates, crossCardOfficialCandidateLimit, {
-          queryKeys: independentRuleQueryKeys,
+          queryKeys: crossCardQuestionBranchKeys,
           strictOnly: false,
         })
-        .slice(0, crossCardOfficialCandidateLimit)
     : [];
+  const lexicallyRankedCrossCardCandidates = reservedLexicalCrossCardCandidates
+    .slice(0, crossCardOfficialCandidateLimit);
+  if (traceLineage) {
+    emitRagLineageListTrace(lineageTraceSink, {
+      type: "MERGE",
+      stage: "cross_card_lexical_merge",
+      channel: "cross_card",
+      beforeItems: [
+        ...strictMechanismCrossCardCandidates,
+        ...questionBranchCrossCardCandidates,
+      ],
+      afterItems: mergedLexicalCrossCardCandidates,
+      requestLimit: null,
+      requestLimitProvenance: "NO_DIRECT_REQUEST_LIMIT",
+    });
+    emitRagLineageListTrace(lineageTraceSink, {
+      type: "LOCAL_TRUNCATION",
+      stage: "cross_card_lexical_reserve",
+      channel: "cross_card",
+      beforeItems: reservedLexicalCrossCardCandidates,
+      afterItems: lexicallyRankedCrossCardCandidates,
+      requestLimit: crossCardOfficialCandidateLimit,
+      requestLimitProvenance: "DERIVED_RUNTIME_POLICY",
+    });
+  }
   // Merge model-assessed and independently ranked candidates, but keep the
   // evidence-derived comparator authoritative. The question-only model may
   // break a genuine tie; it cannot jump ahead of stronger mechanism evidence.
-  const crossCardOfficialQaSource = dedupeBy([
+  const mergedCrossCardQuestionSource = dedupeBy([
     ...lexicallyRankedCrossCardCandidates,
     ...modelAssessedCrossCardCandidates,
   ], stableRecordKey)
-    .sort(compareRetrievedRecords)
-    .slice(0, crossCardOfficialCandidateLimit);
+    .sort(compareRetrievedRecords);
+  const crossCardQuestionSource = mergedCrossCardQuestionSource.slice(
+    0,
+    crossCardOfficialCandidateLimit,
+  );
+  if (traceLineage) {
+    emitRagLineageListTrace(lineageTraceSink, {
+      type: "MERGE",
+      stage: "cross_card_global_merge",
+      channel: "cross_card",
+      beforeItems: [
+        ...lexicallyRankedCrossCardCandidates,
+        ...modelAssessedCrossCardCandidates,
+      ],
+      afterItems: mergedCrossCardQuestionSource,
+      requestLimit: null,
+      requestLimitProvenance: "NO_DIRECT_REQUEST_LIMIT",
+    });
+    emitRagLineageListTrace(lineageTraceSink, {
+      type: "GLOBAL_CROP",
+      stage: "cross_card_global_merge",
+      channel: "cross_card",
+      beforeItems: mergedCrossCardQuestionSource,
+      afterItems: crossCardQuestionSource,
+      requestLimit: crossCardOfficialCandidateLimit,
+      requestLimitProvenance: "DERIVED_RUNTIME_POLICY",
+    });
+  }
+  const crossCardOfficialQaSource = crossCardQuestionSource;
   const scopedOfficialQaRelatedCandidates = scopedOfficialQaRelatedSource
     .map((item) => item.record
       ? evidenceFromOfficialMatch(item, "related", limits.maxEvidenceTextChars, retrievalWarnings)
@@ -604,13 +1098,55 @@ export async function retrieveRagEvidence({
       },
     }, "related", limits.maxEvidenceTextChars, retrievalWarnings))
     .filter((item) => !directIds.has(item.id));
-  const officialQaRelated = allocateOfficialRelatedEvidence({
+  if (traceLineage) {
+    emitRagLineageListTrace(lineageTraceSink, {
+      type: "ALLOCATOR_INPUT",
+      stage: "official_related_allocator",
+      channel: "scoped",
+      items: scopedOfficialQaRelatedCandidates,
+      requestLimit: limits.maxRelatedEvidence,
+      requestLimitProvenance: "RUNTIME_CONFIG",
+      preLimitObservable: true,
+    });
+    emitRagLineageListTrace(lineageTraceSink, {
+      type: "ALLOCATOR_INPUT",
+      stage: "official_related_allocator",
+      channel: "cross_card",
+      items: crossCardOfficialQaRelatedCandidates,
+      requestLimit: limits.maxRelatedEvidence,
+      requestLimitProvenance: "RUNTIME_CONFIG",
+      preLimitObservable: true,
+    });
+  }
+  const allocatedOfficialQaRelated = allocateOfficialRelatedEvidence({
     scopedCandidates: scopedOfficialQaRelatedCandidates,
     crossCardCandidates: crossCardOfficialQaRelatedCandidates,
     limit: limits.maxRelatedEvidence,
     resolvedCards: effectiveQaIdentityCards,
-    supplementalRuleQueryKeys: independentRuleQueryKeys,
+    supplementalRuleQueryKeys: crossCardQuestionBranchKeys,
   });
+  if (traceLineage) {
+    emitRagLineageListTrace(lineageTraceSink, {
+      type: "ALLOCATOR_OUTPUT",
+      stage: "official_related_allocator",
+      channel: "combined",
+      beforeItems: [
+        ...scopedOfficialQaRelatedCandidates,
+        ...crossCardOfficialQaRelatedCandidates,
+      ],
+      afterItems: allocatedOfficialQaRelated,
+      requestLimit: limits.maxRelatedEvidence,
+      requestLimitProvenance: "RUNTIME_CONFIG",
+      preLimitObservable: true,
+    });
+  }
+  const officialQaRelated = allocatedOfficialQaRelated.map((item) => ({
+    ...item,
+    retrievalContext: {
+      ...(item.retrievalContext || {}),
+      relatedOnly: true,
+    },
+  }));
   const officialQaRelatedCandidateCount = dedupeEvidence([
     ...scopedOfficialQaRelatedCandidates,
     ...crossCardOfficialQaRelatedCandidates,
@@ -629,12 +1165,36 @@ export async function retrieveRagEvidence({
     supplementalRuleQueries: effectiveSupplementalRuleQueries,
     allowNoCardMatch: retrievalCards.length === 0,
   });
-  const provisionalOfficialResponses = reserveIdentitySourceCoverage(
+  if (traceLineage) {
+    emitRagLineageListTrace(lineageTraceSink, {
+      type: "SOURCE_RETURNED",
+      stage: "provisional_official_rank",
+      channel: "provisional_official",
+      items: provisionalOfficialResponseSource,
+      requestLimit: null,
+      requestLimitProvenance: "NO_DIRECT_REQUEST_LIMIT",
+      preLimitObservable: true,
+    });
+  }
+  const reservedProvisionalOfficialResponses = reserveIdentitySourceCoverage(
     provisionalOfficialResponseSource,
     limits.maxOfficialQa,
     retrievalCards,
-  )
-    .slice(0, limits.maxOfficialQa)
+  );
+  const boundedProvisionalOfficialResponses = reservedProvisionalOfficialResponses
+    .slice(0, limits.maxOfficialQa);
+  if (traceLineage) {
+    emitRagLineageListTrace(lineageTraceSink, {
+      type: "LOCAL_TRUNCATION",
+      stage: "provisional_official_rank",
+      channel: "provisional_official",
+      beforeItems: reservedProvisionalOfficialResponses,
+      afterItems: boundedProvisionalOfficialResponses,
+      requestLimit: limits.maxOfficialQa,
+      requestLimitProvenance: "RUNTIME_CONFIG",
+    });
+  }
+  const provisionalOfficialResponses = boundedProvisionalOfficialResponses
     .map((record) => evidenceFromRecord(record, "official_response_screenshot", limits.maxEvidenceTextChars, retrievalWarnings));
   if (provisionalOfficialResponses.length) {
     retrievalWarnings.push(`provisional_official_responses_retrieved:${provisionalOfficialResponses.length}`);
@@ -647,7 +1207,7 @@ export async function retrieveRagEvidence({
     mentionQueries,
     deterministicRuleQueries,
     supplementalRuleQueries: effectiveSupplementalRuleQueries,
-    independentQueryLimit: 4,
+    independentQueryLimit: MAX_INDEPENDENT_RULE_QUERY_BRANCHES,
     allowNoCardMatch: retrievalCards.length === 0 && normalizedRuleQueries.length > 0,
   });
   const faqRelatedSource = reserveRankedHeadAndSupplementalCoverage(
@@ -658,13 +1218,34 @@ export async function retrieveRagEvidence({
       strictOnly: true,
     },
   );
+  if (traceLineage) {
+    emitRagLineageListTrace(lineageTraceSink, {
+      type: "SOURCE_RETURNED",
+      stage: "faq_rank",
+      channel: "faq",
+      items: rankedFaqRelatedSource,
+      requestLimit: null,
+      requestLimitProvenance: "NO_DIRECT_REQUEST_LIMIT",
+      preLimitObservable: true,
+    });
+  }
   const officialMatchByRecordKey = new Map(
     officialMatches.all.map((match) => [stableRecordKey(match.record), match]),
   );
   if (faqRelatedSource.length > limits.maxRelatedEvidence) retrievalWarnings.push(`faq_related_limited:${faqRelatedSource.length}->${limits.maxRelatedEvidence}`);
-  const faqRelated = faqRelatedSource
-    .slice(0, limits.maxRelatedEvidence)
-    .map((record) => {
+  const boundedFaqRelatedSource = faqRelatedSource.slice(0, limits.maxRelatedEvidence);
+  if (traceLineage) {
+    emitRagLineageListTrace(lineageTraceSink, {
+      type: "LOCAL_TRUNCATION",
+      stage: "faq_rank",
+      channel: "faq",
+      beforeItems: faqRelatedSource,
+      afterItems: boundedFaqRelatedSource,
+      requestLimit: limits.maxRelatedEvidence,
+      requestLimitProvenance: "RUNTIME_CONFIG",
+    });
+  }
+  const faqRelated = boundedFaqRelatedSource.map((record) => {
       const officialMatch = officialMatchByRecordKey.get(stableRecordKey(record));
       return officialMatch
         ? evidenceFromOfficialMatch(officialMatch, "faq", limits.maxEvidenceTextChars, retrievalWarnings)
@@ -681,11 +1262,34 @@ export async function retrieveRagEvidence({
     supplementalRuleQueries: effectiveSupplementalRuleQueries,
     allowNoCardMatch: retrievalCards.length === 0,
   });
+  if (traceLineage) {
+    emitRagLineageListTrace(lineageTraceSink, {
+      type: "SOURCE_RETURNED",
+      stage: "raw_related_rank",
+      channel: "raw_related",
+      items: rawRelatedSource,
+      requestLimit: null,
+      requestLimitProvenance: "NO_DIRECT_REQUEST_LIMIT",
+      preLimitObservable: true,
+    });
+  }
   if (rawRelatedSource.length > limits.maxRelatedEvidence) retrievalWarnings.push(`raw_related_limited:${rawRelatedSource.length}->${limits.maxRelatedEvidence}`);
-  const rawRelatedEvidence = rawRelatedSource
-    .slice(0, limits.maxRelatedEvidence)
+  const boundedRawRelatedSource = rawRelatedSource.slice(0, limits.maxRelatedEvidence);
+  if (traceLineage) {
+    emitRagLineageListTrace(lineageTraceSink, {
+      type: "LOCAL_TRUNCATION",
+      stage: "raw_related_rank",
+      channel: "raw_related",
+      beforeItems: rawRelatedSource,
+      afterItems: boundedRawRelatedSource,
+      requestLimit: limits.maxRelatedEvidence,
+      requestLimitProvenance: "RUNTIME_CONFIG",
+    });
+  }
+  const rawRelatedEvidence = boundedRawRelatedSource
     .map((record) => evidenceFromRecord(record, evidenceTypeForRecord(record, "related"), limits.maxEvidenceTextChars, retrievalWarnings))
     .filter((item) => !directIds.has(item.id));
+  const allocatedOfficialRelatedIdSet = new Set(diagnosticCandidateIds(officialQaRelated));
   timingsMs.relatedEvidence = Date.now() - stageStartedAt;
   timingsMs.total = Date.now() - retrievalStartedAt;
 
@@ -703,14 +1307,63 @@ export async function retrieveRagEvidence({
     baigeAmbiguousMentions: baigeDebug.ambiguousMentions,
   });
 
+  const outputCardTexts = dedupeEvidence(cardTexts);
+  const outputOfficialQaDirectCandidates = dedupeEvidence(officialQaDirectCandidates);
+  const outputOfficialQaRelated = dedupeEvidence(officialQaRelated);
+  const outputProvisionalOfficialResponses = dedupeEvidence(provisionalOfficialResponses);
+  const outputFaqRelated = dedupeEvidence(faqRelated);
+  const boundedRulebookForRaw = rulebookCandidates.slice(0, limits.maxRelatedEvidence);
+  const mergedRawRelatedSource = [...boundedRulebookForRaw, ...rawRelatedEvidence];
+  const outputRawRelatedEvidence = dedupeEvidence(mergedRawRelatedSource);
+  if (traceLineage) {
+    emitRagLineageListTrace(lineageTraceSink, {
+      type: "LOCAL_TRUNCATION",
+      stage: "raw_related_rulebook_reserve",
+      channel: "rulebook",
+      beforeItems: rulebookCandidates,
+      afterItems: boundedRulebookForRaw,
+      requestLimit: limits.maxRelatedEvidence,
+      requestLimitProvenance: "RUNTIME_CONFIG",
+    });
+    emitRagLineageListTrace(lineageTraceSink, {
+      type: "MERGE",
+      stage: "raw_related_global_merge",
+      channel: "raw_related",
+      beforeItems: mergedRawRelatedSource,
+      afterItems: outputRawRelatedEvidence,
+      requestLimit: null,
+      requestLimitProvenance: "NO_DIRECT_REQUEST_LIMIT",
+    });
+    for (const [channel, items] of Object.entries({
+      cardTexts: outputCardTexts,
+      userProvidedCardTexts: userProvidedCardTextEvidence,
+      officialQaDirectCandidates: outputOfficialQaDirectCandidates,
+      officialQaRelated: outputOfficialQaRelated,
+      provisionalOfficialResponses: outputProvisionalOfficialResponses,
+      faqRelated: outputFaqRelated,
+      rawRelatedEvidence: outputRawRelatedEvidence,
+      rulebookCandidates,
+    })) {
+      emitRagLineageListTrace(lineageTraceSink, {
+        type: "RETRIEVAL_OUTPUT",
+        stage: "retrieval_output",
+        channel,
+        items,
+        requestLimit: null,
+        requestLimitProvenance: "BUCKET_POLICY_RECORDED_UPSTREAM",
+        preLimitObservable: true,
+      });
+    }
+  }
+
   return {
-    cardTexts: dedupeEvidence(cardTexts),
+    cardTexts: outputCardTexts,
     userProvidedCardTexts: userProvidedCardTextEvidence,
-    officialQaDirectCandidates: dedupeEvidence(officialQaDirectCandidates),
-    officialQaRelated: dedupeEvidence(officialQaRelated),
-    provisionalOfficialResponses: dedupeEvidence(provisionalOfficialResponses),
-    faqRelated: dedupeEvidence(faqRelated),
-    rawRelatedEvidence: dedupeEvidence([...rulebookCandidates.slice(0, limits.maxRelatedEvidence), ...rawRelatedEvidence]),
+    officialQaDirectCandidates: outputOfficialQaDirectCandidates,
+    officialQaRelated: outputOfficialQaRelated,
+    provisionalOfficialResponses: outputProvisionalOfficialResponses,
+    faqRelated: outputFaqRelated,
+    rawRelatedEvidence: outputRawRelatedEvidence,
     rulebookCandidates,
     // Keep the canonical local card id on the answer path even when the card
     // was first found through a Baige passcode or another external id.
@@ -745,21 +1398,27 @@ export async function retrieveRagEvidence({
         initialCrossCardQuestionIds: diagnosticCandidateIds(initialCrossCardOfficialQuestions),
         rulePlannerCandidateIds: diagnosticCandidateIds(ruleQueryCandidateQuestions),
         ruleQueryQuestionBranchCandidateIds: diagnosticCandidateIds(questionBranchCrossCardCandidates),
+        scopedOfficialMatchIds: diagnosticCandidateIds(usefulScopedOfficialMatches),
+        scopedSupplementalOfficialIds: diagnosticCandidateIds(scopedSupplementalOfficialRecords),
+        scopedOfficialRelatedCandidateIds: diagnosticCandidateIds(scopedOfficialQaRelatedCandidates),
         crossCardRankedPoolIds: diagnosticCandidateIds(crossCardOfficialQaSource),
         crossCardEvidenceCandidateIds: diagnosticCandidateIds(crossCardOfficialQaRelatedCandidates),
         allocatedOfficialRelatedIds: diagnosticCandidateIds(officialQaRelated),
         allocatedCrossCardIds: diagnosticCandidateIds(
           officialQaRelated.filter((item) => (
-            item?.retrievalContext?.scope === "cross_card_official_mechanism"
+            /^cross_card_official_/u.test(String(item?.retrievalContext?.scope || ""))
           )),
         ),
+        notAllocatedScopedIds: diagnosticCandidateIds(scopedOfficialQaRelatedCandidates)
+          .filter((id) => !allocatedOfficialRelatedIdSet.has(id)),
         notAllocatedCrossCardIds: diagnosticCandidateIds(crossCardOfficialQaRelatedCandidates)
-          .filter((id) => !new Set(diagnosticCandidateIds(officialQaRelated)).has(id)),
+          .filter((id) => !allocatedOfficialRelatedIdSet.has(id)),
       },
       baigeSearchCount: baigeDebug.searchCount,
       baigeCacheHitCount: baigeDebug.cacheHitCount,
       baigeWarnings: baigeDebug.warnings,
       liveOfficialQa: liveOfficialQa.debug || {},
+      officialQaDiscoveryRelations: getOfficialQaDiscoveryRelationStatus(data),
     },
   };
 }
@@ -776,7 +1435,14 @@ export async function loadRagData(dataDir = defaultDataDir, {
   if (dataCache.has(key)) return await dataCache.get(key);
   const pending = (async () => {
     const runtimeBundle = await loadRagRuntimeBundle({ dataDir });
-    if (runtimeBundle.ok) return runtimeBundle.data;
+    if (runtimeBundle.ok) {
+      await bindOfficialQaDiscoveryRelations({
+        dataDir,
+        data: runtimeBundle.data,
+        requireTrustedData: true,
+      });
+      return runtimeBundle.data;
+    }
     if (requireRuntimeBundle) {
       throw unavailableRagDataError({
         phase: "runtime_bundle",
@@ -873,6 +1539,7 @@ export async function loadRawRagData(dataDir = defaultDataDir) {
       verifyCanonicalCorpus: false,
     });
     bindTrustedRagDataRevision(data, manifestValidation);
+    await bindOfficialQaDiscoveryRelations({ dataDir, data, requireTrustedData: true });
     return data;
   })();
   rawDataCache.set(key, pending);
@@ -908,6 +1575,15 @@ export function normalizeInjectedData({ cards = [], records = [], qaRecords = []
   const sourceCards = Array.isArray(cards) ? cards : emptyDataArray;
   const sourceRecords = Array.isArray(records) ? records : emptyDataArray;
   const sourceQaRecords = Array.isArray(qaRecords) ? qaRecords : emptyDataArray;
+  const registered = getRegisteredCanonicalNormalizedRagData({
+    cards: sourceCards,
+    records: sourceRecords,
+    qaRecords: sourceQaRecords,
+  });
+  if (registered) {
+    cacheNormalizedData(sourceCards, sourceRecords, sourceQaRecords, registered);
+    return registered;
+  }
   const cached = cachedNormalizedData(sourceCards, sourceRecords, sourceQaRecords);
   if (cached) return cached;
 
@@ -1044,8 +1720,8 @@ function officialRecordCompleteness(record = {}) {
   const answer = String(record.answer || record.conclusion || "").trim();
   const officialText = String(record.officialText || "").trim();
   const body = String(record.text || "").trim();
-  const questionIds = new Set((record.questionCardIds || []).map(normalizeId).filter(Boolean));
-  const cardIds = new Set((record.cardIds || []).map(normalizeId).filter(Boolean));
+  const questionIds = new Set((record.questionCardIds || []).map(normalizeCardIdentityId).filter(Boolean));
+  const cardIds = new Set((record.cardIds || []).map(normalizeCardIdentityId).filter(Boolean));
   return [
     Number(Boolean(question && answer)),
     Number(Boolean(answer)),
@@ -1060,32 +1736,59 @@ function officialRecordCompleteness(record = {}) {
   ];
 }
 
-function scopeRecordBuckets(buckets, resolvedCards) {
+function scopeRecordBuckets(buckets, resolvedCards, {
+  includeDiscovery = false,
+  allowUnscoped = false,
+} = {}) {
   return {
-    officialQa: recordsForResolvedCards(buckets.officialQa, resolvedCards),
-    qa: recordsForResolvedCards(buckets.qa, resolvedCards),
-    provisionalOfficialResponses: recordsForResolvedCards(buckets.provisionalOfficialResponses, resolvedCards),
-    faq: recordsForResolvedCards(buckets.faq, resolvedCards),
-    rawRelated: recordsForResolvedCards(buckets.rawRelated, resolvedCards),
+    officialQa: recordsForResolvedCards(
+      buckets.officialQa,
+      resolvedCards,
+      { includeDiscovery, allowUnscoped },
+    ),
+    qa: recordsForResolvedCards(
+      buckets.qa,
+      resolvedCards,
+      { includeDiscovery, allowUnscoped },
+    ),
+    provisionalOfficialResponses: recordsForResolvedCards(
+      buckets.provisionalOfficialResponses,
+      resolvedCards,
+      { includeDiscovery, allowUnscoped },
+    ),
+    faq: recordsForResolvedCards(
+      buckets.faq,
+      resolvedCards,
+      { includeDiscovery, allowUnscoped },
+    ),
+    rawRelated: recordsForResolvedCards(
+      buckets.rawRelated,
+      resolvedCards,
+      { includeDiscovery, allowUnscoped },
+    ),
   };
 }
 
-function recordsForResolvedCards(records, resolvedCards) {
+function recordsForResolvedCards(records, resolvedCards, {
+  includeDiscovery = false,
+  allowUnscoped = false,
+} = {}) {
   const identities = cardIdentityKeys(resolvedCards);
-  if (!identities.length || !(records || []).length) return records || [];
-  const index = recordIdentityIndex(records);
+  if (!(records || []).length) return [];
+  if (!identities.length) return allowUnscoped ? records : [];
+  const index = recordIdentityIndex(records, { includeDiscovery });
   const matched = new Set();
   for (const identity of identities) {
     for (const record of index.get(identity) || []) matched.add(record);
   }
-  return matched.size ? [...matched] : records;
+  return [...matched];
 }
 
 function cardIdentityKeys(cards) {
   const keys = [];
   const seen = new Set();
   for (const card of cards || []) {
-    const id = normalizeId(card.id || card.cardId);
+    const id = normalizeCardIdentityId(card.id || card.cardId);
     if (id && !seen.has("id:" + id)) {
       seen.add("id:" + id);
       keys.push("id:" + id);
@@ -1116,7 +1819,7 @@ function canonicalCardIdentityIndex(cards) {
   const byPasscode = new Map();
   const byAlias = new Map();
   for (const card of cards || []) {
-    const id = normalizeId(card.id || card.cardId);
+    const id = normalizeCardIdentityId(card.id || card.cardId);
     if (id) byId.set(id, card);
     const cid = verifiedLocalCardCid(card);
     if (cid) addIdentityIndexCandidate(byCid, cid, card);
@@ -1144,7 +1847,7 @@ function addIdentityIndexCandidate(index, key, card) {
 function canonicalizeRetrievedCardIdentity(card, canonicalCards, warnings = []) {
   if (!card || typeof card !== "object") return card;
   const index = canonicalCardIdentityIndex(canonicalCards);
-  const currentId = normalizeId(card.id || card.cardId);
+  const currentId = normalizeCardIdentityId(card.id || card.cardId);
   const strongCandidates = new Set();
   const direct = currentId ? index.byId.get(currentId) : null;
   if (direct) strongCandidates.add(direct);
@@ -1188,7 +1891,7 @@ function canonicalizeRetrievedCardIdentity(card, canonicalCards, warnings = []) 
   }
   if (!canonical) return ensureCardMentionAlias(card);
 
-  const canonicalId = normalizeId(canonical.id || canonical.cardId);
+  const canonicalId = normalizeCardIdentityId(canonical.id || canonical.cardId);
   if (canonicalId && canonicalId !== currentId) {
     warnings.push(`qa_identity_canonicalized:${currentId || cid || passcode || "name"}->${canonicalId}`);
   }
@@ -1262,16 +1965,21 @@ function identityConflictMention(card = {}) {
   };
 }
 
-function recordIdentityIndex(records) {
-  const cached = recordIdentityIndexCache.get(records);
+function recordIdentityIndex(records, { includeDiscovery = false } = {}) {
+  const cached = includeDiscovery ? null : recordAuthorityIdentityIndexCache.get(records);
   if (cached) return cached;
   const index = new Map();
   for (const record of records || []) {
     const rankingIdentity = retrievalRankingIdentity(record);
     const keys = new Set([
       ...rankingIdentity.cardIds
-        .map((id) => "id:" + normalizeId(id))
+        .map((id) => "id:" + normalizeCardIdentityId(id))
         .filter((key) => key !== "id:"),
+      ...(includeDiscovery
+        ? getOfficialQaDiscoveryCardIds(record)
+          .map((id) => "id:" + normalizeCardIdentityId(id))
+          .filter((key) => key !== "id:")
+        : []),
       ...rankingIdentity.cardNames
         .map((name) => "name:" + normalizeCardKey(name))
         .filter((key) => key !== "name:"),
@@ -1282,7 +1990,7 @@ function recordIdentityIndex(records) {
       index.set(key, matches);
     }
   }
-  recordIdentityIndexCache.set(records, index);
+  if (!includeDiscovery) recordAuthorityIdentityIndexCache.set(records, index);
   return index;
 }
 
@@ -1304,6 +2012,7 @@ function normalizeCard(card = {}) {
 
 function normalizeRecord(record = {}) {
   const id = String(record.id || record.evidenceId || record.stableId || record.sourceId || "");
+  const recordType = record.recordType || inferRecordType(record, id);
   const answer = record.answer || record.conclusion || "";
   const questionProjection = projectOfficialQaQuestion(record);
   const structuredQaText = record.question && answer
@@ -1316,24 +2025,21 @@ function normalizeRecord(record = {}) {
       ].filter(Boolean).join("\n").trim()
     : "";
   const text = structuredQaText || String(record.text || record.officialText || record.question || answer || record.title || "").trim();
-  const metadataCardIds = [...new Set([
-    record.cardId,
-    ...(record.metadataCardIds || record.cardIds || []),
-    ...(record.cards || []).filter((value) => /^\d+$/u.test(String(value || "").trim())),
-  ].map((item) => String(item || "")).filter(Boolean))];
+  const metadataCardIds = structuredRecordOwnershipCardIds(record);
   const cardIds = [...new Set([
     ...metadataCardIds,
-    ...(record.cardIds || []),
-    ...extractInlineCardIds(text),
+    ...(recordType === "card-faq" ? [] : extractInlineCardIds(text)),
   ].map((item) => String(item || "")).filter(Boolean))];
-  const questionCardIds = [...new Set(questionProjection.principalCardIds
+  const questionCardIds = [...new Set((recordType === "card-faq"
+    ? metadataCardIds
+    : questionProjection.principalCardIds)
     .map((item) => String(item || ""))
     .filter(Boolean))];
   const cards = [record.cardName, ...(record.cards || []), ...(record.cardNames || [])].filter(Boolean);
   return {
     ...record,
     id,
-    recordType: record.recordType || inferRecordType(record, id),
+    recordType,
     title: record.title || record.question || id,
     question: record.question || questionProjection.scenarioText || "",
     answer: record.answer || record.conclusion || questionProjection.answerText || "",
@@ -1347,6 +2053,35 @@ function normalizeRecord(record = {}) {
   };
 }
 
+function structuredRecordOwnershipCardIds(record = {}) {
+  const declaredIds = Array.isArray(record.metadataCardIds)
+    ? record.metadataCardIds
+    : record.metadataCardIds || record.cardIds;
+  const cardValues = Array.isArray(record.cards) ? record.cards : [];
+  return [...new Set([
+    record.cardId,
+    ...(Array.isArray(declaredIds) ? declaredIds : [declaredIds]),
+    ...cardValues.map((value) => (
+      value && typeof value === "object"
+        ? value.cardId || value.id
+        : /^\d+$/u.test(String(value || "").trim()) ? value : ""
+    )),
+  ].map((item) => String(item || "").trim()).filter(Boolean))];
+}
+
+function structuredRecordOwnershipCardNames(record = {}) {
+  const cardValues = Array.isArray(record.cards) ? record.cards : [];
+  return [...new Set([
+    record.cardName,
+    ...cardValues.flatMap((value) => (
+      value && typeof value === "object"
+        ? [value.name, value.cnName, value.jaName, value.jpName, value.enName]
+        : /^\d+$/u.test(String(value || "").trim()) ? [] : [value]
+    )),
+    ...(Array.isArray(record.cardNames) ? record.cardNames : [record.cardNames]),
+  ].map((item) => String(item || "").trim()).filter(Boolean))];
+}
+
 function inferRecordType(record, id) {
   if (String(id).startsWith("card-text-")) return "card-text";
   if (String(id).startsWith("card-faq-")) return "card-faq";
@@ -1355,9 +2090,9 @@ function inferRecordType(record, id) {
 }
 
 function findCardRecord(card, cards) {
-  const wantedId = normalizeId(card.id || card.cardId);
+  const wantedId = normalizeCardIdentityId(card.id || card.cardId);
   const wantedNames = new Set([card.name, card.cnName, card.jaName, card.enName, ...(card.aliases || [])].map(normalizeCardKey).filter(Boolean));
-  return cards.find((item) => wantedId && normalizeId(item.id || item.cardId) === wantedId)
+  return cards.find((item) => wantedId && normalizeCardIdentityId(item.id || item.cardId) === wantedId)
     || cards.find((item) => item.aliases.some((alias) => wantedNames.has(normalizeCardKey(alias))))
     || null;
 }
@@ -1476,6 +2211,7 @@ function evidenceFromOfficialMatch(match, type, maxTextChars, warnings) {
     matchedRelatedQuestionCardIds: match.matchedRelatedQuestionCardIds || [],
     matchedRelatedMetadataCardIds: match.matchedRelatedMetadataCardIds || [],
     matchedRelatedCardIds: match.matchedRelatedCardIds || [],
+    matchedDiscoveryCardIds: match.matchedDiscoveryCardIds || [],
     branchRelevant: match.branchRelevant === true,
     branchMatchedCardIds: match.branchMatchedCardIds || [],
     supportingQuestionBranchIndex: match.supportingQuestionBranchIndex ?? null,
@@ -1549,6 +2285,7 @@ function evidenceFromRecord(record, type, maxTextChars = 1600, warnings = []) {
     answer: record.answer || record.conclusion || "",
     retrievalContext: record.retrievalContext || {},
     fullText: text,
+    textProjectionOf: "fullText",
     text: truncated ? `${text.slice(0, Math.max(0, maxTextChars - 1))}…` : text,
     sourceUrl: record.sourceUrl || record.officialUrl || "",
     source: provenance.source,
@@ -1571,7 +2308,9 @@ function evidenceFromRecord(record, type, maxTextChars = 1600, warnings = []) {
 }
 
 function evidenceSourceUrl(record = {}) {
-  const cardId = (record.cardIds || []).map(normalizeId).find(Boolean);
+  const cardId = (record.cardIds || [])
+    .map(normalizeCardIdentityId)
+    .find((id) => /^\d+$/u.test(id));
   if (record.recordType === "card-faq" && cardId) {
     return `https://www.db.yugioh-card.com/yugiohdb/faq_search.action?ope=4&cid=${encodeURIComponent(cardId)}&request_locale=ja`;
   }
@@ -1594,7 +2333,7 @@ function isOfficialQaOrFaqRecord(record = {}) {
     && evidenceProvenance(record).official;
 }
 
-function hasOfficialQuestionSurface(record = {}) {
+export function hasOfficialQuestionSurface(record = {}) {
   if (!isOfficialQaOrFaqRecord(record)) return false;
   const sourceQuestion = String(
     record.rawDetailedQuestion || record.rawQuestion || "",
@@ -1603,7 +2342,10 @@ function hasOfficialQuestionSurface(record = {}) {
     const explicitQuestion = String(record.question || "").trim();
     return Boolean(sourceQuestion || /[?？]/u.test(explicitQuestion));
   }
-  return Boolean(sourceQuestion || String(record.question || "").trim());
+  return Boolean(
+    sourceQuestion
+    || projectOfficialQaQuestion(record).principalSurfaces.length > 0
+  );
 }
 
 function isAuthoritativeQaOrFaqRecord(record = {}) {
@@ -1698,7 +2440,13 @@ function relatedMatchedQuestionCardIds(item = {}) {
       ? item.retrievalSignals.matchedQuestionCardIds
       : []),
   ];
-  return [...new Set(values.map(normalizeId).filter(Boolean))];
+  return [...new Set(values.map(normalizeCardIdentityId).filter(Boolean))];
+}
+
+function hasMatchedDiscoveryRelation(item = {}) {
+  return (Array.isArray(item?.matchedDiscoveryCardIds)
+    ? item.matchedDiscoveryCardIds
+    : []).some((id) => Boolean(normalizeCardIdentityId(id)));
 }
 
 function mergeOfficialRelatedSourceItems(items = []) {
@@ -1714,7 +2462,26 @@ function mergeOfficialRelatedSourceItems(items = []) {
     const previousRecord = previous?.record || previous;
     const mergedRecord = mergeRelatedRecordMetadata(previousRecord, record);
     const match = previous?.record ? previous : item?.record ? item : null;
-    merged.set(key, match ? { ...match, record: mergedRecord } : mergedRecord);
+    if (!match) {
+      merged.set(key, mergedRecord);
+      continue;
+    }
+    merged.set(key, {
+      ...match,
+      record: mergedRecord,
+      matchedDiscoveryCardIds: [...new Set([
+        ...(Array.isArray(previous?.matchedDiscoveryCardIds)
+          ? previous.matchedDiscoveryCardIds
+          : []),
+        ...(Array.isArray(item?.matchedDiscoveryCardIds)
+          ? item.matchedDiscoveryCardIds
+          : []),
+      ])],
+      matchedBy: [...new Set([
+        ...(Array.isArray(previous?.matchedBy) ? previous.matchedBy : []),
+        ...(Array.isArray(item?.matchedBy) ? item.matchedBy : []),
+      ])],
+    });
   }
   return [...merged.values()];
 }
@@ -1791,13 +2558,60 @@ function mergeRelatedRecordMetadata(left = {}, right = {}) {
         ...(leftSignals.strictSupplementalRuleQueryKeys || []),
         ...(rightSignals.strictSupplementalRuleQueryKeys || []),
       ])],
+      groundedQuestionBranchRuleQueryKeys: [...new Set([
+        ...(leftSignals.groundedQuestionBranchRuleQueryKeys || []),
+        ...(rightSignals.groundedQuestionBranchRuleQueryKeys || []),
+      ])],
       supplementalRuleQueryRanks: mergeSupplementalRuleQueryRanks(
         leftSignals.supplementalRuleQueryRanks,
         rightSignals.supplementalRuleQueryRanks,
       ),
+      questionBranchSearch: Boolean(
+        leftSignals.questionBranchSearch || rightSignals.questionBranchSearch,
+      ),
+      questionBranchScenarioSurfaceHead: Boolean(
+        leftSignals.questionBranchScenarioSurfaceHead
+          || rightSignals.questionBranchScenarioSurfaceHead,
+      ),
+      questionBranchMultilingualMechanismFallback: Boolean(
+        leftSignals.questionBranchMultilingualMechanismFallback
+          || rightSignals.questionBranchMultilingualMechanismFallback,
+      ),
       questionBranchFourGramHitCount: Math.max(
         Number(leftSignals.questionBranchFourGramHitCount || 0),
         Number(rightSignals.questionBranchFourGramHitCount || 0),
+      ),
+      questionBranchThreeGramHitCount: Math.max(
+        Number(leftSignals.questionBranchThreeGramHitCount || 0),
+        Number(rightSignals.questionBranchThreeGramHitCount || 0),
+      ),
+      questionBranchHeadlineAnchored: Boolean(
+        leftSignals.questionBranchHeadlineAnchored
+        || rightSignals.questionBranchHeadlineAnchored,
+      ),
+      questionBranchHeadlineThreeGramHitCount: Math.max(
+        Number(leftSignals.questionBranchHeadlineThreeGramHitCount || 0),
+        Number(rightSignals.questionBranchHeadlineThreeGramHitCount || 0),
+      ),
+      questionBranchHeadlineFourGramHitCount: Math.max(
+        Number(leftSignals.questionBranchHeadlineFourGramHitCount || 0),
+        Number(rightSignals.questionBranchHeadlineFourGramHitCount || 0),
+      ),
+      questionBranchHeadlineCanonicalFourGramHitCount: Math.max(
+        Number(leftSignals.questionBranchHeadlineCanonicalFourGramHitCount || 0),
+        Number(rightSignals.questionBranchHeadlineCanonicalFourGramHitCount || 0),
+      ),
+      questionBranchHeadlineLongestRun: Math.max(
+        Number(leftSignals.questionBranchHeadlineLongestRun || 0),
+        Number(rightSignals.questionBranchHeadlineLongestRun || 0),
+      ),
+      questionBranchHeadlineDistinctiveSemanticHitCount: Math.max(
+        Number(leftSignals.questionBranchHeadlineDistinctiveSemanticHitCount || 0),
+        Number(rightSignals.questionBranchHeadlineDistinctiveSemanticHitCount || 0),
+      ),
+      questionBranchHeadlineEffectPhraseHitCount: Math.max(
+        Number(leftSignals.questionBranchHeadlineEffectPhraseHitCount || 0),
+        Number(rightSignals.questionBranchHeadlineEffectPhraseHitCount || 0),
       ),
       questionBranchFourGramCoverage: Math.max(
         Number(leftSignals.questionBranchFourGramCoverage || 0),
@@ -1806,6 +2620,14 @@ function mergeRelatedRecordMetadata(left = {}, right = {}) {
       questionBranchLongestRun: Math.max(
         Number(leftSignals.questionBranchLongestRun || 0),
         Number(rightSignals.questionBranchLongestRun || 0),
+      ),
+      matchedStrongMechanismFeatures: [...new Set([
+        ...(leftSignals.matchedStrongMechanismFeatures || []),
+        ...(rightSignals.matchedStrongMechanismFeatures || []),
+      ])],
+      strongMechanismQueryCoverage: Math.max(
+        Number(leftSignals.strongMechanismQueryCoverage || 0),
+        Number(rightSignals.strongMechanismQueryCoverage || 0),
       ),
       supplementalRuleQueryMechanisms: [...new Set([
         ...(leftSignals.supplementalRuleQueryMechanisms || []),
@@ -1939,7 +2761,7 @@ function rankRecords({ userQuery, records, resolvedCards, mentionQueries = [], r
   const ruleTerms = tokenize(ruleQueries.map((item) => item.query).join(" "));
   const rulePhrases = ruleQueries.map((item) => normalizeCardKey(item.query)).filter(Boolean);
   const queryKey = normalizeCardKey(userQuery);
-  const resolvedIds = new Set((resolvedCards || []).map((card) => normalizeId(card.id || card.cardId)).filter(Boolean));
+  const resolvedIds = new Set((resolvedCards || []).map((card) => normalizeCardIdentityId(card.id || card.cardId)).filter(Boolean));
   const resolvedNames = new Set((resolvedCards || []).flatMap((card) => [card.name, card.cnName, card.jaName, card.enName, ...(card.aliases || [])]).map(normalizeCardKey).filter(Boolean));
   const unresolvedNames = new Set((mentionQueries || []).map(normalizeCardKey).filter(Boolean));
   const queryEffectNumbers = extractEffectNumbers(userQuery);
@@ -2103,68 +2925,66 @@ function rankRecordsWithSupplementalQueries({
 function rankOfficialQaQuestionBranches({
   records = [],
   ruleSearchQueries = [],
+  supplementalRuleQueryKeys = [],
   candidateLimit = 16,
 } = {}) {
   if (!(records || []).length) return [];
   const queries = normalizeRuleSearchQueries(ruleSearchQueries, {
-    maxRuleSearchQueries: 4,
-  }).slice(0, 4);
+    maxRuleSearchQueries: MAX_INDEPENDENT_RULE_QUERY_BRANCHES,
+  }).slice(0, MAX_INDEPENDENT_RULE_QUERY_BRANCHES);
   if (!queries.length) return [];
 
+  const queryPlans = queries.map((query) => ({
+    query,
+    questions: dedupeBy([
+      selectOfficialQaSearchBranch(query.officialQuestion || query.query),
+      selectOfficialQaSearchBranch(query.scenarioQuestion || query.query),
+    ].filter(Boolean), normalizeCardKey),
+    scenarioQuestion: selectOfficialQaSearchBranch(query.scenarioQuestion || query.query),
+    queryKey: ruleSearchQueryIdentity(query),
+  })).filter(({ questions, queryKey }) => questions.length && queryKey);
+  if (!queryPlans.length) return [];
+  const supplementalKeys = new Set((supplementalRuleQueryKeys || []).filter(Boolean));
   const safeCandidateLimit = Math.max(1, Math.floor(Number(candidateLimit) || 16));
-  const perQueryLimit = Math.max(2, Math.min(6, Math.ceil(safeCandidateLimit / queries.length)));
+  const perQueryLimit = Math.max(2, Math.min(6, Math.ceil(safeCandidateLimit / queryPlans.length)));
   const questionProfiles = prepareOfficialQaQuestionTextProfiles(records);
   const merged = new Map();
-  for (const query of queries) {
-    const question = selectOfficialQaSearchBranch(query.query);
-    const queryKey = ruleSearchQueryIdentity(query);
-    if (!question || !queryKey) continue;
-    const searchResult = searchOfficialQaEvidence({
-      question,
-      records,
-      resolvedCards: [],
-      limit: perQueryLimit,
-      subsumptionCandidatePoolComplete: false,
-    });
-    // The ordinary matcher deliberately demotes many cross-card questions by
-    // identity, role and scenario classifiers. Those signals are useful for
-    // direct-answer certification, but they must not hide a source whose
-    // official question text closely matches the complete Japanese question
-    // written by the Relay planner. Add a bounded question-only phrase head;
-    // it never reads the answer and every result remains related-only.
-    const phraseMatches = rankOfficialQaQuestionTextProfiles({
-      question,
-      profiles: questionProfiles,
-      limit: Math.min(4, perQueryLimit),
-    });
-    const strongQuestionMatches = [
-      ...searchResult.exact,
-      ...searchResult.near,
-      ...phraseMatches,
-    ];
-    // If the ordinary matcher and the Japanese full-question rescue both find
-    // nothing stronger, retain a tiny related-only head from this explicit
-    // planner query. This keeps broad but potentially useful context visible
-    // without adding unrelated tails beside an already decisive candidate.
-    const relatedFallback = strongQuestionMatches.length
-      ? []
-      : (searchResult.related || [])
-          .filter((match) => Number(match.semanticScore || 0) > 0)
-          .slice(0, 2);
-    const matches = dedupeBy([
-      ...searchResult.exact,
-      ...searchResult.near,
-      ...phraseMatches.slice(0, 2),
-      ...relatedFallback,
-    ], (match) => stableRecordKey(match.record)).slice(0, perQueryLimit * 2);
-    matches.forEach((match, index) => {
+  const reservedSurfaceHeadKeys = new Set();
+  for (const { query, questions, scenarioQuestion, queryKey } of queryPlans) {
+    const branchCandidateLimit = perQueryLimit * 2;
+    // A single surface keeps the previous two-head allowance. Distinct official
+    // and complete-scenario surfaces split that same allowance instead of
+    // concatenating two full result lists and expanding the branch budget.
+    const perSurfaceCandidateLimit = Math.max(
+      1,
+      Math.floor(branchCandidateLimit / questions.length),
+    );
+    const branchMerged = new Map();
+    const branchSurfaceHeadKeys = new Set();
+    const phraseMatchKeys = new Set();
+    const addCandidate = (match, index, questionOnlyMatch = null, {
+      scenarioSurfaceHead = false,
+    } = {}) => {
       const record = match.record || {};
-      const phraseMetrics = match.questionTextMetrics || {};
+      // A record may also appear in the ordinary near/exact head. Keep that
+      // stronger candidate, but do not discard independently measured
+      // question/headline metrics merely because deduplication saw it first.
+      const phraseMetrics = questionOnlyMatch?.questionTextMetrics
+        || match.questionTextMetrics
+        || {};
+      const questionBranchScore = Math.max(
+        Number(match.score || 0),
+        Number(questionOnlyMatch?.score || 0),
+      );
+      const groundedQueryKeys = phraseMetrics.headlineAnchored === true
+        ? [queryKey]
+        : [];
+      const isSupplemental = supplementalKeys.has(queryKey);
       const candidate = {
         ...record,
         retrievalScore: Math.max(
           normalizeEvidenceRelevanceScore(record.retrievalScore ?? record.score),
-          normalizeEvidenceRelevanceScore(match.score),
+          normalizeEvidenceRelevanceScore(questionBranchScore),
         ),
         retrievalContext: {
           ...(record.retrievalContext || {}),
@@ -2175,18 +2995,154 @@ function rankOfficialQaQuestionBranches({
           ...(record.retrievalSignals || {}),
           ruleQueryBestRank: index + 1,
           ruleQueryKeys: [queryKey],
+          strictRuleQueryKeys: groundedQueryKeys,
           ruleQueryRanks: { [queryKey]: index + 1 },
-          supplementalRuleQueryBestRank: index + 1,
-          supplementalRuleQueryKeys: [queryKey],
-          supplementalRuleQueryRanks: { [queryKey]: index + 1 },
+          ...(isSupplemental ? {
+            supplementalRuleQueryBestRank: index + 1,
+            supplementalRuleQueryKeys: [queryKey],
+            strictSupplementalRuleQueryKeys: groundedQueryKeys,
+            supplementalRuleQueryRanks: { [queryKey]: index + 1 },
+          } : {}),
           questionBranchSearch: true,
-          questionBranchSearchScore: Number(match.score || 0),
+          ...(scenarioSurfaceHead ? { questionBranchScenarioSurfaceHead: true } : {}),
+          questionBranchMultilingualMechanismFallback: Boolean(
+            questionOnlyMatch?.multilingualMechanismFallback,
+          ),
+          questionBranchSearchScore: questionBranchScore,
           questionBranchFourGramHitCount: Number(phraseMetrics.fourGramHitCount || 0),
+          questionBranchThreeGramHitCount: Number(phraseMetrics.threeGramHitCount || 0),
           questionBranchFourGramCoverage: Number(phraseMetrics.fourGramCoverage || 0),
           questionBranchLongestRun: Number(phraseMetrics.longestRun || 0),
+          questionBranchHeadlineAnchored: phraseMetrics.headlineAnchored === true,
+          questionBranchHeadlineThreeGramHitCount: Number(
+            phraseMetrics.headlineThreeGramHitCount || 0,
+          ),
+          questionBranchHeadlineFourGramHitCount: Number(
+            phraseMetrics.headlineFourGramHitCount || 0,
+          ),
+          questionBranchHeadlineCanonicalFourGramHitCount: Number(
+            phraseMetrics.headlineCanonicalFourGramHitCount || 0,
+          ),
+          questionBranchHeadlineLongestRun: Number(phraseMetrics.headlineLongestRun || 0),
+          questionBranchHeadlineDistinctiveSemanticHitCount: Number(
+            phraseMetrics.headlineDistinctiveSemanticHitCount || 0,
+          ),
+          questionBranchHeadlineEffectPhraseHitCount: Number(
+            phraseMetrics.headlineEffectPhraseHitCount || 0,
+          ),
+          groundedQuestionBranchRuleQueryKeys: groundedQueryKeys,
+          matchedStrongMechanismFeatures: [
+            ...(record.retrievalSignals?.matchedStrongMechanismFeatures || []),
+            ...(phraseMetrics.matchedStrongMechanismFeatures || []),
+          ],
+          strongMechanismQueryCoverage: Math.max(
+            Number(record.retrievalSignals?.strongMechanismQueryCoverage || 0),
+            Number(phraseMetrics.strongMechanismQueryCoverage || 0),
+          ),
         },
       };
       const key = stableRecordKey(candidate);
+      const previous = branchMerged.get(key);
+      if (!previous) {
+        branchMerged.set(key, candidate);
+        return key;
+      }
+      const [lower, higher] = compareRetrievedRecords(previous, candidate) <= 0
+        ? [candidate, previous]
+        : [previous, candidate];
+      branchMerged.set(key, mergeRelatedRecordMetadata(lower, higher));
+      return key;
+    };
+
+    for (const question of questions) {
+      const isDistinctScenarioSurface = questions.length > 1
+        && normalizeCardKey(question) === normalizeCardKey(scenarioQuestion);
+      const searchResult = searchOfficialQaEvidence({
+        question,
+        records,
+        resolvedCards: [],
+        limit: perQueryLimit,
+        subsumptionCandidatePoolComplete: false,
+      });
+      // The ordinary matcher deliberately demotes many cross-card questions by
+      // identity, role and scenario classifiers. Rank both normalized Planner
+      // surfaces against the official question projection so a complete
+      // action/zone/timing scenario is not reduced to mechanism context only.
+      const phraseMatches = rankOfficialQaQuestionTextProfiles({
+        question,
+        contextText: [query.subclaim, question].filter(Boolean).join(" "),
+        profiles: questionProfiles,
+        limit: Math.min(4, perQueryLimit),
+      });
+      phraseMatches.slice(0, 4).forEach((match) => {
+        phraseMatchKeys.add(stableRecordKey(match.record));
+      });
+      const questionOnlyMatches = mergeOfficialQaQuestionOnlyMatches({
+        phraseMatches,
+        phraseLimit: 4,
+        multilingualLimit: 0,
+      });
+      const strongQuestionMatches = [
+        ...searchResult.exact,
+        ...searchResult.near,
+        ...questionOnlyMatches,
+      ];
+      const relatedFallback = strongQuestionMatches.length
+        ? []
+        : (searchResult.related || [])
+            .filter((match) => Number(match.semanticScore || 0) > 0)
+            .slice(0, 2);
+      const surfaceMatches = dedupeBy([
+        ...questionOnlyMatches,
+        ...searchResult.exact,
+        ...searchResult.near,
+        ...relatedFallback,
+      ], (match) => stableRecordKey(match.record)).slice(0, perSurfaceCandidateLimit);
+      const questionOnlyMatchByRecord = new Map(
+        questionOnlyMatches.map((match) => [stableRecordKey(match.record), match]),
+      );
+      surfaceMatches.forEach((match, index) => {
+        const key = addCandidate(
+          match,
+          index,
+          questionOnlyMatchByRecord.get(stableRecordKey(match.record)),
+          { scenarioSurfaceHead: isDistinctScenarioSurface && index === 0 },
+        );
+        if (index === 0 && key) branchSurfaceHeadKeys.add(key);
+      });
+    }
+
+    // Preserve the existing bounded cross-language mechanism companion once per
+    // Planner branch. Records already supplied by either lexical surface remain
+    // excluded so this fallback cannot displace their dedicated surface heads.
+    const multilingualMechanismMatches = rankOfficialQaMultilingualMechanismProfiles({
+      contextText: [query.subclaim, query.scenarioQuestion || query.query]
+        .filter(Boolean)
+        .join(" "),
+      // Apply the multilingual bound after removing records already supplied
+      // by the phrase head. Otherwise two same-language mechanism matches can
+      // consume both companion slots before a cross-language record is seen.
+      profiles: questionProfiles.filter(
+        (profile) => !phraseMatchKeys.has(stableRecordKey(profile.record)),
+      ),
+      limit: Math.min(2, perQueryLimit),
+    });
+    multilingualMechanismMatches.forEach((match, index) => {
+      addCandidate(match, perSurfaceCandidateLimit + index, match);
+    });
+
+    const rankedBranchCandidates = [...branchMerged.values()].sort(compareRetrievedRecords);
+    const reservedBranchHeads = [...branchSurfaceHeadKeys]
+      .map((key) => branchMerged.get(key))
+      .filter(Boolean)
+      .sort(compareRetrievedRecords);
+    const boundedBranchCandidates = dedupeBy([
+      ...reservedBranchHeads,
+      ...rankedBranchCandidates,
+    ], stableRecordKey).slice(0, branchCandidateLimit);
+    boundedBranchCandidates.forEach((candidate) => {
+      const key = stableRecordKey(candidate);
+      if (branchSurfaceHeadKeys.has(key)) reservedSurfaceHeadKeys.add(key);
       const previous = merged.get(key);
       if (!previous) {
         merged.set(key, candidate);
@@ -2198,27 +3154,155 @@ function rankOfficialQaQuestionBranches({
       merged.set(key, mergeRelatedRecordMetadata(lower, higher));
     });
   }
-  return [...merged.values()].sort(compareRetrievedRecords).slice(0, safeCandidateLimit);
+  const rankedCandidates = [...merged.values()].sort(compareRetrievedRecords);
+  const reservedSurfaceHeads = [...reservedSurfaceHeadKeys]
+    .map((key) => merged.get(key))
+    .filter(Boolean)
+    .sort(compareRetrievedRecords);
+  return dedupeBy([
+    ...reservedSurfaceHeads.slice(0, safeCandidateLimit),
+    ...rankedCandidates,
+  ], stableRecordKey).slice(0, safeCandidateLimit).sort(compareRetrievedRecords);
+}
+
+export function mergeOfficialQaQuestionOnlyMatches({
+  phraseMatches = [],
+  multilingualMechanismMatches = [],
+  phraseLimit = 4,
+  multilingualLimit = 2,
+} = {}) {
+  const safePhraseLimit = Math.max(1, Math.min(4, Math.floor(Number(phraseLimit) || 4)));
+  const safeMultilingualLimit = Math.max(
+    0,
+    Math.min(2, Math.floor(Number(multilingualLimit) || 0)),
+  );
+  const boundedPhraseMatches = dedupeBy(
+    phraseMatches || [],
+    (match) => stableRecordKey(match?.record || match),
+  ).slice(0, safePhraseLimit);
+  const phraseKeys = new Set(
+    boundedPhraseMatches.map((match) => stableRecordKey(match?.record || match)),
+  );
+  const boundedMultilingualMatches = dedupeBy(
+    multilingualMechanismMatches || [],
+    (match) => stableRecordKey(match?.record || match),
+  ).filter((match) => !phraseKeys.has(stableRecordKey(match?.record || match)))
+    .slice(0, safeMultilingualLimit);
+  return [...boundedPhraseMatches, ...boundedMultilingualMatches];
+}
+
+function rankOfficialQaMultilingualMechanismProfiles({
+  contextText = "",
+  profiles = [],
+  limit = 2,
+} = {}) {
+  const queryMechanismSignature = buildRuleMechanismSignature(contextText);
+  if (!isUsableRuleMechanismSignature(queryMechanismSignature)) return [];
+  const strongQueryFeatures = [...queryMechanismSignature].filter(isStrongRuleMechanismFeature);
+  if (!strongQueryFeatures.length) return [];
+
+  return (profiles || []).map((profile) => {
+    const mechanismMatch = bestRuleMechanismMatch(
+      [queryMechanismSignature],
+      profile.evidenceMechanismSignature,
+    );
+    const qualifies = mechanismMatch.matchedStrongFeatures.length >= 1
+      && Number(mechanismMatch.strongQueryCoverage || 0) >= 0.5
+      && (
+        mechanismMatch.matchedStrongFeatures.length >= 2
+        || mechanismMatch.matchedContextFeatures.length >= 1
+      );
+    return qualifies ? { profile, mechanismMatch } : null;
+  }).filter(Boolean)
+    .sort((left, right) => (
+      Number(right.mechanismMatch.strongQueryCoverage || 0)
+        - Number(left.mechanismMatch.strongQueryCoverage || 0)
+      || right.mechanismMatch.matchedStrongFeatures.length
+        - left.mechanismMatch.matchedStrongFeatures.length
+      || right.mechanismMatch.matchedContextFeatures.length
+        - left.mechanismMatch.matchedContextFeatures.length
+      || stableRecordKey(left.profile.record).localeCompare(stableRecordKey(right.profile.record))
+    ))
+    .slice(0, Math.max(1, Math.min(2, Math.floor(Number(limit) || 2))))
+    .map(({ profile, mechanismMatch }) => ({
+      record: profile.record,
+      score: normalizeEvidenceRelevanceScore(
+        0.35
+          + Number(mechanismMatch.strongQueryCoverage || 0) * 0.35
+          + Math.min(2, mechanismMatch.matchedStrongFeatures.length) * 0.1
+          + Math.min(2, mechanismMatch.matchedContextFeatures.length) * 0.05,
+      ),
+      multilingualMechanismFallback: true,
+      questionTextMetrics: {
+        matchedStrongMechanismFeatures: mechanismMatch.matchedStrongFeatures,
+        strongMechanismQueryCoverage: Number(
+          Number(mechanismMatch.strongQueryCoverage || 0).toFixed(4),
+        ),
+      },
+    }));
 }
 
 function prepareOfficialQaQuestionTextProfiles(records = []) {
   return (records || []).map((record) => {
-    const question = projectOfficialQaQuestion(record).scenarioText || record.title || "";
+    const questionProjection = projectOfficialQaQuestion(record);
+    const question = questionProjection.scenarioText || record.title || "";
+    // `title` is the concise official question when the synchronized source
+    // exposes one.  Older compact records may contain only a truncated title;
+    // that is still safe as a positive ranking signal because eligibility is
+    // established by the complete question projection below.  It is never a
+    // deletion gate and no answer text participates.
+    const headline = extractPrincipalQuestionHeadline(questionProjection.scenarioText)
+      || String(
+        record.question
+          || record.rawQuestion
+          || record.title
+          || questionProjection.principalText
+          || "",
+      ).trim();
     const cjkSegments = normalizeCjkQuestionSegments(question);
     return cjkSegments.some((segment) => segment.length >= 4)
-      ? { record, cjkSegments }
+      ? {
+          record,
+          cjkSegments,
+          headlineCjkSegments: normalizeCjkQuestionSegments(headline),
+          headlineCanonicalCjkSegments: normalizeCanonicalCjkQuestionSegments(headline),
+          headlineEffectPhrases: extractOfficialQaEffectPhrases(headline),
+          headlineSemanticConcepts: extractOfficialQaSemanticConcepts(headline),
+          evidenceMechanismSignature: retrievalQuestionFeatures(record).evidenceMechanismSignature,
+        }
       : null;
   }).filter(Boolean);
 }
 
 function rankOfficialQaQuestionTextProfiles({
   question = "",
+  contextText = question,
   profiles = [],
   limit = 6,
 } = {}) {
   const querySegments = normalizeCjkQuestionSegments(question);
   const queryGrams = uniqueCjkNgrams(querySegments, 4);
-  if (queryGrams.length < 8 || countJapaneseKana(question) < 4) return [];
+  const queryThreeGrams = uniqueCjkNgrams(querySegments, 3);
+  const queryCanonicalFourGrams = uniqueCjkNgrams(
+    normalizeCanonicalCjkQuestionSegments(question),
+    4,
+  );
+  const queryMechanismSignature = buildRuleMechanismSignature(contextText);
+  const queryEffectPhrases = extractOfficialQaEffectPhrases(contextText);
+  const queryDistinctiveSemanticConcepts = extractOfficialQaSemanticConcepts(contextText)
+    .filter((concept) => !RULE_MECHANISM_GENERIC_CONCEPTS.has(concept));
+  const hasStrongMechanismAnchor = [...queryMechanismSignature]
+    .some(isStrongRuleMechanismFeature);
+  // The synchronized corpus is mainly Japanese, but deterministic card-text
+  // branches can be Chinese. Requiring kana here silently discarded those
+  // branches before the existing absolute CJK n-gram and mechanism thresholds
+  // could judge them. Keep the same strict thresholds, but make eligibility
+  // depend on a real CJK question surface instead of one particular language.
+  const cjkQuestionLength = querySegments.reduce((sum, segment) => sum + segment.length, 0);
+  if (cjkQuestionLength < 4) return [];
+  if (queryGrams.length < 8 && (!hasStrongMechanismAnchor || queryThreeGrams.length < 4)) {
+    return [];
+  }
 
   const minimumHits = Math.max(3, Math.ceil(queryGrams.length * 0.12));
   const preliminary = [];
@@ -2229,16 +3313,85 @@ function rankOfficialQaQuestionTextProfiles({
         fourGramHitCount += 1;
       }
     }
-    if (fourGramHitCount < minimumHits) continue;
+    let threeGramHitCount = 0;
+    for (const gram of queryThreeGrams) {
+      if (profile.cjkSegments.some((segment) => segment.includes(gram))) {
+        threeGramHitCount += 1;
+      }
+    }
+    const mechanismMatch = bestRuleMechanismMatch(
+      [queryMechanismSignature],
+      profile.evidenceMechanismSignature,
+    );
+    let headlineThreeGramHitCount = 0;
+    for (const gram of queryThreeGrams) {
+      if (profile.headlineCjkSegments.some((segment) => segment.includes(gram))) {
+        headlineThreeGramHitCount += 1;
+      }
+    }
+    let headlineFourGramHitCount = 0;
+    for (const gram of queryGrams) {
+      if (profile.headlineCjkSegments.some((segment) => segment.includes(gram))) {
+        headlineFourGramHitCount += 1;
+      }
+    }
+    let headlineCanonicalFourGramHitCount = 0;
+    for (const gram of queryCanonicalFourGrams) {
+      if (profile.headlineCanonicalCjkSegments.some((segment) => segment.includes(gram))) {
+        headlineCanonicalFourGramHitCount += 1;
+      }
+    }
+    const headlineEffectPhraseHitCount = queryEffectPhrases
+      .filter((phrase) => profile.headlineEffectPhrases.includes(phrase)).length;
+    const headlineDistinctiveSemanticHitCount = queryDistinctiveSemanticConcepts
+      .filter((concept) => profile.headlineSemanticConcepts.includes(concept)).length;
+    const mechanismAnchoredShortMatch = mechanismMatch.matchedStrongFeatures.length >= 1
+      && Number(mechanismMatch.strongQueryCoverage || 0) >= 0.5
+      && threeGramHitCount >= 2;
+    if (fourGramHitCount < minimumHits && !mechanismAnchoredShortMatch) continue;
     preliminary.push({
       ...profile,
       fourGramHitCount,
-      fourGramCoverage: fourGramHitCount / queryGrams.length,
+      fourGramCoverage: fourGramHitCount / Math.max(1, queryGrams.length),
+      threeGramHitCount,
+      threeGramCoverage: queryThreeGrams.length
+        ? threeGramHitCount / queryThreeGrams.length
+        : 0,
+      mechanismAnchoredShortMatch,
+      matchedStrongMechanismFeatures: mechanismMatch.matchedStrongFeatures,
+      strongMechanismQueryCoverage: Number(mechanismMatch.strongQueryCoverage || 0),
+      headlineThreeGramHitCount,
+      headlineFourGramHitCount,
+      headlineCanonicalFourGramHitCount,
+      headlineEffectPhraseHitCount,
+      headlineDistinctiveSemanticHitCount,
     });
   }
-  preliminary.sort((left, right) => (
-    right.fourGramHitCount - left.fourGramHitCount
+  const semanticHead = [...preliminary].sort((left, right) => (
+    right.headlineDistinctiveSemanticHitCount - left.headlineDistinctiveSemanticHitCount
+      || right.headlineEffectPhraseHitCount - left.headlineEffectPhraseHitCount
+      || right.headlineCanonicalFourGramHitCount - left.headlineCanonicalFourGramHitCount
+      || right.headlineFourGramHitCount - left.headlineFourGramHitCount
+      || right.headlineThreeGramHitCount - left.headlineThreeGramHitCount
+      || Number(right.mechanismAnchoredShortMatch) - Number(left.mechanismAnchoredShortMatch)
+      || right.fourGramHitCount - left.fourGramHitCount
+      || right.threeGramHitCount - left.threeGramHitCount
       || right.fourGramCoverage - left.fourGramCoverage
+      || stableRecordKey(left.record).localeCompare(stableRecordKey(right.record))
+  ));
+
+  // Keep one independent whole-question lexical head. Semantic labels are
+  // useful for ranking analogues, but they must not prevent a near-verbatim
+  // official question from ever reaching the more precise longest-run check.
+  // This reserves no extra final evidence slots: the lexical head is merged
+  // back into the existing fixed `limit` below.
+  const lexicalHead = [...preliminary].sort((left, right) => (
+    right.fourGramCoverage - left.fourGramCoverage
+      || right.fourGramHitCount - left.fourGramHitCount
+      || right.threeGramCoverage - left.threeGramCoverage
+      || right.threeGramHitCount - left.threeGramHitCount
+      || right.headlineCanonicalFourGramHitCount - left.headlineCanonicalFourGramHitCount
+      || right.headlineFourGramHitCount - left.headlineFourGramHitCount
       || stableRecordKey(left.record).localeCompare(stableRecordKey(right.record))
   ));
 
@@ -2246,28 +3399,77 @@ function rankOfficialQaQuestionTextProfiles({
   // four-gram scan. It is only a tie-breaker, so calculate it for a generous
   // bounded head rather than multiplying it by the full synchronized corpus.
   const runCandidateLimit = Math.max(64, Math.min(256, Math.floor(Number(limit) || 6) * 32));
-  const ranked = preliminary.slice(0, runCandidateLimit)
+  const enrichedByRecord = new Map(dedupeBy([
+    ...semanticHead.slice(0, runCandidateLimit),
+    ...lexicalHead.slice(0, runCandidateLimit),
+  ], (item) => stableRecordKey(item.record))
     .map((item) => ({
       ...item,
       longestRun: longestCommonCjkRun(querySegments, item.cjkSegments),
+      headlineLongestRun: longestCommonCjkRun(querySegments, item.headlineCjkSegments),
     }))
-    .filter((item) => item.longestRun >= 5)
+    .map((item) => ({
+      ...item,
+      // This bonus distinguishes a question whose concise official headline
+      // itself contains the queried operation from a long scenario where the
+      // same words appear only incidentally inside quoted/background effects.
+      // It can improve ordering only after the complete question qualified.
+      headlineAnchored: item.mechanismAnchoredShortMatch && (
+        (
+          item.headlineThreeGramHitCount >= 2
+          && item.headlineLongestRun >= 4
+        ) || item.headlineCanonicalFourGramHitCount >= 3
+      ),
+    }))
+    .map((item) => [stableRecordKey(item.record), item]));
+  const isQualified = (item) => (
+    item.longestRun >= 5
+      || (item.mechanismAnchoredShortMatch && item.longestRun >= 4)
+  );
+  const ranked = semanticHead.slice(0, runCandidateLimit)
+    .map((item) => enrichedByRecord.get(stableRecordKey(item.record)))
+    .filter(Boolean)
+    .filter(isQualified)
     .sort((left, right) => (
-      right.fourGramHitCount - left.fourGramHitCount
+      Number(right.headlineAnchored) - Number(left.headlineAnchored)
+        || right.headlineDistinctiveSemanticHitCount - left.headlineDistinctiveSemanticHitCount
+        || right.headlineEffectPhraseHitCount - left.headlineEffectPhraseHitCount
+        || right.headlineCanonicalFourGramHitCount - left.headlineCanonicalFourGramHitCount
+        || right.headlineFourGramHitCount - left.headlineFourGramHitCount
+        || right.headlineThreeGramHitCount - left.headlineThreeGramHitCount
+        || Number(right.mechanismAnchoredShortMatch) - Number(left.mechanismAnchoredShortMatch)
+        || right.fourGramHitCount - left.fourGramHitCount
+        || right.threeGramHitCount - left.threeGramHitCount
         || right.longestRun - left.longestRun
         || right.fourGramCoverage - left.fourGramCoverage
         || stableRecordKey(left.record).localeCompare(stableRecordKey(right.record))
     ));
-  const best = ranked[0];
-  if (!best) return [];
-  const relativeMinimumHits = Math.max(minimumHits, Math.floor(best.fourGramHitCount * 0.55));
-  const relativeMinimumCoverage = Math.max(0.12, best.fourGramCoverage * 0.55);
-  const relativeMinimumRun = Math.max(5, Math.floor(best.longestRun * 0.4));
-  return ranked
+  const lexicalRanked = lexicalHead.slice(0, runCandidateLimit)
+    .map((item) => enrichedByRecord.get(stableRecordKey(item.record)))
+    .filter(Boolean)
+    .filter(isQualified)
+    .sort((left, right) => (
+      right.fourGramCoverage - left.fourGramCoverage
+        || right.longestRun - left.longestRun
+        || right.fourGramHitCount - left.fourGramHitCount
+        || right.threeGramCoverage - left.threeGramCoverage
+        || right.headlineCanonicalFourGramHitCount - left.headlineCanonicalFourGramHitCount
+        || right.headlineLongestRun - left.headlineLongestRun
+        || stableRecordKey(left.record).localeCompare(stableRecordKey(right.record))
+    ));
+  // Use absolute relevance requirements only.  A relative threshold tied to
+  // the single best question made recall depend on unrelated corpus contents:
+  // one near-verbatim candidate could erase another independently decisive
+  // question from the bounded post-planner pool.
+  return dedupeBy([
+    ...lexicalRanked.slice(0, 1),
+    ...ranked,
+  ], (item) => stableRecordKey(item.record))
     .filter((item) => (
-      item.fourGramHitCount >= relativeMinimumHits
-      && item.fourGramCoverage >= relativeMinimumCoverage
-      && item.longestRun >= relativeMinimumRun
+      (item.fourGramHitCount >= minimumHits
+        && item.fourGramCoverage >= 0.12
+        && item.longestRun >= 5)
+      || (item.mechanismAnchoredShortMatch && item.longestRun >= 4)
     ))
     .slice(0, Math.max(1, Math.floor(Number(limit) || 6)))
     .map((item) => ({
@@ -2275,12 +3477,25 @@ function rankOfficialQaQuestionTextProfiles({
       score: normalizeEvidenceRelevanceScore(
         0.45
           + item.fourGramCoverage * 0.35
+          + item.threeGramCoverage * 0.1
+          + item.strongMechanismQueryCoverage * 0.1
           + Math.min(1, item.longestRun / 24) * 0.2,
       ),
       questionTextMetrics: {
         fourGramHitCount: item.fourGramHitCount,
         fourGramCoverage: Number(item.fourGramCoverage.toFixed(4)),
+        threeGramHitCount: item.threeGramHitCount,
+        threeGramCoverage: Number(item.threeGramCoverage.toFixed(4)),
         longestRun: item.longestRun,
+        headlineAnchored: item.headlineAnchored,
+        headlineThreeGramHitCount: item.headlineThreeGramHitCount,
+        headlineFourGramHitCount: item.headlineFourGramHitCount,
+        headlineCanonicalFourGramHitCount: item.headlineCanonicalFourGramHitCount,
+        headlineEffectPhraseHitCount: item.headlineEffectPhraseHitCount,
+        headlineDistinctiveSemanticHitCount: item.headlineDistinctiveSemanticHitCount,
+        headlineLongestRun: item.headlineLongestRun,
+        matchedStrongMechanismFeatures: item.matchedStrongMechanismFeatures,
+        strongMechanismQueryCoverage: Number(item.strongMechanismQueryCoverage.toFixed(4)),
       },
     }));
 }
@@ -2290,6 +3505,22 @@ function normalizeCjkQuestionSegments(value) {
     .matchAll(/[\u3040-\u30ff\u3400-\u9fff]+/gu)]
     .map((match) => match[0])
     .filter(Boolean);
+}
+
+function extractPrincipalQuestionHeadline(value) {
+  const paragraphs = String(value || "")
+    .split(/\n+/u)
+    .map((item) => item.replace(/\s+/gu, " ").trim())
+    .filter(Boolean);
+  const questions = paragraphs.filter((item) => /[?？]/u.test(item));
+  return questions.at(-1) || "";
+}
+
+function normalizeCanonicalCjkQuestionSegments(value) {
+  const expanded = String(value || "")
+    .normalize("NFKC")
+    .replace(/P\s*ゾーン/giu, "ペンデュラムゾーン");
+  return normalizeCjkQuestionSegments(expanded);
 }
 
 function uniqueCjkNgrams(segments = [], size = 4) {
@@ -2330,55 +3561,200 @@ function longestCommonTextRun(left, right) {
   return best;
 }
 
-function countJapaneseKana(value) {
-  return [...String(value || "").matchAll(/[\u3040-\u30ff]/gu)].length;
-}
-
-function selectIndependentRuleQueries({
+export function selectIndependentRuleQueries({
   deterministicRuleQueries = [],
   supplementalRuleQueries = [],
   limit = 0,
 } = {}) {
-  const safeLimit = Math.max(0, Math.min(4, Math.floor(Number(limit) || 0)));
+  const safeLimit = Math.max(0, Math.min(
+    MAX_INDEPENDENT_RULE_QUERY_BRANCHES,
+    Math.floor(Number(limit) || 0),
+  ));
   if (!safeLimit) return [];
-  // Prefer model-generated unresolved subclaims. When that stage times out or
-  // returns no plan, keep a bounded deterministic branch fallback so one card-
-  // text operation cannot hide every other branch. Deterministic branches do
-  // not receive supplemental keys and therefore cannot consume the prompt's
-  // additional reserved cross-card slots.
-  const branchQueries = (supplementalRuleQueries || []).length
-    ? supplementalRuleQueries
-    : deterministicRuleQueries;
-  const candidates = dedupeBy(
-    branchQueries || [],
-    ruleSearchQueryIdentity,
-  ).filter((query) => ruleSearchQueryIdentity(query));
-  const selected = [];
-  const selectedKeys = new Set();
-  const representedMechanisms = new Set();
-  const add = (query) => {
-    const key = ruleSearchQueryIdentity(query);
-    if (!key || selectedKeys.has(key) || selected.length >= safeLimit) return false;
-    selected.push(query);
-    selectedKeys.add(key);
-    return true;
-  };
-  for (const query of candidates) {
-    const mechanism = inferRuleSearchMechanism(query);
-    if (!mechanism || representedMechanisms.has(mechanism)) continue;
-    if (add(query)) representedMechanisms.add(mechanism);
+  // Prefer model-generated unresolved subclaims, but retain one independent
+  // deterministic user/card-text branch when one exists. A full model plan is
+  // still fallible and must not silently remove the original-question safety
+  // net. The reservation stays inside the same four-query cap.
+  const supplemental = normalizeRuleSearchQueries(supplementalRuleQueries, {
+    maxRuleSearchQueries: 16,
+  });
+  const supplementalKeys = new Set(
+    supplemental.map(ruleSearchQueryIdentity).filter(Boolean),
+  );
+  const deterministic = normalizeRuleSearchQueries(deterministicRuleQueries, {
+    // Inspect the complete bounded deterministic plan before choosing the
+    // reserved branch. A decisive card-text operation may occur late in the
+    // printed effect and must not lose merely because broad question-derived
+    // queries appeared first.
+    maxRuleSearchQueries: 16,
+  }).filter((query) => !supplementalKeys.has(ruleSearchQueryIdentity(query)));
+  if (!deterministic.length) return supplemental.slice(0, safeLimit);
+  const supplementalLimit = Math.max(0, safeLimit - 1);
+  const selected = supplemental.slice(0, supplementalLimit);
+  const mechanismFeaturesForQuery = (query) => (
+    [...buildRuleMechanismSignature([
+      query?.query,
+      query?.officialQuestion,
+      query?.scenarioQuestion,
+    ].filter(Boolean).join(" "))]
+  );
+  const supplementalRelationFeatures = selected
+    .map((query) => new Set(mechanismFeaturesForQuery(query)));
+  const supplementalMechanismFeatures = new Set(
+    supplementalRelationFeatures
+      .flatMap((features) => [...features].filter(isStrongRuleMechanismFeature)),
+  );
+  const deterministicRelationFeatures = deterministic.map(mechanismFeaturesForQuery);
+  const deterministicMechanismFeatures = deterministicRelationFeatures
+    .map((features) => features.filter(isStrongRuleMechanismFeature));
+  const remainingDeterministic = deterministic.map((query, index) => ({
+    query,
+    index,
+    features: deterministicMechanismFeatures[index],
+    relationFeatures: deterministicRelationFeatures[index],
+  }));
+  const representedFeatures = new Set(supplementalMechanismFeatures);
+
+  // Novelty is useful for the remaining deterministic slots, but a primary
+  // card-text clause that grounds the model's own mechanism must not lose only
+  // because every one of its features is already represented. Reference-card
+  // clauses remain in the ordinary novelty pool and cannot take this one
+  // grounding position from the card actually named by the player.
+  const primaryCardTextGrounding = remainingDeterministic
+    .filter(({ query }) => (
+      String(query?.source || "") === "card_text_derived_rule_search_query"
+    ))
+    .map((entry) => {
+      const bestRelationOverlap = supplementalRelationFeatures
+        .map((supplementalFeatures) => {
+          const matchedFeatures = entry.relationFeatures
+            .filter((feature) => supplementalFeatures.has(feature));
+          const groundingFeatureKey = (feature) => (
+            String(feature || "").startsWith("relation:treated-as")
+              ? "relation:treated-as"
+              : feature
+          );
+          const distinctMatchedFeatures = [...new Set(
+            matchedFeatures.map(groundingFeatureKey),
+          )];
+          const distinctStrongMatchedFeatures = [...new Set(
+            matchedFeatures
+              .filter(isStrongRuleMechanismFeature)
+              .map(groundingFeatureKey),
+          )];
+          return {
+            overlapScore: distinctMatchedFeatures.reduce(
+              (total, feature) => total + ruleMechanismFeatureWeight(feature),
+              0,
+            ),
+            overlapCount: distinctMatchedFeatures.length,
+            strongOverlapCount: distinctStrongMatchedFeatures.length,
+          };
+        })
+        // One generic operation (for example, only "Special Summon"), or
+        // context without a shared operation, is not enough to override the
+        // existing novelty policy. Grounding requires a complete relation to
+        // one model subclaim; that relation may include zone or activation
+        // context in addition to its strong mechanism anchor.
+        .filter(({ overlapCount, strongOverlapCount }) => (
+          strongOverlapCount >= 1 && overlapCount >= 2
+        ))
+        .sort((left, right) => (
+          right.overlapScore - left.overlapScore
+            || right.overlapCount - left.overlapCount
+            || right.strongOverlapCount - left.strongOverlapCount
+        ))[0];
+      return bestRelationOverlap ? { ...entry, ...bestRelationOverlap } : null;
+    })
+    .filter(Boolean)
+    .sort((left, right) => (
+      right.overlapScore - left.overlapScore
+        || right.overlapCount - left.overlapCount
+        || right.strongOverlapCount - left.strongOverlapCount
+        || left.index - right.index
+    ))[0];
+  if (selected.length < safeLimit && primaryCardTextGrounding) {
+    const groundingIndex = remainingDeterministic.findIndex(
+      (entry) => entry.index === primaryCardTextGrounding.index,
+    );
+    if (groundingIndex >= 0) remainingDeterministic.splice(groundingIndex, 1);
+    selected.push(primaryCardTextGrounding.query);
+    for (const feature of primaryCardTextGrounding.features) representedFeatures.add(feature);
   }
-  for (const query of candidates) add(query);
-  return selected;
+
+  while (selected.length < safeLimit && remainingDeterministic.length) {
+    remainingDeterministic.sort((left, right) => {
+      const leftFeatures = left.features;
+      const rightFeatures = right.features;
+      const novelty = (features) => features
+        .filter((feature) => !representedFeatures.has(feature))
+        .reduce((total, feature) => total + ruleMechanismFeatureWeight(feature), 0);
+      const leftNovelty = novelty(leftFeatures);
+      const rightNovelty = novelty(rightFeatures);
+      return rightNovelty - leftNovelty
+        || rightFeatures.filter((feature) => !representedFeatures.has(feature)).length
+          - leftFeatures.filter((feature) => !representedFeatures.has(feature)).length
+        || Number(/card_text/iu.test(String(right.query.source || "")))
+          - Number(/card_text/iu.test(String(left.query.source || "")))
+        || left.index - right.index;
+    });
+    const [{ query, features }] = remainingDeterministic.splice(0, 1);
+    selected.push(query);
+    for (const feature of features) representedFeatures.add(feature);
+  }
+
+  for (const query of supplemental.slice(supplementalLimit)) {
+    if (selected.length >= safeLimit) break;
+    selected.push(query);
+  }
+
+  return normalizeRuleSearchQueries(selected, {
+    maxRuleSearchQueries: safeLimit,
+  });
+}
+
+function relatedMatchedQuestionSideCardIds(item = {}) {
+  const values = [
+    ...(Array.isArray(item?.matchedQuestionCardIds) ? item.matchedQuestionCardIds : []),
+    ...(Array.isArray(item?.matchedRelatedQuestionCardIds)
+      ? item.matchedRelatedQuestionCardIds
+      : []),
+    ...(Array.isArray(item?.retrievalSignals?.matchedQuestionCardIds)
+      ? item.retrievalSignals.matchedQuestionCardIds
+      : []),
+  ];
+  return [...new Set(values.map(normalizeCardIdentityId).filter(Boolean))];
 }
 
 function compareRetrievedRecords(left = {}, right = {}) {
-  const leftSignals = left.retrievalSignals || {};
-  const rightSignals = right.retrievalSignals || {};
+  const leftSignals = comparableRetrievalSignals(left);
+  const rightSignals = comparableRetrievalSignals(right);
   return Number(rightSignals.questionCardIdCoverage || 0) - Number(leftSignals.questionCardIdCoverage || 0)
     || Number(rightSignals.matchedQuestionCardIdCount || 0) - Number(leftSignals.matchedQuestionCardIdCount || 0)
+    || Number(rightSignals.questionBranchHeadlineAnchored === true)
+      - Number(leftSignals.questionBranchHeadlineAnchored === true)
+    // A Planner scenario surface preserves the concrete action, zone and timing
+    // that its abstract official-question surface may intentionally omit. Keep
+    // that bounded lexical head ahead of same-branch semantic neighbours while
+    // leaving ordinary single-surface ranking unchanged.
+    || Number(rightSignals.questionBranchScenarioSurfaceHead === true)
+      - Number(leftSignals.questionBranchScenarioSurfaceHead === true)
+    || Number(rightSignals.questionBranchHeadlineDistinctiveSemanticHitCount || 0)
+      - Number(leftSignals.questionBranchHeadlineDistinctiveSemanticHitCount || 0)
+    || Number(rightSignals.questionBranchHeadlineEffectPhraseHitCount || 0)
+      - Number(leftSignals.questionBranchHeadlineEffectPhraseHitCount || 0)
+    || Number(rightSignals.questionBranchHeadlineCanonicalFourGramHitCount || 0)
+      - Number(leftSignals.questionBranchHeadlineCanonicalFourGramHitCount || 0)
+    || Number(rightSignals.questionBranchHeadlineFourGramHitCount || 0)
+      - Number(leftSignals.questionBranchHeadlineFourGramHitCount || 0)
+    || Number(rightSignals.questionBranchHeadlineThreeGramHitCount || 0)
+      - Number(leftSignals.questionBranchHeadlineThreeGramHitCount || 0)
+    || Number(rightSignals.questionBranchHeadlineLongestRun || 0)
+      - Number(leftSignals.questionBranchHeadlineLongestRun || 0)
     || Number(rightSignals.questionBranchFourGramHitCount || 0)
       - Number(leftSignals.questionBranchFourGramHitCount || 0)
+    || Number(rightSignals.questionBranchThreeGramHitCount || 0)
+      - Number(leftSignals.questionBranchThreeGramHitCount || 0)
     || Number(rightSignals.questionBranchLongestRun || 0)
       - Number(leftSignals.questionBranchLongestRun || 0)
     || Number(rightSignals.questionBranchFourGramCoverage || 0)
@@ -2394,6 +3770,34 @@ function compareRetrievedRecords(left = {}, right = {}) {
     || modelAssessmentRank(rightSignals.modelCandidateAssessment)
       - modelAssessmentRank(leftSignals.modelCandidateAssessment)
     || stableRecordKey(left).localeCompare(stableRecordKey(right));
+}
+
+function comparableRetrievalSignals(item = {}) {
+  const nested = item.retrievalSignals || {};
+  const topLevelMatchedQuestionCardIdCount = Array.isArray(item.matchedQuestionCardIds)
+    ? item.matchedQuestionCardIds.length
+    : 0;
+  const hasTopLevelEffectCompatibility = Object.prototype.hasOwnProperty.call(
+    item,
+    "effectNumberCompatible",
+  );
+  return {
+    ...nested,
+    // Official matcher results carry these values at the top level, whereas
+    // independently ranked records carry them inside retrievalSignals. Merge
+    // both shapes before applying the one canonical comparator.
+    questionCardIdCoverage: Math.max(
+      Number(nested.questionCardIdCoverage || 0),
+      Number(item.questionCardIdCoverage || 0),
+    ),
+    matchedQuestionCardIdCount: Math.max(
+      Number(nested.matchedQuestionCardIdCount || 0),
+      topLevelMatchedQuestionCardIdCount,
+    ),
+    effectNumberCompatible: hasTopLevelEffectCompatibility
+      ? item.effectNumberCompatible !== false
+      : nested.effectNumberCompatible,
+  };
 }
 
 function modelAssessmentRank(assessment = null) {
@@ -2413,14 +3817,14 @@ function modelAssessmentRank(assessment = null) {
   return 0;
 }
 
-function hasEligibleModelCandidateAssessment(item = {}) {
+function hasEligibleModelCandidateAssessment(item = {}, allowedRelevances = ["high", "medium"]) {
   const record = item?.record || item;
   const assessment = record?.retrievalSignals?.modelCandidateAssessment
     || record?.retrievalContext?.modelCandidateAssessment
     || item?.modelCandidateAssessment;
   if (!assessment || typeof assessment !== "object") return false;
   return assessment.source === "model_rule_query_soft_ranker"
-    && ["high", "medium"].includes(String(assessment.relevance || ""))
+    && allowedRelevances.includes(String(assessment.relevance || ""))
     && ["same", "partial"].includes(String(assessment.premise || ""));
 }
 
@@ -2476,10 +3880,10 @@ function applyModelAssessmentsToOfficialMatches(matches = {}, assessmentById = n
 function hasSevereQuestionIdentityMismatch(match = {}, resolvedCardCount = 0) {
   const record = match.record || {};
   const selectedBranchCardIds = new Set(
-    (match.supportingQuestionBranchCardIds || []).map(normalizeId).filter(Boolean),
+    (match.supportingQuestionBranchCardIds || []).map(normalizeCardIdentityId).filter(Boolean),
   );
   const selectedBranchMatchedCardIds = new Set(
-    (match.branchMatchedCardIds || []).map(normalizeId).filter(Boolean),
+    (match.branchMatchedCardIds || []).map(normalizeCardIdentityId).filter(Boolean),
   );
   const useSelectedBranch = match.branchRelevant === true
     && selectedBranchCardIds.size > 0
@@ -2509,8 +3913,13 @@ function hasSevereQuestionIdentityMismatch(match = {}, resolvedCardCount = 0) {
 }
 
 function principalQuestionCardIds(record = {}) {
+  if (record.recordType === "card-faq") {
+    return new Set(structuredRecordOwnershipCardIds(record)
+      .map(normalizeCardIdentityId)
+      .filter(Boolean));
+  }
   return new Set(projectOfficialQaQuestion(record).principalCardIds
-    .map(normalizeId)
+    .map(normalizeCardIdentityId)
     .filter(Boolean));
 }
 
@@ -2651,8 +4060,14 @@ function scoreRecord(record, {
   const questionCardIdCoverage = resolvedIds.size
     ? matchedQuestionCardIds.length / resolvedIds.size
     : 0;
-  const cardNameMatch = normalizedCardNames.some((name) => resolvedNames.has(name)) || [...resolvedNames].some((name) => name.length >= 3 && !hasNumberedCardIdentityConflict(name, text) && textKey.includes(name));
-  const unresolvedNameMatch = [...unresolvedNames].some((name) => name.length >= 3 && !hasNumberedCardIdentityConflict(name, text) && textKey.includes(name));
+  const allowUnstructuredCardNameMatch = record.recordType !== "card-faq";
+  const cardNameMatch = normalizedCardNames.some((name) => resolvedNames.has(name))
+    || (
+      allowUnstructuredCardNameMatch
+      && [...resolvedNames].some((name) => name.length >= 3 && !hasNumberedCardIdentityConflict(name, text) && textKey.includes(name))
+    );
+  const unresolvedNameMatch = allowUnstructuredCardNameMatch
+    && [...unresolvedNames].some((name) => name.length >= 3 && !hasNumberedCardIdentityConflict(name, text) && textKey.includes(name));
   const cardScore = cardIdMatch ? 5 : cardNameMatch ? 4 : unresolvedNameMatch ? 2 : 0;
   if (!allowNoCardMatch && resolvedIds.size + resolvedNames.size > 0 && !cardScore) {
     return emptyRecordScore();
@@ -2799,7 +4214,7 @@ function retrievalRecordFeatures(record = {}, preparedIdentity) {
     : retrievalRankingIdentity(record);
   const features = {
     textKey: normalizeCardKey(identity.text),
-    normalizedCardIds: identity.cardIds.map(normalizeId).filter(Boolean),
+    normalizedCardIds: identity.cardIds.map(normalizeCardIdentityId).filter(Boolean),
     normalizedCardNames: identity.cardNames.map(normalizeCardKey).filter(Boolean),
   };
   if (record && typeof record === "object") retrievalRecordFeatureCache.set(record, features);
@@ -2821,8 +4236,10 @@ function retrievalQuestionFeatures(record = {}) {
     rankingIdentity,
     questionProjection,
     questionText,
-    questionCardIds: new Set(questionProjection.principalCardIds
-      .map(normalizeId)
+    questionCardIds: new Set((record.recordType === "card-faq"
+      ? structuredRecordOwnershipCardIds(record)
+      : questionProjection.principalCardIds)
+      .map(normalizeCardIdentityId)
       .filter(Boolean)),
     evidenceEffectNumbers: extractEffectNumbers(evidenceText),
     evidenceQuestionType: classifyOfficialQaQuestionType(evidenceText),
@@ -2839,8 +4256,27 @@ function isScenarioOfficialQaRecord(record = {}) {
 }
 
 function retrievalRankingIdentity(record = {}, preparedProjection) {
-  const hasQuestionBoundIdentity = isScenarioOfficialQaRecord(record)
-    || (record.recordType === "card-faq" && hasOfficialQuestionSurface(record));
+  if (record.recordType === "card-faq") {
+    const projection = preparedProjection && typeof preparedProjection === "object"
+      ? preparedProjection
+      : projectOfficialQaQuestion(record);
+    const text = hasOfficialQuestionSurface(record)
+      ? [...new Set([
+          projection.principalText,
+          projection.scenarioText,
+          ...(projection.surfaces || []),
+        ].map((value) => String(value || "").trim()).filter(Boolean))].join("\n")
+      : [record.title || "", record.text || ""].join("\n");
+    return {
+      text,
+      cardIds: structuredRecordOwnershipCardIds(record),
+      cardNames: structuredRecordOwnershipCardNames(record),
+    };
+  }
+  // card-faq has its own ownership-only branch above.  Do not broaden the
+  // question-bound identity rules of unrelated record types merely because
+  // they happen to expose a question-shaped field.
+  const hasQuestionBoundIdentity = isScenarioOfficialQaRecord(record);
   if (!hasQuestionBoundIdentity) {
     return {
       text: [record.title || "", record.text || ""].join("\n"),
@@ -2875,13 +4311,13 @@ function retrievalRankingIdentity(record = {}, preparedProjection) {
     });
   return {
     text,
-    cardIds: [...new Set((projection.principalCardIds || []).map(normalizeId).filter(Boolean))],
+    cardIds: [...new Set((projection.principalCardIds || []).map(normalizeCardIdentityId).filter(Boolean))],
     cardNames: [...new Set(cardNames)],
   };
 }
 
 function inferRuleSearchMechanism(item = {}) {
-  const signature = buildRuleMechanismSignature(item?.query);
+  const signature = buildRuleMechanismSignature(item?.scenarioQuestion || item?.query);
   if (!isUsableRuleMechanismSignature(signature)) return "";
   return ruleMechanismSignatureIdentity(signature);
 }
@@ -2896,8 +4332,10 @@ function ruleMechanismSignatureIdentity(signature = new Set()) {
 }
 
 function ruleSearchQueryIdentity(item = {}) {
-  const queryKey = normalizeCardKey(item?.query);
-  if (!queryKey) return "";
+  const officialQuestionKey = normalizeCardKey(item?.officialQuestion || item?.query);
+  const scenarioQuestionKey = normalizeCardKey(item?.scenarioQuestion || item?.query);
+  if (!officialQuestionKey && !scenarioQuestionKey) return "";
+  const queryKey = `${officialQuestionKey}\u0000${scenarioQuestionKey}`;
   return `${queryKey}|${inferRuleSearchMechanism(item)}`;
 }
 
@@ -2909,6 +4347,8 @@ function normalizeRuleSearchQueries(items, limits = {}) {
       ? {
           subclaim: "",
           checkpoint: "",
+          officialQuestion: item,
+          scenarioQuestion: item,
           query: item,
           reason: "",
           confidence: "medium",
@@ -2918,24 +4358,45 @@ function normalizeRuleSearchQueries(items, limits = {}) {
       : {
           subclaim: String(item?.subclaim || item?.factToVerify || item?.ruleQuestion || "").trim(),
           checkpoint: String(item?.checkpoint || item?.stage || "").trim(),
-          query: String(item?.query || item?.searchQuery || item?.keyword || item?.topic || "").trim(),
+          officialQuestion: String(
+            item?.officialQuestion || item?.officialQaQuestion
+              || item?.query || item?.searchQuery || item?.keyword || item?.topic || "",
+          ).trim(),
+          scenarioQuestion: String(
+            item?.scenarioQuestion || item?.fullScenarioQuestion
+              || item?.query || item?.searchQuery || item?.keyword || item?.topic || "",
+          ).trim(),
+          query: String(
+            item?.query || item?.scenarioQuestion || item?.officialQuestion
+              || item?.searchQuery || item?.keyword || item?.topic || "",
+          ).trim(),
           reason: String(item?.reason || "").trim(),
           confidence: item?.confidence || "medium",
           source: item?.source || "rule_search_query",
           declaredMechanism: String(item?.declaredMechanism || item?.mechanism || "").trim(),
         })
-    .map((item) => ({
-      ...item,
-      subclaim: item.subclaim.replace(/\s+/gu, " ").slice(0, 160),
-      checkpoint: item.checkpoint.replace(/\s+/gu, " ").toLowerCase().slice(0, 64),
-      query: normalizeRuleSearchQueryText(item.query),
-      reason: item.reason.replace(/\s+/gu, " ").slice(0, 120),
-      mechanism: inferRuleSearchMechanism(item),
-    }))
+    .map((item) => {
+      const officialQuestion = normalizeRuleSearchQueryText(item.officialQuestion);
+      const scenarioQuestion = normalizeRuleSearchQueryText(item.scenarioQuestion);
+      const query = scenarioQuestion || officialQuestion || normalizeRuleSearchQueryText(item.query);
+      const normalized = {
+        ...item,
+        subclaim: item.subclaim.replace(/\s+/gu, " ").slice(0, 160),
+        checkpoint: item.checkpoint.replace(/\s+/gu, " ").toLowerCase().slice(0, 64),
+        officialQuestion: officialQuestion || query,
+        scenarioQuestion: scenarioQuestion || query,
+        query,
+        reason: item.reason.replace(/\s+/gu, " ").slice(0, 120),
+      };
+      return {
+        ...normalized,
+        mechanism: inferRuleSearchMechanism(normalized),
+      };
+    })
     .filter((item) => item.query && /[A-Za-z\u3040-\u30ff\u3400-\u9fff0-9]/u.test(item.query));
   const groupedByQuery = new Map();
   for (const item of normalized) {
-    const key = normalizeCardKey(item.query);
+    const key = `${normalizeCardKey(item.officialQuestion)}\u0000${normalizeCardKey(item.scenarioQuestion)}`;
     const group = groupedByQuery.get(key) || [];
     group.push(item);
     groupedByQuery.set(key, group);
@@ -2951,7 +4412,18 @@ function normalizeRuleSearchQueries(items, limits = {}) {
   if (deduped.length <= max) return deduped;
 
   const reservedIndexes = new Set();
+  const representedCheckpoints = new Set();
+  deduped.forEach((item, index) => {
+    if (!item.checkpoint || representedCheckpoints.has(item.checkpoint)) return;
+    if (reservedIndexes.size >= max) return;
+    representedCheckpoints.add(item.checkpoint);
+    reservedIndexes.add(index);
+  });
   const representedMechanisms = new Set();
+  for (const index of reservedIndexes) {
+    const mechanism = deduped[index]?.mechanism;
+    if (mechanism) representedMechanisms.add(mechanism);
+  }
   deduped.forEach((item, index) => {
     if (!item.mechanism || representedMechanisms.has(item.mechanism)) return;
     if (reservedIndexes.size >= max) return;
@@ -2979,10 +4451,19 @@ function deriveRuleSearchQueries(userQuery) {
 function buildRuleQueryCandidateQuestions({
   scopedMatches = [],
   crossCardRecords = [],
+  resolvedCards = [],
   limit = 12,
 } = {}) {
   const safeLimit = Math.max(1, Math.min(12, Math.floor(Number(limit) || 12)));
-  const scopedCandidates = (scopedMatches || []).slice(0, Math.min(8, safeLimit)).map((match) => ({
+  // Preserve distinct structured question premises before taking the small
+  // question-only sample shown to the query model. A raw top-N prefix can hide
+  // the only candidate that combines several resolved card identities even
+  // though its official question is already in the scoped pool.
+  const scopedCandidates = reserveIdentitySourceCoverage(
+    scopedMatches || [],
+    Math.min(8, safeLimit),
+    resolvedCards,
+  ).slice(0, Math.min(8, safeLimit)).map((match) => ({
     ...(match.record || {}),
     questionType: match.questionType || match.record?.questionType || "unknown",
   }));
@@ -3049,7 +4530,9 @@ function isStrictSupplementalOfficialMechanismMatch(record = {}, query = {}) {
   // Mechanism coverage is recomputed against this one supplemental query. The
   // ordinary ranked record carries aggregate signals, and a handwritten
   // question-type label is intentionally not a hard deletion gate here.
-  const queryText = typeof query === "string" ? query : query?.query;
+  const queryText = typeof query === "string"
+    ? query
+    : query?.scenarioQuestion || query?.query;
   const querySignature = buildRuleMechanismSignature(queryText);
   if (!isUsableRuleMechanismSignature(querySignature)) return false;
   const evidenceSignature = retrievalQuestionFeatures(record).evidenceMechanismSignature;
@@ -3066,9 +4549,9 @@ function recordSharesResolvedIdentity(record = {}, resolvedCards = []) {
   if (!(resolvedCards || []).length) return false;
   const identity = retrievalRankingIdentity(record);
   const resolvedIds = new Set((resolvedCards || [])
-    .map((card) => normalizeId(card?.id || card?.cardId))
+    .map((card) => normalizeCardIdentityId(card?.id || card?.cardId))
     .filter(Boolean));
-  if (identity.cardIds.some((id) => resolvedIds.has(normalizeId(id)))) return true;
+  if (identity.cardIds.some((id) => resolvedIds.has(normalizeCardIdentityId(id)))) return true;
   const resolvedNames = new Set((resolvedCards || [])
     .flatMap((card) => [
       card?.name,
@@ -3110,7 +4593,9 @@ function selectRuleSearchCardTextClauses(value, limit = 4, userQuery = "") {
   const safeLimit = Math.max(1, Math.floor(Number(limit) || 1));
   const clauses = splitCardTextClauseEntries(value)
     .filter(({ text }) => text.length >= 4 && containsOperationLanguage(text));
-  if (clauses.length <= safeLimit) return clauses.map(({ text }) => text);
+  if (clauses.length <= safeLimit) {
+    return clauses.map((entry) => contextualizeBulletRuleSearchClause(entry, clauses));
+  }
 
   const selected = [];
   const selectedIndexes = new Set();
@@ -3162,7 +4647,34 @@ function selectRuleSearchCardTextClauses(value, limit = 4, userQuery = "") {
   }
   return selected
     .sort((left, right) => left.index - right.index)
-    .map(({ text }) => text);
+    .map((entry) => contextualizeBulletRuleSearchClause(entry, clauses));
+}
+
+function contextualizeBulletRuleSearchClause(entry, clauses = []) {
+  if (entry?.marker !== "●") return entry?.text || "";
+  const preceding = [];
+  const entryPosition = clauses.indexOf(entry);
+  for (let index = entryPosition - 1; index >= 0; index -= 1) {
+    const candidate = clauses[index];
+    if (!candidate || candidate.marker === "●") continue;
+    preceding.push(candidate);
+    if (isRuleSearchActivationClause(candidate.text)
+        || /^[①②③④⑤⑥⑦⑧⑨]|^\d+$/u.test(String(candidate.marker || ""))) break;
+  }
+  const activation = preceding.find((candidate) => isRuleSearchActivationClause(candidate.text));
+  const mainOperation = preceding.find((candidate) => (
+    candidate !== activation && containsOperationLanguage(candidate.text)
+  ));
+  return [...new Set([activation, mainOperation]
+    .filter(Boolean)
+    .sort((left, right) => left.index - right.index)
+    .map((candidate) => candidate.text)
+    .concat(entry.text))]
+    .join(" ");
+}
+
+function isRuleSearchActivationClause(value) {
+  return /(?:发动|發動|発動|activation|activat(?:e|ed|ing))/iu.test(String(value || ""));
 }
 
 function splitCardTextClauseEntries(value) {
@@ -3366,8 +4878,10 @@ function tokenize(value) {
   return [...new Set([...base, ...grams])].slice(0, 60);
 }
 
-function normalizeId(value) {
-  return String(value || "").replace(/\D+/gu, "").replace(/^0+(?=\d)/u, "");
+function normalizeCardIdentityId(value) {
+  const text = String(value ?? "").trim();
+  if (!text) return "";
+  return /^\d+$/u.test(text) ? text.replace(/^0+(?=\d)/u, "") : text;
 }
 
 function extractInlineCardIds(value) {
@@ -3415,12 +4929,18 @@ function resolveUnresolvedMentionCards(unresolvedMentions, cardProvider, limits,
         warnings.push(`unresolved_mention_fuzzy_low_confidence:${query}->${best.name}:${best.confidence}`);
         continue;
       }
+      const queryMatchesUserSurface = normalizeCardKey(query) === normalizeCardKey(mention.input);
+      if (!queryMatchesUserSurface && !providerPrimaryNameMechanicallyMatchesSurface(best, mention.input)) {
+        warnings.push(`unresolved_mention_fuzzy_unanchored_expansion:${query}->${best.name}`);
+        continue;
+      }
       warnings.push(`unresolved_mention_fuzzy_match:${query}->${best.name}`);
       result.push({
         ...best,
         input: mention.input,
         matchedQuery: query,
         confidence: Math.min(best.confidence, 0.7),
+        retrievalIdentityMatchKind: "local_fuzzy",
       });
       break;
     }
@@ -3432,6 +4952,7 @@ async function resolveUnresolvedMentionCardsWithBaige(unresolvedMentions, {
   fetchImpl,
   env,
   limits,
+  canonicalCards = [],
   warnings,
   debug,
   signal,
@@ -3440,6 +4961,52 @@ async function resolveUnresolvedMentionCardsWithBaige(unresolvedMentions, {
   const mentions = (unresolvedMentions || []).slice(0, limits.maxCards);
   const minConfidence = readPositiveDecimal(env.RAG_BAIGE_MIN_CONFIDENCE, 0.72);
   const result = await Promise.all(mentions.map(async (mention) => {
+    const modelExpansionQueries = modelIdentityExpansionQueries(mention);
+    if (modelExpansionQueries.length) {
+      const intersection = await resolveModelExpansionByStableCidIntersection({
+        surface: mention.input,
+        expansionQueries: modelExpansionQueries,
+        fetchImpl,
+        env,
+        limits,
+        warnings,
+        debug,
+        signal,
+      });
+      if (!intersection.card) {
+        if (intersection.candidates.length > 1) {
+          debug.ambiguousMentions.push({
+            input: mention.input,
+            reason: "conflicting_model_expansion_cid_intersection",
+            source: "retrieval_identity_reconciliation",
+            candidateCards: intersection.candidates.slice(0, 3).map((card) => ({
+              id: card.id || card.cardId || "",
+              cid: card.cid ?? null,
+              name: card.name || card.cnName || card.jpName || card.enName || "",
+              source: "baige_model_expansion_cid_intersection",
+              confidence: card.confidence || 0,
+            })),
+          });
+        }
+        return null;
+      }
+      warnings.push(`baige_match:${intersection.matchedQuery}->${intersection.card.name}`);
+      return {
+        ...toRagCard(intersection.card, mention.input, Number(intersection.card.confidence || minConfidence)),
+        matchedQuery: intersection.matchedQuery,
+        externalSurfaceResolution: intersection.resolutionKind,
+        externalSurfaceMatchKind: intersection.surfaceMatchKind,
+        externalSurfaceCompatible: true,
+        externalIdentityUniqueConvergence: true,
+        identityVerificationStatus: "verified_external_resolution",
+        identityVerificationSource: intersection.usedExpansion
+          ? "model_expansion_cid_intersection"
+          : "provider_surface_unique_identity",
+        ...(intersection.usedExpansion ? { modelExpansionCidIntersectionVerified: true } : {}),
+        originalSurfaceStableCids: intersection.originalSurfaceCids,
+        modelExpansionExactCids: intersection.expansionCids,
+      };
+    }
     let bestLowConfidence = null;
     let bestLowConfidenceCandidates = [];
     let bestLowConfidenceQuery = "";
@@ -3453,21 +5020,66 @@ async function resolveUnresolvedMentionCardsWithBaige(unresolvedMentions, {
         warnings.push(`baige_no_result:${query}`);
         continue;
       }
-      const selection = selectUniqueBaigeCandidate(candidates, minConfidence);
+      // Canonicalize every eligible external mirror before deciding whether
+      // the user's surface converges to one identity. A model-generated search
+      // expansion is never itself a surface anchor.
+      const selection = selectUniqueBaigeCandidate(candidates, minConfidence, {
+        canonicalCards,
+        surface: mention.input,
+        query,
+      });
       const best = selection.card;
       const confidence = Number(best?.confidence || 0);
       if (best) {
         const queryMatchesUserSurface = normalizeCardKey(query) === normalizeCardKey(mention.input);
-        const resolutionKind = selection.resolutionKind === "unique_exact_primary_name"
+        const resolutionKind = isUniqueExactProviderNameResolution(selection.resolutionKind)
           && !queryMatchesUserSurface
           ? "canonical_expansion_exact_primary_name"
           : selection.resolutionKind || "confidence_margin";
+        const externalSurfaceCompatible = selection.surfaceCompatible === true;
+        const externalExpansionPrimaryNameAnchored = resolutionKind === "canonical_expansion_exact_primary_name"
+          && externalSurfaceCompatible;
+        const modelExpansionPendingIdentityReconciliation = resolutionKind === "canonical_expansion_exact_primary_name"
+          && mention.source === "model_card_name_extractor"
+          && mention.reason === "model_candidate_not_found";
+        if (resolutionKind === "canonical_expansion_exact_primary_name"
+            && !externalExpansionPrimaryNameAnchored
+            && !modelExpansionPendingIdentityReconciliation) {
+          warnings.push(`baige_unanchored_canonical_expansion:${query}->${best.name}`);
+          continue;
+        }
+        if (modelExpansionPendingIdentityReconciliation && !externalExpansionPrimaryNameAnchored) {
+          // The provider proves that the expanded canonical name exists, not
+          // that the model mapped the user's surface correctly. Preserve it as
+          // a candidate for the final admission gate, which still requires
+          // original-surface compatibility, unique external identity
+          // convergence and CID/passcode-backed local canonicalization before
+          // any local evidence can be unlocked.
+          warnings.push(`baige_model_expansion_pending_identity_reconciliation:${query}->${best.name}`);
+        }
         warnings.push(`baige_match:${query}->${best.name}`);
         return {
           ...toRagCard(best, mention.input, confidence),
           matchedQuery: query,
           externalSurfaceResolution: resolutionKind,
+          externalSurfaceMatchKind: selection.surfaceMatchKind,
+          externalSurfaceCompatible,
+          externalIdentityUniqueConvergence: selection.canonicalIdentityUniqueConvergence === true,
+          externalExpansionPrimaryNameAnchored,
+          modelExpansionPendingIdentityReconciliation,
+          identityVerificationStatus: "verified_external_resolution",
+          identityVerificationSource: "provider_surface_unique_identity",
         };
+      }
+      if (selection.incompatibleCandidates?.length) {
+        const isModelExpansion = normalizeCardKey(query) !== normalizeCardKey(mention.input)
+          && mention.source === "model_card_name_extractor"
+          && mention.reason === "model_candidate_not_found";
+        if (isModelExpansion) {
+          warnings.push(`baige_model_expansion_pending_identity_reconciliation:${query}->${selection.incompatibleCandidates[0]?.name || "candidate"}`);
+          warnings.push(`baige_model_expansion_stable_identity_unverified:${query}->${selection.incompatibleCandidates[0]?.name || "candidate"}`);
+        }
+        warnings.push(`baige_unanchored_canonical_expansion:${query}->${selection.incompatibleCandidates[0]?.name || "candidate"}`);
       }
       if (selection.ambiguous) {
         const ambiguousConfidence = Number(selection.candidates[0]?.confidence || 0);
@@ -3531,10 +5143,191 @@ function mentionSearchQueries(mention) {
   return dedupeBy(queries, normalizeCardKey).slice(0, 3);
 }
 
+function modelIdentityExpansionQueries(value = {}) {
+  const explicitlyModelDerived = value.reason === "model_candidate_not_found";
+  const supplied = Array.isArray(value.identityVerificationSearchTexts)
+    ? value.identityVerificationSearchTexts
+    : explicitlyModelDerived && Array.isArray(value.searchTexts)
+      ? value.searchTexts
+      : [];
+  const surfaceKey = normalizeCardKey(value.input);
+  return dedupeBy(supplied
+    .map((item) => String(item || "").trim())
+    .filter((item) => item && normalizeCardKey(item) !== surfaceKey), normalizeCardKey)
+    .slice(0, 3);
+}
+
+async function resolveModelExpansionByStableCidIntersection({
+  surface,
+  expansionQueries,
+  fetchImpl,
+  env,
+  limits,
+  warnings,
+  debug,
+  signal,
+}) {
+  const originalSearch = await searchBaige(surface, { fetchImpl, env, limits, debug, signal });
+  warnings.push(...originalSearch.warnings);
+  const originalResults = originalSearch.results || [];
+  const originalEligibleResults = originalResults.filter((candidate) => (
+    Number(candidate?.confidence || 0) >= 0.72
+      && providerPrimaryNameMechanicallyMatchesSurface(candidate, surface)
+  ));
+  const originalCandidatesByCid = stableExternalCidCandidates(originalEligibleResults);
+  const originalSelection = selectUniqueBaigeCandidate(originalResults, 0.72, {
+    surface,
+    query: surface,
+  });
+  const originalSurfaceCids = [...originalCandidatesByCid.keys()].sort();
+  if (originalSelection.card) {
+    return {
+      card: originalSelection.card,
+      matchedQuery: surface,
+      resolutionKind: originalSelection.resolutionKind || "single_eligible_identity",
+      surfaceMatchKind: originalSelection.surfaceMatchKind || "",
+      usedExpansion: false,
+      originalSurfaceCids,
+      expansionCids: [],
+      candidates: originalSelection.candidates || [originalSelection.card],
+    };
+  }
+
+  // A canonical/model expansion may confirm or disambiguate identities already
+  // returned for the user's original surface, but it must never create an
+  // identity when that surface produced no stable CID at all.
+  if (!originalCandidatesByCid.size) {
+    warnings.push(`baige_model_expansion_stable_identity_unverified:${surface}->${expansionQueries[0] || "candidate"}`);
+    warnings.push(`baige_model_expansion_original_surface_has_no_stable_identity:${surface}`);
+    return {
+      card: null,
+      matchedQuery: "",
+      resolutionKind: "",
+      surfaceMatchKind: "",
+      usedExpansion: false,
+      originalSurfaceCids,
+      expansionCids: [],
+      candidates: originalSelection.candidates || [],
+    };
+  }
+
+  // A model expansion may confirm one mechanically compatible identity, but it
+  // must not choose between multiple identities returned for the user's own
+  // surface. Otherwise the model-generated name would become the deciding
+  // identity fact and could unlock the wrong card text and card-scoped Q&A.
+  if (originalCandidatesByCid.size > 1) {
+    warnings.push(`baige_model_expansion_stable_identity_unverified:${surface}->${expansionQueries[0] || "candidate"}`);
+    warnings.push(
+      `baige_model_expansion_original_surface_identity_ambiguous:${surface}:${originalSurfaceCids.join(",")}`,
+    );
+    return {
+      card: null,
+      matchedQuery: "",
+      resolutionKind: "",
+      surfaceMatchKind: "",
+      usedExpansion: false,
+      originalSurfaceCids,
+      expansionCids: [],
+      candidates: originalSelection.candidates || originalEligibleResults,
+    };
+  }
+
+  const expansionCandidatesByCid = new Map();
+  const matchedQueryByCid = new Map();
+
+  for (const query of expansionQueries) {
+    const searchResult = await searchBaige(query, { fetchImpl, env, limits, debug, signal });
+    warnings.push(...searchResult.warnings);
+    for (const candidate of searchResult.results || []) {
+      if (!providerIdentityNameExactlyMatches(candidate, query)) continue;
+      const cid = verifiedExternalCardCid(candidate);
+      if (!cid) continue;
+      const previous = expansionCandidatesByCid.get(cid);
+      if (!previous || Number(candidate.confidence || 0) > Number(previous.confidence || 0)) {
+        expansionCandidatesByCid.set(cid, candidate);
+        matchedQueryByCid.set(cid, query);
+      }
+    }
+  }
+
+  const expansionCids = [...expansionCandidatesByCid.keys()].sort();
+  const intersectingCids = expansionCids.filter((cid) => originalCandidatesByCid.has(cid));
+  if (intersectingCids.length !== 1) {
+    warnings.push(`baige_model_expansion_stable_identity_unverified:${surface}->${expansionQueries[0] || "candidate"}`);
+    warnings.push(
+      intersectingCids.length
+        ? `baige_model_expansion_cid_intersection_ambiguous:${surface}:${intersectingCids.join(",")}`
+        : `baige_model_expansion_cid_intersection_empty:${surface}`,
+    );
+    return {
+      card: null,
+      matchedQuery: "",
+      resolutionKind: "",
+      surfaceMatchKind: "",
+      usedExpansion: true,
+      originalSurfaceCids,
+      expansionCids,
+      candidates: intersectingCids.map((cid) => expansionCandidatesByCid.get(cid)).filter(Boolean),
+    };
+  }
+
+  const cid = intersectingCids[0];
+  warnings.push(`baige_model_expansion_cid_intersection_verified:${surface}:${cid}`);
+  return {
+    card: expansionCandidatesByCid.get(cid),
+    matchedQuery: matchedQueryByCid.get(cid) || expansionQueries[0],
+    resolutionKind: "model_expansion_exact_cid_intersection",
+    surfaceMatchKind: "stable_cid_intersection",
+    usedExpansion: true,
+    originalSurfaceCids,
+    expansionCids,
+    candidates: [expansionCandidatesByCid.get(cid)].filter(Boolean),
+  };
+}
+
+function stableExternalCidCandidates(candidates) {
+  const byCid = new Map();
+  for (const candidate of candidates || []) {
+    const cid = verifiedExternalCardCid(candidate);
+    if (!cid) continue;
+    const previous = byCid.get(cid);
+    if (!previous || Number(candidate.confidence || 0) > Number(previous.confidence || 0)) {
+      byCid.set(cid, candidate);
+    }
+  }
+  return byCid;
+}
+
+function providerPrimaryNameExactlyMatches(card = {}, query = "") {
+  const queryKey = normalizeCardKey(query);
+  return Boolean(queryKey) && (card.providerPrimaryNames || [])
+    .some((name) => normalizeCardKey(name) === queryKey);
+}
+
+function providerAliasExactlyMatches(card = {}, query = "") {
+  const queryKey = normalizeCardKey(query);
+  // Aliases are copied from explicit provider fields; the search query is never
+  // inserted into this array. They form a second identity tier only when no
+  // provider primary name exactly matches the user's surface.
+  return Boolean(queryKey) && (card.aliases || [])
+    .some((name) => normalizeCardKey(name) === queryKey);
+}
+
+function providerIdentityNameExactlyMatches(card = {}, query = "") {
+  return providerPrimaryNameExactlyMatches(card, query)
+    || providerAliasExactlyMatches(card, query);
+}
+
+function isUniqueExactProviderNameResolution(value) {
+  return value === "unique_exact_primary_name"
+    || value === "unique_exact_provider_alias";
+}
+
 async function enrichCardsWithBaige(cards, {
   fetchImpl,
   env,
   limits,
+  canonicalCards = [],
   warnings,
   debug,
   signal,
@@ -3544,7 +5337,7 @@ async function enrichCardsWithBaige(cards, {
   const result = await Promise.all(sourceCards.map(async (card) => {
     const needsNumberedIdentityEnrichment = card.numberedIdentityNameMismatch === true;
     const needsSurfaceIdentityVerification = !needsNumberedIdentityEnrichment
-      && cardInputNeedsIdentityVerification(card);
+      && cardInputNeedsIdentityVerification(card, canonicalCards);
     if (!needsNumberedIdentityEnrichment && !needsSurfaceIdentityVerification
       && hasUsableCardText(card) && (card.id || card.cardId)) {
       return card;
@@ -3555,15 +5348,24 @@ async function enrichCardsWithBaige(cards, {
     if (!nameQuery) {
       return card;
     }
-    const searchResult = await searchBaige(nameQuery, { fetchImpl, env, limits, debug, signal });
-    warnings.push(...searchResult.warnings);
-    const selection = selectUniqueBaigeCandidate(searchResult.results || [], 0.72);
-    let best = selection.card;
+    const modelExpansionQueries = needsSurfaceIdentityVerification
+      ? modelIdentityExpansionQueries(card)
+      : [];
+    let selection = { card: null, ambiguous: false, candidates: [] };
+    let best = null;
     let matchedQuery = nameQuery;
+    let externalSurfaceResolution = "";
+    let externalSurfaceMatchKind = "";
+    let externalSurfaceCompatible = false;
+    let externalIdentityUniqueConvergence = false;
     let verifiedByCanonicalLookup = false;
-    if (!best && !selection.ambiguous && needsSurfaceIdentityVerification) {
-      const canonicalLookup = await verifySurfaceIdentityThroughCanonicalBaigeLookup(card, {
-        primaryQuery: nameQuery,
+    let verifiedByCanonicalCidIntersection = false;
+    let verifiedByModelCidIntersection = false;
+    let primarySearchResults = [];
+    if (modelExpansionQueries.length) {
+      const intersection = await resolveModelExpansionByStableCidIntersection({
+        surface: card.input || nameQuery,
+        expansionQueries: modelExpansionQueries,
         fetchImpl,
         env,
         limits,
@@ -3571,9 +5373,55 @@ async function enrichCardsWithBaige(cards, {
         debug,
         signal,
       });
+      if (!intersection.card) {
+        return { ...card, identityVerificationStatus: "unverified" };
+      }
+      best = intersection.card;
+      matchedQuery = intersection.matchedQuery || modelExpansionQueries[0];
+      externalSurfaceResolution = intersection.resolutionKind;
+      externalSurfaceMatchKind = intersection.surfaceMatchKind;
+      externalSurfaceCompatible = true;
+      externalIdentityUniqueConvergence = true;
+      verifiedByModelCidIntersection = intersection.usedExpansion === true;
+    } else {
+      const searchResult = await searchBaige(nameQuery, { fetchImpl, env, limits, debug, signal });
+      warnings.push(...searchResult.warnings);
+      primarySearchResults = searchResult.results || [];
+      selection = selectUniqueBaigeCandidate(primarySearchResults, 0.72, {
+        canonicalCards,
+        surface: card.input || nameQuery,
+        query: nameQuery,
+      });
+      best = selection.card;
+      if (best) {
+        externalSurfaceResolution = selection.resolutionKind || "";
+        externalSurfaceMatchKind = selection.surfaceMatchKind || "";
+        externalSurfaceCompatible = selection.surfaceCompatible === true;
+        externalIdentityUniqueConvergence = selection.canonicalIdentityUniqueConvergence === true;
+      }
+    }
+    if (!best && !selection.ambiguous && needsSurfaceIdentityVerification) {
+      const canonicalLookup = await verifySurfaceIdentityThroughCanonicalBaigeLookup(card, {
+        primaryQuery: nameQuery,
+        fetchImpl,
+        env,
+        limits,
+        canonicalCards,
+        warnings,
+        debug,
+        signal,
+        originalSurfaceResults: primarySearchResults,
+      });
       best = canonicalLookup.card;
       matchedQuery = canonicalLookup.matchedQuery || nameQuery;
       verifiedByCanonicalLookup = Boolean(best);
+      verifiedByCanonicalCidIntersection = canonicalLookup.verifiedByStableCidIntersection === true;
+      if (best) {
+        externalSurfaceResolution = canonicalLookup.resolutionKind || "";
+        externalSurfaceMatchKind = canonicalLookup.surfaceMatchKind || "";
+        externalSurfaceCompatible = canonicalLookup.surfaceCompatible === true;
+        externalIdentityUniqueConvergence = canonicalLookup.canonicalIdentityUniqueConvergence === true;
+      }
       if (canonicalLookup.ambiguous) {
         debug.ambiguousMentions.push({
           input: card.input || nameQuery,
@@ -3614,6 +5462,18 @@ async function enrichCardsWithBaige(cards, {
     const externalCard = {
       ...toRagCard(best, card.input || nameQuery, Number(best.confidence || 0)),
       matchedQuery,
+      ...(externalSurfaceResolution ? {
+        externalSurfaceResolution,
+        externalSurfaceMatchKind,
+        externalSurfaceCompatible,
+        externalIdentityUniqueConvergence,
+      } : {}),
+      ...(verifiedByModelCidIntersection ? {
+        modelExpansionCidIntersectionVerified: true,
+      } : {}),
+      ...(verifiedByCanonicalCidIntersection ? {
+        canonicalLookupCidIntersectionVerified: true,
+      } : {}),
     };
     if (verifiedByCanonicalLookup) {
       warnings.push(`local_approximate_identity_verified_via_canonical_lookup:${card.input}:${matchedQuery}`);
@@ -3629,6 +5489,9 @@ async function enrichCardsWithBaige(cards, {
         ...externalCard,
         resolutionSource: card.resolutionSource || "external_identity_verification",
         identityVerificationStatus: "verified_external_replacement",
+        identityVerificationSource: verifiedByModelCidIntersection
+          ? "model_expansion_cid_intersection"
+          : card.identityVerificationSource,
         replacedLocalCandidate: summarizeIdentityCandidate(card),
       });
     }
@@ -3637,6 +5500,9 @@ async function enrichCardsWithBaige(cards, {
       identityVerificationStatus: needsSurfaceIdentityVerification
         ? "verified_same_identity"
         : card.identityVerificationStatus,
+      ...(verifiedByModelCidIntersection
+        ? { identityVerificationSource: "model_expansion_cid_intersection" }
+        : {}),
     };
   }));
   return result.filter(Boolean);
@@ -3647,15 +5513,20 @@ async function verifySurfaceIdentityThroughCanonicalBaigeLookup(card, {
   fetchImpl,
   env,
   limits,
+  canonicalCards = [],
   warnings,
   debug,
   signal,
+  originalSurfaceResults = [],
 }) {
   throwIfAborted(signal);
   for (const query of canonicalIdentityVerificationQueries(card, primaryQuery)) {
     const searchResult = await searchBaige(query, { fetchImpl, env, limits, debug, signal });
     warnings.push(...searchResult.warnings);
-    const selection = selectUniqueBaigeCandidate(searchResult.results || [], 0.72);
+    const selection = selectUniqueBaigeCandidate(searchResult.results || [], 0.72, {
+      canonicalCards,
+      surface: card.input || primaryQuery,
+    });
     if (selection.ambiguous) {
       warnings.push(`baige_canonical_identity_ambiguous:${card.input || primaryQuery}:${query}`);
       return {
@@ -3663,20 +5534,51 @@ async function verifySurfaceIdentityThroughCanonicalBaigeLookup(card, {
         matchedQuery: query,
         ambiguous: true,
         candidates: selection.candidates,
+        resolutionKind: selection.resolutionKind || "",
+        surfaceMatchKind: selection.surfaceMatchKind || "",
+        surfaceCompatible: selection.surfaceCompatible === true,
+        canonicalIdentityUniqueConvergence: selection.canonicalIdentityUniqueConvergence === true,
       };
     }
+    if (selection.card && canonicalLookupVerifiesUserSurface(card, selection.card)) {
+      return {
+        card: selection.card,
+        matchedQuery: query,
+        ambiguous: false,
+        candidates: selection.candidates,
+        resolutionKind: selection.resolutionKind || "",
+        surfaceMatchKind: selection.surfaceMatchKind || "",
+        surfaceCompatible: selection.surfaceCompatible === true,
+        canonicalIdentityUniqueConvergence: selection.canonicalIdentityUniqueConvergence === true,
+      };
+    }
+
+    const cidIntersection = canonicalLookupStableCidIntersection({
+      localCard: card,
+      originalSurfaceResults,
+      canonicalResults: searchResult.results || [],
+      canonicalQuery: query,
+    });
+    if (cidIntersection.card) {
+      warnings.push(
+        `local_approximate_identity_verified_via_original_surface_cid:${card.input || primaryQuery}:${cidIntersection.cid}`,
+      );
+      return {
+        card: cidIntersection.card,
+        matchedQuery: query,
+        ambiguous: false,
+        candidates: [cidIntersection.card],
+        resolutionKind: "canonical_lookup_exact_cid_intersection",
+        surfaceMatchKind: "stable_cid_intersection",
+        surfaceCompatible: true,
+        canonicalIdentityUniqueConvergence: true,
+        verifiedByStableCidIntersection: true,
+      };
+    }
+
     if (!selection.card) continue;
 
-    if (!canonicalLookupVerifiesUserSurface(card, selection.card)) {
-      warnings.push(`baige_canonical_identity_mismatch:${card.input || primaryQuery}:${query}`);
-      continue;
-    }
-    return {
-      card: selection.card,
-      matchedQuery: query,
-      ambiguous: false,
-      candidates: selection.candidates,
-    };
+    warnings.push(`baige_canonical_identity_mismatch:${card.input || primaryQuery}:${query}`);
   }
   return { card: null, matchedQuery: "", ambiguous: false, candidates: [] };
 }
@@ -3728,9 +5630,44 @@ function canonicalLookupVerifiesUserSurface(localCard = {}, externalCard = {}) {
   return [...localCanonicalKeys].some((key) => externalKeys.has(key));
 }
 
-function cardInputNeedsIdentityVerification(card = {}) {
+function canonicalLookupStableCidIntersection({
+  localCard = {},
+  originalSurfaceResults = [],
+  canonicalResults = [],
+  canonicalQuery = "",
+} = {}) {
+  const localCid = verifiedExternalCardCid(localCard) || verifiedLocalCardCid(localCard);
+  if (!localCid) return { card: null, cid: "" };
+
+  const originalSurface = localCard.input || localCard.matchedQuery;
+  const originalByCid = stableExternalCidCandidates(originalSurfaceResults.filter((candidate) => (
+    Number(candidate?.confidence || 0) >= 0.72
+      && providerPrimaryNameMechanicallyMatchesSurface(candidate, originalSurface)
+  )));
+  const canonicalByCid = stableExternalCidCandidates(canonicalResults.filter((candidate) => (
+    Number(candidate?.confidence || 0) >= 0.72
+      && providerIdentityNameExactlyMatches(candidate, canonicalQuery)
+  )));
+  if (originalByCid.size !== 1 || canonicalByCid.size !== 1) {
+    return { card: null, cid: "" };
+  }
+
+  const [originalCid] = originalByCid.keys();
+  const [canonicalCid, canonicalCard] = canonicalByCid.entries().next().value;
+  if (originalCid !== canonicalCid
+      || canonicalCid !== localCid) {
+    return { card: null, cid: "" };
+  }
+  return { card: canonicalCard, cid: canonicalCid };
+}
+
+function cardInputNeedsIdentityVerification(card = {}, canonicalCards = []) {
   const inputKey = normalizeCardKey(card.input);
   if (!inputKey || card.resolutionSource === "card_text_reference") return false;
+  // Only a loader-gated, non-serializable replay attestation can settle a
+  // completed verification. Plain object fields are never an authorization.
+  if (hasTrustedFrozenResolvedCardAttestation(card)) return false;
+  if (card.retrievalIdentityMatchKind === "local_fuzzy") return true;
   // Edit-distance candidates are hypotheses, even when a display alias has
   // already copied the user's surface. They must never self-verify through
   // that derived alias or through a confidence threshold.
@@ -3779,59 +5716,277 @@ function boundedIdentityEditDistance(left, right, limit) {
   return previous[right.length];
 }
 
-function selectUniqueBaigeCandidate(candidates, minConfidence) {
+function selectUniqueBaigeCandidate(candidates, minConfidence, {
+  canonicalCards = [],
+  surface = "",
+  query = "",
+} = {}) {
   const eligible = (candidates || [])
     .filter((candidate) => Number(candidate?.confidence || 0) >= minConfidence);
   if (!eligible.length) return { card: null, ambiguous: false, candidates: [] };
-  const identities = new Map();
+  // External providers can emit multiple localized mirrors for one card. Form
+  // connected identity groups from every verified CID/passcode token, including
+  // a unique local-card bridge when one mirror carries the CID and another only
+  // carries the engine passcode. Names are fallback identities only when the
+  // provider supplied no strong numeric identity at all.
+  const identityGroups = [];
   for (const candidate of eligible) {
-    const key = externalCardIdentityKey(candidate);
-    if (!identities.has(key)) identities.set(key, candidate);
+    const tokens = new Set(externalCardIdentityTokens(candidate, canonicalCards));
+    const matches = identityGroups.filter((group) => (
+      [...tokens].some((token) => group.tokens.has(token))
+    ));
+    if (!matches.length) {
+      identityGroups.push({ candidates: [candidate], tokens });
+      continue;
+    }
+    const target = matches[0];
+    target.candidates.push(candidate);
+    for (const token of tokens) target.tokens.add(token);
+    for (const merged of matches.slice(1)) {
+      target.candidates.push(...merged.candidates);
+      for (const token of merged.tokens) target.tokens.add(token);
+      identityGroups.splice(identityGroups.indexOf(merged), 1);
+    }
   }
-  const uniqueCandidates = [...identities.values()]
-    .sort((left, right) => Number(right.confidence || 0) - Number(left.confidence || 0));
+  const surfaceKey = normalizeCardKey(surface);
+  const primaryExactGroups = surfaceKey
+    ? identityGroups.filter((group) => group.candidates.some((candidate) => (
+        providerPrimaryNameExactlyMatches(candidate, surfaceKey)
+      )))
+    : [];
+  const aliasExactGroups = surfaceKey && !primaryExactGroups.length
+    ? identityGroups.filter((group) => group.candidates.some((candidate) => (
+        providerAliasExactlyMatches(candidate, surfaceKey)
+      )))
+    : [];
+  const stableLocalIdentityGroups = surfaceKey
+    && !primaryExactGroups.length
+    && !aliasExactGroups.length
+    ? identityGroups.filter((group) => (
+      groupHasIndependentStableLocalIdentityConvergence(group, surface)
+    ))
+    : [];
+  const compatibleGroups = primaryExactGroups.length
+    ? primaryExactGroups
+    : aliasExactGroups.length
+      ? aliasExactGroups
+      : stableLocalIdentityGroups.length
+        ? stableLocalIdentityGroups
+      : surface
+        // A single fuzzy/contains result is still only a search ranking. It
+        // cannot prove that the user's surface names that card, even when the
+        // provider returns only one canonical identity group.
+        ? []
+        : identityGroups;
+  const surfaceMatchKind = primaryExactGroups.length
+    ? "provider_primary_name_exact"
+    : aliasExactGroups.length
+      ? "provider_alias_exact"
+      : stableLocalIdentityGroups.length
+        ? "stable_cid_local_identity_intersection"
+      : "";
+  const representative = (group) => [...group.candidates].sort((left, right) => (
+    Number(right.confidence || 0) - Number(left.confidence || 0)
+    || externalCardIdentityTokens(left).join("|").localeCompare(
+      externalCardIdentityTokens(right).join("|"),
+    )
+    || normalizeCardKey(left.name).localeCompare(normalizeCardKey(right.name))
+  ))[0];
+  const incompatibleCandidates = identityGroups
+    .filter((group) => !compatibleGroups.includes(group))
+    .map(representative);
+  const uniqueCandidates = compatibleGroups
+    .map(representative)
+    .sort((left, right) => (
+      Number(right.confidence || 0) - Number(left.confidence || 0)
+      || externalCardIdentityTokens(left).join("|").localeCompare(
+        externalCardIdentityTokens(right).join("|"),
+      )
+    ));
+  if (!uniqueCandidates.length) {
+    return {
+      card: null,
+      ambiguous: false,
+      candidates: [],
+      incompatibleCandidates,
+    };
+  }
   if (uniqueCandidates.length === 1) {
+    const convergedGroup = compatibleGroups[0];
     return {
       card: uniqueCandidates[0],
       ambiguous: false,
       candidates: uniqueCandidates,
-      resolutionKind: String(uniqueCandidates[0].confidenceSource || "").includes("unique_exact_primary_name")
-        ? "unique_exact_primary_name"
-        : "single_eligible_identity",
+      incompatibleCandidates,
+      surfaceCompatible: true,
+      canonicalIdentityUniqueConvergence: true,
+      surfaceMatchKind,
+      resolutionKind: surfaceMatchKind === "stable_cid_local_identity_intersection"
+        ? "strong_identity_unique_local_convergence"
+        : convergedGroup.candidates.length > 1
+        ? "canonical_identity_unique_surface_match"
+        : aliasExactGroups.includes(convergedGroup)
+          ? "unique_exact_provider_alias"
+          : String(uniqueCandidates[0].confidenceSource || "").includes("unique_exact_primary_name")
+            ? "unique_exact_primary_name"
+            : "single_eligible_identity",
     };
   }
-  const best = uniqueCandidates[0];
-  const runnerUp = uniqueCandidates[1];
-  const margin = Number(best.confidence || 0) - Number(runnerUp.confidence || 0);
-  const providerCertifiedUnique = /(?:unique|high_gap)/u.test(String(best.confidenceSource || ""));
-  if (margin >= 0.05 || providerCertifiedUnique) {
-    return {
-      card: best,
-      ambiguous: false,
-      candidates: uniqueCandidates,
-      resolutionKind: String(best.confidenceSource || "").includes("unique_exact_primary_name")
-        ? "unique_exact_primary_name"
-        : providerCertifiedUnique
-          ? "provider_certified_unique"
-          : "confidence_margin",
-    };
-  }
-  return { card: null, ambiguous: true, candidates: uniqueCandidates };
+  // A score margin is ranking evidence, not identity evidence. If two distinct
+  // canonical identities remain compatible with the user's original surface,
+  // fail closed regardless of provider order or confidence wording.
+  return {
+    card: null,
+    ambiguous: true,
+    candidates: uniqueCandidates,
+    incompatibleCandidates,
+    surfaceCompatible: true,
+    canonicalIdentityUniqueConvergence: false,
+  };
 }
 
-function externalCardIdentityKey(card = {}) {
+function groupHasIndependentStableLocalIdentityConvergence(group = {}, surface = "") {
+  const tokens = [...(group.tokens || [])];
+  const localTokens = tokens.filter((token) => token.startsWith("local:"));
+  if (new Set(localTokens).size !== 1) return false;
+  const candidates = group.candidates || [];
+  const cidContributors = candidates.filter((candidate) => Boolean(verifiedExternalCardCid(candidate)));
+  const passcodeContributors = candidates.filter((candidate) => Boolean(verifiedEnginePasscode(candidate)));
+  const independentMirrorProof = cidContributors.some((cidCandidate) => (
+    passcodeContributors.some((passcodeCandidate) => (
+      cidCandidate !== passcodeCandidate
+      && (
+        !verifiedEnginePasscode(cidCandidate)
+        || !verifiedExternalCardCid(passcodeCandidate)
+      )
+    ))
+  ));
+  const surfaceMechanicallyAnchored = candidates.some((candidate) => (
+    providerPrimaryNameMechanicallyMatchesSurface(candidate, surface)
+  ));
+  // A fuzzy search result is not identity proof by itself. Preserve only the
+  // stronger existing path where independent CID and passcode mirrors both
+  // bridge to the same unique synchronized local identity.
+  return independentMirrorProof && surfaceMechanicallyAnchored;
+}
+
+function externalCardIdentityTokens(card = {}, canonicalCards = []) {
+  const localIdentityId = normalizeCardIdentityId(card.id || card.cardId);
   const passcode = verifiedEnginePasscode(card)
-    || (/^[1-9]\d{4,9}$/u.test(normalizeId(card.id || card.cardId))
-      ? normalizeId(card.id || card.cardId)
+    || (/^[1-9]\d{4,9}$/u.test(localIdentityId)
+      ? localIdentityId
       : "");
   const cid = verifiedExternalCardCid(card);
-  return passcode ? `passcode:${passcode}` : cid ? `cid:${cid}` : `name:${normalizeCardKey(card.name)}`;
+  const tokens = new Set([
+    cid ? `cid:${cid}` : "",
+    passcode ? `passcode:${passcode}` : "",
+  ].filter(Boolean));
+  if ((canonicalCards || []).length && (cid || passcode)) {
+    const index = canonicalCardIdentityIndex(canonicalCards);
+    const localCandidates = new Set([
+      ...(cid ? index.byCid.get(cid) || [] : []),
+      ...(passcode ? index.byPasscode.get(passcode) || [] : []),
+    ]);
+    if (localCandidates.size === 1) {
+      const local = [...localCandidates][0];
+      const localId = normalizeCardIdentityId(local.id || local.cardId);
+      if (localId) tokens.add(`local:${localId}`);
+    }
+  }
+  if (!tokens.size) {
+    const nameKey = normalizeCardKey(card.name || card.cnName || card.jaName || card.enName);
+    if (nameKey) tokens.add(`name:${nameKey}`);
+  }
+  return [...tokens].sort();
+}
+
+function providerPrimaryNameMechanicallyMatchesSurface(card = {}, input = "") {
+  const inputKey = normalizeCardKey(input);
+  if (!inputKey) return false;
+  const stripNumberedPrefix = (value) => normalizeCardKey(value)
+    .replace(/^(?:cno|no)\d{1,4}/u, "");
+  return [
+    ...(card.providerPrimaryNames || []),
+    card.name,
+    card.cnName,
+    card.jaName,
+    card.jpName,
+    card.enName,
+    ...(card.aliases || []),
+  ]
+    .filter(Boolean)
+    .some((surfaceName) => {
+      if (hasNumberedCardIdentityConflict(input, surfaceName)) return false;
+      const surfaceKey = normalizeCardKey(surfaceName);
+      if (!surfaceKey) return false;
+      if (surfaceKey === inputKey) return true;
+      if (inputKey.length >= 4
+          && stripNumberedPrefix(surfaceName) === stripNumberedPrefix(input)) {
+        return true;
+      }
+      // Permit a long provider surface wrapped in a small amount of extractor
+      // context, but never let a short family fragment certify one card.
+      const shorterLength = Math.min(surfaceKey.length, inputKey.length);
+      const longerLength = Math.max(surfaceKey.length, inputKey.length);
+      if (shorterLength >= 6
+        && shorterLength / longerLength >= 0.6
+        && (surfaceKey.includes(inputKey) || inputKey.includes(surfaceKey))) {
+        return true;
+      }
+      // For long surfaces only, compare equal-length leading/trailing windows.
+      // This admits a little extractor context plus a bounded translation edit
+      // without turning a short family fragment into an identity anchor.
+      const lengthGap = longerLength - shorterLength;
+      if (shorterLength < 8 || lengthGap > 3 || shorterLength / longerLength < 0.75) {
+        return false;
+      }
+      const shorter = surfaceKey.length <= inputKey.length ? surfaceKey : inputKey;
+      const longer = surfaceKey.length > inputKey.length ? surfaceKey : inputKey;
+      const editLimit = Math.min(3, Math.floor(shorterLength / 4));
+      return [...new Set([
+        longer.slice(0, shorterLength),
+        longer.slice(-shorterLength),
+      ])].some((window) => (
+        boundedIdentityEditDistance(shorter, window, editLimit) <= editLimit
+      ));
+    });
+}
+
+function isAnchoredCanonicalExpansion(card = {}) {
+  const cid = verifiedLocalCardCid(card);
+  const surfaceAnchorVerified = (
+    card.externalSurfaceResolution === "canonical_expansion_exact_primary_name"
+      && card.externalExpansionPrimaryNameAnchored === true
+  ) || (
+    card.externalSurfaceResolution === "model_expansion_exact_cid_intersection"
+      && card.modelExpansionCidIntersectionVerified === true
+  );
+  return surfaceAnchorVerified
+    && card.identityCanonicalizationConflict !== true
+    && Boolean(card.identityCanonicalizationSource)
+    && Boolean(cid)
+    && normalizeCardIdentityId(card.id || card.cardId) === cid;
+}
+
+function hasStableLocalIdentityCanonicalization(card = {}) {
+  return ["cid", "passcode"].includes(String(card.identityCanonicalizationSource || ""))
+    && Boolean(normalizeCardIdentityId(card.id || card.cardId));
+}
+
+function isLowConfidenceLocalFuzzy(card = {}) {
+  const confidence = Number(card.confidence);
+  return card.retrievalIdentityMatchKind === "local_fuzzy"
+    && Number.isFinite(confidence)
+    && confidence <= 0.7;
 }
 
 function suppressModelExpansionConflicts(localCards, baigeCards, warnings) {
   const surfaceVerified = (baigeCards || []).filter((card) => (
     Number(card.confidence || 0) >= 0.72
-    && normalizeCardKey(card.matchedQuery) === normalizeCardKey(card.input)
+    && (
+      normalizeCardKey(card.matchedQuery) === normalizeCardKey(card.input)
+      || isAnchoredCanonicalExpansion(card)
+    )
   ));
   if (!surfaceVerified.length) return localCards || [];
   return (localCards || []).filter((localCard) => {
@@ -3839,8 +5994,10 @@ function suppressModelExpansionConflicts(localCards, baigeCards, warnings) {
       normalizeCardKey(verifiedCard.input) === normalizeCardKey(localCard.input)
       && !sameStableCardIdentity(verifiedCard, localCard)
       && (
-        normalizeCardKey(localCard.matchedQuery) !== normalizeCardKey(localCard.input)
-        || Number(verifiedCard.confidence || 0) >= Number(localCard.confidence || 0) + 0.02
+        isAnchoredCanonicalExpansion(verifiedCard)
+          ? isLowConfidenceLocalFuzzy(localCard)
+          : normalizeCardKey(localCard.matchedQuery) !== normalizeCardKey(localCard.input)
+            || Number(verifiedCard.confidence || 0) >= Number(localCard.confidence || 0) + 0.02
       )
     ));
     if (!conflict) return true;
@@ -3992,8 +6149,8 @@ function verifiedExternalCardCid(card = {}) {
 }
 
 function sameStableCardIdentity(left = {}, right = {}) {
-  const leftId = normalizeId(left.id || left.cardId);
-  const rightId = normalizeId(right.id || right.cardId);
+  const leftId = normalizeCardIdentityId(left.id || left.cardId);
+  const rightId = normalizeCardIdentityId(right.id || right.cardId);
   if (leftId && rightId && leftId === rightId) return true;
 
   const leftPasscode = verifiedEnginePasscode(left)
@@ -4012,7 +6169,7 @@ function sameStableCardIdentity(left = {}, right = {}) {
 }
 
 function stableCardIdentityKey(card = {}) {
-  const id = normalizeId(card.id || card.cardId);
+  const id = normalizeCardIdentityId(card.id || card.cardId);
   const passcode = verifiedEnginePasscode(card);
   const cid = verifiedExternalCardCid(card) || verifiedLocalCardCid(card);
   return cid ? `cid:${cid}`
@@ -4036,7 +6193,11 @@ function mergeCardsByStableIdentity(cards) {
 
 function ensureCardMentionAlias(card = {}) {
   const input = String(card.input || "").trim();
-  const includeInput = card.identityVerificationStatus !== "unverified";
+  const requiresExternalVerification = card.requiresExternalIdentityVerification === true
+    || card.identityMatchKind === "edit_distance";
+  const verificationComplete = /^verified_/u.test(String(card.identityVerificationStatus || ""));
+  const includeInput = card.identityVerificationStatus !== "unverified"
+    && (!requiresExternalVerification || verificationComplete);
   return {
     ...card,
     aliases: cardIdentityNames(
@@ -4054,7 +6215,7 @@ export function reconcileRetrievedCardResolution({
 } = {}) {
   const candidates = mergeCardsByStableIdentity(retrievedCards).map(ensureCardMentionAlias);
   const externallyResolvedSurfaceKeys = new Set(candidates
-    .filter((card) => card.externalSurfaceResolution === "unique_exact_primary_name")
+    .filter(retrievedExternalIdentityProofIsMechanical)
     .map((card) => normalizeCardKey(card.input))
     .filter(Boolean));
   const ambiguousMentions = dedupeMentions([
@@ -4111,6 +6272,50 @@ export function reconcileRetrievedCardResolution({
   };
 }
 
+function retrievedExternalIdentityProofIsMechanical(card = {}) {
+  if (![
+    "verified_same_identity",
+    "verified_external_replacement",
+    "verified_external_resolution",
+  ].includes(String(card.identityVerificationStatus || ""))) return false;
+  if (
+    card.externalSurfaceCompatible !== true
+    || card.externalIdentityUniqueConvergence !== true
+  ) return false;
+
+  const matchKind = String(card.externalSurfaceMatchKind || "");
+  const resolutionKind = String(card.externalSurfaceResolution || "");
+  if (matchKind === "provider_primary_name_exact") {
+    return [
+      "unique_exact_primary_name",
+      "canonical_identity_unique_surface_match",
+      "canonical_expansion_exact_primary_name",
+    ].includes(resolutionKind);
+  }
+  if (matchKind === "provider_alias_exact") {
+    return [
+      "unique_exact_provider_alias",
+      "canonical_identity_unique_surface_match",
+      "canonical_expansion_exact_primary_name",
+    ].includes(resolutionKind);
+  }
+  if (matchKind === "stable_cid_local_identity_intersection") {
+    return resolutionKind === "strong_identity_unique_local_convergence"
+      && ["cid", "passcode"].includes(String(card.identityCanonicalizationSource || ""));
+  }
+  if (matchKind !== "stable_cid_intersection"
+      || !["cid", "passcode"].includes(String(card.identityCanonicalizationSource || ""))) {
+    return false;
+  }
+  return (
+    resolutionKind === "model_expansion_exact_cid_intersection"
+      && card.modelExpansionCidIntersectionVerified === true
+  ) || (
+    resolutionKind === "canonical_lookup_exact_cid_intersection"
+      && card.canonicalLookupCidIntersectionVerified === true
+  );
+}
+
 function dedupeMentions(items) {
   return dedupeBy((items || []).filter((item) => normalizeCardKey(item?.input)), (item) => (
     `${normalizeCardKey(item.input)}:${String(item.reason || "")}`
@@ -4148,7 +6353,7 @@ function normalizeUserProvidedCardTexts(items, limits) {
 }
 
 function dedupeCards(cards) {
-  return dedupeBy((cards || []).filter(Boolean), (card) => normalizeId(card.id || card.cardId) || normalizeCardKey(card.name || card.cnName || card.jaName || card.enName || card.input));
+  return dedupeBy((cards || []).filter(Boolean), stableCardIdentityKey);
 }
 
 function dedupeEvidence(items) {
@@ -4167,6 +6372,65 @@ function dedupeBy(items, getKey) {
     if (!map.has(key)) map.set(key, item);
   }
   return [...map.values()];
+}
+
+function emitRagLineageListTrace(lineageTraceSink, {
+  items,
+  beforeItems,
+  afterItems,
+  ...event
+} = {}) {
+  if (typeof lineageTraceSink !== "function") return;
+  const source = Array.isArray(items) ? items : null;
+  const before = Array.isArray(beforeItems) ? beforeItems : null;
+  const after = Array.isArray(afterItems) ? afterItems : null;
+  emitRagLineageTrace(lineageTraceSink, {
+    ...event,
+    ...(source ? {
+      returnedCount: source.length,
+      returnedIds: lineageTraceIds(source),
+      returnedItems: source,
+    } : {}),
+    ...(before ? {
+      beforeCount: before.length,
+      beforeIds: lineageTraceIds(before),
+      beforeItems: before,
+    } : {}),
+    ...(after ? {
+      afterCount: after.length,
+      afterIds: lineageTraceIds(after),
+      afterItems: after,
+    } : {}),
+  });
+}
+
+function emitRagLineageTrace(lineageTraceSink, event = {}) {
+  if (typeof lineageTraceSink !== "function") return;
+  try {
+    const detached = typeof structuredClone === "function"
+      ? structuredClone(event)
+      : JSON.parse(JSON.stringify(event));
+    lineageTraceSink(deepFreezeLineageSnapshot(detached));
+  } catch {
+    // Observation is deliberately non-authoritative. Snapshot or sink failures
+    // must never alter retrieval ordering, output, serialization, or errors.
+  }
+}
+
+function lineageTraceIds(items = []) {
+  return (Array.isArray(items) ? items : []).map((item, index) => {
+    const id = item && typeof item === "object"
+      ? stableRecordKey(item.record || item)
+      : String(item ?? "").trim();
+    return id || `unidentified:${index + 1}`;
+  });
+}
+
+function deepFreezeLineageSnapshot(value, seen = new WeakSet()) {
+  if (!value || typeof value !== "object" || seen.has(value)) return value;
+  seen.add(value);
+  for (const child of Object.values(value)) deepFreezeLineageSnapshot(child, seen);
+  return Object.freeze(value);
 }
 
 function readRetrievalLimits(env, maxPerBucket) {
@@ -4213,64 +6477,126 @@ function reserveIdentitySourceCoverage(items = [], limit = 1, resolvedCards = []
   const safeLimit = Math.max(1, Math.floor(Number(limit) || 1));
   const selected = [];
   const selectedKeys = new Set();
-  const representedIds = new Set();
-  const add = (item, assignedId = "") => {
+  const representedCoverageKeys = new Set();
+  const coverageKeysByRecord = new Map();
+  const add = (item) => {
     const key = stableRecordKey(item?.record || item);
     if (!key || selectedKeys.has(key) || selected.length >= safeLimit) return false;
     selected.push(item);
     selectedKeys.add(key);
-    if (assignedId) representedIds.add(assignedId);
+    for (const coverageKey of coverageKeysByRecord.get(key) || []) {
+      representedCoverageKeys.add(coverageKey);
+    }
     return true;
   };
 
-  // Reserve records that cover distinct question-side identity combinations
-  // before filling by global rank. This keeps one multi-card interaction from
-  // being reduced to independent same-card tails as synchronized corpora grow.
-  const resolvedIds = new Set((resolvedCards || [])
-    .map((card) => normalizeId(card?.id || card?.cardId))
-    .filter(Boolean));
-  const resolvedNames = new Set((resolvedCards || [])
-    .flatMap((card) => [
-      card?.name,
-      card?.cnName,
-      card?.jaName,
-      card?.enName,
-      ...(card?.aliases || []),
-    ])
-    .map(normalizeCardKey)
-    .filter(Boolean));
-  const bestByIdentityGroup = new Map();
-  for (const item of items || []) {
+  // Reserve records by the exact question-side identity combination plus each
+  // strict planner/mechanism branch. Two records about the same card identity
+  // are not interchangeable when they cover different strict branches.
+  const resolvedIds = new Set();
+  const identityTokenByResolvedId = new Map();
+  const identityTokensByResolvedName = new Map();
+  (resolvedCards || []).forEach((card, index) => {
+    const id = normalizeCardIdentityId(card?.id || card?.cardId);
+    const names = cardIdentityNames(card).map(normalizeCardKey).filter(Boolean);
+    const fallbackName = names[0] || "";
+    const token = id
+      ? `id:${id}`
+      : fallbackName
+        ? `name:${fallbackName}:${index}`
+        : "";
+    if (!token) return;
+    if (id) {
+      resolvedIds.add(id);
+      identityTokenByResolvedId.set(id, token);
+    }
+    for (const name of names) {
+      const tokens = identityTokensByResolvedName.get(name) || new Set();
+      tokens.add(token);
+      identityTokensByResolvedName.set(name, tokens);
+    }
+  });
+  const hasResolvedIdentity = identityTokenByResolvedId.size > 0
+    || identityTokensByResolvedName.size > 0;
+  const bestByCoverageKey = new Map();
+  (items || []).forEach((item, index) => {
     const record = item?.record || item;
-    const ids = [
-      ...evidenceMatchedQuestionCardIds(item),
-      ...(record.cardIds || []),
+    const principalIds = [...principalQuestionCardIds(record)]
+      .map(normalizeCardIdentityId)
+      .filter(Boolean);
+    const rawIds = [
+      // Slot coverage must use question-side identities only. Source metadata
+      // can establish provenance, but it must not make a one-card question look
+      // like a multi-card premise and crowd out a genuine question-side match.
+      ...relatedMatchedQuestionSideCardIds(item),
+      ...principalIds,
     ]
-      .map(normalizeId)
-      .filter((id) => !resolvedIds.size || resolvedIds.has(id))
-      .sort();
-    const names = [record.cardName, ...(record.cards || []), ...(record.cardNames || [])]
-      .map(normalizeCardKey)
-      .filter((name) => name && (!resolvedNames.size || resolvedNames.has(name)))
-      .sort();
-    const identities = [...new Set([
-      ...ids.map((id) => `id:${id}`),
-      ...names.map((name) => `name:${name}`),
-    ])];
-    if (!identities.length) continue;
-    const group = identities.join("|");
-    if (!bestByIdentityGroup.has(group)) bestByIdentityGroup.set(group, item);
-  }
-  const identityGroups = [...bestByIdentityGroup.entries()]
-    .sort((left, right) => {
-      const leftSize = left[0].split("|").length;
-      const rightSize = right[0].split("|").length;
-      return rightSize - leftSize || left[0].localeCompare(right[0]);
-    });
-  for (const [group, item] of identityGroups) {
-    const identities = group.split("|");
-    if (!identities.some((id) => !representedIds.has(id))) continue;
-    if (add(item)) identities.forEach((id) => representedIds.add(id));
+      .map(normalizeCardIdentityId)
+      .filter(Boolean);
+    const identityTokens = new Set();
+    for (const id of rawIds) {
+      const token = identityTokenByResolvedId.get(id);
+      if (token) identityTokens.add(token);
+      else if (!hasResolvedIdentity) identityTokens.add(`id:${id}`);
+    }
+    for (const name of retrievalRankingIdentity(record).cardNames.map(normalizeCardKey).filter(Boolean)) {
+      const resolvedTokens = identityTokensByResolvedName.get(name);
+      if (resolvedTokens?.size === 1) identityTokens.add([...resolvedTokens][0]);
+      else if (!hasResolvedIdentity) identityTokens.add(`name:${name}`);
+    }
+    const identities = [...identityTokens].sort();
+    if (!identities.length) return;
+    const identityCombination = identities.join("|");
+    const strictQueryKeys = supplementalQueryKeysForItem(item, { strictOnly: true }).sort();
+    // Query-branch coverage and question-premise coverage are independent.
+    // A candidate that happens to match a strict planner branch must not lose
+    // its own structured question premise: another record can match the same
+    // branch while asking about a materially different restriction. Preserve
+    // both dimensions inside the existing global evidence limit. Answer text
+    // and broad record metadata never participate.
+    const premiseKey = principalIds
+      .filter((id) => !resolvedIds.has(id))
+      .sort()
+      .join("|") || "none";
+    const coverageKeys = [
+      `${identityCombination}::question-premise:${premiseKey}`,
+      ...strictQueryKeys.map((branchKey) => `${identityCombination}::${branchKey}`),
+    ];
+    coverageKeysByRecord.set(stableRecordKey(record), coverageKeys);
+    for (const coverageKey of coverageKeys) {
+      if (!bestByCoverageKey.has(coverageKey)) {
+        bestByCoverageKey.set(coverageKey, {
+          item,
+          index,
+          identitySize: identities.length,
+          strict: strictQueryKeys.length > 0,
+        });
+      }
+    }
+  });
+  const coverageEntries = [...bestByCoverageKey.entries()]
+    .sort((left, right) => (
+      right[1].identitySize - left[1].identitySize
+      || Number(right[1].strict) - Number(left[1].strict)
+      || left[1].index - right[1].index
+      || left[0].localeCompare(right[0])
+    ));
+  // When strict planner branches compete with several distinct official
+  // premises inside a very small scoped budget, reserve one best strict
+  // representative first. The remaining slots still follow premise/identity
+  // coverage, so this does not restore the former fixed two-premise ceiling.
+  const strictRepresentative = [...bestByCoverageKey.values()]
+    .filter((entry) => entry.strict)
+    .sort((left, right) => (
+      right.identitySize - left.identitySize
+      || left.index - right.index
+      || stableRecordKey(left.item?.record || left.item)
+        .localeCompare(stableRecordKey(right.item?.record || right.item))
+    ))[0]?.item;
+  if (strictRepresentative) add(strictRepresentative);
+  for (const [coverageKey, { item }] of coverageEntries) {
+    if (representedCoverageKeys.has(coverageKey)) continue;
+    add(item);
   }
   for (const item of items || []) add(item);
   const remaining = (items || []).filter(
@@ -4286,6 +6612,10 @@ function supplementalQueryKeysForItem(item, { strictOnly = false } = {}) {
     ? [
         ...(signals.strictRuleQueryKeys || []),
         ...(signals.strictSupplementalRuleQueryKeys || []),
+        // A complete official-question match that is both mechanism-anchored
+        // and headline-anchored may represent its planner branch for bounded
+        // coverage. It remains related-only and receives no authority upgrade.
+        ...(signals.groundedQuestionBranchRuleQueryKeys || []),
       ]
     : [
         ...(signals.ruleQueryKeys || []),
@@ -4360,9 +6690,10 @@ function reserveSupplementalQueryCoverage(items = [], limit = 1, {
   return [...selected, ...remaining];
 }
 
-function reserveRankedHeadAndSupplementalCoverage(items = [], limit = 1, {
+export function reserveRankedHeadAndSupplementalCoverage(items = [], limit = 1, {
   queryKeys = [],
   strictOnly = false,
+  preserveStrictMechanismRepresentative = false,
 } = {}) {
   const safeLimit = Math.max(1, Math.floor(Number(limit) || 1));
   const orderedItems = dedupeBy(
@@ -4371,36 +6702,144 @@ function reserveRankedHeadAndSupplementalCoverage(items = [], limit = 1, {
   );
   if (orderedItems.length <= 1) return orderedItems;
 
-  // Always preserve the independently ranked head, then cover strict query
-  // branches. Model assessments have already been applied only as a final
-  // tie-breaker in the evidence-derived order above.
   const head = orderedItems[0];
   if (safeLimit === 1) return [head];
+  // Inside the fixed four-slot cross-card budget, preserve the highest-ranked
+  // strict mechanism result that did not enter through question-branch search.
+  // Question-only candidates can otherwise occupy every slot before the two
+  // retrieval paths are merged. The remaining slots keep the existing bounded
+  // per-query coverage policy.
+  const strictMechanismRepresentative = preserveStrictMechanismRepresentative
+    && safeLimit === 4
+    && strictOnly
+    ? orderedItems.find((item) => {
+        const signals = (item?.record || item)?.retrievalSignals || {};
+        return signals.questionBranchSearch !== true
+          && (signals.strictSupplementalRuleQueryKeys || []).length > 0;
+      })
+    : null;
+  const representativeKey = strictMechanismRepresentative
+    ? stableRecordKey(strictMechanismRepresentative?.record || strictMechanismRepresentative)
+    : "";
+  const representedByStrictMechanism = new Set(
+    strictMechanismRepresentative
+      ? supplementalQueryKeysForItem(strictMechanismRepresentative, { strictOnly: true })
+      : [],
+  );
+  const remainingQueryKeys = (queryKeys || []).filter(
+    (queryKey) => !representedByStrictMechanism.has(queryKey),
+  );
+  const coverageItems = representativeKey
+    ? orderedItems.filter((item) => (
+        stableRecordKey(item?.record || item) !== representativeKey
+      ))
+    : orderedItems;
   const queryReserved = reserveSupplementalQueryCoverage(
-    orderedItems,
-    safeLimit,
+    coverageItems,
+    safeLimit - Number(Boolean(strictMechanismRepresentative)),
     {
-      queryKeys,
+      queryKeys: remainingQueryKeys,
       strictOnly,
       fillRemaining: false,
     },
   );
-  const selected = [head];
-  const selectedKeys = new Set([stableRecordKey(head?.record || head)]);
-  for (const candidate of queryReserved) {
-    if (selected.length >= safeLimit) break;
-    const key = stableRecordKey(candidate?.record || candidate);
-    if (!key || selectedKeys.has(key)) continue;
-    selected.push(candidate);
-    selectedKeys.add(key);
-  }
   return dedupeBy([
-    ...selected,
+    ...(strictMechanismRepresentative ? [strictMechanismRepresentative] : []),
+    ...queryReserved,
+    head,
     ...orderedItems,
   ], (item) => stableRecordKey(item?.record || item));
 }
 
-function allocateOfficialRelatedEvidence({
+export function reserveUncoveredCrossCardBranches(items = [], limit = 1, {
+  queryKeys = [],
+  fillRemaining = false,
+  rankedHeadCount = 1,
+} = {}) {
+  const safeLimit = Math.max(0, Math.floor(Number(limit) || 0));
+  if (!safeLimit) return [];
+  const ordered = dedupeEvidence(items || []);
+  // Preserve the requested retrieval head before reserving planner-branch
+  // coverage. Allocation callers may set this to zero after a scoped head has
+  // already been retained, so an unqualified cross-card head cannot evict it.
+  const safeRankedHeadCount = Math.min(
+    safeLimit,
+    Math.max(0, Math.floor(Number(rankedHeadCount) || 0)),
+  );
+  const selected = ordered.slice(0, safeRankedHeadCount);
+  const selectedKeys = new Set(selected.map(stableRecordKey));
+  const initiallyRepresentedQueryKeys = new Set(selected.flatMap((item) => (
+    supplementalQueryKeysForItem(item, { strictOnly: true })
+  )));
+  const strictQueryKeys = queryKeys.filter((key) => !initiallyRepresentedQueryKeys.has(key));
+  const strict = strictQueryKeys.length && selected.length < safeLimit
+    ? reserveSupplementalQueryCoverage(
+        ordered.filter((item) => !selectedKeys.has(stableRecordKey(item))),
+        safeLimit - selected.length,
+        {
+          queryKeys: strictQueryKeys,
+          strictOnly: true,
+          fillRemaining: false,
+        },
+      ).slice(0, safeLimit - selected.length)
+    : [];
+  for (const item of strict) {
+    if (selected.length >= safeLimit) break;
+    const key = stableRecordKey(item);
+    if (selectedKeys.has(key)) continue;
+    selected.push(item);
+    selectedKeys.add(key);
+  }
+  const representedQueryKeys = new Set(selected.flatMap((item) => ([
+    ...supplementalQueryKeysForItem(item, { strictOnly: false }),
+    ...supplementalQueryKeysForItem(item, { strictOnly: true }),
+  ])));
+  const uncoveredQueryKeys = queryKeys.filter((key) => !representedQueryKeys.has(key));
+  const branchRepresentatives = uncoveredQueryKeys.length && selected.length < safeLimit
+    ? reserveSupplementalQueryCoverage(
+        ordered.filter((item) => !selectedKeys.has(stableRecordKey(item))),
+        safeLimit - selected.length,
+        {
+          queryKeys: uncoveredQueryKeys,
+          strictOnly: false,
+          fillRemaining: false,
+        },
+      )
+    : [];
+  for (const item of branchRepresentatives) {
+    if (selected.length >= safeLimit) break;
+    const key = stableRecordKey(item);
+    if (selectedKeys.has(key)) continue;
+    selected.push(item);
+    selectedKeys.add(key);
+  }
+  // A question-only model assessment is not authority and cannot delete any
+  // candidate, but a same/partial-premise assessment is useful bounded ranking
+  // evidence. Preserve every such candidate that fits after strict branches so
+  // one ordinary head cannot hide a second independently relevant premise.
+  for (const item of ordered) {
+    if (selected.length >= safeLimit) break;
+    const key = stableRecordKey(item);
+    if (selectedKeys.has(key) || !hasEligibleModelCandidateAssessment(item)) continue;
+    selected.push(item);
+    selectedKeys.add(key);
+  }
+  if (fillRemaining) {
+    // When there is no scoped evidence at all, fill the bounded cross-card-only
+    // result in authoritative rank order. In a mixed allocation, unassessed
+    // padding would evict scoped sources without covering another query branch.
+    for (const item of ordered) {
+      if (selected.length >= safeLimit) break;
+      const key = stableRecordKey(item);
+      if (selectedKeys.has(key)) continue;
+      selected.push(item);
+      selectedKeys.add(key);
+    }
+  }
+  return selected;
+}
+
+export function allocateOfficialRelatedEvidence({
   scopedCandidates = [],
   crossCardCandidates = [],
   limit = 1,
@@ -4408,93 +6847,218 @@ function allocateOfficialRelatedEvidence({
   supplementalRuleQueryKeys = [],
 } = {}) {
   const safeLimit = Math.max(1, Math.floor(Number(limit) || 1));
-  const rankRelatedCandidates = (items = []) => (items || [])
-    .map((item, index) => ({ item, index }))
-    .sort((left, right) => {
-      const leftSignals = left.item?.retrievalSignals || {};
-      const rightSignals = right.item?.retrievalSignals || {};
-      return Number(right.item?.branchRelevant === true) - Number(left.item?.branchRelevant === true)
-        || Number(rightSignals.strongMechanismQueryCoverage || 0)
-          - Number(leftSignals.strongMechanismQueryCoverage || 0)
-        || (rightSignals.matchedStrongMechanismFeatures || []).length
-          - (leftSignals.matchedStrongMechanismFeatures || []).length
-        || Number(right.item?.retrievalScore || 0) - Number(left.item?.retrievalScore || 0)
-        || Number(rightSignals.lexicalHitCount || 0) - Number(leftSignals.lexicalHitCount || 0)
-        || modelAssessmentRank(rightSignals.modelCandidateAssessment)
-          - modelAssessmentRank(leftSignals.modelCandidateAssessment)
-        || left.index - right.index;
-    })
-    .map(({ item }) => item);
-  const scoped = reserveIdentitySourceCoverage(
-    rankRelatedCandidates(dedupeEvidence(scopedCandidates)),
-    safeLimit,
-    resolvedCards,
-  );
+  const rankedScoped = dedupeEvidence(scopedCandidates || []).sort((left, right) => (
+    officialRelatedResolvedQuestionIdentityCount(right, resolvedCards)
+      - officialRelatedResolvedQuestionIdentityCount(left, resolvedCards)
+    || Number(officialRelatedSceneCompatible(right))
+      - Number(officialRelatedSceneCompatible(left))
+    || compareRetrievedRecords(left, right)
+  ));
+  const hasResolvedIdentity = (resolvedCards || []).some((card) => (
+    normalizeCardIdentityId(card?.id || card?.cardId)
+      || cardIdentityNames(card).some((name) => normalizeCardKey(name))
+  ));
+  // With no confirmed identity anchor, external card ids describe unrelated
+  // examples rather than premises that deserve one slot each. Keep the actual
+  // evidence rank; strict planner branches are still reserved below.
+  const scoped = hasResolvedIdentity
+    ? reserveIdentitySourceCoverage(rankedScoped, safeLimit, resolvedCards)
+    : rankedScoped;
+  const metadataScopedHead = hasResolvedIdentity && safeLimit > 1
+    ? rankedScoped.find((item) => (
+        isConfirmedMetadataScopedOfficialHead(item, resolvedCards)
+      ))
+    : null;
   const scopedKeys = new Set(scoped.map(stableRecordKey));
-  const crossCard = dedupeEvidence(crossCardCandidates)
-    .filter((item) => !scopedKeys.has(stableRecordKey(item)));
-  if (!scoped.length) {
-    const crossCardOnlyLimit = Math.min(4, safeLimit);
-    return reserveRankedHeadAndSupplementalCoverage(crossCard, crossCardOnlyLimit, {
-      queryKeys: supplementalRuleQueryKeys,
-      strictOnly: true,
-    }).slice(0, crossCardOnlyLimit);
-  }
-  if (!crossCard.length) {
-    return reserveRankedHeadAndSupplementalCoverage(scoped, safeLimit, {
-      queryKeys: supplementalRuleQueryKeys,
-      strictOnly: true,
-    }).slice(0, safeLimit);
+  const crossCard = dedupeEvidence((crossCardCandidates || []).map((item) => ({
+    ...item,
+    type: "related",
+    isDirect: false,
+    retrievalContext: {
+      ...(item?.retrievalContext || {}),
+      scope: "cross_card_official_mechanism",
+      relatedOnly: true,
+    },
+  })))
+    .filter((item) => !scopedKeys.has(stableRecordKey(item)))
+    .sort(compareRetrievedRecords);
+  const maxCrossCard = Math.min(5, safeLimit);
+  const selected = [];
+  const selectedKeys = new Set();
+  let selectedCrossCardCount = 0;
+  const add = (item, { cross = false } = {}) => {
+    const key = stableRecordKey(item);
+    if (!key || selectedKeys.has(key) || selected.length >= safeLimit) return false;
+    if (cross && selectedCrossCardCount >= maxCrossCard) return false;
+    selected.push(item);
+    selectedKeys.add(key);
+    if (cross) selectedCrossCardCount += 1;
+    return true;
+  };
+  const representedQueryKeys = ({ strictOnly = false } = {}) => new Set(
+    selected.flatMap((item) => strictOnly
+      ? supplementalQueryKeysForItem(item, { strictOnly: true })
+      : [
+          ...supplementalQueryKeysForItem(item, { strictOnly: false }),
+          ...supplementalQueryKeysForItem(item, { strictOnly: true }),
+        ]),
+  );
+  const addPerQueryCoverage = (candidates, {
+    cross = false,
+    strictOnly = false,
+  } = {}) => {
+    const remainingSlots = safeLimit - selected.length;
+    const remainingCrossSlots = maxCrossCard - selectedCrossCardCount;
+    const capacity = cross ? Math.min(remainingSlots, remainingCrossSlots) : remainingSlots;
+    if (capacity <= 0) return;
+    const represented = representedQueryKeys({ strictOnly });
+    const uncoveredQueryKeys = supplementalRuleQueryKeys.filter(
+      (queryKey) => !represented.has(queryKey),
+    );
+    if (!uncoveredQueryKeys.length) return;
+    const coverage = reserveSupplementalQueryCoverage(
+      candidates.filter((item) => !selectedKeys.has(stableRecordKey(item))),
+      capacity,
+      {
+        queryKeys: uncoveredQueryKeys,
+        strictOnly,
+        fillRemaining: false,
+      },
+    );
+    for (const item of coverage) add(item, { cross });
+  };
+
+  // Same-card/current-scene evidence is retained first: one question-side
+  // coverage head, at most one confirmed metadata-scoped official head, then
+  // one strict representative for each decision-plan query it can cover. The
+  // metadata reserve stays inside the existing global budget and never uses
+  // answer text or promotes FAQ ownership metadata into question-side scope.
+  if (scoped.length) add(scoped[0]);
+  if (metadataScopedHead) add(metadataScopedHead);
+  addPerQueryCoverage(scoped, { strictOnly: true });
+
+  // Give same-card/current-scene evidence the first opportunity to cover a
+  // non-strict branch. A cross-card analogue must not displace a stronger
+  // scoped representative for that same query merely because it was reserved.
+  addPerQueryCoverage(scoped);
+
+  // Cover every still-unrepresented strict Planner branch before retaining a
+  // second question premise for a query already represented by scoped
+  // evidence. The later grounded reserve may use only the remaining bounded
+  // capacity and therefore cannot starve an independent strict branch.
+  addPerQueryCoverage(crossCard, { cross: true, strictOnly: true });
+
+  // A headline-grounded question-only match represents an independently
+  // observed official question premise, not merely another mechanism score.
+  // Preserve at most one such cross-card premise per Planner branch even when
+  // scoped evidence carries the same query key. The existing global and five-
+  // item cross-card ceilings still apply, and every item remains related-only.
+  const groundedCrossCardCandidates = crossCard.filter((item) => {
+    const record = item?.record || item;
+    return (record?.retrievalSignals?.groundedQuestionBranchRuleQueryKeys || []).length > 0;
+  });
+  const groundedCrossCardQueryKeys = supplementalRuleQueryKeys.filter((queryKey) => (
+    groundedCrossCardCandidates.some((item) => {
+      const record = item?.record || item;
+      return (record?.retrievalSignals?.groundedQuestionBranchRuleQueryKeys || [])
+        .includes(queryKey);
+    })
+  ));
+  if (groundedCrossCardQueryKeys.length) {
+    const groundedCapacity = Math.min(
+      safeLimit - selected.length,
+      maxCrossCard - selectedCrossCardCount,
+    );
+    if (groundedCapacity > 0) {
+      const groundedCoverage = reserveSupplementalQueryCoverage(
+        groundedCrossCardCandidates.filter(
+          (item) => !selectedKeys.has(stableRecordKey(item)),
+        ),
+        groundedCapacity,
+        {
+          queryKeys: groundedCrossCardQueryKeys,
+          strictOnly: true,
+          fillRemaining: false,
+        },
+      );
+      for (const item of groundedCoverage) add(item, { cross: true });
+    }
   }
 
-  // A mechanism ruling is often documented on another card, but analogies must
-  // not crowd the same-card sources out of the bounded prompt. Keep at most four
-  // cross-card candidates so independent mechanism branches can survive; this
-  // is allocation only, never an authority upgrade or applicability decision.
-  const crossCardReserve = Math.min(4, Math.max(0, safeLimit - 1));
-  const maxCrossCard = scoped.length < safeLimit
-    ? Math.min(crossCard.length, safeLimit - scoped.length, crossCardReserve)
-    : Math.min(
-      crossCard.length,
-      Math.max(0, safeLimit - 1),
-      crossCardReserve,
-    );
-  const scopedLimit = Math.min(scoped.length, safeLimit - maxCrossCard);
-  const prioritizedScoped = reserveRankedHeadAndSupplementalCoverage(
-    scoped,
-    Math.max(1, scopedLimit),
+  // A high-confidence same/partial question-only assessment is not authority,
+  // but it remains a bounded ranking signal for same-card/current-scene
+  // official evidence. Preserve those scoped candidates after every evidence-
+  // derived branch has had first priority, before soft cross-card reserves or
+  // ordinary padding can consume the remaining global slots.
+  for (const item of rankedScoped) {
+    if (selected.length >= safeLimit) break;
+    if (!hasEligibleModelCandidateAssessment(item, ["high"])) continue;
+    add(item);
+  }
+
+  // Reconnect the bounded cross-card reserve after the scoped head and strict
+  // branches. Only a real uncovered query branch or a positive same/partial
+  // model assessment may enter before ordinary scoped filling. Passing only
+  // uncovered keys avoids repeating the supplemental coverage already above.
+  const representedAfterStrictBranches = representedQueryKeys();
+  const uncoveredCrossCardQueryKeys = supplementalRuleQueryKeys.filter(
+    (queryKey) => !representedAfterStrictBranches.has(queryKey),
+  );
+  const crossCardReserve = reserveUncoveredCrossCardBranches(
+    crossCard.filter((item) => !selectedKeys.has(stableRecordKey(item))),
+    Math.min(safeLimit - selected.length, maxCrossCard - selectedCrossCardCount),
     {
-      queryKeys: supplementalRuleQueryKeys,
-      strictOnly: true,
+      queryKeys: uncoveredCrossCardQueryKeys,
+      fillRemaining: scoped.length === 0,
+      rankedHeadCount: 0,
     },
   );
-  const selectedScoped = prioritizedScoped.slice(0, scopedLimit);
-  if (maxCrossCard <= 0) return selectedScoped;
+  for (const item of crossCardReserve) add(item, { cross: true });
 
-  const representedQueryKeys = new Set(selectedScoped.flatMap((item) => (
-    supplementalQueryKeysForItem(item, { strictOnly: true })
-  )));
-  const uncoveredQueryKeys = supplementalRuleQueryKeys.filter(
-    (key) => !representedQueryKeys.has(key),
-  );
-  const prioritizedCrossCard = uncoveredQueryKeys.length
-    ? reserveRankedHeadAndSupplementalCoverage(crossCard, maxCrossCard, {
-      queryKeys: uncoveredQueryKeys,
-      strictOnly: true,
-    })
-    : crossCard;
-  return dedupeEvidence([
-    ...selectedScoped,
-    ...prioritizedCrossCard.slice(0, maxCrossCard),
-  ]).slice(0, safeLimit);
+  // Preserve distinct scoped official-question premises before adding optional
+  // analogy context. Evidence IDs remain the only deduplication boundary.
+  for (const item of scoped) add(item);
+  for (const item of crossCard) add(item, { cross: true });
+  return selected;
 }
 
-function evidenceMatchedQuestionCardIds(item = {}) {
+function isConfirmedMetadataScopedOfficialHead(item = {}, resolvedCards = []) {
   const record = item?.record || item;
-  return [...new Set([
-    ...relatedMatchedQuestionCardIds(item),
+  if (!isOfficialQaRecord(record)) return false;
+  const resolvedIds = new Set((resolvedCards || [])
+    .map((card) => normalizeCardIdentityId(card?.id || card?.cardId))
+    .filter(Boolean));
+  if (!resolvedIds.size) return false;
+  const metadataIds = (Array.isArray(item?.matchedRelatedMetadataCardIds)
+    ? item.matchedRelatedMetadataCardIds
+    : [])
+    .map(normalizeCardIdentityId)
+    .filter(Boolean);
+  if (!metadataIds.some((id) => resolvedIds.has(id))) return false;
+  const questionSideIds = new Set([
+    ...relatedMatchedQuestionSideCardIds(item),
     ...principalQuestionCardIds(record),
-  ].map(normalizeId).filter(Boolean))];
+  ].map(normalizeCardIdentityId).filter(Boolean));
+  return ![...questionSideIds].some((id) => resolvedIds.has(id));
+}
+
+function officialRelatedSceneCompatible(item = {}) {
+  return item?.supportingQuestionBranchIdentityComplete === true
+    || item?.supportingQuestionBranchScenarioPremiseCompatibility === "compatible"
+    || item?.scenarioPremiseCompatibility === "compatible";
+}
+
+function officialRelatedResolvedQuestionIdentityCount(item = {}, resolvedCards = []) {
+  const resolvedIds = new Set((resolvedCards || [])
+    .map((card) => normalizeCardIdentityId(card?.id || card?.cardId))
+    .filter(Boolean));
+  const questionIds = new Set([
+    ...relatedMatchedQuestionSideCardIds(item),
+    ...retrievalRankingIdentity(item).cardIds,
+  ].map(normalizeCardIdentityId).filter(Boolean));
+  const matchedCount = [...questionIds].filter((id) => resolvedIds.has(id)).length;
+  if (matchedCount) return matchedCount;
+  return Number(recordSharesResolvedIdentity(item, resolvedCards));
 }
 
 async function readRequiredJsonSource(dataDir, name, arrayKeys) {

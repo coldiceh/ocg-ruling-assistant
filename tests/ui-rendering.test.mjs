@@ -169,7 +169,7 @@ test("ui_has_single_query_button", async () => {
   assert.match(html, /id="pipelineStageList"/u);
   assert.match(html, /id="pipelineElapsedText"/u);
   assert.match(html, /id="rulingModelSelect"[^>]+disabled/u);
-  assert.match(html, /value="relay-gpt-5\.6-sol-low" selected>GPT-5\.6 Sol · 思考 low</u);
+  assert.match(html, /value="relay-gpt-6-astra-low" selected>GPT-6 Astra · 思考 low</u);
   assert.doesNotMatch(html, /第三方中转/u);
   assert.doesNotMatch(html, /value="glm-5\.2-high"/u);
   assert.doesNotMatch(html, /value="kimi-[^"]+"/u);
@@ -237,10 +237,11 @@ test("public ruling model selector uses the allowlisted backend profiles without
   const normalizeCapabilities = new Function(
     `${definitions}\n${functions}\nreturn normalizeRulingModelCapabilities;`,
   )();
-  assert.match(definitions, /const DEFAULT_RULING_MODEL_PROFILE = "relay-gpt-5\.6-sol-low"/u);
+  assert.match(definitions, /const DEFAULT_RULING_MODEL_PROFILE = "relay-gpt-6-astra-low"/u);
   const capabilities = normalizeCapabilities({
-    defaultRulingModelProfile: "relay-gpt-5.6-sol-low",
+    defaultRulingModelProfile: "relay-gpt-6-astra-low",
     rulingModelProfiles: [
+      { id: "relay-gpt-6-astra-low", available: true, label: "OpenAI official" },
       { id: "relay-gpt-5.6-luna-low", available: true, label: "OpenAI official" },
       { id: "relay-gpt-5.6-sol-low", available: true, label: "OpenAI official" },
       { id: "deepseek-v4-flash-standard", available: true },
@@ -253,13 +254,14 @@ test("public ruling model selector uses the allowlisted backend profiles without
     ],
   });
 
-  assert.equal(capabilities.defaultProfile, "relay-gpt-5.6-sol-low");
+  assert.equal(capabilities.defaultProfile, "relay-gpt-6-astra-low");
   assert.deepEqual(capabilities.profiles.map((profile) => ({
     id: profile.id,
     label: profile.label,
     provider: profile.provider,
     available: profile.available,
   })), [
+    { id: "relay-gpt-6-astra-low", label: "GPT-6 Astra · 思考 low", provider: "relay", available: true },
     { id: "relay-gpt-5.6-luna-low", label: "GPT-5.6 Luna · 思考 low", provider: "relay", available: true },
     { id: "relay-gpt-5.6-sol-low", label: "GPT-5.6 Sol · 思考 low", provider: "relay", available: true },
     { id: "deepseek-v4-flash-standard", label: "DeepSeek V4 Flash · standard（实验性）", provider: "deepseek", available: true },
@@ -267,18 +269,20 @@ test("public ruling model selector uses the allowlisted backend profiles without
     { id: "deepseek-v4-flash-high", label: "DeepSeek V4 Flash · 思考 high（实验性）", provider: "deepseek", available: true },
     { id: "deepseek-v4-flash-max", label: "DeepSeek V4 Flash · 思考 max（实验性）", provider: "deepseek", available: true },
   ]);
-  assert.equal(capabilities.profiles[0].benchmarkSummary, "旧匿名 10 题小样本：10/10，平均 34.6 秒；之后出现样本外错误，不再作为推荐依据。");
-  assert.equal(capabilities.profiles[1].benchmarkSummary, undefined);
-  assert.equal(capabilities.profiles[2].benchmarkSummary, "匿名 10 题评测：5/10，另有 4 题部分正确；平均 12.4 秒，仅供实验。");
+  assert.equal(capabilities.profiles[0].benchmarkSummary, undefined);
+  assert.equal(capabilities.profiles[1].benchmarkSummary, "旧匿名 10 题小样本：10/10，平均 34.6 秒；之后出现样本外错误，不再作为推荐依据。");
+  assert.equal(capabilities.profiles[2].benchmarkSummary, undefined);
+  assert.equal(capabilities.profiles[3].benchmarkSummary, "匿名 10 题评测：5/10，另有 4 题部分正确；平均 12.4 秒，仅供实验。");
   for (const profile of capabilities.profiles) {
     assert.equal(profile.answerLatency.profileId, profile.id);
     assert.equal(profile.answerLatency.status, "unavailable");
   }
   const partialAvailability = normalizeCapabilities({
-    defaultRulingModelProfile: "relay-gpt-5.6-sol-low",
+    defaultRulingModelProfile: "relay-gpt-6-astra-low",
     rulingModelProfiles: [
       { id: "glm-5.2-high", available: false },
       { id: "deepseek-v4-flash-high", available: true },
+      { id: "relay-gpt-6-astra-low", available: false },
       { id: "relay-gpt-5.6-luna-low", available: false },
       { id: "relay-gpt-5.6-sol-low", available: false },
     ],
@@ -286,6 +290,7 @@ test("public ruling model selector uses the allowlisted backend profiles without
   assert.deepEqual(
     partialAvailability.profiles.map((profile) => [profile.id, profile.available]),
     [
+      ["relay-gpt-6-astra-low", false],
       ["relay-gpt-5.6-luna-low", false],
       ["relay-gpt-5.6-sol-low", false],
       ["deepseek-v4-flash-standard", false],
@@ -303,7 +308,7 @@ test("public ruling model selector uses the allowlisted backend profiles without
   );
   assert.match(app, /setRulingModelCapabilitiesUnavailable\("模型能力接口不可用/u);
   assert.doesNotMatch(app, /默认 GPT-5\.6 Luna low|平均 34\.6 秒；推荐/u);
-  assert.match(app, /默认 GPT-5\.6 Sol low/u);
+  assert.match(app, /默认 GPT-6 Astra low/u);
   assert.match(app, /系统不会自动改用其他模型/u);
   assert.match(app, /selectedRulingModelProfile = DEFAULT_RULING_MODEL_PROFILE/u);
   assert.match(app, /if \(value === "relay"\) return "ChatGPT"/u);
@@ -643,19 +648,19 @@ test("readme_keeps_only_requested_future_plans", async () => {
   assert.match(japanese, /## 仕組み/u);
   assert.match(readme, /旧的 10 题小样本.*Luna low/u);
   assert.match(readme, /样本外规则问题中出现错误/u);
-  assert.match(readme, /当前公开版本优先使用 \*\*Sol low\*\*/u);
-  assert.match(readme, /仍可能答错新的复杂规则问题/u);
+  assert.match(readme, /当前公开版本默认使用 \*\*GPT‑6 Astra low\*\*/u);
+  assert.match(readme, /Astra 尚未完成同条件的最终裁定正确率评测/u);
   assert.match(readme, /Luna \| low \| 10\/10[\s\S]*120,457 \/ 18,133 \/ 2,014 \/ 138,590[\s\S]*USD 0\.045851/u);
   assert.match(readme, /Terra \| low \| 10\/10[\s\S]*120,457 \/ 21,090 \/ 3,307 \/ 141,547[\s\S]*USD 0\.493994/u);
   assert.match(readme, /全部输入 Token 当作未缓存输入/u);
   assert.doesNotMatch(readme, /因此当前公开版本使用它/u);
   assert.match(english, /old, small 10-case sample/u);
   assert.match(english, /failed an out-of-sample ruling question/u);
-  assert.match(english, /current public default prioritizes \*\*Sol low\*\*/u);
+  assert.match(english, /The current public default is \*\*GPT‑6 Astra low\*\*, with Sol low and the other model options retained\./u);
   assert.match(english, /every input token as uncached/u);
   assert.match(japanese, /以前の小規模な 10 問サンプル/u);
   assert.match(japanese, /サンプル外のルール問題で誤答/u);
-  assert.match(japanese, /現在のデフォルトは \*\*Sol low\*\*/u);
+  assert.match(japanese, /公開版の現在のデフォルトは \*\*GPT‑6 Astra low\*\*/u);
   assert.match(japanese, /すべての入力 Token をキャッシュなし/u);
   assert.doesNotMatch(english, /Lua|Fluorohydride\/ygopro-core/u);
   assert.doesNotMatch(japanese, /Lua|Fluorohydride\/ygopro-core/u);
@@ -694,7 +699,7 @@ test("ui_hides_engine_details_by_default", async () => {
   assert.match(html, /id="themeToggle"/u);
   assert.match(html, /class="page-background"/u);
   assert.doesNotMatch(html, /ANALYSIS CORE|TOKEN|provider debug/u);
-  assert.match(html, /GPT-5\.6 Sol/u);
+  assert.match(html, /GPT-6 Astra/u);
   assert.doesNotMatch(html, /AI裁定分析|RAG 裁定分析|RAG 分析/u);
   assert.doesNotMatch(html, /后端模式|公开资料检索|卡片文本分析/u);
   assert.doesNotMatch(html, /terminal-theme|OCG RULING TERMINAL/u);
@@ -1840,6 +1845,56 @@ test("rag UI presents provider failures as model service unavailable in Chinese"
     "模型未返回完整正文",
   );
   assert.match(app, /providerFailureState\s*\? "模型服务暂不可用"\s*:\s*\(systemFailureState \? "裁定生成异常" : "分析完成"\)/u);
+});
+
+test("renderBackendAnswer displays the complete cloud evidence answer and source links", async () => {
+  const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+  const source = [
+    sourceBetween(app, "function renderBackendAnswer", "function renderAnswerVersion"),
+    sourceBetween(app, "function providerFailurePresentation", "async function loadBudgetStatus"),
+    sourceBetween(app, "function formatRiskFlag", "function formatProvisionalVerdict"),
+    sourceBetween(app, "function renderList", "function startPendingStages"),
+    sourceBetween(app, "function renderSources", "function renderFeedbackPanel"),
+  ].join("\n");
+  const document = createTestDocument();
+  const ui = Object.fromEntries([
+    "resultGrid", "stepsTitle", "stepsList", "verdictBlock", "confidenceText", "verdictTitle",
+    "rulingBasisText", "verdictBody", "questionsList", "sourcesList",
+  ].map((name) => [name, { ...document.createElement("div"), classList: { remove() {} } }]));
+  const render = new Function("ui", "document", "clearElement", "appendText", `
+    let lastRenderedBackendAnswer;
+    const debugUiEnabled = false;
+    const noop = () => {};
+    const completePendingStages = noop, renderAnswerVersion = noop, renderEngineSimulation = noop;
+    const renderCards = noop, renderSubAnswers = noop, renderParserDebug = noop, renderFeedbackPanel = noop;
+    const updateModelStatus = noop, renderBudgetStatus = noop, loadBudgetStatus = noop;
+    const modelProviderLabel = noop, modelStatusFromAnswer = noop, basisFromBackendMode = noop;
+    ${source}
+    return renderBackendAnswer;
+  `)(ui, document, clearTestElement, appendTestText);
+  const answer = {
+    answerLevel: "rule_analysis",
+    shortAnswer: "第一部分：完整裁定正文。\n".repeat(300) + "最后部分：完整结论。",
+    reasoning: ["第一项理由", "第二项理由"],
+    usedEvidence: [
+      { id: "ui-reference-1", type: "official_qa", title: "官方参考资料", sourceUrl: "https://example.test/reference/1" },
+      { id: "ui-reference-2", type: "card_text", title: "完整卡文", sourceUrl: "https://example.test/reference/2" },
+    ],
+    debug: {},
+  };
+  for (const mode of ["rag_baseline", "cloud_evidence_v1"]) {
+    render({ ...answer, mode });
+    assert.equal(ui.verdictBody.textContent === answer.shortAnswer, true, `${mode}: complete shortAnswer must display`);
+    assert.equal(ui.verdictTitle.textContent, "裁定分析");
+    assert.deepEqual(ui.stepsList.childNodes.map((node) => node.textContent), answer.reasoning);
+    assert.equal(ui.sourcesList.childNodes.length, answer.usedEvidence.length);
+    for (let index = 0; index < answer.usedEvidence.length; index += 1) {
+      const reference = answer.usedEvidence[index];
+      const sourceNode = ui.sourcesList.childNodes[index];
+      assert.equal(sourceNode.childNodes[1].textContent, `${reference.title} (${reference.id})`);
+      assert.equal(sourceNode.childNodes[2].href, reference.sourceUrl);
+    }
+  }
 });
 
 function sourceBetween(source, startMarker, endMarker) {

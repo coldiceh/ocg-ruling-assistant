@@ -1,4 +1,5 @@
-﻿{
-  "answerApiUrl": "https://ocg-ruling-assistant.vercel.app/api/answer?client=20260722-answer-version-1",
-  "budgetApiUrl": "https://ocg-ruling-assistant.vercel.app/api/budget"
+{
+  "answerApiUrl": "/api/answer",
+  "budgetApiUrl": "/api/budget",
+  "deploymentLabel": "Preview · 云端验证版"
 }

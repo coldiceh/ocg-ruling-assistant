@@ -13,31 +13,31 @@ import {
   resolvePricedModelId,
 } from "../backend/modelPricing.mjs";
 
-test("versioned relay screenshot pricing remains explicitly unverified", () => {
+test("versioned relay prices record live vendor rates and observed group", () => {
   const pricing = getRelayModelPricingConfig();
-  assert.equal(pricing.pricingVersion, "relay-token-group-screenshot-2026-08-07");
-  assert.equal(pricing.effectiveDate, "2026-08-07");
-  assert.equal(pricing.checkedAt, "2026-08-07");
+  assert.equal(pricing.pricingVersion, "relay-live-pricing-2026-09-08");
+  assert.equal(pricing.effectiveDate, "2026-09-08");
+  assert.equal(pricing.checkedAt, "2026-09-08");
   assert.equal(pricing.multiplier, 0.27);
-  assert.equal(pricing.source.kind, "user_provided_token_group_screenshot");
+  assert.equal(pricing.source.kind, "vendor_pricing_and_observed_token_usage");
   assert.equal(pricing.source.providerVerified, false);
   assert.deepEqual(pricing.models["gpt-5.6-sol"], {
-    inputUsdPerMillion: 7.3,
-    cachedInputUsdPerMillion: 0.73,
-    outputUsdPerMillion: 43.8,
+    inputUsdPerMillion: 5,
+    cachedInputUsdPerMillion: 0.5,
+    outputUsdPerMillion: 30,
   });
   assert.equal(pricing.models["gpt-5.6-terra"].outputUsdPerMillion, 17.52);
   assert.equal(pricing.models["gpt-5.6-luna"].cachedInputUsdPerMillion, 0.03942);
 });
 
-test("versioned GPT-5.6 pricing matches current official standard rates", () => {
+test("versioned pricing records checked Sol promotional rates", () => {
   const pricing = getModelPricingConfig();
-  assert.equal(pricing.pricingVersion, "openai-gpt-5.6-standard-2026-08-10");
+  assert.equal(pricing.pricingVersion, "openai-astra-sol-promotion-2026-09-08");
   assert.deepEqual(pricing.models["gpt-5.6-sol"], {
-    inputUsdPerMillion: 5,
-    cachedInputUsdPerMillion: 0.5,
-    cacheWriteUsdPerMillion: 6.25,
-    outputUsdPerMillion: 30,
+    inputUsdPerMillion: 4,
+    cachedInputUsdPerMillion: 0.4,
+    cacheWriteUsdPerMillion: 5,
+    outputUsdPerMillion: 20,
     longContext: {
       thresholdInputTokensExclusive: 272000,
       inputMultiplier: 2,
@@ -397,10 +397,10 @@ test("cache writes use 1.25x input price and alias uses Sol rates", () => {
     },
   });
   assert.equal(cost.model, "gpt-5.6-sol");
-  assert.equal(cost.inputCostUsd, 0.0035);
-  assert.equal(cost.cachedInputCostUsd, 0.00005);
-  assert.equal(cost.cacheWriteCostUsd, 0.00125);
-  assert.equal(cost.totalCostUsd, 0.0048);
+  assert.equal(cost.inputCostUsd, 0.0028);
+  assert.equal(cost.cachedInputCostUsd, 0.00004);
+  assert.equal(cost.cacheWriteCostUsd, 0.001);
+  assert.equal(cost.totalCostUsd, 0.00384);
 });
 
 test("long context applies full-request 2x input and 1.5x output multipliers", () => {
@@ -412,9 +412,9 @@ test("long context applies full-request 2x input and 1.5x output multipliers", (
     },
   });
   assert.equal(cost.longContextApplied, true);
-  assert.equal(cost.inputCostUsd, 3);
-  assert.equal(cost.outputCostUsd, 0.045);
-  assert.equal(cost.totalCostUsd, 3.045);
+  assert.equal(cost.inputCostUsd, 2.4);
+  assert.equal(cost.outputCostUsd, 0.03);
+  assert.equal(cost.totalCostUsd, 2.43);
 });
 
 test("configurable FX is recorded with its version", () => {
@@ -431,6 +431,37 @@ test("configurable FX is recorded with its version", () => {
   assert.equal(cost.exchangeRate, 7.25);
   assert.equal(cost.exchangeRateVersion, "manual-2026-07-27");
   assert.equal(cost.totalCostCny, 1.015);
+});
+
+test("Astra estimates use the checked official rates and full-request long-context tiers", () => {
+  const pricing = getModelPricingConfig();
+  assert.ok(pricing.sources.includes("https://developers.openai.com/api/docs/models/gpt-6-astra"));
+  assert.deepEqual(pricing.models["gpt-6-astra"], {
+    inputUsdPerMillion: 10,
+    cachedInputUsdPerMillion: 1,
+    cacheWriteUsdPerMillion: 12.5,
+    outputUsdPerMillion: 50,
+    longContext: {
+      thresholdInputTokensExclusive: 272000,
+      inputMultiplier: 2,
+      outputMultiplier: 1.5,
+    },
+  });
+  const cost = estimateOpenAIModelCost({
+    model: "gpt-6-astra",
+    inputBillingBasis: "all_uncached",
+    usage: { input_tokens: 1000, output_tokens: 100 },
+  });
+  assert.equal(cost.totalCostUsd, 0.015);
+  assert.equal(cost.longContextApplied, false);
+  const longCost = estimateOpenAIModelCost({
+    model: "gpt-6-astra",
+    usage: { input_tokens: 300000, output_tokens: 1000 },
+  });
+  assert.equal(longCost.inputCostUsd, 6);
+  assert.equal(longCost.outputCostUsd, 0.075);
+  assert.equal(longCost.totalCostUsd, 6.075);
+  assert.equal(longCost.longContextApplied, true);
 });
 
 test("unknown models and invalid rates fail closed", () => {

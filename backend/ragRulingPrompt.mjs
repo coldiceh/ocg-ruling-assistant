@@ -1,5 +1,4 @@
 import { evidenceBucketsToList } from "./ragEvidenceRetriever.mjs";
-import { extractRelevantOfficialQaAnswerExcerpt } from "./officialQaAnswerExtractor.mjs";
 
 export const RAG_ANSWER_LEVELS = Object.freeze([
   "official_confirmed",
@@ -77,30 +76,82 @@ export function buildRagRulingPromptBundle({
   cardResolution = {},
   evidence = {},
   env = {},
+  lineageTraceSink,
 } = {}) {
+  const traceLineage = typeof lineageTraceSink === "function";
   const warnings = [];
+  const promptSafeEvidence = normalizePromptEvidenceSafety(evidence);
+  const maxPromptChars = readNumber(env.RAG_MAX_PROMPT_CHARS, 36000);
+  const hasReferenceCharLimit = Object.hasOwn(env, "RAG_MAX_PROMPT_REFERENCE_CHARS")
+    && String(env.RAG_MAX_PROMPT_REFERENCE_CHARS || "").trim() !== "";
+  const hasLegacyReferenceItemLimit = Object.hasOwn(env, "RAG_MAX_PROMPT_REFERENCE_ITEMS")
+    && String(env.RAG_MAX_PROMPT_REFERENCE_ITEMS || "").trim() !== "";
   const limits = {
     maxCards: readNumber(env.RAG_MAX_CARDS, 6),
     maxOfficialQa: readNumber(env.RAG_MAX_OFFICIAL_QA, 7),
     maxRelatedEvidence: readNumber(env.RAG_MAX_RELATED_EVIDENCE, 14),
-    maxReferenceItems: readNumber(env.RAG_MAX_PROMPT_REFERENCE_ITEMS, 64),
+    // The complete rendered prompt owns the ordinary production budget.  A
+    // separate percentage of that budget can discard whole decisive records
+    // even when the fixed prompt plus those records still fits.  Preserve only
+    // an explicit compatibility override; otherwise the actual prompt fitter
+    // measures the remaining capacity after the fixed envelope is rendered.
+    maxReferenceChars: hasReferenceCharLimit
+      ? readNumber(env.RAG_MAX_PROMPT_REFERENCE_CHARS, Number.POSITIVE_INFINITY)
+      : Number.POSITIVE_INFINITY,
+    maxReferenceItems: hasLegacyReferenceItemLimit
+      ? readNumber(env.RAG_MAX_PROMPT_REFERENCE_ITEMS, 64)
+      : Number.POSITIVE_INFINITY,
     maxCardTextChars: readNumber(env.RAG_MAX_CARD_TEXT_CHARS, 3200),
     maxEvidenceTextChars: readNumber(env.RAG_MAX_EVIDENCE_TEXT_CHARS, 2800),
-    maxPromptChars: readNumber(env.RAG_MAX_PROMPT_CHARS, 36000),
+    maxPromptChars,
   };
+  if (traceLineage) {
+    emitRagPromptTrace(lineageTraceSink, {
+      type: "LIMITS",
+      stage: "prompt_config",
+      requestLimitProvenance: "RUNTIME_CONFIG",
+      limits,
+    });
+    for (const bucket of EVIDENCE_BUCKET_ORDER) {
+      emitRagPromptListTrace(lineageTraceSink, {
+        type: "PROMPT_INPUT",
+        stage: "prompt_input",
+        channel: bucket,
+        items: Array.isArray(evidence?.[bucket]) ? evidence[bucket] : [],
+        requestLimit: null,
+        requestLimitProvenance: "BUCKET_POLICY_RECORDED_UPSTREAM",
+        preLimitObservable: true,
+      });
+    }
+  }
   const authoritativeDirect = selectAuthoritativeOfficialDirectCandidate({
-    candidates: evidence.officialQaDirectCandidates || [],
+    candidates: promptSafeEvidence.officialQaDirectCandidates || [],
     cardResolution,
-    baigeAmbiguousMentions: evidence.baigeAmbiguousMentions,
+    baigeAmbiguousMentions: promptSafeEvidence.baigeAmbiguousMentions,
   });
   const focusCardIds = (cardResolution.resolvedCards || [])
     .map((card) => String(card?.id || card?.cardId || "").trim())
     .filter(Boolean);
-  const evidencePayload = prepareEvidenceForPrompt(evidence, limits, warnings, {
+  const evidencePayload = prepareEvidenceForPrompt(promptSafeEvidence, limits, warnings, {
     authoritativeDirectId: authoritativeDirect?.id || null,
     focusCardIds,
+    resolvedCards: cardResolution.resolvedCards || [],
+    lineageTraceSink,
   });
-  const ruleQueryPlanDiagnostics = buildRuleQueryPlanDiagnostics(evidence.ruleSearchQueries);
+  if (traceLineage) {
+    for (const bucket of EVIDENCE_BUCKET_ORDER) {
+      emitRagPromptListTrace(lineageTraceSink, {
+        type: "PROMPT_PREPARED",
+        stage: "prompt_prepared",
+        channel: bucket,
+        items: Array.isArray(evidencePayload?.[bucket]) ? evidencePayload[bucket] : [],
+        requestLimit: null,
+        requestLimitProvenance: "PROMPT_POLICY_RECORDED_UPSTREAM",
+        preLimitObservable: true,
+      });
+    }
+  }
+  const ruleQueryPlanDiagnostics = buildRuleQueryPlanDiagnostics(promptSafeEvidence.ruleSearchQueries);
   const payload = {
     userQuery: String(userQuery || ""),
     resolvedCards: summarizeCards(cardResolution.resolvedCards || [], limits.maxCards),
@@ -128,7 +179,28 @@ export function buildRagRulingPromptBundle({
       directQa: authoritativeDirect,
       maxPromptChars: limits.maxPromptChars,
     });
-    if (promptResult.truncated) warnings.push("official_direct_prompt_truncated");
+    if (traceLineage) {
+      const visibleItems = promptVisibleEvidenceItems(promptResult.prompt);
+      emitRagPromptTrace(lineageTraceSink, {
+        type: "PROMPT_PACKING",
+        stage: "prompt_packing",
+        channel: "official_direct",
+        compacted: false,
+        requestCharLimit: limits.maxPromptChars,
+        observedPromptChars: promptResult.prompt.length,
+        requestLimitProvenance: "RUNTIME_CHAR_BUDGET",
+      });
+      emitRagPromptListTrace(lineageTraceSink, {
+        type: "PROMPT_VISIBLE",
+        stage: "prompt_visible",
+        channel: "official_direct",
+        items: visibleItems,
+        requestLimit: null,
+        requestCharLimit: limits.maxPromptChars,
+        requestLimitProvenance: "RUNTIME_CHAR_BUDGET",
+        preLimitObservable: true,
+      });
+    }
     return {
       prompt: promptResult.prompt,
       recoveryPrompt: "",
@@ -141,13 +213,15 @@ export function buildRagRulingPromptBundle({
       ruleQueryPlanDiagnostics,
       warnings,
       promptChars: promptResult.prompt.length,
-      promptTruncated: promptResult.truncated,
+      promptTruncated: false,
       authoritativeOfficialDirectId: String(authoritativeDirect.id),
     };
   }
 
   let prompt = renderGeneralPrompt(restorePromptEvidenceBodies(payload));
-  if (prompt.length > limits.maxPromptChars) {
+  const ordinaryPromptChars = prompt.length;
+  const promptCompacted = prompt.length > limits.maxPromptChars;
+  if (promptCompacted) {
     warnings.push("rag_prompt_compacted_to_max_chars");
     prompt = buildCompactRagPrompt({ payload, maxPromptChars: limits.maxPromptChars });
   }
@@ -158,6 +232,41 @@ export function buildRagRulingPromptBundle({
     allowedEvidenceIds,
     warnings,
   });
+  if (traceLineage) {
+    const preparedItems = evidenceBucketsToList(evidencePayload);
+    const visibleItems = promptVisibleEvidenceItems(prompt);
+    emitRagPromptTrace(lineageTraceSink, {
+      type: "PROMPT_PACKING",
+      stage: "prompt_packing",
+      channel: "ordinary",
+      compacted: promptCompacted,
+      preCompactPromptChars: ordinaryPromptChars,
+      observedPromptChars: prompt.length,
+      requestCharLimit: limits.maxPromptChars,
+      requestLimitProvenance: "RUNTIME_CHAR_BUDGET",
+    });
+    emitRagPromptListTrace(lineageTraceSink, {
+      type: "PROMPT_GLOBAL_CROP",
+      stage: "prompt_packing",
+      channel: "all_evidence",
+      beforeItems: preparedItems,
+      afterItems: visibleItems,
+      requestLimit: null,
+      requestCharLimit: limits.maxPromptChars,
+      requestLimitProvenance: "RUNTIME_CHAR_BUDGET",
+      preLimitObservable: true,
+    });
+    emitRagPromptListTrace(lineageTraceSink, {
+      type: "PROMPT_VISIBLE",
+      stage: "prompt_visible",
+      channel: "serialized_evidence",
+      items: visibleItems,
+      requestLimit: null,
+      requestCharLimit: limits.maxPromptChars,
+      requestLimitProvenance: "RUNTIME_CHAR_BUDGET",
+      preLimitObservable: true,
+    });
+  }
   return {
     prompt,
     // Compatibility field only. Public generation is deliberately one-call,
@@ -173,7 +282,12 @@ export function buildRagRulingPromptBundle({
     ruleQueryPlanDiagnostics,
     warnings,
     promptChars: prompt.length,
-    promptTruncated: warnings.some((warning) => warning.includes("truncated") || warning.includes("compacted")),
+    // Repacking complete records into a smaller envelope is not itself text
+    // truncation.  Per-record body loss is reported by
+    // appendSerializedEvidenceTruncationWarnings; the frozen audit separately
+    // verifies the complete user question, resolved card texts and required
+    // evidence identities.
+    promptTruncated: warnings.some((warning) => warning.includes("truncated")),
     authoritativeOfficialDirectId: null,
   };
 }
@@ -211,6 +325,79 @@ function parseSerializedPromptPayload(prompt) {
     // A damaged ordinary envelope must not be replaced by a plausible tail.
     return null;
   }
+}
+
+function promptVisibleEvidenceItems(prompt) {
+  const parsed = parseSerializedPromptPayload(prompt);
+  if (!parsed || typeof parsed !== "object") return [];
+  if (parsed.officialQaDirectCandidate
+      && typeof parsed.officialQaDirectCandidate === "object"
+      && !Array.isArray(parsed.officialQaDirectCandidate)) {
+    return [parsed.officialQaDirectCandidate];
+  }
+  if (Array.isArray(parsed.evidence)) return parsed.evidence;
+  if (!parsed.evidence || typeof parsed.evidence !== "object") return [];
+  return Object.values(parsed.evidence).flatMap((items) => (
+    Array.isArray(items) ? items : []
+  ));
+}
+
+function emitRagPromptListTrace(lineageTraceSink, {
+  items,
+  beforeItems,
+  afterItems,
+  ...event
+} = {}) {
+  if (typeof lineageTraceSink !== "function") return;
+  const source = Array.isArray(items) ? items : null;
+  const before = Array.isArray(beforeItems) ? beforeItems : null;
+  const after = Array.isArray(afterItems) ? afterItems : null;
+  emitRagPromptTrace(lineageTraceSink, {
+    ...event,
+    ...(source ? {
+      returnedCount: source.length,
+      returnedIds: promptLineageIds(source),
+      returnedItems: source,
+    } : {}),
+    ...(before ? {
+      beforeCount: before.length,
+      beforeIds: promptLineageIds(before),
+      beforeItems: before,
+    } : {}),
+    ...(after ? {
+      afterCount: after.length,
+      afterIds: promptLineageIds(after),
+      afterItems: after,
+    } : {}),
+  });
+}
+
+function emitRagPromptTrace(lineageTraceSink, event = {}) {
+  if (typeof lineageTraceSink !== "function") return;
+  try {
+    const detached = typeof structuredClone === "function"
+      ? structuredClone(event)
+      : JSON.parse(JSON.stringify(event));
+    lineageTraceSink(deepFreezePromptLineageSnapshot(detached));
+  } catch {
+    // Observation must not affect prompt bytes, selection, or error behavior.
+  }
+}
+
+function promptLineageIds(items = []) {
+  return (Array.isArray(items) ? items : []).map((item, index) => {
+    const id = item && typeof item === "object"
+      ? String(item.id || item.evidenceId || item.stableId || "").trim()
+      : String(item ?? "").trim();
+    return id || `unidentified:${index + 1}`;
+  });
+}
+
+function deepFreezePromptLineageSnapshot(value, seen = new WeakSet()) {
+  if (!value || typeof value !== "object" || seen.has(value)) return value;
+  seen.add(value);
+  for (const child of Object.values(value)) deepFreezePromptLineageSnapshot(child, seen);
+  return Object.freeze(value);
 }
 
 function extractSerializedEvidenceIds(evidence) {
@@ -282,15 +469,13 @@ function serializedPromptEvidenceItems(payload = {}) {
 
 function serializedEvidenceBodyIsTruncated(sourceItem = {}, serializedItem = {}) {
   if (sourceItem?.retrievalContext?.textProvidedBy === "resolvedCards") return false;
-  const source = promptEvidenceBodySource(sourceItem);
+  const source = compactEvidenceTextFields(
+    promptEvidenceBodySource(sourceItem),
+    Number.POSITIVE_INFINITY,
+  );
   const serialized = capturePromptEvidenceBody(serializedItem);
-  const fields = ["question", "detailedScene", "answer"];
-  if (evidenceTextAddsInformation(source.text, [
-    source.question,
-    source.detailedScene,
-    source.answer,
-  ])) fields.push("text");
-  return fields.some((field) => source[field] && serialized[field].length < source[field].length);
+  return Object.keys(source)
+    .some((field) => source[field] && String(serialized[field] || "").length < source[field].length);
 }
 
 function buildRuleQueryPlanDiagnostics(ruleSearchQueries = []) {
@@ -327,7 +512,12 @@ function buildEvidenceSelectionDiagnostics(evidencePayload = {}, allowedEvidence
         id,
         type: String(item?.type || ""),
         bucket,
+        title: String(item?.title || ""),
+        official: item?.official === true,
+        source: String(item?.source || ""),
+        sourceTier: String(item?.sourceTier || ""),
         sourceAuthority: String(item?.sourceAuthority || ""),
+        sourceUrl: String(item?.sourceUrl || ""),
         isDirect: item?.isDirect === true,
         matchLevel: String(item?.matchLevel || ""),
         ...(retrievalContext.scope
@@ -389,8 +579,38 @@ function renderGeneralPrompt(payload) {
   return [
     ...GENERAL_INSTRUCTIONS,
     "本次用户问题、卡片原文与检索资料如下：",
-    JSON.stringify(payload, null, 2),
+    JSON.stringify(modelVisiblePromptPayload(payload)),
   ].join("\n");
+}
+
+function modelVisiblePromptPayload(payload = {}) {
+  const evidence = Array.isArray(payload.evidence)
+    ? payload.evidence.map(({ bucket, ...item }) => ({
+        bucket,
+        ...modelVisiblePromptEvidenceItem(item),
+      }))
+    : Object.fromEntries(EVIDENCE_BUCKET_ORDER.map((bucket) => [
+        bucket,
+        (payload.evidence?.[bucket] || []).map(modelVisiblePromptEvidenceItem),
+      ]));
+  return { ...payload, evidence };
+}
+
+function modelVisiblePromptEvidenceItem(item = {}) {
+  const retrievalContext = promptRetrievalContext(item.retrievalContext);
+  const body = Object.fromEntries(Object.entries(capturePromptEvidenceBody(item))
+    .filter(([, value]) => value));
+  return {
+    id: item.id,
+    recordType: item.recordType || "",
+    sourceAuthority: item.sourceAuthority || "other_reference",
+    ...(item.title ? { title: item.title } : {}),
+    ...((item.cards || []).length ? { cards: item.cards } : {}),
+    ...((item.cardIds || []).length ? { cardIds: item.cardIds } : {}),
+    ...((item.questionCardIds || []).length ? { questionCardIds: item.questionCardIds } : {}),
+    ...(Object.keys(retrievalContext).length ? { retrievalContext } : {}),
+    ...body,
+  };
 }
 
 function buildOfficialDirectPrompt({
@@ -401,11 +621,7 @@ function buildOfficialDirectPrompt({
   directQa = {},
   maxPromptChars,
 } = {}) {
-  const configuredMaxChars = Math.max(1, Number(maxPromptChars) || 12000);
-  // A complete serialized envelope is mandatory. For unrealistically small
-  // limits, exceeding the configured target is safer than slicing JSON or
-  // dropping the official evidence identity.
-  const maxChars = Math.max(600, configuredMaxChars);
+  const maxChars = Math.max(1, Number(maxPromptChars) || 12000);
   const instructions = [
     "你是游戏王 OCG 官方 Q&A 转述助手。检索器已经严格确认下面唯一的 officialQaDirectCandidate 对应用户完整问题。",
     "以该官方 Q&A 为裁定依据，完整回答用户的全部子问题；保留其中所有实质条件、例外、后续处理、次数和限制，不得添加原文没有说明的处理。",
@@ -415,24 +631,13 @@ function buildOfficialDirectPrompt({
     "直接输出完整中文裁定正文，不要输出 JSON、代码围栏或字段名。",
   ];
   const cards = resolvedCards.map((card) => ({ id: card.id, name: card.name, aliases: card.aliases || [] }));
-  const sourceText = extractCompleteOfficialDirectAnswerText(directQa);
+  const sourceBody = compactEvidenceTextFields(capturePromptEvidenceBody(directQa));
   const directSourceMetadata = promptSourceMetadata(directQa, "official_direct");
-  const directFocusCardIds = cards.map((card) => String(card.id || "").trim()).filter(Boolean);
-  const directQuestion = preserveEvidenceText(
-    directQa.question || directQa.rawQuestion || "",
-    Math.min(1200, Math.max(120, Math.floor(maxChars * 0.15))),
-    directFocusCardIds,
-  );
-  const directDetailedScene = preserveEvidenceText(
-    directQa.rawDetailedQuestion || directQa.detailedScene || directQa.detailedQuestion || "",
-    Math.min(1800, Math.max(160, Math.floor(maxChars * 0.2))),
-    directFocusCardIds,
-  );
-  const render = (lines, query, identities, text) => [
-    ...lines,
+  const prompt = [
+    ...instructions,
     JSON.stringify({
-      userQuery: query,
-      resolvedCards: identities,
+      userQuery: String(userQuery || ""),
+      resolvedCards: cards,
       decisionChecklist,
       decisionPlan,
       officialQaDirectCandidate: {
@@ -440,126 +645,81 @@ function buildOfficialDirectPrompt({
         type: "official_qa",
         title: directQa.title || "",
         ...directSourceMetadata,
-        question: directQuestion,
-        detailedScene: directDetailedScene,
-        answer: text,
-        text,
+        ...sourceBody,
         sourceUrl: directQa.sourceUrl || "",
       },
     }),
   ].join("\n");
-  let prompt = render(instructions, String(userQuery || ""), cards, sourceText);
-  if (prompt.length <= maxChars) return { prompt, truncated: false };
-  const compactInstructions = [
-    "完整转述唯一精确官方 Q&A，回答全部子问题并保留所有条件、例外、后续处理和限制，不得增删结论。",
-    `直接输出完整中文正文，并注明官方 Q&A ID：${String(directQa.id || "")}。`,
-  ];
-  const compactCards = cards.slice(0, 6).map((card) => ({ id: card.id, name: card.name }));
-  const compactQuery = preserveTextEnds(userQuery, 500);
-  const renderCompact = (text) => render(
-    compactInstructions,
-    compactQuery,
-    compactCards,
-    text,
-  );
-  prompt = renderCompact(fitEvidenceTextToRenderedPrompt({
-    sourceText,
-    maxChars,
-    renderWithText: renderCompact,
-    minimumChars: 80,
-  }));
   if (prompt.length > maxChars) {
-    const minimal = ["完整转述给定唯一官方 Q&A；直接输出中文正文并注明其官方 Q&A ID。"];
-    const minimalQuery = preserveTextEnds(userQuery, 120);
-    const renderMinimal = (text) => render(
-      minimal,
-      minimalQuery,
-      [],
-      text,
-    );
-    prompt = renderMinimal(fitEvidenceTextToRenderedPrompt({
-      sourceText,
-      maxChars,
-      renderWithText: renderMinimal,
-      minimumChars: 40,
-    }));
+    throw evidencePromptBudgetExceeded({
+      reason: "complete_reference_does_not_fit",
+      evidenceId: directQa.id,
+      maxPromptChars: maxChars,
+    });
   }
-  if (prompt.length > maxChars) {
-    prompt = render(
-      ["完整转述唯一官方 Q&A，直接输出中文正文并注明其官方 Q&A ID。"],
-      preserveTextEnds(userQuery, 40),
-      [],
-      preserveTextEnds(sourceText, 40),
-    );
+  return { prompt, truncated: false };
+}
+
+function normalizePromptEvidenceSafety(evidence = {}) {
+  const source = evidence && typeof evidence === "object" ? evidence : {};
+  const relatedByIdentity = new Map();
+  for (const bucket of EVIDENCE_BUCKET_ORDER) {
+    for (const item of Array.isArray(source[bucket]) ? source[bucket] : []) {
+      const id = stablePromptRecordIdentity(item);
+      if (!id) continue;
+      const relatedOnly = promptEvidenceMustRemainRelated(item, bucket);
+      relatedByIdentity.set(id, relatedByIdentity.get(id) === true || relatedOnly);
+    }
   }
   return {
-    prompt,
-    truncated: true,
-    exceedsConfiguredLimit: prompt.length > configuredMaxChars,
+    ...source,
+    ...Object.fromEntries(EVIDENCE_BUCKET_ORDER.map((bucket) => [
+      bucket,
+      (Array.isArray(source[bucket]) ? source[bucket] : []).map((item) => {
+        const id = stablePromptRecordIdentity(item);
+        const relatedOnly = promptEvidenceMustRemainRelated(item, bucket)
+          || (id && relatedByIdentity.get(id) === true);
+        return relatedOnly ? forcePromptEvidenceRelatedOnly(item) : item;
+      }),
+    ])),
   };
 }
 
-function fitEvidenceTextToRenderedPrompt({
-  sourceText,
-  maxChars,
-  renderWithText,
-  minimumChars = 1,
-} = {}) {
-  const source = String(sourceText || "");
-  if (!source) return "";
-  const limit = Math.max(1, Number(maxChars) || 1);
-  if (renderWithText(source).length <= limit) return source;
-
-  // The excerpt is serialized twice in the compatibility envelope and JSON
-  // escaping is content-dependent. Binary-search the actual rendered length
-  // instead of estimating with a fixed divisor.
-  let lower = 1;
-  let upper = source.length;
-  let best = "";
-  while (lower <= upper) {
-    const middle = Math.floor((lower + upper) / 2);
-    const candidate = preserveTextEnds(source, middle);
-    if (renderWithText(candidate).length <= limit) {
-      best = candidate;
-      lower = middle + 1;
-    } else {
-      upper = middle - 1;
-    }
+function promptEvidenceMustRemainRelated(item = {}, bucket = "") {
+  const scope = String(item?.retrievalContext?.scope || "");
+  if (item?.retrievalContext?.relatedOnly === true || /cross[_ -]?card/iu.test(scope)) {
+    return true;
   }
-  return best || preserveTextEnds(source, Math.min(
-    source.length,
-    Math.max(1, Number(minimumChars) || 1),
-  ));
+  if (bucket === "officialQaDirectCandidates") return false;
+  return isOfficialQaOrFaqPromptItem(item);
 }
 
-function extractCompleteOfficialDirectAnswerText(record = {}) {
-  const structuredAnswer = extractRelevantOfficialQaAnswerExcerpt(record);
-  const fullTextAnswer = extractRelevantOfficialQaAnswerExcerpt({
-    ...record,
-    answer: "",
-    officialAnswer: "",
-    conclusion: "",
-  });
-  return mergeComplementaryEvidenceText(structuredAnswer, fullTextAnswer);
-}
-
-function mergeComplementaryEvidenceText(primary, supplemental) {
-  const primaryText = String(primary || "").trim();
-  const supplementalText = String(supplemental || "").trim();
-  if (!primaryText) return supplementalText;
-  if (!supplementalText) return primaryText;
-  const primaryKey = normalizeEvidenceComparisonText(primaryText);
-  const supplementalKey = normalizeEvidenceComparisonText(supplementalText);
-  if (supplementalKey.includes(primaryKey)) return supplementalText;
-  if (primaryKey.includes(supplementalKey)) return primaryText;
-  return `${primaryText}\n${supplementalText}`;
+function forcePromptEvidenceRelatedOnly(item = {}) {
+  const matchLevel = item?.matchLevel === "official_qa_exact"
+    ? "official_qa_near"
+    : item?.matchLevel;
+  return {
+    ...item,
+    type: item?.type === "official_qa" ? "related" : item?.type,
+    isDirect: false,
+    ...(matchLevel ? { matchLevel } : {}),
+    retrievalContext: {
+      ...(item?.retrievalContext || {}),
+      relatedOnly: true,
+    },
+  };
 }
 
 function prepareEvidenceForPrompt(
   evidence,
   limits,
   warnings,
-  { authoritativeDirectId = null, focusCardIds = [] } = {},
+  {
+    authoritativeDirectId = null,
+    focusCardIds = [],
+    resolvedCards = [],
+    lineageTraceSink,
+  } = {},
 ) {
   const directCandidates = Array.isArray(evidence.officialQaDirectCandidates)
     ? evidence.officialQaDirectCandidates
@@ -576,58 +736,97 @@ function prepareEvidenceForPrompt(
     ...(Array.isArray(evidence.officialQaRelated) ? evidence.officialQaRelated : []),
   ];
   const prepared = {
-    officialQaDirectCandidates: limitEvidence(focusedDirectCandidates, limits.maxOfficialQa, limits.maxEvidenceTextChars, "official_direct", warnings, focusCardIds),
+    officialQaDirectCandidates: limitEvidence(focusedDirectCandidates, limits.maxOfficialQa, limits.maxEvidenceTextChars, "official_direct", warnings, focusCardIds, lineageTraceSink),
     // Project every ordinary reference before applying the one shared reference
     // budget. Per-bucket slicing here would make a relevant item below the old
     // bucket cutoff impossible to recover in the unified selector.
     officialQaRelated: projectPromptEvidence(relatedCandidates, limits.maxEvidenceTextChars, "official_related", focusCardIds),
     provisionalOfficialResponses: projectPromptEvidence(evidence.provisionalOfficialResponses, limits.maxEvidenceTextChars, "official_response", focusCardIds),
     faqRelated: projectPromptEvidence(evidence.faqRelated, limits.maxEvidenceTextChars, "faq", focusCardIds),
-    // Resolved cards already carry the complete effect text. Keep the evidence
-    // identity so the final model can cite it, but omit only the duplicate text
-    // body for cards already represented in resolvedCards.
-    cardTexts: omitRepeatedResolvedCardText(limitEvidence(
-      evidence.cardTexts,
+    // Resolved cards already carry the complete effect text. A body-less card
+    // evidence shell adds no fact or citation value to the model envelope.
+    cardTexts: limitEvidence(
+      omitRepeatedResolvedCardText(evidence.cardTexts, resolvedCards),
       limits.maxCards,
       limits.maxCardTextChars,
       "card_text",
       warnings,
       focusCardIds,
-    ), focusCardIds),
-    userProvidedCardTexts: limitEvidence(evidence.userProvidedCardTexts, limits.maxCards, limits.maxCardTextChars, "user_text", warnings, focusCardIds),
+      lineageTraceSink,
+    ),
+    userProvidedCardTexts: limitEvidence(evidence.userProvidedCardTexts, limits.maxCards, limits.maxCardTextChars, "user_text", warnings, focusCardIds, lineageTraceSink),
     rawRelatedEvidence: projectPromptEvidence(evidence.rawRelatedEvidence, limits.maxEvidenceTextChars, "raw_related", focusCardIds),
   };
   if (authoritativeDirectId) return prepared;
-  return limitPreparedReferenceEvidence(prepared, limits.maxReferenceItems, warnings);
+  // Always pass through the identity-level selector so the same record cannot
+  // reach the model twice through both a downgraded direct bucket and an
+  // ordinary related bucket.  Infinite limits disable only the old budget;
+  // they do not disable stable-ID deduplication.
+  return limitPreparedReferenceEvidence(prepared, {
+    maxChars: limits.maxReferenceChars,
+    maxItems: limits.maxReferenceItems,
+    focusCardIds,
+    lineageTraceSink,
+  }, warnings);
 }
 
-function evidenceSharesFocusCard(item = {}, focusCardIds = []) {
-  if (!focusCardIds.length) return false;
-  const focus = new Set(focusCardIds.map(String));
-  return (item.cardIds || []).map(String).some((id) => focus.has(id));
+function omitRepeatedResolvedCardText(items = [], resolvedCards = []) {
+  const resolved = (resolvedCards || []).map((card) => ({
+    fingerprint: compactCardTextFingerprint({ text: card?.effectText || card?.text || "" }),
+    identities: compactCardIdentityKeys(card),
+  })).filter((item) => item.fingerprint && item.identities.size);
+  return (items || []).filter((item) => {
+    const fingerprint = compactCardTextFingerprint(item);
+    const identities = compactCardIdentityKeys(item);
+    return !fingerprint || !identities.size || !resolved.some((card) => (
+      card.fingerprint === fingerprint && setsIntersect(card.identities, identities)
+    ));
+  });
 }
 
-function omitRepeatedResolvedCardText(items = [], focusCardIds = []) {
-  return (items || []).map((item) => evidenceSharesFocusCard(item, focusCardIds)
-    ? {
-        ...item,
-        text: "",
-        retrievalContext: {
-          ...(item.retrievalContext || {}),
-          textProvidedBy: "resolvedCards",
-        },
-      }
-    : item);
-}
-
-function limitPreparedReferenceEvidence(prepared = {}, limit = 64, warnings = []) {
-  const safeLimit = Math.max(1, Math.floor(Number(limit) || 64));
+function limitPreparedReferenceEvidence(prepared = {}, {
+  maxChars = 16000,
+  maxItems = Number.POSITIVE_INFINITY,
+  focusCardIds = [],
+  lineageTraceSink,
+} = {}, warnings = []) {
+  const safeCharBudget = Math.max(1, Math.floor(Number(maxChars) || 16000));
+  const requestedItemLimit = Number(maxItems);
+  const safeItemLimit = Number.isFinite(requestedItemLimit)
+    ? Math.max(1, Math.floor(requestedItemLimit || 1))
+    : Number.MAX_SAFE_INTEGER;
   const referenceOnly = {
     ...prepared,
     cardTexts: [],
     userProvidedCardTexts: [],
   };
-  const selected = selectCompactEvidenceEntries(referenceOnly, { limit: safeLimit });
+  // `selectCompactEvidenceEntries` already deduplicates stable evidence
+  // identities. Do not infer equivalence from similar question or answer text:
+  // distinct official records may deliberately document opposite outcomes.
+  const ranked = selectCompactEvidenceEntries(referenceOnly, {
+    limit: Number.POSITIVE_INFINITY,
+  });
+  const selected = [];
+  let usedChars = 2;
+  for (const entry of ranked) {
+    if (selected.length >= safeItemLimit) break;
+    // Charge the same complete body that the ordinary renderer restores, not
+    // the earlier per-item projection. Otherwise a long decisive record looks
+    // artificially cheap during preselection and forces a later prompt compact.
+    const restoredItem = restorePromptEvidenceBody(
+      entry.item,
+      Number.POSITIVE_INFINITY,
+      focusCardIds,
+    );
+    const serializedChars = JSON.stringify({ bucket: entry.bucket, ...restoredItem }).length
+      + (selected.length ? 1 : 0);
+    // Never replace the highest-priority reference with shorter lower-priority
+    // material merely because it exceeds this preselection budget. The total
+    // prompt compact/fitter owns the exceptional single-record case.
+    if (selected.length > 0 && usedChars + serializedChars > safeCharBudget) continue;
+    selected.push(entry);
+    usedChars += serializedChars;
+  }
   const result = {
     ...prepared,
     ...Object.fromEntries(
@@ -640,14 +839,32 @@ function limitPreparedReferenceEvidence(prepared = {}, limit = 64, warnings = []
     before += (prepared[bucket] || []).length;
   }
   for (const { bucket, item } of selected) result[bucket].push(item);
-  if (before > selected.length) {
+  if (typeof lineageTraceSink === "function") {
+    emitRagPromptListTrace(lineageTraceSink, {
+      type: "PROMPT_GLOBAL_SELECTION",
+      stage: "prompt_reference_selection",
+      channel: "references",
+      beforeItems: ranked.map(({ item }) => item),
+      afterItems: selected.map(({ item }) => item),
+      requestLimit: Number.isFinite(requestedItemLimit) ? safeItemLimit : null,
+      requestCharLimit: safeCharBudget,
+      requestLimitProvenance: Number.isFinite(requestedItemLimit)
+        ? "RUNTIME_CONFIG"
+        : "NO_FINITE_ITEM_REQUEST_LIMIT",
+      preLimitObservable: true,
+    });
+  }
+  if (ranked.length > selected.length || usedChars > safeCharBudget) {
+    warnings.push(`prompt_reference_chars_limited:${usedChars}/${safeCharBudget}:${ranked.length}->${selected.length}`);
+  }
+  if (Number.isFinite(requestedItemLimit) && ranked.length > safeItemLimit) {
     warnings.push(`prompt_reference_items_limited:${before}->${selected.length}`);
   }
   return result;
 }
 
 function downgradeOfficialDirectToRelated(item = {}) {
-  return {
+  return forcePromptEvidenceRelatedOnly({
     ...item,
     type: "related",
     isDirect: false,
@@ -660,10 +877,18 @@ function downgradeOfficialDirectToRelated(item = {}) {
       "unique_semantic_question_subsumption",
       "unique_question_card_subsumption",
     ].includes(value)),
-  };
+  });
 }
 
-function limitEvidence(items = [], limit, textLimit, label, warnings, focusCardIds = []) {
+function limitEvidence(
+  items = [],
+  limit,
+  textLimit,
+  label,
+  warnings,
+  focusCardIds = [],
+  lineageTraceSink,
+) {
   const source = Array.isArray(items) ? items : [];
   const bucket = promptBucketForLabel(label);
   const projected = projectPromptEvidence(source, textLimit, label, focusCardIds);
@@ -671,6 +896,18 @@ function limitEvidence(items = [], limit, textLimit, label, warnings, focusCardI
     projected.map((item) => ({ bucket, item })),
     limit,
   ).map(({ item }) => item);
+  if (typeof lineageTraceSink === "function") {
+    emitRagPromptListTrace(lineageTraceSink, {
+      type: "PROMPT_LOCAL_TRUNCATION",
+      stage: "prompt_bucket_selection",
+      channel: bucket,
+      beforeItems: projected,
+      afterItems: selected,
+      requestLimit: limit,
+      requestLimitProvenance: "RUNTIME_CONFIG",
+      preLimitObservable: true,
+    });
+  }
   if (projected.length > selected.length) {
     warnings.push(`${label}_evidence_limited:${projected.length}->${selected.length}`);
   }
@@ -681,7 +918,6 @@ function projectPromptEvidence(items = [], textLimit, label, focusCardIds = []) 
   const source = Array.isArray(items) ? items : [];
   return source.map((item, bucketIndex) => {
     const projectionWarnings = [];
-    const sourceText = String(item.fullText || item.text || item.officialText || item.answer || "");
     const sourceMetadata = promptSourceMetadata(item, label);
     const structuredQa = buildStructuredOfficialQa(item, {
       textLimit,
@@ -700,6 +936,7 @@ function projectPromptEvidence(items = [], textLimit, label, focusCardIds = []) 
       retrievalContext: promptRetrievalContext(item.retrievalContext),
       cards: item.cards || [],
       cardIds: item.cardIds || [],
+      questionCardIds: item.questionCardIds || [],
       ...((item.matchedBy || []).length ? { matchedBy: item.matchedBy } : {}),
       ...((item.matchedQuestionCardIds || []).length
         ? { matchedQuestionCardIds: item.matchedQuestionCardIds }
@@ -707,21 +944,14 @@ function projectPromptEvidence(items = [], textLimit, label, focusCardIds = []) 
     };
     if (structuredQa) Object.assign(result, structuredQa);
     else {
-      if (sourceText.length > textLimit) projectionWarnings.push(`${label}_text_truncated:${item.id}`);
-      result.text = preserveEvidenceText(sourceText, textLimit, focusCardIds);
+      Object.assign(result, compactEvidenceTextFields(capturePromptEvidenceBody(item)));
     }
     const retrievalSignals = item?.retrievalSignals && typeof item.retrievalSignals === "object"
       ? item.retrievalSignals
       : {};
-    const sourceBodyChars = canonicalEvidenceBodyChars(item);
-    const projectedBodyChars = canonicalEvidenceBodyChars(result);
     result[PROMPT_SELECTION_METADATA] = {
       retrievalScore: normalizePromptRetrievalScore(item?.retrievalScore ?? item?.score),
       bucketRank: bucketIndex + 1,
-      sourceBodyChars,
-      projectedBodyChars,
-      bodyCoverage: sourceBodyChars > 0 ? Math.min(1, projectedBodyChars / sourceBodyChars) : 0,
-      bodyComplete: sourceBodyChars > 0 && projectedBodyChars >= sourceBodyChars,
       sourceBody: capturePromptEvidenceBody(item),
       warningLabel: label,
       projectionWarnings,
@@ -745,6 +975,11 @@ function projectPromptEvidence(items = [], textLimit, label, focusCardIds = []) 
           || item?.retrievalContext?.modelCandidateAssessment?.premise
           || "",
       ).trim(),
+      // Private selection signal only. It is derived entirely from the
+      // official question/headline and the planner query, never the answer,
+      // and the Symbol metadata is stripped from the serialized prompt.
+      questionBranchHeadlineAnchored:
+        retrievalSignals.questionBranchHeadlineAnchored === true,
     };
     return result;
   });
@@ -774,75 +1009,20 @@ function normalizePromptRetrievalScore(value) {
 }
 
 function canonicalEvidenceBodyParts(item = {}) {
-  const question = String(item?.question || item?.rawQuestion || "");
-  const detailedScene = String(
-    item?.rawDetailedQuestion
-      || item?.detailedScene
-      || item?.detailedQuestion
-      || (item?.scenario && item.scenario !== question ? item.scenario : "")
-      || "",
-  );
-  const answer = String(item?.answer || item?.officialAnswer || item?.conclusion || "");
-  const fallbackText = String(item?.fullText || item?.text || item?.officialText || "");
-  const structured = [question, detailedScene, answer].filter(Boolean);
-  // Some official mirrors expose a short structured answer while keeping
-  // decisive conditions or the complete answer only in text/fullText. Retain
-  // that field whenever it contributes information beyond the structured
-  // fields, but avoid paying twice for an exact duplicate.
-  if (evidenceTextAddsInformation(fallbackText, structured)) structured.push(fallbackText);
-  return structured.length ? structured : [fallbackText].filter(Boolean);
-}
-
-function evidenceTextAddsInformation(value, structuredParts = []) {
-  const textKey = normalizeEvidenceComparisonText(value);
-  if (!textKey) return false;
-  const partKeys = (structuredParts || [])
-    .map(normalizeEvidenceComparisonText)
-    .filter(Boolean);
-  if (!partKeys.length) return true;
-  if (partKeys.some((part) => part.includes(textKey))) return false;
-
-  // Mirrors commonly expose fullText as a mechanical concatenation of only a
-  // subset of the structured fields (for example question + answer while a
-  // separate detailedScene also exists). Match a finite permutation/subset of
-  // those fields: each field may account for fallback text at most once, so an
-  // extra repeated answer or any unmatched tail remains complementary.
-  if (partKeys.length > 4) return true;
-  const stateCount = 1 << partKeys.length;
-  const offsets = new Uint32Array(stateCount);
-  const reachableMasks = new Uint8Array(stateCount);
-  reachableMasks[0] = 1;
-  for (let mask = 1; mask < stateCount; mask += 1) {
-    for (let index = 0; index < partKeys.length; index += 1) {
-      if (mask & (1 << index)) offsets[mask] += partKeys[index].length;
-    }
-  }
-  for (let mask = 0; mask < stateCount; mask += 1) {
-    if (!reachableMasks[mask]) continue;
-    const offset = offsets[mask];
-    if (offset === textKey.length) return false;
-    for (let index = 0; index < partKeys.length; index += 1) {
-      const bit = 1 << index;
-      if (mask & bit) continue;
-      if (textKey.startsWith(partKeys[index], offset)) reachableMasks[mask | bit] = 1;
-    }
-  }
-  return true;
-}
-
-function normalizeEvidenceComparisonText(value) {
-  return String(value || "")
-    .normalize("NFKC")
-    .replace(/\s+/gu, "")
-    .trim();
-}
-
-function canonicalEvidenceBodyChars(item = {}) {
-  return canonicalEvidenceBodyParts(item).join("\n").length;
+  return Object.values(capturePromptEvidenceBody(item)).filter(Boolean);
 }
 
 function capturePromptEvidenceBody(item = {}) {
   const question = String(item?.question || item?.rawQuestion || "");
+  // Adapters declare only assignments they actually performed. Without that
+  // source binding, parallel body fields remain independent complete blocks.
+  const fullTextIsProjection = (item.fullTextProjectionOf === "text" && item.text)
+    || (item.fullTextProjectionOf === "answer" && item.answer)
+    || (item.fullTextProjectionOf === "conclusion"
+      && !item.answer && !item.officialAnswer && item.conclusion);
+  const fullText = fullTextIsProjection ? "" : String(item.fullText || "");
+  const text = String(item.text || "");
+  const useFullText = fullText && (!text || item.textProjectionOf === "fullText");
   return Object.freeze({
     question,
     detailedScene: String(
@@ -852,8 +1032,13 @@ function capturePromptEvidenceBody(item = {}) {
         || (item?.scenario && item.scenario !== question ? item.scenario : "")
         || "",
     ),
+    ...(item.cardReferenceContext
+      ? { cardReferenceContext: String(item.cardReferenceContext) }
+      : {}),
     answer: String(item?.answer || item?.officialAnswer || item?.conclusion || ""),
-    text: String(item?.fullText || item?.text || item?.officialText || ""),
+    text: useFullText ? fullText : text,
+    ...(fullText && !useFullText ? { fullText } : {}),
+    ...(item.officialText ? { officialText: String(item.officialText) } : {}),
   });
 }
 
@@ -867,7 +1052,15 @@ function promptEvidenceBodySource(item = {}) {
 function restorePromptEvidenceBody(item = {}, textLimit, focusCardIds = []) {
   if (item?.retrievalContext?.textProvidedBy === "resolvedCards") return { ...item };
   const result = { ...item };
-  for (const key of ["question", "detailedScene", "answer", "text"]) delete result[key];
+  for (const key of [
+    "question",
+    "detailedScene",
+    "cardReferenceContext",
+    "answer",
+    "text",
+    "fullText",
+    "officialText",
+  ]) delete result[key];
   return Object.assign(
     result,
     compactEvidenceTextFields(promptEvidenceBodySource(item), textLimit, focusCardIds),
@@ -962,152 +1155,12 @@ function buildStructuredOfficialQa(item = {}, {
     && !["official_direct", "official_related", "official_response", "faq"].includes(label)) {
     return null;
   }
-  const question = String(item.question || item.rawQuestion || "").trim();
-  const detailedScene = String(
-    item.rawDetailedQuestion
-      || item.detailedScene
-      || item.detailedQuestion
-      || (item.scenario && item.scenario !== question ? item.scenario : "")
-      || "",
-  ).trim();
-  const answer = String(item.answer || item.officialAnswer || item.conclusion || "").trim();
-  const fallbackText = String(item.fullText || item.text || item.officialText || "").trim();
-  const complementaryText = evidenceTextAddsInformation(fallbackText, [
-    question,
-    detailedScene,
-    answer,
-  ]) ? fallbackText : "";
-  const fields = [
-    { key: "question", value: question, weight: 0.28 },
-    { key: "detailedScene", value: detailedScene, weight: 0.32 },
-    { key: "answer", value: answer, weight: 0.4 },
-    ...(complementaryText
-      ? [{ key: "text", value: complementaryText, weight: 0.4 }]
-      : []),
-  ].filter((field) => field.value);
-  if (!fields.length) return null;
-
-  const budgets = allocateStructuredTextBudgets(fields, textLimit);
-  const result = {};
-  let truncated = false;
-  fields.forEach((field, index) => {
-    const budget = budgets[index];
-    if (field.value.length > budget) truncated = true;
-    result[field.key] = preserveEvidenceText(field.value, budget, focusCardIds);
-  });
-  if (truncated) warnings.push(`${label}_text_truncated:${item.id}`);
-  return result;
-}
-
-function allocateStructuredTextBudgets(fields, textLimit) {
-  if (!Number.isFinite(Number(textLimit))) {
-    return fields.map((field) => Math.max(1, field.value.length));
-  }
-  const available = Math.max(fields.length, Math.floor(Number(textLimit) || fields.length));
-  const lengths = fields.map((field) => Math.max(1, field.value.length));
-  const budgets = fields.map(() => 1);
-  let remaining = available - budgets.length;
-
-  // Weighted water filling: once a short field reaches its actual length, its
-  // unused share is redistributed among the still-truncated fields. This keeps
-  // the general question/scene/answer weights without wasting most of the
-  // budget when the question is short and the answer is long.
-  while (remaining > 0) {
-    const active = fields
-      .map((field, index) => ({
-        index,
-        capacity: lengths[index] - budgets[index],
-        weight: Math.max(0.0001, Number(field.weight) || 1),
-      }))
-      .filter(({ capacity }) => capacity > 0);
-    if (!active.length) break;
-    const weightTotal = active.reduce((sum, field) => sum + field.weight, 0);
-    const roundRemaining = remaining;
-    let spent = 0;
-    for (const field of active) {
-      const proportional = Math.floor(roundRemaining * (field.weight / weightTotal));
-      const addition = Math.min(field.capacity, proportional, remaining - spent);
-      if (addition <= 0) continue;
-      budgets[field.index] += addition;
-      spent += addition;
-    }
-    if (spent === 0) {
-      const next = [...active].sort((left, right) => (
-        right.weight - left.weight || left.index - right.index
-      ))[0];
-      budgets[next.index] += 1;
-      spent = 1;
-    }
-    remaining -= spent;
-  }
-  return budgets;
-}
-
-function preserveEvidenceText(value, limit, focusCardIds = []) {
-  const text = String(value || "");
-  const max = Math.max(1, Number(limit) || 1);
-  if (text.length <= max) return text;
-  const matches = findFocusMatches(text, focusCardIds)
-    .slice(0, Math.max(1, Math.min(4, Math.floor(max / 24))));
-  if (!matches.length) return preserveTextEnds(text, max);
-
-  // Secondary/minimal prompt compression can assign fewer than 48 characters
-  // to one structured QA field. In that case, keeping the matching identity is
-  // more useful than reverting to an ends-only excerpt that silently drops it.
-  if (max < 24) return sliceAroundMatch(text, matches[0], max).slice(0, max);
-
-  const separator = "\n…\n";
-  const separatorCost = separator.length * (matches.length + 1);
-  const available = max - separatorCost;
-  if (available < matches.length + 2) return preserveTextEnds(text, max);
-  const headLength = Math.max(1, Math.floor(available * 0.25));
-  const tailLength = Math.max(1, Math.floor(available * 0.2));
-  const focusTotal = Math.max(matches.length, available - headLength - tailLength);
-  let remainingFocus = focusTotal;
-  const focusSegments = matches.map((match, index) => {
-    const remainingMatches = matches.length - index;
-    const length = Math.max(1, Math.floor(remainingFocus / remainingMatches));
-    remainingFocus -= length;
-    return sliceAroundMatch(text, match, length);
-  });
-  return [
-    text.slice(0, headLength),
-    ...focusSegments,
-    text.slice(-tailLength),
-  ].join(separator);
-}
-
-function findFocusMatches(text, focusCardIds = []) {
-  const matches = [];
-  const seenPositions = new Set();
-  for (const rawId of focusCardIds) {
-    const id = String(rawId || "").trim();
-    if (!id) continue;
-    const placeholder = `<<${id}>>`;
-    let position = text.indexOf(placeholder);
-    let length = placeholder.length;
-    if (position < 0) {
-      position = text.indexOf(id);
-      length = id.length;
-    }
-    if (position < 0 || seenPositions.has(position)) continue;
-    seenPositions.add(position);
-    matches.push({ position, length });
-  }
-  return matches.sort((left, right) => left.position - right.position);
-}
-
-function sliceAroundMatch(text, match, limit) {
-  const length = Math.max(match.length, Number(limit) || match.length);
-  const before = Math.max(0, Math.floor((length - match.length) / 2));
-  let start = Math.max(0, match.position - before);
-  let end = Math.min(text.length, start + length);
-  start = Math.max(0, end - length);
-  return text.slice(start, end);
+  const fields = compactEvidenceTextFields(capturePromptEvidenceBody(item));
+  return Object.keys(fields).length ? fields : null;
 }
 
 function buildCompactRagPrompt({ payload, maxPromptChars }) {
-  const maxChars = Math.max(600, Number(maxPromptChars) || 12000);
+  const maxChars = Math.max(1, Number(maxPromptChars) || 12000);
   const focusCardIds = (payload.resolvedCards || [])
     .map((card) => String(card?.id || "").trim())
     .filter(Boolean);
@@ -1117,7 +1170,6 @@ function buildCompactRagPrompt({ payload, maxPromptChars }) {
   });
   const variants = buildCompactPromptVariants(payload);
   let bestWholeAttempt = null;
-  let emergencyWholeAttempt = null;
   let smallestBaseAttempt = null;
   for (const variant of variants) {
     const attempt = packWholeEvidenceEntries({
@@ -1127,34 +1179,26 @@ function buildCompactRagPrompt({ payload, maxPromptChars }) {
       maxChars,
     });
     if (attempt.prompt && (attempt.selectedCount > 0 || prioritizedEntries.length === 0)) {
-      if (variant.emergencyOnly === true) {
-        emergencyWholeAttempt = { attempt, variant };
-      } else if (!bestWholeAttempt || attempt.selectedCount > bestWholeAttempt.attempt.selectedCount) {
+      if (!bestWholeAttempt || attempt.selectedCount > bestWholeAttempt.attempt.selectedCount) {
         bestWholeAttempt = { attempt, variant };
       }
     }
     if (attempt.baseFits) smallestBaseAttempt = { attempt, variant };
   }
   if (bestWholeAttempt) return bestWholeAttempt.attempt.prompt;
-  if (emergencyWholeAttempt) return emergencyWholeAttempt.attempt.prompt;
+  throw evidencePromptBudgetExceeded({
+    reason: smallestBaseAttempt ? "complete_reference_does_not_fit" : "fixed_envelope_does_not_fit",
+    evidenceId: prioritizedEntries[0]?.item?.id,
+    maxPromptChars: maxChars,
+  });
+}
 
-  // Whole high-priority records are tried under every complete envelope first.
-  // Only a single top-ranked record that cannot fit even by itself is excerpted.
-  const fallback = smallestBaseAttempt || {
-    variant: variants.at(-1),
-    attempt: { prompt: "", baseFits: false },
-  };
-  if (prioritizedEntries.length) {
-    const fitted = fitSingleEvidenceEntry({
-      entry: prioritizedEntries[0],
-      variant: fallback.variant,
-      focusCardIds,
-      maxChars,
-    });
-    if (fitted) return fitted;
-  }
-  if (fallback.attempt.prompt) return fallback.attempt.prompt;
-  return fallback.variant.render(buildPackedPromptPayload(fallback.variant.basePayload, [], fallback.variant.mode));
+function evidencePromptBudgetExceeded(details = {}) {
+  const error = new Error("证据准备失败：完整证据提示无法装入预算，本次未生成裁定。");
+  error.code = "evidence_prompt_budget_exceeded";
+  error.statusCode = 503;
+  error.details = details;
+  return error;
 }
 
 function buildCompactPromptVariants(payload = {}) {
@@ -1185,28 +1229,7 @@ function buildCompactPromptVariants(payload = {}) {
     render: (compactPayload) => [
       "仅依据用户问题、卡片原文和所给资料，逐个子问题推理；不得编造。先在内部逐项核对 decisionChecklist 和 decisionPlan，但不得把它们当证据或输出检查过程。只有完整对应本题的 official direct Q&A 才能称为官方直接裁定，相关资料与卡文只能支持分析。",
       "直接输出完整中文裁定正文，不要 JSON、代码围栏或字段名；引用资料时只能使用 allowedEvidenceIds 中真实存在的 id。",
-      JSON.stringify(compactPayload),
-    ].join("\n"),
-  }, {
-    mode: "array",
-    emergencyOnly: true,
-    basePayload: {
-      userQuery: preserveTextEnds(payload.userQuery, 80),
-      resolvedCards: (payload.resolvedCards || []).slice(0, 1).map((card) => ({
-        id: card.id,
-        name: preserveTextEnds(card.name, 40),
-        effectText: preserveTextEnds(card.effectText, 60),
-      })),
-      unresolvedMentions: [],
-      ambiguousMentions: [],
-      decisionChecklist: (payload.decisionChecklist || []).slice(0, 4),
-      decisionPlan: (payload.decisionPlan || []).slice(0, 2),
-      evidence: [],
-      allowedEvidenceIds: [],
-    },
-    render: (smallestPayload) => [
-      "仅依据下列资料直接输出完整中文裁定正文；不要输出 JSON 或字段名。先在内部逐项核对 decisionPlan，不得把它当证据或展示检查过程；引用资料时只能使用 allowedEvidenceIds 中真实存在的 id；不得编造。",
-      JSON.stringify(smallestPayload),
+      JSON.stringify(modelVisiblePromptPayload(compactPayload)),
     ].join("\n"),
   }];
 }
@@ -1270,33 +1293,6 @@ function buildPackedPromptPayload(basePayload = {}, entries = [], mode = "bucket
   return { ...basePayload, evidence, allowedEvidenceIds: ids };
 }
 
-function fitSingleEvidenceEntry({ entry, variant, focusCardIds, maxChars }) {
-  const sourceChars = Math.max(
-    1,
-    Number(entry?.item?.[PROMPT_SELECTION_METADATA]?.sourceBodyChars)
-      || canonicalEvidenceBodyChars(promptEvidenceBodySource(entry?.item)),
-  );
-  let lower = 1;
-  let upper = sourceChars;
-  let best = "";
-  while (lower <= upper) {
-    const middle = Math.floor((lower + upper) / 2);
-    const projected = compactPromptEvidenceItem(entry.item, middle, focusCardIds);
-    const prompt = variant.render(buildPackedPromptPayload(
-      variant.basePayload,
-      [{ bucket: entry.bucket, item: projected }],
-      variant.mode,
-    ));
-    if (prompt.length <= maxChars) {
-      best = prompt;
-      lower = middle + 1;
-    } else {
-      upper = middle - 1;
-    }
-  }
-  return best;
-}
-
 function compactEvidencePriorityEntries(evidence = {}, { resolvedCards = [] } = {}) {
   const cardTextEntries = dedupeCompactCardTextEntries(
     interleavePromptBuckets(evidence, CARD_TEXT_BUCKETS),
@@ -1341,25 +1337,46 @@ function selectPreferredEvidenceEntries(entries = [], limit = 1) {
     ? Math.max(1, Math.floor(requestedLimit || 1))
     : Number.MAX_SAFE_INTEGER;
   const preferredByIdentity = new Map();
+  const entriesByIdentity = new Map();
   for (const entry of entries) {
     const key = compactEvidenceEntryKey(entry);
+    const identityEntries = entriesByIdentity.get(key) || [];
+    identityEntries.push(entry);
+    entriesByIdentity.set(key, identityEntries);
     const previous = preferredByIdentity.get(key);
     if (!previous || compareEvidenceProjection(entry, previous) < 0) {
       preferredByIdentity.set(key, entry);
     }
   }
-  return [...preferredByIdentity.values()]
+  return [...preferredByIdentity.entries()]
+    .map(([key, entry]) => mergePromptIdentitySafety(entry, entriesByIdentity.get(key)))
     .sort(compareEvidenceSelectionPriority)
     .slice(0, safeLimit);
 }
 
+function mergePromptIdentitySafety(preferred = {}, identityEntries = []) {
+  const relatedEntries = (identityEntries || []).filter(({ item }) => (
+    item?.retrievalContext?.relatedOnly === true
+  ));
+  if (!relatedEntries.length) return preferred;
+  const crossCardScope = relatedEntries
+    .map(({ item }) => String(item?.retrievalContext?.scope || ""))
+    .find((scope) => /cross[_ -]?card/iu.test(scope));
+  return {
+    ...preferred,
+    item: forcePromptEvidenceRelatedOnly({
+      ...preferred.item,
+      retrievalContext: {
+        ...(preferred.item?.retrievalContext || {}),
+        ...(crossCardScope ? { scope: crossCardScope } : {}),
+        relatedOnly: true,
+      },
+    }),
+  };
+}
+
 function compareEvidenceProjection(left = {}, right = {}) {
-  const leftMetadata = left?.item?.[PROMPT_SELECTION_METADATA] || {};
-  const rightMetadata = right?.item?.[PROMPT_SELECTION_METADATA] || {};
-  return Number(rightMetadata.projectedBodyChars || 0) - Number(leftMetadata.projectedBodyChars || 0)
-    || Number(rightMetadata.bodyCoverage || 0) - Number(leftMetadata.bodyCoverage || 0)
-    || Number(rightMetadata.bodyComplete === true) - Number(leftMetadata.bodyComplete === true)
-    || compareEvidenceSelectionPriority(left, right)
+  return compareEvidenceSelectionPriority(left, right)
     || evidenceProjectionStableKey(left).localeCompare(evidenceProjectionStableKey(right));
 }
 
@@ -1367,12 +1384,20 @@ function compareEvidenceSelectionPriority(left = {}, right = {}) {
   const leftMetadata = left?.item?.[PROMPT_SELECTION_METADATA] || {};
   const rightMetadata = right?.item?.[PROMPT_SELECTION_METADATA] || {};
   return evidenceFactLayerRank(right) - evidenceFactLayerRank(left)
+    || Number(rightMetadata.questionBranchHeadlineAnchored === true)
+      - Number(leftMetadata.questionBranchHeadlineAnchored === true)
     || Number(rightMetadata.retrievalScore || 0) - Number(leftMetadata.retrievalScore || 0)
     || evidenceAuthorityRank(right?.item) - evidenceAuthorityRank(left?.item)
-    || Number(rightMetadata.projectedBodyChars || 0) - Number(leftMetadata.projectedBodyChars || 0)
-    || Number(rightMetadata.bodyCoverage || 0) - Number(leftMetadata.bodyCoverage || 0)
-    || Number(rightMetadata.bodyComplete === true) - Number(leftMetadata.bodyComplete === true)
     || compactEvidenceEntryKey(left).localeCompare(compactEvidenceEntryKey(right));
+}
+
+function isOfficialQaOrFaqPromptItem(item = {}) {
+  return ["qa", "card-faq", "official-database"].includes(String(item?.recordType || ""))
+    && (
+      item?.official === true
+      || ["official_database", "official_reference"].includes(item?.sourceAuthority)
+      || /official|yugioh.*database|konami/iu.test(String(item?.source || ""))
+    );
 }
 
 function evidenceProjectionStableKey({ bucket, item } = {}) {
@@ -1400,13 +1425,12 @@ function promptRetrievalContext(value) {
   const source = value && typeof value === "object" ? value : {};
   return {
     ...(source.scope ? { scope: String(source.scope) } : {}),
-    ...(typeof source.relatedOnly === "boolean" ? { relatedOnly: source.relatedOnly } : {}),
-    ...(source.textProvidedBy ? { textProvidedBy: String(source.textProvidedBy) } : {}),
+    ...(source.relatedOnly === true ? { relatedOnly: true } : {}),
   };
 }
 
 function compactEvidenceEntryKey({ bucket, item } = {}) {
-  const id = String(item?.id || "").trim();
+  const id = stablePromptRecordIdentity(item);
   if (id) return `id:${id}`;
   const bodyFingerprint = compactCardTextFingerprint(item)
     || canonicalEvidenceBodyParts(item)
@@ -1415,6 +1439,12 @@ function compactEvidenceEntryKey({ bucket, item } = {}) {
       .replace(/\s+/gu, "")
       .trim();
   return `${String(bucket || "")}:${bodyFingerprint || evidenceProjectionStableKey({ bucket, item })}`;
+}
+
+function stablePromptRecordIdentity(item = {}) {
+  return String(item?.id || item?.evidenceId || item?.stableId || "")
+    .trim()
+    .replace(/@[a-f0-9]{8,}(?=#|$)/iu, "");
 }
 
 function dedupeCompactCardTextEntries(entries = [], resolvedCards = []) {
@@ -1500,55 +1530,30 @@ function compactPromptEvidenceItem(item = {}, textLimit, focusCardIds) {
     sourceTier: item.sourceTier || "",
     sourceAuthority: item.sourceAuthority || "other_reference",
     retrievalContext: promptRetrievalContext(item.retrievalContext),
+    cards: item.cards || [],
+    cardIds: item.cardIds || [],
+    questionCardIds: item.questionCardIds || [],
     ...compactEvidenceTextFields(promptEvidenceBodySource(item), textLimit, focusCardIds),
     sourceUrl: item.sourceUrl || "",
     isDirect: item.isDirect === true,
     matchLevel: item.matchLevel || "",
   };
   const previousMetadata = item?.[PROMPT_SELECTION_METADATA] || {};
-  const sourceBodyChars = Number(previousMetadata.sourceBodyChars)
-    || canonicalEvidenceBodyChars(item);
-  const projectedBodyChars = canonicalEvidenceBodyChars(result);
   result[PROMPT_SELECTION_METADATA] = {
     ...previousMetadata,
-    sourceBodyChars,
-    projectedBodyChars,
-    bodyCoverage: sourceBodyChars > 0 ? Math.min(1, projectedBodyChars / sourceBodyChars) : 0,
-    bodyComplete: sourceBodyChars > 0 && projectedBodyChars >= sourceBodyChars,
     strictQueryKeys: previousMetadata.strictQueryKeys || [],
     strictSupplementalQueryKeys: previousMetadata.strictSupplementalQueryKeys || [],
     mechanisms: previousMetadata.mechanisms || [],
     modelPremise: previousMetadata.modelPremise || "",
+    questionBranchHeadlineAnchored:
+      previousMetadata.questionBranchHeadlineAnchored === true,
   };
   return result;
 }
 
 function compactEvidenceTextFields(item = {}, textLimit, focusCardIds = []) {
-  const question = String(item.question || "");
-  const detailedScene = String(item.detailedScene || "");
-  const answer = String(item.answer || "");
-  const fallbackText = String(item.text || "");
-  const complementaryText = evidenceTextAddsInformation(fallbackText, [
-    question,
-    detailedScene,
-    answer,
-  ]) ? fallbackText : "";
-  const structuredFields = [
-    { key: "question", value: question, weight: 0.28 },
-    { key: "detailedScene", value: detailedScene, weight: 0.32 },
-    { key: "answer", value: answer, weight: 0.4 },
-    ...(complementaryText
-      ? [{ key: "text", value: complementaryText, weight: 0.4 }]
-      : []),
-  ].filter((field) => field.value);
-  if (!structuredFields.length) {
-    return { text: preserveEvidenceText(fallbackText, textLimit, focusCardIds) };
-  }
-  const budgets = allocateStructuredTextBudgets(structuredFields, textLimit);
-  return Object.fromEntries(structuredFields.map((field, index) => [
-    field.key,
-    preserveEvidenceText(field.value, budgets[index], focusCardIds),
-  ]));
+  return Object.fromEntries(Object.entries(capturePromptEvidenceBody(item))
+    .filter(([, value]) => value));
 }
 
 function summarizeCards(cards, limit) {
@@ -1569,15 +1574,6 @@ function summarizeCards(cards, limit) {
     source: card.source || "",
     effectText: card.effectText || card.text || "",
   }));
-}
-
-function preserveTextEnds(value, limit) {
-  const text = String(value || "");
-  const max = Math.max(1, Number(limit) || 1);
-  if (text.length <= max) return text;
-  const head = Math.max(1, Math.ceil((max - 1) * 0.6));
-  const tail = Math.max(1, max - head - 1);
-  return `${text.slice(0, head)}…${text.slice(-tail)}`;
 }
 
 function readNumber(value, fallback) {

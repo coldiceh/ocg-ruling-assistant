@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "status": "synced-with-warnings",
+  "generatedAt": "2026-08-12T11:40:56.595Z",
+  "freshnessDays": 7,
+  "sourceFreshness": "fresh",
+  "previousSourceRevision": "32214",
+  "sourceRevision": "32215",
+  "lastSuccessfulSyncAt": "2026-08-12T11:40:56.595Z",
+  "lastFailedSyncAt": null,
+  "syncFailureCount": 0,
+  "aliasWarnings": [],
+  "parseFailedWarnings": [],
+  "contentQualityWarnings": [],
+  "dataQualityWarnings": [],
+  "aliasWarningCount": 0,
+  "parseFailedCount": 0,
+  "contentQualityWarningCount": 0,
+  "dataQualityWarningCount": 0,
+  "newItems": 2879,
+  "changedItems": 3040,
+  "removedItems": 0,
+  "qaDetailCursor": 0,
+  "qaDiscoveryCardCount": 14258,
+  "qaDiscoveryQaCount": 11553,
+  "qaDiscoveryComplete": true,
+  "sources": [
+    {
+      "id": "official-card-database",
+      "name": "Yu-Gi-Oh! OCG Card Database",
+      "url": "https://www.db.yugioh-card.com/yugiohdb/",
+      "role": "最终权威资料来源；涉及裁定变更时以官方数据库和事务局确认优先。"
+    },
+    {
+      "id": "ygoresources",
+      "name": "YGOResources DB",
+      "url": "https://db.ygoresources.com",
+      "role": "结构化卡片与 Q&A 数据来源，用于生成 GitHub Pages 可读取的静态快照。"
+    }
+  ],
+  "warnings": [
+    "Q&A 12400 was removed upstream (404)"
+  ],
+  "sourceSyncWarnings": [],
+  "sourceRetirementWarnings": [
+    "Q&A 12400 was removed upstream (404)"
+  ],
+  "sourceRetirementWarningCount": 1,
+  "changedPaths": [
+    "/data/card/23150"
+  ]
+}

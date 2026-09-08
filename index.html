@@ -25,7 +25,8 @@
           <p class="eyebrow">卡片文本 / Q&amp;A / FAQ</p>
           <h1>游戏王 OCG AI裁定</h1>
         </div>
-        <div class="status-cluster" aria-label="主题设置">
+        <div class="status-cluster" aria-label="页面状态与主题设置">
+          <span class="status-badge deployment-label" id="deploymentLabel" hidden></span>
           <button class="theme-toggle" id="themeToggle" type="button" aria-label="切换白天或黑夜主题">白天模式</button>
         </div>
       </header>
@@ -50,7 +51,7 @@
             <label class="model-tier-label" for="rulingModelSelect">
               <span>裁定模型</span>
               <select id="rulingModelSelect" aria-describedby="rulingModelStatus rulingModelLatency" disabled>
-                <option value="relay-gpt-5.6-sol-low" selected>GPT-5.6 Sol · 思考 low</option>
+                <option value="relay-gpt-6-astra-low" selected>GPT-6 Astra · 思考 low</option>
               </select>
               <small id="rulingModelStatus" hidden></small>
               <small id="rulingModelLatency" class="model-latency" aria-live="polite">正在读取平均出答案时间</small>
@@ -183,33 +184,6 @@
             </form>
 
             <div id="adminLabWorkspace" hidden>
-              <section class="admin-lab-section" aria-labelledby="adminRiskControlTitle">
-                <div class="admin-section-head">
-                  <div>
-                    <h3 id="adminRiskControlTitle">公开问答风控</h3>
-                    <p>查看非规则问题风控是否生效。管理员登录只提供状态管理，不会绕过公开问答风控。</p>
-                  </div>
-                  <button
-                    class="danger-outline-button"
-                    id="adminRiskControlUnlockButton"
-                    type="button"
-                    aria-describedby="adminRiskControlDetails adminRiskControlActionStatus"
-                    disabled
-                  >立即解除风控</button>
-                </div>
-                <div
-                  class="admin-risk-control-status"
-                  id="adminRiskControlStatus"
-                  role="status"
-                  aria-live="polite"
-                  aria-atomic="true"
-                >
-                  <strong id="adminRiskControlState">尚未读取</strong>
-                  <p id="adminRiskControlDetails">登录后读取公开问答风控状态。</p>
-                </div>
-                <p class="admin-status" id="adminRiskControlActionStatus" role="status" aria-live="polite"></p>
-              </section>
-
               <section class="admin-lab-section" aria-labelledby="adminBudgetTitle">
                 <div class="admin-section-head">
                   <div>

@@ -21,20 +21,20 @@ export function createLocalCardDataProvider(options = {}) {
       return fuzzyFindCards(searchEntries, name, limit);
     },
     getCardProfile(cardId) {
-      return cardById.get(normalizeId(cardId)) || null;
+      return cardById.get(normalizeCardIdentityId(cardId)) || null;
     },
     getCardText(cardId) {
-      const card = cardById.get(normalizeId(cardId));
+      const card = cardById.get(normalizeCardIdentityId(cardId));
       return card?.effectText || "";
     },
     getCardImage(cardId) {
       return buildCardImageCandidates(cardId);
     },
     getCardFaq(cardId, limit = 8) {
-      const wantedId = normalizeId(cardId);
+      const wantedId = normalizeCardIdentityId(cardId);
       if (!wantedId) return [];
       return allRecords
-        .filter((record) => (record.cardIds || []).some((id) => normalizeId(id) === wantedId))
+        .filter((record) => (record.cardIds || []).some((id) => normalizeCardIdentityId(id) === wantedId))
         .slice(0, limit);
     },
   };
@@ -43,8 +43,8 @@ export function createLocalCardDataProvider(options = {}) {
 }
 
 export function buildCardImageCandidates(cardId) {
-  const rawId = normalizeId(cardId);
-  if (!rawId) return [];
+  const rawId = normalizeCardIdentityId(cardId);
+  if (!/^\d+$/u.test(rawId)) return [];
   const normalizedId = rawId.padStart(8, "0");
   const compactId = normalizedId.replace(/^0+/u, "") || normalizedId;
   return [
@@ -160,7 +160,7 @@ function getCardCatalog(cards) {
   const cached = cardCatalogCache.get(cards);
   if (cached) return cached;
   const normalizedCards = cards.map(normalizeProviderCard).filter((card) => card.name);
-  const cardById = new Map(normalizedCards.map((card) => [normalizeId(card.id || card.cardId), card]).filter(([id]) => id));
+  const cardById = new Map(normalizedCards.map((card) => [normalizeCardIdentityId(card.id || card.cardId), card]).filter(([id]) => id));
   const searchEntries = normalizedCards.map((card) => ({
     card,
     aliases: dedupeAliases([card.name, card.cnName, card.jaName, card.enName, ...(card.aliases || [])]),
@@ -200,6 +200,8 @@ function setCachedProvider(cards, records, qaRecords, provider) {
   qaCache.set(qaRecords, provider);
 }
 
-function normalizeId(value) {
-  return String(value || "").replace(/\D+/gu, "").replace(/^0+(?=\d)/u, "");
+function normalizeCardIdentityId(value) {
+  const text = String(value ?? "").trim();
+  if (!text) return "";
+  return /^\d+$/u.test(text) ? text.replace(/^0+(?=\d)/u, "") : text;
 }

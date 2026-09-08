@@ -10,7 +10,6 @@ import { planFormalScenario } from "./formalScenarioPlanner.mjs";
 
 const DISABLED_VALUES = /^(?:0|false|off|disabled|no)$/iu;
 const VALIDATED_CLIENT_ANALYSES = new WeakSet();
-const VALIDATED_FORMAL_EVIDENCE = new WeakSet();
 
 export function formalShadowEnabled(env = globalThis.process?.env || {}) {
   const mode = String(env.RAG_FORMAL_ENGINE_MODE ?? "off").trim().toLowerCase();
@@ -262,130 +261,8 @@ function formalResultToEvidence({ scenario, analysis, draftVerification } = {}) 
       structuredTrace: summary.structuredTrace,
     };
     const sealedEvidence = deepFreeze(structuredClone(evidence));
-    VALIDATED_FORMAL_EVIDENCE.add(sealedEvidence);
     return sealedEvidence;
   });
-}
-
-export function applyFormalAnswerGate(answer, formalEvidence = [], {
-  preserveAuthoritativeAnswer = false,
-} = {}) {
-  const supplied = Array.isArray(formalEvidence) ? formalEvidence : [];
-  const source = supplied.filter((item) => item && VALIDATED_FORMAL_EVIDENCE.has(item));
-  if (!source.length) {
-    if (!supplied.length) return answer;
-    return {
-      ...answer,
-      riskFlags: [...new Set([...(answer?.riskFlags || []), "formal_engine_evidence_rejected_unverified_origin"])],
-    };
-  }
-  const trusted = source.filter((item) => item?.trusted === true && ["TRUE", "FALSE"].includes(item.verdict));
-  const unknown = source.filter((item) => item?.verdict === "UNKNOWN");
-  const conditional = source.filter((item) => item?.conditional === true && ["TRUE", "FALSE"].includes(item.verdict));
-  const unverified = source.filter((item) => !trusted.includes(item) && !unknown.includes(item) && !conditional.includes(item));
-  const riskFlags = new Set(answer?.riskFlags || []);
-  for (const item of unknown) riskFlags.add(`formal_engine_unknown:${item.queryId}`);
-  for (const item of conditional) riskFlags.add(`formal_engine_conditional:${item.queryId}`);
-  for (const item of unverified) riskFlags.add(`formal_engine_unverified:${item.queryId}`);
-  const modelPolarity = definiteAnswerPolarity([
-    answer?.shortAnswer,
-    ...(Array.isArray(answer?.reasoning) ? answer.reasoning : []),
-  ].filter(Boolean).join("\n"));
-  if (!preserveAuthoritativeAnswer && unknown.length && modelPolarity !== "neutral") {
-    riskFlags.add(`formal_engine_unknown_blocked_model_${modelPolarity}`);
-  }
-
-  const unresolved = unknown.length > 0 || conditional.length > 0 || unverified.length > 0;
-  const formalLines = source.map(renderFormalClaim);
-  const formalReasoning = trusted.map((item) => {
-    const proofId = item.proof?.certificateId ? `，证明证书 ${item.proof.certificateId}` : "";
-    return `形式规则内核对“${item.claimText}”给出经校验的 ${item.verdict}${proofId}；模型无权翻转该结论。`;
-  });
-  for (const item of unknown) {
-    formalReasoning.push(`形式规则内核对“${item.claimText}”返回 UNKNOWN，未签发确定性证明；UNKNOWN 对“可以”和“不可以”均不构成依据。`);
-  }
-  for (const item of conditional) {
-    formalReasoning.push(`形式规则内核对“${item.claimText}”的 ${item.verdict} 仅成立于 ${item.scenarioMode || "非严格"} 场景及其显式假设下，不能作为无条件权威结论。`);
-  }
-  for (const item of unverified) {
-    formalReasoning.push(`形式规则内核对“${item.claimText}”没有产生可作为权威使用的 STRICT 验证结果。`);
-  }
-  const gated = {
-    ...answer,
-    usedEvidence: mergeEvidenceRefs(answer?.usedEvidence, trusted),
-    riskFlags: [...riskFlags],
-    formalQueryResults: source.map(publicFormalClaim),
-  };
-  if (preserveAuthoritativeAnswer) {
-    return {
-      ...gated,
-      reasoning: [
-        ...(Array.isArray(answer?.reasoning) ? answer.reasoning : []),
-        ...formalReasoning,
-        ...traceReasoning(trusted),
-      ].slice(0, 12),
-    };
-  }
-  return {
-    ...gated,
-    ...(unresolved ? { answerLevel: "low_confidence_analysis", confidenceSelfEstimate: "low" } : {}),
-    shortAnswer: formalLines.join(" "),
-    reasoning: [...formalReasoning, ...traceReasoning(trusted)].slice(0, 6),
-  };
-}
-
-function renderFormalClaim(item) {
-  if (item?.trusted === true && ["TRUE", "FALSE"].includes(item.verdict)) return renderTrustedClaim(item);
-  if (item?.verdict === "UNKNOWN") {
-    return `对于“${item.claimText}”：未签发确定性证明/UNKNOWN，不能据此断言“可以”或“不可以”。`;
-  }
-  if (item?.conditional === true) {
-    return `对于“${item.claimText}”：形式内核仅在 ${item.scenarioMode || "非严格"} 场景及其显式假设下得到 ${item.verdict}；这不是无条件权威结论。`;
-  }
-  return `对于“${item?.claimText || item?.queryId || "该查询"}”：未签发可作为权威使用的 STRICT 确定性证明。`;
-}
-
-function renderTrustedClaim(item) {
-  const verdictText = item.verdict === "TRUE" ? "可以" : "不可以";
-  return `对于“${item.claimText}”：${verdictText}（形式证明已通过校验）。`;
-}
-
-function traceReasoning(items) {
-  const trace = items.find((item) => Array.isArray(item.structuredTrace) && item.structuredTrace.length)?.structuredTrace || [];
-  if (!trace.length) return [];
-  const rendered = trace.slice(0, 12).map((step) => {
-    if (typeof step === "string") return step;
-    if (!step || typeof step !== "object") return String(step);
-    return String(step.label || step.event || step.type || step.operation || step.nodeId || "状态迁移");
-  });
-  return rendered.length ? [`形式证明轨迹：${rendered.join(" → ")}`] : [];
-}
-
-function mergeEvidenceRefs(existing = [], trusted = []) {
-  const merged = [...(Array.isArray(existing) ? existing : [])];
-  const seen = new Set(merged.map((item) => item?.id).filter(Boolean));
-  for (const item of trusted) {
-    if (seen.has(item.id)) continue;
-    merged.push({ id: item.id, type: item.type, title: item.title });
-    seen.add(item.id);
-  }
-  return merged;
-}
-
-function publicFormalClaim(item) {
-  return {
-    queryId: item.queryId,
-    predicate: item.predicate,
-    claimText: item.claimText,
-    verdict: item.verdict,
-    trusted: item.trusted === true,
-    conditional: item.conditional === true,
-    scenarioMode: item.scenarioMode || null,
-    assumptions: item.assumptions || [],
-    unknownReasons: publicUnknownReasons(item.unknownReasons),
-    versions: item.versions || {},
-    proof: item.proof || null,
-  };
 }
 
 function publicUnknownReasons(reasons) {
@@ -679,16 +556,6 @@ function publicAssumptions(value) {
     assumesFactId: item?.assumesFactId || null,
     sourceSpan: item?.sourceSpan || null,
   }));
-}
-
-function definiteAnswerPolarity(value) {
-  const text = String(value || "");
-  const negative = /(?:不能|不可以|无法)(?:发动|召唤|进行|适用|加入|处理|特殊召唤)?/u.test(text);
-  const positive = /(?:可以|能够|能)(?:发动|召唤|进行|适用|加入|处理|特殊召唤)?/u.test(text);
-  if (positive && negative) return "mixed";
-  if (positive) return "positive";
-  if (negative) return "negative";
-  return "neutral";
 }
 
 function isEnabled(value) {

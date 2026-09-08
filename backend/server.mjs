@@ -42,7 +42,6 @@ const adminApiPaths = new Set([
   "/api/admin-auth",
   "/api/admin-model-lab",
   "/api/admin-queries",
-  "/api/admin-risk-control",
 ]);
 let localAdminHandlersPromise;
 
@@ -288,7 +287,6 @@ async function createLocalAdminHandlers() {
     { createAdminAuthHandler },
     { createProductionAdminModelLabHandler },
     { createAdminQueriesHandler },
-    { createAdminRiskControlHandler },
     { createAdminSessionManager },
     {
       createAdminModelLabDevelopmentService,
@@ -297,7 +295,6 @@ async function createLocalAdminHandlers() {
     import("../api/admin-auth.js"),
     import("../api/admin-model-lab.js"),
     import("../api/admin-queries.js"),
-    import("../api/admin-risk-control.js"),
     import("./adminSession.mjs"),
     import("./adminModelLabProduction.mjs"),
   ]);
@@ -335,7 +332,6 @@ async function createLocalAdminHandlers() {
         : undefined,
     })],
     ["/api/admin-queries", createAdminQueriesHandler(shared)],
-    ["/api/admin-risk-control", createAdminRiskControlHandler(shared)],
   ]);
 }
 

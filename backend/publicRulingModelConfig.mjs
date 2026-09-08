@@ -1,10 +1,21 @@
-export const DEFAULT_PUBLIC_RULING_MODEL_PROFILE = "relay-gpt-5.6-sol-low";
+export const DEFAULT_PUBLIC_RULING_MODEL_PROFILE = "relay-gpt-6-astra-low";
 // The third-party relay endpoint is deployment-specific and intentionally has
 // no repository default. Keep the historical export name for internal imports.
 export const DEFAULT_PUBLIC_RELAY_BASE_URL = "";
-export const DEFAULT_PUBLIC_RELAY_MODEL = "gpt-5.6-sol";
+export const DEFAULT_PUBLIC_RELAY_MODEL = "gpt-6-astra";
 
 export const PUBLIC_RULING_MODEL_PROFILES = Object.freeze({
+  "relay-gpt-6-astra-low": Object.freeze({
+    id: "relay-gpt-6-astra-low",
+    label: "GPT-6 Astra · 思考 low",
+    provider: "relay",
+    model: "gpt-6-astra",
+    thinkingMode: "enabled",
+    reasoningEffort: "low",
+    transport: "chat_completions_sse",
+    thirdParty: true,
+    modelIdentityVerified: false,
+  }),
   "relay-gpt-5.6-luna-low": Object.freeze({
     id: "relay-gpt-5.6-luna-low",
     label: "GPT-5.6 Luna · 思考 low",
