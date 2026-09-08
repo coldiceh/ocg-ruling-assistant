@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "builtAtUtc": "2026-09-08T12:39:07.878Z",
+  "dataRevision": "68c852a91549b81d7a57ca55ae5a73c07722bdcb35df4f2543e97297c38a179a",
+  "model": {
+    "id": "Qwen/Qwen3-Embedding-0.6B",
+    "revision": "97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3"
+  },
+  "inputContract": {
+    "schemaVersion": 1,
+    "textNormalization": "nfkc_lf_trim_lines_collapse_horizontal_whitespace_v1",
+    "questionSceneView": "official_qa_labeled_title_question_raw_question_raw_detailed_projected_scene_card_reference_context_or_rule_doc_title_v3",
+    "rulingBodyView": "official_qa_separated_answer_else_complete_official_body_card_reference_context_or_rule_doc_source_record_body_v3",
+    "queryTemplate": "Instruct: {instruction}\\nQuery:{query}",
+    "queryInstruction": "Given a web search query, retrieve relevant passages that answer the query",
+    "documentInstruction": null,
+    "tokenizerPaddingSide": "left",
+    "tokenizerMaxLength": 8192,
+    "tokenizerTruncation": true,
+    "pooling": "last_non_padding_token",
+    "normalization": "l2",
+    "similarity": "exact_cosine_matrix_max_two_views",
+    "vectorDtype": "float32"
+  },
+  "inputContractSha256": "bc6634e9180568b7144dd456be8f2bec81007468a10fe60b838ce83114e91392",
+  "corpusFile": "corpus.json.gz",
+  "corpusEncoding": "gzip",
+  "corpusSha256": "3ba4fd740c1c0e565a0560e7b16ecd7ab32eaccbbac79ace88737f0565792029",
+  "corpusBytes": 166378399,
+  "corpusCompressedSha256": "f7ecf1eb92c9bb6b9b25fc2a682a60e9670db5fc04f5a71cc82c8a5de8de9daa",
+  "corpusCompressedBytes": 24508408,
+  "candidateCount": 31058,
+  "uniqueDocumentViews": 61983,
+  "vectorIndexSha256": "a9be861530ffcaebc1b66140208782cea73d9f1b1246f60178f3328567d5322b",
+  "reusedVectorShards": 6,
+  "sourceRuleSha256": "e6d55bd5dfa6490598f520ed01ada5b4e440d89a7c8d55c243e335f22b2bdfbe",
+  "privateEvaluationInputs": false,
+  "externalCalls": 0,
+  "embeddingComputations": 0
+}

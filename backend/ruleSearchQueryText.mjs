@@ -3,15 +3,18 @@ const DEFAULT_MAX_BRANCH_CHARS = 160;
 
 export function splitRuleSearchQueryBranches(value, {
   maxBranches = DEFAULT_MAX_BRANCHES,
-  maxBranchChars = DEFAULT_MAX_BRANCH_CHARS,
+  maxBranchChars,
 } = {}) {
   const safeBranchLimit = Math.max(1, Math.floor(Number(maxBranches) || DEFAULT_MAX_BRANCHES));
-  const safeCharLimit = Math.max(1, Math.floor(Number(maxBranchChars) || DEFAULT_MAX_BRANCH_CHARS));
+  const safeCharLimit = maxBranchChars === undefined || maxBranchChars === null
+    ? null
+    : Math.max(1, Math.floor(Number(maxBranchChars) || DEFAULT_MAX_BRANCH_CHARS));
   return String(value || "")
     .normalize("NFKC")
     .split(/[|｜\r\n]+/u)
-    .map((branch) => branch.replace(/\s+/gu, " ").trim().slice(0, safeCharLimit))
+    .map((branch) => branch.replace(/\s+/gu, " ").trim())
     .filter(Boolean)
+    .map((branch) => safeCharLimit === null ? branch : branch.slice(0, safeCharLimit))
     .slice(0, safeBranchLimit);
 }
 

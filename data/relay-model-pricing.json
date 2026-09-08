@@ -1,21 +1,22 @@
 {
   "schemaVersion": 1,
-  "pricingVersion": "relay-token-group-screenshot-2026-08-07",
-  "effectiveDate": "2026-08-07",
-  "checkedAt": "2026-08-07",
+  "pricingVersion": "relay-live-pricing-2026-09-08",
+  "effectiveDate": "2026-09-08",
+  "checkedAt": "2026-09-08",
   "currency": "USD",
   "unit": "per_1m_tokens",
   "multiplier": 0.27,
   "source": {
-    "kind": "user_provided_token_group_screenshot",
+    "kind": "vendor_pricing_and_observed_token_usage",
     "providerVerified": false,
-    "note": "The 0.27 multiplier applies only to the token group shown in the user-provided screenshot. Other token groups require an explicit server override or an updated pricing dataset; the relay dashboard remains the billing authority."
+    "url": "https://api.986310.xyz/pricing",
+    "note": "Sol and Astra base rates read from vendor pricing on 2026-09-08. Latest observed token usage at 2026-09-08T07:16:48Z showed group multiplier0.27; current editable token group was not exposed. Terra/Luna retain old screenshot rates. Usage estimates remain subject to provider billing. One CNY per site-dollar credit is the user-confirmed purchase conversion, not foreign exchange."
   },
   "models": {
     "gpt-5.6-sol": {
-      "inputUsdPerMillion": 7.3,
-      "cachedInputUsdPerMillion": 0.73,
-      "outputUsdPerMillion": 43.8
+      "inputUsdPerMillion": 5,
+      "cachedInputUsdPerMillion": 0.5,
+      "outputUsdPerMillion": 30
     },
     "gpt-5.6-terra": {
       "inputUsdPerMillion": 2.92,
@@ -26,6 +27,11 @@
       "inputUsdPerMillion": 0.3942,
       "cachedInputUsdPerMillion": 0.03942,
       "outputUsdPerMillion": 2.3652
+    },
+    "gpt-6-astra": {
+      "inputUsdPerMillion": 10,
+      "cachedInputUsdPerMillion": 1,
+      "outputUsdPerMillion": 50
     }
   }
 }

@@ -1,7 +1,6 @@
 import {
   createPublicAnswerModelEnv,
   getRagBudgetStatus,
-  isServerOwnedPrivateEvaluationEnv,
   resolveCardExtractionProvider,
   resolveRagProvider,
 } from "./ragModelClient.mjs";
@@ -21,16 +20,6 @@ import {
   answerRagRulingQuestionForVersion,
   getRulingVersionCapabilities,
 } from "./rulingVersionRegistry.mjs";
-import {
-  activatePublicOfftopicRiskControl,
-  buildPublicOfftopicRiskControlAnswer,
-  publicOfftopicRiskControlStorageStatus,
-  readPublicOfftopicRiskControl,
-} from "./publicOfftopicRiskControl.mjs";
-import {
-  classifyPublicQueryScope,
-  shouldTriggerPublicQueryRisk,
-} from "./publicQueryScopeClassifier.mjs";
 
 export const PUBLIC_ANSWER_REQUEST_BODY_LIMIT_BYTES = 64 * 1024;
 export const PUBLIC_ANSWER_QUESTION_LIMIT_CHARACTERS = 12_000;
@@ -161,7 +150,7 @@ export async function getPublicAnswerModelInfo({ env = process.env } = {}) {
     budget,
     engineEnabled: false,
     enabled: rulingModelProfiles.some((profile) => profile.available),
-    pipeline: "rag_baseline",
+    pipeline: env.RAG_EVIDENCE_PIPELINE === 'cloud_evidence_v1' ? 'cloud_evidence_v1' : 'rag_baseline',
     legacyModes: [],
   };
 }
@@ -172,9 +161,6 @@ export async function answerPublicRulingQuestion({
   signal,
   progress,
   appendAudit = appendQueryAudit,
-  readRiskControl = readPublicOfftopicRiskControl,
-  classifyScope = classifyPublicQueryScope,
-  activateRiskControl = activatePublicOfftopicRiskControl,
   answerOfficialExact = answerExactOfficialQaQuestionForVersion,
   answerRuling = answerRagRulingQuestionForVersion,
 } = {}) {
@@ -188,9 +174,8 @@ export async function answerPublicRulingQuestion({
     );
   }
 
-  // Audit begins before any early return so blocked questions remain visible
-  // to the administrator. The risk-control record itself never stores the
-  // question text.
+  // Audit begins before any early return so every public question remains
+  // visible to the administrator.
   const auditPromise = appendAudit({
     question: normalizedPayload.question,
     mode,
@@ -207,44 +192,6 @@ export async function answerPublicRulingQuestion({
   if (exactAnswer) {
     await auditPromise;
     return { answer: exactAnswer, latency: null };
-  }
-
-  if (shouldApplyPublicOfftopicRiskControl(env)) {
-    const storage = publicOfftopicRiskControlStorageStatus(env);
-    if (storage.enabled) {
-      const activeControl = await readRiskControl({ env }).catch(() => null);
-      if (activeControl?.active === true) {
-        await auditPromise;
-        return {
-          answer: buildPublicOfftopicRiskControlAnswer({ status: activeControl, env }),
-          latency: null,
-        };
-      }
-
-      // A storage outage cannot safely enforce a global lock. Skip the paid
-      // classifier as well as the write and continue the normal ruling path.
-      if (activeControl?.ok === true) {
-        const scopeDecision = await classifyScope({
-          question: normalizedPayload.question,
-          env,
-          signal,
-        }).catch(() => null);
-        if (shouldTriggerPublicQueryRisk(scopeDecision)) {
-          const activated = await activateRiskControl({ env }).catch(() => null);
-          if (activated?.active === true) {
-            await auditPromise;
-            return {
-              answer: buildPublicOfftopicRiskControlAnswer({
-                status: activated,
-                triggered: activated.triggered === true,
-                env,
-              }),
-              latency: null,
-            };
-          }
-        }
-      }
-    }
   }
 
   const profile = resolvePublicRulingModelProfile(
@@ -275,14 +222,6 @@ export async function answerPublicRulingQuestion({
     await auditPromise;
     throw error;
   }
-}
-
-export function shouldApplyPublicOfftopicRiskControl(env = process.env) {
-  if (isServerOwnedPrivateEvaluationEnv(env)) return false;
-  if (/^(?:1|true|yes|on)$/iu.test(String(env.RAG_DRY_RUN || "").trim())) return false;
-  return !/^(?:0|false|off|no)$/iu.test(
-    String(env.PUBLIC_OFFTOPIC_RISK_CONTROL_ENABLED || "").trim(),
-  );
 }
 
 export async function persistPublicAnswerLatency({ latency, env = process.env } = {}) {
@@ -316,6 +255,7 @@ export function publicAnswerHttpError(error) {
       error: publicMessage || (error instanceof Error ? error.message : String(error)),
       code: error?.code || "answer_failed",
       ...(officialQaBodyDetails ? { details: officialQaBodyDetails } : {}),
+      ...(error?.cloudCosts ? {debug:{cloudCosts:error.cloudCosts}} : {}),
     },
   };
 }

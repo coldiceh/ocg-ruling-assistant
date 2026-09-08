@@ -11,6 +11,9 @@ import {
   isServerOwnedPrivateEvaluationEnv,
 } from "./ragModelClient.mjs";
 import { buildRagRulingPromptBundle } from "./ragRulingPrompt.mjs";
+import { createCloudEvidenceProvider } from './cloudEvidenceProvider.mjs';
+import { generateCloudEvidencePlan } from './cloudEvidencePlan.mjs';
+import { runCloudBudgetedQuestion, cloudSiliconFlowCallbacks } from './cloudRequestBudget.mjs';
 import { hasNumberedCardIdentityConflict } from "./numberedCardIdentity.mjs";
 import { retrieveExactOfficialQaDirect } from "./officialQaExactDirect.mjs";
 import { resolveRagDataRevision } from "./ragDataRevisionManifest.mjs";
@@ -18,8 +21,21 @@ import {
   beginPrivateEvaluationStage,
   createPrivateEvaluationDiagnostics,
 } from "./privateEvaluationDiagnostics.mjs";
+import {
+  attestTrustedFrozenResolvedCard,
+  hasTrustedFrozenCardResolutionAttestation,
+} from "../scripts/lib/retrieval-evidence-lineage.mjs";
 
 const defaultSnapshotRevisionCache = new WeakMap();
+const TRUSTED_FROZEN_IDENTITY_RESOLUTION_SOURCES = new Set([
+  "query",
+  "external_identity_verification",
+]);
+const TRUSTED_FROZEN_IDENTITY_VERIFICATION_STATUSES = new Set([
+  "verified_same_identity",
+  "verified_external_replacement",
+  "verified_external_resolution",
+]);
 
 const DISABLED_ENGINE = Object.freeze({
   requested: false,
@@ -65,6 +81,18 @@ const DISABLED_AUXILIARY_STAGE = Object.freeze({
 });
 
 export async function answerRagRulingQuestion(options = {}) {
+  const activeEnv=options.env || globalThis.process?.env || {};
+  if(activeEnv.RAG_EVIDENCE_PIPELINE==='cloud_evidence_v1') {
+    if(options.dryRun===true || /^(1|true|yes|on)$/iu.test(String(activeEnv.RAG_DRY_RUN||''))) {
+      throw Object.assign(new Error('cloud_evidence_dry_run_not_supported'),{code:'cloud_evidence_dry_run_not_supported'});
+    }
+    return runCloudBudgetedQuestion({env:activeEnv,fetchImpl:options.fetchImpl,budget:options.cloudBudget},
+      ()=>answerRagRulingQuestionWithDiagnostics(options));
+  }
+  return answerRagRulingQuestionWithDiagnostics(options);
+}
+
+async function answerRagRulingQuestionWithDiagnostics(options) {
   const diagnostics = createPrivateEvaluationDiagnostics({
     env: options.env || globalThis.process?.env || {},
     traceId: options.privateEvaluationTraceId,
@@ -106,12 +134,23 @@ async function answerRagRulingQuestionInternal({
   officialQaExactCandidatePoolComplete = false,
   officialQaExactOnly = false,
   officialQaExactAlreadyChecked = false,
+  evidenceSelectionProvider,
+  frozenCardResolution,
   progress,
 } = {}) {
   const pipelineStartedAt = Date.now();
   const timingsMs = {};
   const query = String(question || userQuery || "").trim();
   if (!query) return buildEmptyQuestionAnswer();
+  const cloudEvidence = env.RAG_EVIDENCE_PIPELINE === 'cloud_evidence_v1';
+  if (cloudEvidence && (dryRun === true
+      || ['1', 'true', 'yes', 'on'].includes(String(env.RAG_DRY_RUN || '').toLowerCase()))) {
+    const error = new Error('cloud_evidence_dry_run_not_supported');
+    error.code = 'cloud_evidence_dry_run_not_supported';
+    throw error;
+  }
+  // Trial packing and the final model must see the same size contract.
+  const promptEnv = cloudEvidence ? {...env, RAG_MAX_PROMPT_CHARS: '36000'} : env;
 
   const dataStartedAt = Date.now();
   const dataStage = beginPrivateEvaluationStage(privateEvaluationDiagnostics, "data_load");
@@ -158,8 +197,9 @@ async function answerRagRulingQuestionInternal({
   const extractionStage = beginPrivateEvaluationStage(privateEvaluationDiagnostics, "extraction");
   const preflightStartedAt = Date.now();
   let cardNameModel;
-  let ruleQueryModel;
+  let ruleQueryModel = {...DISABLED_AUXILIARY_STAGE, queries:[], candidateAssessments:[]};
   let cardResolution;
+  let frozenCardResolutionRejections = [];
   try {
     const maxCards = readNumber(env.RAG_MAX_CARDS, 6);
     const localCardResolution = extractRagCards(query, {
@@ -179,13 +219,28 @@ async function answerRagRulingQuestionInternal({
       now,
       signal,
     });
-    cardResolution = (cardNameModel.candidates || []).length
+    const extractedCardResolution = (cardNameModel.candidates || []).length
       ? extractRagCards(query, {
         cards: data.cards || [],
         maxCards,
         modelCardNameCandidates: cardNameModel.candidates,
       })
       : localCardResolution;
+    const trustedFrozenCardResolution = normalizeFrozenCardResolution(frozenCardResolution, {
+      questionSha256: sha256Text(query),
+      dataRevision,
+      currentCardResolution: extractedCardResolution,
+      canonicalCards: data.cards || [],
+    });
+    frozenCardResolutionRejections = trustedFrozenCardResolution?.rejectedResolvedCards || [];
+    cardResolution = trustedFrozenCardResolution
+      ? {
+          ...extractedCardResolution,
+          resolvedCards: trustedFrozenCardResolution.resolvedCards,
+          unresolvedMentions: trustedFrozenCardResolution.unresolvedMentions,
+          ambiguousMentions: trustedFrozenCardResolution.ambiguousMentions,
+        }
+      : extractedCardResolution;
     timingsMs.auxiliaryExtractionModels = elapsedMs(auxiliaryExtractionStartedAt);
     extractionStage.end();
   } catch (error) {
@@ -199,6 +254,20 @@ async function answerRagRulingQuestionInternal({
   const retrievalStage = beginPrivateEvaluationStage(privateEvaluationDiagnostics, "retrieval");
   let retrievedEvidence;
   try {
+    const cloudProvider = cloudEvidence ? createCloudEvidenceProvider({
+      ...cloudSiliconFlowCallbacks(),
+      fetchImpl: fetchImpl || globalThis.fetch,
+      generatePlan: async ({question,cardTexts,signal:planSignal}) => {
+        const plan = await generateCloudEvidencePlan({
+          question,cardTexts,signal:planSignal,env,fetchImpl:fetchImpl||globalThis.fetch,
+        });
+        ruleQueryModel = {...plan.telemetry, queries:[], candidateAssessments:[],
+          informationNeeds:plan.informationNeeds, queryTexts:plan.queryTexts};
+        timingsMs.ruleQueryExtraction = plan.telemetry.elapsedMs;
+        timingsMs.auxiliaryExtractionModels += plan.telemetry.elapsedMs;
+        return plan;
+      },
+    }) : null;
     retrievedEvidence = await retrieveRagEvidence({
       userQuery: query,
       cardResolution,
@@ -208,6 +277,14 @@ async function answerRagRulingQuestionInternal({
       qaRecords: data.qaRecords,
       enableLiveOfficialQa: true,
       subsumptionCandidatePoolComplete: usesCompleteDefaultSnapshot,
+      preparedEvidenceProvider: cloudProvider ? async (preparedEvidence) => cloudProvider.retrieve({
+        userQuery:query, dataRevision, cardResolution:preparedEvidence.cardResolution,
+        retrievedEvidence:preparedEvidence, env, signal,
+        packEvidence:(selectedEvidence)=>buildRagRulingPromptBundle({
+          userQuery:query,cardResolution:preparedEvidence.cardResolution,
+          evidence:selectedEvidence,env:promptEnv,
+        }),
+      }) : undefined,
       ruleSearchQueryProvider: async ({
         resolvedCards,
         userProvidedCardTexts,
@@ -249,12 +326,28 @@ async function answerRagRulingQuestionInternal({
 
   const effectiveCardResolution = reconcileCardResolution(cardResolution, retrievedEvidence);
 
-  // The public pure-LLM path ends evidence preparation here.  Retrieved card
-  // text, FAQ, official Q&A and general rule records are passed through exactly
-  // as returned by the retriever. No applicability classifier, handwritten
-  // rule component, semantic executor, duel engine, formal engine or Lua
-  // analysis may filter, strengthen or replace them before the final model.
-  const evidence = retrievedEvidence;
+  // Without an explicitly injected provider, the public pure-LLM path ends
+  // evidence preparation here and passes the retriever result through exactly.
+  // The optional seam is reserved for callers that deliberately own a bounded
+  // evidence-selection step; it is not enabled by runtime configuration.
+  let evidence = retrievedEvidence;
+  if (typeof evidenceSelectionProvider === "function") {
+    evidence = await evidenceSelectionProvider({
+      userQuery: query,
+      dataRevision,
+      sourceData: data,
+      cardResolution: effectiveCardResolution,
+      retrievedEvidence,
+      env,
+      signal,
+      packEvidence: (selectedEvidence) => buildRagRulingPromptBundle({
+        userQuery: query,
+        cardResolution: effectiveCardResolution,
+        evidence: selectedEvidence,
+        env: promptEnv,
+      }),
+    });
+  }
   progress?.transition?.("generate_ruling");
   const promptStage = beginPrivateEvaluationStage(privateEvaluationDiagnostics, "prompt_build");
   let promptBundle;
@@ -266,7 +359,7 @@ async function answerRagRulingQuestionInternal({
       userQuery: query,
       cardResolution: effectiveCardResolution,
       evidence,
-      env,
+      env: promptEnv,
     });
     evidenceFingerprint = sha256Json(evidence);
     finalPromptSha256 = sha256Text(promptBundle.prompt);
@@ -331,6 +424,11 @@ async function answerRagRulingQuestionInternal({
         item.id === authoritativeOfficialDirectId && item.type === "official_qa"
       )),
   );
+  const answerLevel = authoritativeOfficialDirectCompleted
+    ? "official_confirmed"
+    : normalized.answerLevel === "official_confirmed"
+      ? "rule_analysis"
+      : normalized.answerLevel;
   const auxiliaryTokenUsage = sumUsageTelemetry([
     cardNameModel.tokenUsage,
     ruleQueryModel.tokenUsage,
@@ -343,13 +441,11 @@ async function answerRagRulingQuestionInternal({
     + (ruleQueryModel.estimatedCostUsd || 0);
 
   return {
-    mode: "rag_baseline",
+    mode: env.RAG_EVIDENCE_PIPELINE === 'cloud_evidence_v1' ? 'cloud_evidence_v1' : 'rag_baseline',
     // Authority is server-owned. A model cannot promote ordinary evidence to
     // an official ruling, while a completed answer from the already-certified
     // unique direct-Q&A route must not be downgraded by the plain-text adapter.
-    answerLevel: authoritativeOfficialDirectCompleted
-      ? "official_confirmed"
-      : normalized.answerLevel,
+    answerLevel,
     shortAnswer: normalized.shortAnswer,
     reasoning: normalized.reasoning,
     usedEvidence: displayedEvidence,
@@ -365,6 +461,14 @@ async function answerRagRulingQuestionInternal({
     formalEngine: { ...DISABLED_FORMAL_ENGINE },
     legacyLua: { ...DISABLED_LEGACY_LUA },
     debug: {
+      cloudEvidence: evidence.debug?.cloudEvidence || null,
+      ...(cloudEvidence && env.VERCEL_ENV === 'preview' ? {
+        cloudEvidenceCapture: {
+          actualPrompt: promptBundle.prompt,
+          informationNeeds: ruleQueryModel.informationNeeds || [],
+          queryTexts: ruleQueryModel.queryTexts || [],
+        },
+      } : {}),
       mode: "rag_baseline",
       engineStatus: "disabled",
       engineTraceSha256: null,
@@ -383,6 +487,7 @@ async function answerRagRulingQuestionInternal({
         legacyLuaUnknownReasons: 0,
       },
       unresolvedMentions: effectiveCardResolution.unresolvedMentions,
+      frozenCardResolutionRejections,
       ambiguousMentions: [
         ...(effectiveCardResolution.ambiguousMentions || []),
         ...(evidence.baigeAmbiguousMentions || []),
@@ -479,6 +584,29 @@ async function answerRagRulingQuestionInternal({
 }
 
 function reconcileCardResolution(cardResolution = {}, evidence = {}) {
+  // Retrieval owns the final identity decision. In particular, an approximate
+  // extraction candidate may be rejected after external verification; merging
+  // the pre-retrieval candidate back here would silently resurrect it.
+  if (evidence.cardResolution && typeof evidence.cardResolution === "object") {
+    const extractedCards = cardResolution.resolvedCards || [];
+    const resolvedCards = (evidence.cardResolution.resolvedCards || []).map((retrievedCard) => {
+      const extractedCard = extractedCards.find((candidate) => sameCanonicalCardId(candidate, retrievedCard));
+      if (!extractedCard) return retrievedCard;
+      return {
+        ...extractedCard,
+        ...retrievedCard,
+        effectText: retrievedCard.effectText || extractedCard.effectText || "",
+        aliases: [...new Set([
+          ...(extractedCard.aliases || []),
+          ...(retrievedCard.aliases || []),
+        ].filter(Boolean))],
+      };
+    });
+    return {
+      ...evidence.cardResolution,
+      resolvedCards,
+    };
+  }
   const resolvedCards = dedupeCards([
     ...(evidence.retrievedCards || []),
     ...(cardResolution.resolvedCards || []),
@@ -525,6 +653,32 @@ function cardMatchesMention(mention, cards) {
       || (mentionKey.length >= 3 && (name.includes(mentionKey) || mentionKey.includes(name)))
     ));
   });
+}
+
+function frozenCardMatchesPendingMention(mention, card = {}) {
+  const mentionKey = normalizeCardKey(mention?.input);
+  if (!mentionKey) return false;
+  const originKeys = [card?.input, card?.matchedQuery]
+    .map(normalizeCardKey)
+    .filter(Boolean);
+  if (originKeys.length > 0) return originKeys.includes(mentionKey);
+  const identityText = [
+    card?.name,
+    card?.cnName,
+    card?.jaName,
+    card?.jpName,
+    card?.enName,
+    ...(card?.aliases || []),
+  ].filter(Boolean).join(" ");
+  if (hasNumberedCardIdentityConflict(mention?.input, identityText)) return false;
+  return [
+    card?.name,
+    card?.cnName,
+    card?.jaName,
+    card?.jpName,
+    card?.enName,
+    ...(card?.aliases || []),
+  ].map(normalizeCardKey).filter(Boolean).includes(mentionKey);
 }
 
 function buildEmptyQuestionAnswer() {
@@ -798,6 +952,146 @@ function firstReturnedModel(attempts = []) {
   return model || null;
 }
 
+function normalizeFrozenCardResolution(value, {
+  questionSha256,
+  dataRevision,
+  currentCardResolution,
+  canonicalCards = [],
+} = {}) {
+  if (value === undefined || value === null) return null;
+  if (!value || typeof value !== "object" || Array.isArray(value)
+      || String(value.questionSha256 || "") !== String(questionSha256 || "")
+      || String(value.dataRevision || "") !== String(dataRevision || "")
+      || !Array.isArray(value.resolvedCards)
+      || !Array.isArray(value.unresolvedMentions)
+      || !Array.isArray(value.ambiguousMentions)) {
+    throw new Error("frozen_card_resolution_binding_invalid");
+  }
+  const pendingMentions = [
+    ...value.unresolvedMentions,
+    ...value.ambiguousMentions,
+  ];
+  const currentCards = Array.isArray(currentCardResolution?.resolvedCards)
+    ? currentCardResolution.resolvedCards
+    : [];
+  const trustedReplayAttestation = hasTrustedFrozenCardResolutionAttestation(value);
+  const rejectedResolvedCards = [];
+  const resolvedCards = value.resolvedCards.flatMap((card) => {
+    const ids = [card?.id, card?.cardId, card?.cid, card?.passcode]
+      .map((id) => String(id || "").trim())
+      .filter(Boolean);
+    const verification = String(card?.identityVerificationStatus || "");
+    const verificationAllowed = TRUSTED_FROZEN_IDENTITY_VERIFICATION_STATUSES.has(
+      verification,
+    );
+    const currentMatches = currentCards.filter((candidate) => (
+      frozenCardIdentityKeys(candidate).some((key) => frozenCardIdentityKeys(card).includes(key))
+    ));
+    const currentMatch = currentMatches.length === 1 ? currentMatches[0] : null;
+    const currentMatchSource = String(currentMatch?.resolutionSource || "");
+    const currentMatchNeedsVerification = currentMatch?.requiresExternalIdentityVerification === true
+      || currentMatch?.identityMatchKind === "edit_distance"
+      || currentMatch?.retrievalIdentityMatchKind === "local_fuzzy";
+    const blockedByPendingIdentity = pendingMentions.some(
+      (mention) => frozenCardMatchesPendingMention(mention, card),
+    );
+    const legacyNonIdentityReference = !String(card?.resolutionSource || "").trim()
+      && !String(card?.source || "").trim()
+      && !verification
+      && ids.length > 0
+      && currentMatches.length === 1
+      && currentMatchSource === "card_text_reference"
+      && currentMatch?.identityCanonicalizationConflict !== true
+      && !currentMatchNeedsVerification
+      && card?.identityCanonicalizationConflict !== true
+      && !blockedByPendingIdentity;
+    if (legacyNonIdentityReference) {
+      rejectedResolvedCards.push(Object.freeze({
+        id: String(card?.id || card?.cardId || card?.cid || card?.passcode),
+        resolutionSource: currentMatchSource,
+        reason: "legacy_frozen_non_identity_reference",
+      }));
+      return [];
+    }
+    const confirmedByCurrentResolution = Boolean(currentMatch)
+      && TRUSTED_FROZEN_IDENTITY_RESOLUTION_SOURCES.has(currentMatchSource)
+      && currentMatch?.identityCanonicalizationConflict !== true
+      && (!currentMatchNeedsVerification
+        || TRUSTED_FROZEN_IDENTITY_VERIFICATION_STATUSES.has(
+          String(currentMatch?.identityVerificationStatus || ""),
+        ));
+    let resolutionSource = String(card?.resolutionSource || "");
+    if (!resolutionSource && confirmedByCurrentResolution) {
+      resolutionSource = currentMatchSource;
+    }
+    // Older frozen manual-review traces retained the external provider and its
+    // explicit verification verdict, but their sanitizer omitted
+    // resolutionSource. This is the only safe legacy migration: an external
+    // identity remains external and still needs a verified_* verdict.
+    if (!resolutionSource
+        && String(card?.source || "") === "baige"
+        && trustedReplayAttestation
+        && verificationAllowed) {
+      resolutionSource = "external_identity_verification";
+    }
+    const canonicalFrozenMatches = canonicalCards.filter((candidate) => (
+      frozenCardIdentityKeys(candidate).some((key) => frozenCardIdentityKeys(card).includes(key))
+    ));
+    const confirmedByFrozenVerification = trustedReplayAttestation
+      && resolutionSource === "external_identity_verification"
+      && verificationAllowed
+      && canonicalFrozenMatches.length === 1;
+    const externalIdentityVerified = resolutionSource !== "external_identity_verification"
+      || confirmedByFrozenVerification;
+    const confirmedIdentity = confirmedByFrozenVerification || confirmedByCurrentResolution;
+    if (!card || typeof card !== "object" || Array.isArray(card)
+        || ids.length === 0
+        || card.identityCanonicalizationConflict === true
+        || !confirmedIdentity
+        || !TRUSTED_FROZEN_IDENTITY_RESOLUTION_SOURCES.has(resolutionSource)
+        || !externalIdentityVerified
+        || blockedByPendingIdentity) {
+      throw new Error("frozen_card_resolution_untrusted");
+    }
+    return [confirmedByFrozenVerification
+      ? attestTrustedFrozenResolvedCard(value, card, {
+          canonicalCard: canonicalFrozenMatches[0],
+          resolutionSource,
+        })
+      : resolutionSource === card.resolutionSource
+        ? card
+        : { ...card, resolutionSource }];
+  });
+  if (rejectedResolvedCards.length > 0 && resolvedCards.length === 0) {
+    throw new Error("frozen_card_resolution_untrusted");
+  }
+  return {
+    resolvedCards,
+    unresolvedMentions: value.unresolvedMentions,
+    ambiguousMentions: value.ambiguousMentions,
+    rejectedResolvedCards,
+  };
+}
+
+function frozenCardIdentityKeys(card = {}) {
+  return [...new Set([
+    card?.id,
+    card?.cardId,
+    card?.cid,
+    card?.passcode,
+  ].map((value) => String(value || "").trim()).filter(Boolean))];
+}
+
+function sameCanonicalCardId(left = {}, right = {}) {
+  const values = (card) => new Set([
+    card.id,
+    card.cardId,
+    card.cid,
+  ].map((value) => String(value ?? "").trim()).filter(Boolean));
+  const leftIds = values(left);
+  return [...values(right)].some((id) => leftIds.has(id));
+}
+
 function selectedPromptEvidenceRefs(evidence = {}, allowedEvidenceIds = []) {
   const allowed = new Set((allowedEvidenceIds || [])
     .map((id) => String(id || "").trim())
@@ -832,17 +1126,14 @@ function assertRelayRuleQueryPlanAvailable(result = {}, { dryRun = false, env = 
   const forcedDryRun = /^(?:1|true|yes|on)$/iu.test(String(env.RAG_DRY_RUN || "").trim());
   const relayRequired = result.relayRequired === true || result.providerUsed === "relay";
   if (dryRun === true || forcedDryRun || !relayRequired) return;
-  if (Array.isArray(result.queries) && result.queries.length > 0) return;
-  const hasUsableCandidateAssessment = (Array.isArray(result.candidateAssessments)
-    ? result.candidateAssessments
-    : []).some((item) => (
-    ["high", "medium"].includes(String(item?.relevance || "").toLowerCase())
-      && ["same", "partial"].includes(String(item?.premise || "").toLowerCase())
-  ));
-  if (hasUsableCandidateAssessment) return;
+  if (result.responseStatus === "valid") return;
 
   const warnings = Array.isArray(result.warnings) ? result.warnings.map(String) : [];
-  const timedOut = warnings.some((warning) => /timeout|timed out|超时/iu.test(warning));
+  const providerFailure = result?.providerFailure && typeof result.providerFailure === "object"
+    ? result.providerFailure
+    : null;
+  const timedOut = providerFailure?.kind === "timeout"
+    || warnings.some((warning) => /timeout|timed out|超时/iu.test(warning));
   const unavailable = result.providerUsed !== "relay";
   const error = new Error(unavailable
     ? "Relay 证据准备模型不可用，本次未生成裁定，请联系管理员检查配置。"
@@ -855,5 +1146,11 @@ function assertRelayRuleQueryPlanAvailable(result = {}, { dryRun = false, env = 
       ? "rule_query_model_timeout"
       : "rule_query_model_empty";
   error.statusCode = 503;
+  error.responseReason = String(result.responseReason || "").trim() || null;
+  if (providerFailure) {
+    error.providerFailure = providerFailure;
+    error.outcomeKnown = providerFailure.outcomeKnown ?? null;
+    error.budgetReservationMayExist = providerFailure.budgetReservationMayExist ?? null;
+  }
   throw error;
 }

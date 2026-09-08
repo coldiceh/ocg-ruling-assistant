@@ -4,8 +4,6 @@ import { analyzeOrderedResolutionCheckpoint } from "./orderedResolutionCheckpoin
 import { analyzeEffectRewriteAttribution } from "./effectRewriteAttribution.mjs";
 import { analyzePrintedCardNameReferenceTransition } from "./printedCardNameReferenceReasoner.mjs";
 import { analyzeSummonProcedureTriggerTransition } from "./summonProcedureTriggerReasoner.mjs";
-import { attachSemanticTransitionContract } from "./semanticAuthorityGate.mjs";
-
 export function analyzeEffectStateTransition({
   userQuery = "",
   cardTexts = [],
@@ -13,13 +11,9 @@ export function analyzeEffectStateTransition({
   operationLegality = null,
   resolvedCards = [],
 } = {}) {
-  const finalize = (transition) => attachSemanticTransitionContract(transition, {
-    userQuery,
-    cardResolution: { resolvedCards },
-  });
   const candidates = [];
   const collect = (transition) => {
-    if (transition) candidates.push(finalize(transition));
+    if (transition) candidates.push(transition);
   };
   const summonProcedureTriggerTransition = analyzeSummonProcedureTriggerTransition({
     userQuery: String(userQuery || ""),
@@ -71,12 +65,9 @@ export function analyzeEffectStateTransition({
   return selectBestSemanticCandidate(candidates);
 }
 
-// Reasoners are independent capability providers.  An early recognizer may
+// Reasoners are independent capability providers. An early recognizer may
 // legitimately return an incomplete diagnostic, so it must not prevent a
-// later executor from proving the whole question.  Prefer complete claim
-// coverage, then an explicit authoritative execution; partial candidates are
-// retained only as diagnostics and will still fail the separate authority
-// gate in the RAG pipeline.
+// later executor from producing a complete result.
 function selectBestSemanticCandidate(candidates = []) {
   return [...candidates]
     .filter(Boolean)
@@ -85,23 +76,11 @@ function selectBestSemanticCandidate(candidates = []) {
 }
 
 function semanticCandidateScore(candidate = {}) {
-  const coverage = candidate.queryCoverage || {};
-  const claims = Array.isArray(coverage.claims) ? coverage.claims : [];
-  const covered = claims.filter((claim) => claim?.covered === true).length;
-  const uncovered = Array.isArray(coverage.uncoveredClaimIds) ? coverage.uncoveredClaimIds.length : claims.length;
-  const ambiguous = Array.isArray(coverage.ambiguousClaimIds) ? coverage.ambiguousClaimIds.length : 0;
-  // Authority gating may deliberately demote an otherwise completed local
-  // diagnostic. Candidate arbitration compares that pre-boundary execution;
-  // the authority bonus below still requires the current trusted state.
   const diagnosticStatus = candidate.originalStatus ?? candidate.status;
   const diagnosticComplete = candidate.originalComplete ?? candidate.complete;
   const executable = diagnosticStatus === "resolved" && diagnosticComplete === true;
-  return (executable && coverage.complete === true ? 10_000 : 0)
-    + (executable ? 1_000 : 0)
-    + (candidate.status === "resolved" && candidate.complete === true && candidate.authoritative === true ? 200 : 0)
-    + (covered * 20)
-    - (uncovered * 10)
-    - (ambiguous * 20);
+  return (executable ? 1_000 : 0)
+    + (candidate.status === "resolved" && candidate.complete === true && candidate.authoritative === true ? 200 : 0);
 }
 
 // Render from generic movement records emitted by the state engine. Card names

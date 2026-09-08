@@ -61,18 +61,21 @@ const NON_CARD_HEADING_NAMES = new Set(["效果", "问题", "问", "q", "场景"
 export function extractRagCards(userQuery, { cards = [], maxCards = 6, modelCardNameCandidates = [] } = {}) {
   const query = String(userQuery || "");
   const cardLimit = normalizeMaxCards(maxCards);
-  const cardNameScanQuery = maskNonCardQuotedExpressions(query);
+  const aliasIndex = buildAliasIndex(cards);
+  const cardNameScanQuery = maskNonCardQuotedExpressions(query, { aliasIndex });
   const normalizedQuery = normalizeCardKey(cardNameScanQuery);
   const queryNumberedIdentityKeys = new Set(extractNumberedCardIdentities(query).map(numberedIdentityKey));
-  const aliasIndex = buildAliasIndex(cards);
   const userProvidedCardTexts = extractUserProvidedCardTextBlocks(query);
   const nonCardQuotedMentionKeys = new Set(
-    collectQuotedMentionEntries(query)
+    collectQuotedMentionEntries(query, { aliasIndex })
       .filter((item) => item.role !== "card")
       .map((item) => normalizeCardKey(item.mention))
       .filter(Boolean),
   );
   const modelMentions = normalizeModelCardNameCandidates(modelCardNameCandidates)
+    .filter((mention) => [mention.originalText, mention.name].some((surface) => (
+      isPlausibleUnresolvedCardMention(surface, "model_card_name_extractor")
+    )))
     .filter((mention) => (
       !nonCardQuotedMentionKeys.has(normalizeCardKey(mention.name))
       && !nonCardQuotedMentionKeys.has(normalizeCardKey(mention.originalText))
@@ -84,7 +87,7 @@ export function extractRagCards(userQuery, { cards = [], maxCards = 6, modelCard
   let exactMentionSeeds = [
     ...buildModelMentionSeeds(modelMentions),
     ...extractNumberedCardMentionCandidates(query).map((input) => ({ input, reason: "numbered_card_not_found", source: "numbered_card_identity" })),
-    ...extractQuotedMentions(query).map((input) => ({ input, reason: "quoted_mention_not_found", source: "quoted_mention" })),
+    ...extractQuotedMentions(query, { aliasIndex }).map((input) => ({ input, reason: "quoted_mention_not_found", source: "quoted_mention" })),
     ...userProvidedCardTexts.map((item) => ({ input: item.name, reason: "user_provided_text_name_not_found", source: "user_provided_text" })),
   ];
   let unquotedMentionSeeds = extractUnquotedCardMentionCandidates(cardNameScanQuery)
@@ -194,11 +197,13 @@ export function extractRagCards(userQuery, { cards = [], maxCards = 6, modelCard
     const mentionKey = normalizeCardKey(mention);
     if (!mentionKey || seenMentionKeys.has(mentionKey)) continue;
     seenMentionKeys.add(mentionKey);
-    const candidates = aliasIndex.get(mentionKey) || [];
+    const candidates = resolveMentionCandidates(cards, aliasIndex, mention);
+    const allowUnresolvedHypothesis = isPlausibleUnresolvedCardMention(mention, seed.source);
     const requiresExternalNumberedIdentityVerification = numberedMentionKeysRequiringExternalVerification.has(mentionKey);
     const nearestEditCandidates = candidates.length
       || seed.deferToNestedKnownSpan
       || requiresExternalNumberedIdentityVerification
+      || !allowUnresolvedHypothesis
       ? []
       : collectNearestEditCandidates(aliasIndex, mention);
     const nearestEditCandidate = nearestEditCandidates.length === 1 ? nearestEditCandidates[0] : null;
@@ -206,6 +211,7 @@ export function extractRagCards(userQuery, { cards = [], maxCards = 6, modelCard
       || nearestEditCandidate
       || seed.deferToNestedKnownSpan
       || requiresExternalNumberedIdentityVerification
+      || !allowUnresolvedHypothesis
       ? null
       : findUniqueDistinctiveFragmentCandidate(cards, mention);
     if (candidates.length === 1) {
@@ -219,10 +225,11 @@ export function extractRagCards(userQuery, { cards = [], maxCards = 6, modelCard
         nearestEditCandidate,
         mention,
         confidenceForNearEditMention(seed, nearestEditCandidate.nearEditDistance),
+        seed,
       );
     } else if (distinctiveFragmentCandidate) {
       addResolved(resolved, seenCards, distinctiveFragmentCandidate, mention, 0.91);
-    } else if (looksLikeCardMention(mention) && !numberedMentionAlreadyResolved(mention, resolved)) {
+    } else if (allowUnresolvedHypothesis && !numberedMentionAlreadyResolved(mention, resolved)) {
       if (nearestEditCandidates.length > 1) nearEditAmbiguityLockedMentionKeys.add(mentionKey);
       if (seed.source !== "contextual_distinctive_fragment") unresolvedMentions.push(buildUnresolvedMention(seed));
     }
@@ -233,8 +240,9 @@ export function extractRagCards(userQuery, { cards = [], maxCards = 6, modelCard
     const mentionKey = normalizeCardKey(mention);
     if (!mentionKey || seenMentionKeys.has(mentionKey)) continue;
     seenMentionKeys.add(mentionKey);
-    const candidates = aliasIndex.get(mentionKey) || [];
-    const nearestEditCandidates = candidates.length || seed.deferToNestedKnownSpan
+    const candidates = resolveMentionCandidates(cards, aliasIndex, mention);
+    const allowUnresolvedHypothesis = isPlausibleUnresolvedCardMention(mention, seed.source);
+    const nearestEditCandidates = candidates.length || seed.deferToNestedKnownSpan || !allowUnresolvedHypothesis
       ? []
       : collectNearestEditCandidates(aliasIndex, mention);
     const nearestEditCandidate = nearestEditCandidates.length === 1 ? nearestEditCandidates[0] : null;
@@ -249,22 +257,24 @@ export function extractRagCards(userQuery, { cards = [], maxCards = 6, modelCard
         nearestEditCandidate,
         mention,
         confidenceForNearEditMention(seed, nearestEditCandidate.nearEditDistance),
+        seed,
       );
-    } else if (looksLikeCardMention(mention) && !numberedMentionAlreadyResolved(mention, resolved)) {
+    } else if (allowUnresolvedHypothesis && !numberedMentionAlreadyResolved(mention, resolved)) {
       if (nearestEditCandidates.length > 1) nearEditAmbiguityLockedMentionKeys.add(mentionKey);
       unresolvedMentions.push(buildUnresolvedMention(seed));
     }
   }
 
   const aliasHits = [];
-  for (const [aliasKey, candidates] of queryAliasEntries) {
+  for (const [aliasKey, primaryCandidates] of queryAliasEntries) {
     // Two-character aliases are too ambiguous for passive substring scanning
     // (for example, the card "融合" inside the gameplay term "融合怪").
     // Explicit model/quoted/unquoted candidates above can still resolve them.
     if (aliasKey.length < 3) continue;
     if (exactSpanSelection.hasOccurrences(aliasKey) && !exactSpanSelection.hasSelectedOccurrence(aliasKey)) continue;
-    const bestAlias = candidates[0]?.matchedAlias || "";
+    const bestAlias = primaryCandidates[0]?.matchedAlias || "";
     if (!bestAlias || !buildMentionContexts(cardNameScanQuery, bestAlias, resolved).length) continue;
+    const candidates = resolveMentionCandidates(cards, aliasIndex, bestAlias);
     aliasHits.push({ aliasKey, candidates, score: aliasKey.length + bestAlias.length / 100 });
   }
   aliasHits.sort((left, right) => right.score - left.score);
@@ -851,6 +861,10 @@ function exactSurfaceKey(value) {
   return String(value || "").normalize("NFKC").toLowerCase();
 }
 
+function punctuationInsensitiveSurfaceKey(value) {
+  return exactSurfaceKey(value).replace(/[\s・·･.－—–-]+/gu, "");
+}
+
 function spansOverlap(left, right) {
   return left.start < right.end && right.start < left.end;
 }
@@ -1022,7 +1036,7 @@ function cleanUnquotedMention(value) {
     .replace(/^[,，。；;、：:\s]+|[,，。；;、：:\s]+$/gu, "")
     .trim();
   text = trimGameplaySuffix(text);
-  const leadingNoise = /^(?:了|双方|雙方|我方|对方|對方|自己|自分|它的|他的|她的|其|那只|那張|那张|这只|這隻|这張|这张|只有|一只|一張|一张|怪兽|怪獸|的时候|時候|此时|此時|这时|這時|那之后|那之後|之后|之後|随后|隨後|接着|接著|接下来|接下來|其后|其後|此后|此後|然后|然後|如果|假设|假設|此卡|这张卡|這張卡|这个|這個|那个|那個|手卡|墓地|除外|场上|場上|场上的|場上的|选择|選擇|适用|適用|发动|發動|要将|要將|将|將|把|想要|作为|作為|被破坏|被破壞|替代|代替|降低|提升|攻击力|攻擊力|守备力|守備力|可以|能否|是否|能|吗|嗎|的)+/u;
+  const leadingNoise = /^(?:了|双方|雙方|我方|对方|對方|自己|自分|它的|他的|她的|其|那只|那張|那张|这只|這隻|这張|这张|只有|一只|一張|一张|怪兽|怪獸|的时候|時候|此时|此時|这时|這時|那之后|那之後|之后|之後|随后|隨後|接着|接著|接下来|接下來|其后|其後|此后|此後|然后|然後|如果|假设|假設|此卡|这张卡|這張卡|这个|這個|那个|那個|手卡|墓地|除外|场上|場上|场上的|場上的|选择|選擇|适用|適用|发动|發動|使用|要将|要將|将|將|把|想要|作为|作為|被破坏|被破壞|替代|代替|降低|提升|攻击力|攻擊力|守备力|守備力|可以|能否|是否|能|吗|嗎|的)+/u;
   const trailingNoise = /(?:的)?(?:效果|效应|效應|破坏|破壞|被破坏|被破壞|特殊召唤|特殊召喚|能|可以|吗|嗎|的时候|時候|此时|此時|选择|選擇|适用|適用|发动|發動|降低.*|提升.*|作为.*|作為.*)$/u;
   let previous = "";
   while (text && text !== previous) {
@@ -1057,6 +1071,7 @@ function hasSentenceInitialRulingSubjectSignal(value, rawValue = value) {
   // not unknown card names. Check the untrimmed surface too, because the
   // general cleaner intentionally removes words such as "效果" and "怪兽".
   if (/(?:这个|這個|那个|那個|该|該|此)(?:卡|怪兽|怪獸|效果)?$/u.test(rawText)) return false;
+  if (/^(?:正在|正|仍然|仍|已经|已經|尚未)$/u.test(text)) return false;
   if (/^(?:没有|沒有|并无|並無|不存在|不再存在)(?:其他|其它|别的|別的)?/u.test(rawText)) return false;
   if (/^(?:被)?(?:战斗|戰鬥|效果)(?:破坏|破壞|无效|無效|处理|處理)?(?:的情况下|的情況下|的场合|的場合|后|後|时|時|中|下)?$/u.test(text)) return false;
   if (/(?:召唤|召喚|发动|發動|处理|處理|结算|結算|连锁|連鎖|攻击|攻擊|伤害步骤|傷害步驟|伤害阶段|傷害階段|主要阶段|主要階段|战斗阶段|戰鬥階段|回合|状态|狀態|情况下|情況下|场合|場合|期间|期間|时点|時點).*(?:成功|无效|無效|失败|失敗|后|後|前|中|下|时|時|这个|這個|那个|那個|该|該|此)$/u.test(text)) return false;
@@ -1645,6 +1660,7 @@ function applyContextualNearEditResolution({
       selected,
       mention.input,
       confidenceForNearEditMention(mention, selected.nearEditDistance),
+      mention,
     );
     resolvedMentionKeys.add(normalizeCardKey(mention.input));
   }
@@ -1668,6 +1684,44 @@ function findContextualShortMentionCandidates(cards, mention) {
   const mentionKey = normalizeCardKey(mention);
   if (!mentionKey || mentionKey.length > MAX_CONTEXTUAL_SHORT_MENTION_LENGTH || !/[\u3400-\u9fff]/u.test(String(mention || ""))) return [];
   return getSupplementalCardIndexes(cards).shortMentionIndex.get(mentionKey) || [];
+}
+
+function resolveMentionCandidates(cards, aliasIndex, mention) {
+  const mentionKey = normalizeCardKey(mention);
+  const primary = aliasIndex.get(mentionKey) || [];
+  const exactSurface = exactSurfaceKey(mention);
+  const exactSurfaceCandidates = dedupeBy(
+    primary.filter((candidate) => exactSurfaceKey(candidate.matchedAlias) === exactSurface),
+    (candidate) => cardIdentity(candidate.card),
+  );
+  // Normalization intentionally removes punctuation such as middle dots. If
+  // punctuation removal alone creates a collision between complete canonical
+  // names, the literal player surface is stronger.  Do not apply this to
+  // localized glyph normalization or supplemental short aliases: those
+  // collisions remain ambiguous and may still need contextual resolution.
+  const punctuationKey = punctuationInsensitiveSurfaceKey(mention);
+  const punctuationOnlyCanonicalCollision = primary.length > 1
+    && primary.every((candidate) => (
+      candidate.matchedAliasKind === "canonical_name"
+      && punctuationInsensitiveSurfaceKey(candidate.matchedAlias) === punctuationKey
+    ));
+  if (punctuationOnlyCanonicalCollision && exactSurfaceCandidates.length) {
+    return exactSurfaceCandidates;
+  }
+  // Generated short-name prefixes and suffixes are contextual hypotheses, not
+  // exact identities.  They may widen an existing exact alias into an
+  // ambiguity, but they must never create an identity from an otherwise
+  // unknown 2-4 character surface.
+  if (!primary.length || !/^[\u3400-\u9fff]{2,4}$/u.test(mentionKey)) return primary;
+  const hasExactCanonicalName = primary.some((candidate) => (
+    candidate.matchedAliasKind === "canonical_name"
+    && normalizeCardKey(candidate.matchedAlias) === mentionKey
+  ));
+  if (hasExactCanonicalName) return primary;
+  return dedupeBy([
+    ...primary,
+    ...findContextualShortMentionCandidates(cards, mention),
+  ], (candidate) => cardIdentity(candidate.card));
 }
 
 function chooseContextualShortMentionCandidate(query, mention, candidates, resolvedCards) {
@@ -1966,10 +2020,11 @@ function addResolved(
   return resolvedCard;
 }
 
-function addEditDistanceResolved(resolved, seenCards, candidate, input, confidence) {
-  if (!extractNumberedCardIdentities(input).length) {
-    return addResolved(resolved, seenCards, candidate, input, confidence);
-  }
+function addEditDistanceResolved(resolved, seenCards, candidate, input, confidence, mention = {}) {
+  const identityVerificationSearchTexts = dedupeBy(
+    Array.isArray(mention?.searchTexts) ? mention.searchTexts : [],
+    normalizeCardKey,
+  );
   return addResolved(
     resolved,
     seenCards,
@@ -1982,6 +2037,7 @@ function addEditDistanceResolved(resolved, seenCards, candidate, input, confiden
       identityMatchKind: "edit_distance",
       nearEditDistance: Number(candidate?.nearEditDistance || 1),
       requiresExternalIdentityVerification: true,
+      ...(identityVerificationSearchTexts.length ? { identityVerificationSearchTexts } : {}),
     },
   );
 }
@@ -2020,7 +2076,7 @@ function applyReferencedCardTextResolution({ query, aliasIndex, resolved, seenCa
       ? blocks.filter((block) => block.kind === "effect")
       : blocks;
     for (const block of effectBlocks) {
-      for (const mention of extractQuotedMentions(block.text)) {
+      for (const mention of extractQuotedMentions(block.text, { aliasIndex })) {
         const candidates = aliasIndex.get(normalizeCardKey(mention)) || [];
         if (candidates.length !== 1) continue;
         addResolved(resolved, seenCards, candidates[0], mention, 0.86, "card_text_reference");
@@ -2030,14 +2086,14 @@ function applyReferencedCardTextResolution({ query, aliasIndex, resolved, seenCa
   }
 }
 
-export function extractQuotedMentions(query) {
+export function extractQuotedMentions(query, { aliasIndex } = {}) {
   return dedupeBy(
-    collectQuotedMentionEntries(query).filter((item) => item.role === "card"),
+    collectQuotedMentionEntries(query, { aliasIndex }).filter((item) => item.role === "card"),
     (item) => normalizeCardKey(item.mention),
   ).map((item) => item.mention);
 }
 
-function collectQuotedMentionEntries(query) {
+function collectQuotedMentionEntries(query, { aliasIndex } = {}) {
   const result = [];
   const text = String(query || "");
   for (const pattern of QUOTED_MENTION_PATTERNS) {
@@ -2051,7 +2107,7 @@ function collectQuotedMentionEntries(query) {
         mention,
         index,
         end,
-        role: classifyQuotedMentionRole(text, mention, index, end),
+        role: classifyQuotedMentionRole(text, mention, index, end, { aliasIndex }),
       });
     }
   }
@@ -2070,9 +2126,14 @@ function collectQuotedMentionEntries(query) {
   return result;
 }
 
-function classifyQuotedMentionRole(text, mention, index, end) {
+function classifyQuotedMentionRole(text, mention, index, end, { aliasIndex } = {}) {
   const prefix = String(text || "").slice(Math.max(0, index - 32), index).normalize("NFKC");
   const suffix = String(text || "").slice(end, end + 48).normalize("NFKC");
+
+  // A literal synchronized card name remains an identity even in prose such
+  // as “judge the situation of X”.  Grammar-based non-card classification is
+  // only a fallback for quoted surfaces that do not exactly name a known card.
+  if (hasExactKnownCardSurface(aliasIndex, mention)) return "card";
 
   // Quotation marks are also used to define the meaning of a term in the
   // question itself. Requiring both a metalinguistic prefix and an
@@ -2080,6 +2141,29 @@ function classifyQuotedMentionRole(text, mention, index, end) {
   // failures without weakening unresolved handling for actual quoted cards.
   if (/(?:本题|本問|本问|问题中|問題中|这里|這裡|此处|此處)(?:所说|所說|所谓|所謂|的)?\s*$/u.test(prefix)
       && /^\s*(?:按|应按|應按|是指|指的是|表示|意味着|意味著|定义为|定義為|理解为|理解為)/u.test(suffix)) {
+    return "metalinguistic_term";
+  }
+  if (/(?:处于|處於|处在|處在)\s*$/u.test(prefix)
+      && /^\s*(?:的)?(?:状态|狀態)/u.test(suffix)) {
+    return "metalinguistic_term";
+  }
+
+  const clauseStart = Math.max(
+    String(text || "").lastIndexOf("。", index - 1),
+    String(text || "").lastIndexOf("！", index - 1),
+    String(text || "").lastIndexOf("？", index - 1),
+    String(text || "").lastIndexOf("\n", index - 1),
+  ) + 1;
+  const followingBoundaries = ["。", "！", "？", "\n"]
+    .map((token) => String(text || "").indexOf(token, end))
+    .filter((position) => position >= 0);
+  const clauseEnd = followingBoundaries.length
+    ? Math.min(...followingBoundaries)
+    : String(text || "").length;
+  const clausePrefix = String(text || "").slice(clauseStart, index).normalize("NFKC");
+  const clauseSuffix = String(text || "").slice(end, clauseEnd).normalize("NFKC");
+  if (/(?:包含|包括|含有|具有).{0,160}$/su.test(clausePrefix)
+      && /(?:处理|處理|処理|操作).{0,16}(?:的)?(?:效果|効果|效应|效應)/su.test(clauseSuffix)) {
     return "metalinguistic_term";
   }
 
@@ -2093,6 +2177,16 @@ function classifyQuotedMentionRole(text, mention, index, end) {
 
   if (looksLikeQuotedEffectClause(mention)) return "effect_clause";
   return "card";
+}
+
+function hasExactKnownCardSurface(aliasIndex, mention) {
+  if (!(aliasIndex instanceof Map)) return false;
+  const key = normalizeCardKey(mention);
+  if (!key) return false;
+  return (aliasIndex.get(key) || []).some((candidate) => (
+    candidate?.matchedAliasKind !== "canonical_name_prefix"
+      && normalizeCardKey(candidate?.matchedAlias) === key
+  ));
 }
 
 function looksLikeQuotedEffectClause(mention) {
@@ -2122,10 +2216,10 @@ function looksLikeQuotedEffectClause(mention) {
     || hasEffectInstructionGrammar;
 }
 
-function maskNonCardQuotedExpressions(query) {
+function maskNonCardQuotedExpressions(query, { aliasIndex } = {}) {
   const text = String(query || "");
   const chars = text.split("");
-  for (const entry of collectQuotedMentionEntries(text)) {
+  for (const entry of collectQuotedMentionEntries(text, { aliasIndex })) {
     if (entry.role === "card") continue;
     for (let index = entry.index; index < entry.end; index += 1) chars[index] = " ";
   }
@@ -2158,7 +2252,7 @@ export function extractUserProvidedCardTextBlocks(query) {
     }
 
     const text = bodyLines.join("\n").trim();
-    if (!text || !looksLikeCardMention(heading.name)) continue;
+    if (!text || !isPlausibleCardTextHeadingName(heading.name)) continue;
     blocks.push({
       name: heading.name,
       text,
@@ -2204,7 +2298,7 @@ function parseBracketHeading(text) {
     const match = text.match(pattern);
     if (!match) continue;
     const name = String(match[1] || "").trim();
-    if (looksLikeCardMention(name)) return { name, rest: String(match[2] || "").trim() };
+    if (isPlausibleCardTextHeadingName(name)) return { name, rest: String(match[2] || "").trim() };
   }
   return null;
 }
@@ -2215,8 +2309,28 @@ function parseColonHeading(text) {
   const name = String(match[1] || "").trim();
   const normalizedName = normalizeCardKey(name);
   if (!normalizedName || NON_CARD_HEADING_NAMES.has(normalizedName)) return null;
-  if (!looksLikeCardMention(name)) return null;
+  if (!isPlausibleCardTextHeadingName(name)) return null;
   return { name, rest: String(match[2] || "").trim() };
+}
+
+function isPlausibleCardTextHeadingName(value) {
+  const text = String(value || "").normalize("NFKC").replace(/\s+/gu, " ").trim();
+  const compact = text.replace(/\s+/gu, "");
+  if (!looksLikeCardMention(text)) return false;
+  if (/^(?:(?:c|cl|chain)\d+|连锁\d+|連鎖\d+)$/iu.test(compact)) return false;
+  // Section labels and instructions can be followed by numbered lines just
+  // like a card text block. Reject their grammar before treating the heading
+  // as an unknown card name; actual unknown cards remain supported.
+  if (/^(?:请|請)?(?:分别|分別|逐项|逐項|依次|各自)?(?:判断|判定|分析|回答|说明|說明|比较|比較)(?:以下|下列|上述)?(?:问题|問題|情况|情況|场景|場景|分支|事项|事項)?$/u.test(compact)) {
+    return false;
+  }
+  if (/^(?:请|請).{0,48}(?:判断|判定|分析|回答|说明|說明|比较|比較).{0,48}(?:问题|問題|情况|情況|场景|場景|分支|事项|事項)$/u.test(compact)) {
+    return false;
+  }
+  if (/^(?:(?:问题|問題|场景|場景|前提|条件|條件|步骤|步驟|处理|處理|结论|結論|答案|裁定|说明|說明|补充|補充|要求|事项|事項)){1,3}(?:[一二三四五六七八九十\d]+)?$/u.test(compact)) {
+    return false;
+  }
+  return true;
 }
 
 function normalizeInlineEffectText(value) {
@@ -2261,6 +2375,26 @@ function confidenceForAlias(aliasKey) {
 function looksLikeCardMention(value) {
   const text = String(value || "").trim();
   return text.length >= 2 && /[A-Za-z\u3040-\u30ff\u3400-\u9fff0-9]/u.test(text);
+}
+
+function isPlausibleUnresolvedCardMention(value, source = "") {
+  const text = String(value || "").normalize("NFKC").replace(/\s+/gu, " ").trim();
+  if (!looksLikeCardMention(text)) return false;
+  if (/^(?:(?:c|cl|chain)\s*\d+|连锁\s*\d+|連鎖\s*\d+)$/iu.test(text)) return false;
+  if (/^\d{1,2}\s*[.．、:：]?\s*(?:我方|对方|對方|自己|自分|双方|雙方|玩家)(?=$|的|场上|場上|手牌|手卡|墓地)/u.test(text)) return false;
+  if (/^(?:请|請)(?:分别|分別|逐项|逐項|依次|各自)?(?:判断|判定|分析|回答|说明|說明|比较|比較)(?:这些|這些|以下|下列|上述)?$/u.test(text.replace(/\s+/gu, ""))) return false;
+  if (source !== "model_card_name_extractor") return true;
+  if (looksLikeGenericCardDescription(text)) return false;
+  if (/^(?:正在|正|已经|已經|尚未|没有|沒有|不存在|处理时|處理時|结算时|結算時|发动时|發動時|连锁中|連鎖中).*(?:卡|卡片|怪兽|怪獸|魔法|陷阱|效果|对象|對象)$/u.test(text)) {
+    return false;
+  }
+  if (/(?:系列|字段|主字段|卡片类别|卡片類別|怪兽类别|怪獸類別|魔法陷阱卡类|魔法陷阱卡類)$/u.test(text)) {
+    return false;
+  }
+  const operationCount = (text.match(/发动|發動|处理|處理|结算|結算|选择|選擇|特殊召唤|特殊召喚|破坏|破壞|除外|返回|回到|送去墓地|成为对象|成為對象/gu) || []).length;
+  const clauseLike = /[，,。；;！？!?：:\r\n]/u.test(text) || text.length > 40;
+  if (operationCount >= 2 && clauseLike) return false;
+  return true;
 }
 
 function cardAliases(card = {}) {

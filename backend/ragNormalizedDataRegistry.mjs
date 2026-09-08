@@ -1,4 +1,5 @@
 const canonicalSnapshots = new WeakSet();
+const canonicalSnapshotsByArrays = new WeakMap();
 const canonicalArraysByRole = Object.freeze({
   cards: new WeakSet(),
   records: new WeakSet(),
@@ -24,6 +25,17 @@ export function registerCanonicalNormalizedRagData(data) {
   for (const [role, registry] of Object.entries(canonicalArraysByRole)) {
     registry.add(data[role]);
   }
+  let byCards = canonicalSnapshotsByArrays.get(data.records);
+  if (!byCards) {
+    byCards = new WeakMap();
+    canonicalSnapshotsByArrays.set(data.records, byCards);
+  }
+  let byQaRecords = byCards.get(data.cards);
+  if (!byQaRecords) {
+    byQaRecords = new WeakMap();
+    byCards.set(data.cards, byQaRecords);
+  }
+  byQaRecords.set(data.qaRecords, data);
   return data;
 }
 
@@ -34,4 +46,9 @@ export function isCanonicalNormalizedRagData(data) {
 export function isCanonicalNormalizedRagArray(value, role) {
   const registry = canonicalArraysByRole[role];
   return Boolean(registry && Array.isArray(value) && registry.has(value));
+}
+
+export function getRegisteredCanonicalNormalizedRagData({ cards, records, qaRecords } = {}) {
+  if (!Array.isArray(cards) || !Array.isArray(records) || !Array.isArray(qaRecords)) return null;
+  return canonicalSnapshotsByArrays.get(records)?.get(cards)?.get(qaRecords) || null;
 }

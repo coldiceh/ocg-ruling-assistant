@@ -1,12 +1,13 @@
 {
   "schemaVersion": 1,
-  "pricingVersion": "openai-gpt-5.6-standard-2026-08-10",
-  "effectiveDate": "2026-08-10",
-  "checkedAt": "2026-08-10",
+  "pricingVersion": "openai-astra-sol-promotion-2026-09-08",
+  "effectiveDate": "2026-09-08",
+  "checkedAt": "2026-09-08",
   "currency": "USD",
   "unit": "per_1m_tokens",
   "processingTier": "standard",
   "sources": [
+    "https://developers.openai.com/api/docs/models/gpt-6-astra",
     "https://openai.com/index/gpt-5-6/",
     "https://developers.openai.com/api/docs/models/gpt-5.6-sol",
     "https://developers.openai.com/api/docs/models/gpt-5.6-terra",
@@ -14,7 +15,8 @@
   ],
   "notes": {
     "reasoningTokens": "Reasoning tokens are included in output_tokens and are not billed a second time.",
-    "cacheWrites": "GPT-5.6 cache writes are billed at 1.25x the uncached input rate.",
+    "cacheWrites": "GPT-5.6 and GPT-6 Astra cache writes are billed at 1.25x the uncached input rate.",
+    "modelChecks": "GPT-6 Astra and GPT-5.6 Sol checked on 2026-09-08. Sol promotional rates apply through at least November 21, 2026; Terra and Luna retain the 2026-08-10 check. Official estimates do not establish relay charges.",
     "longContext": "Requests with more than 272000 input tokens are billed at 2x input and 1.5x output for the full request.",
     "estimateOnly": "Calculated costs are estimates, not invoices."
   },
@@ -22,11 +24,22 @@
     "gpt-5.6": "gpt-5.6-sol"
   },
   "models": {
+    "gpt-6-astra": {
+      "inputUsdPerMillion": 10,
+      "cachedInputUsdPerMillion": 1,
+      "cacheWriteUsdPerMillion": 12.5,
+      "outputUsdPerMillion": 50,
+      "longContext": {
+        "thresholdInputTokensExclusive": 272000,
+        "inputMultiplier": 2,
+        "outputMultiplier": 1.5
+      }
+    },
     "gpt-5.6-sol": {
-      "inputUsdPerMillion": 5,
-      "cachedInputUsdPerMillion": 0.5,
-      "cacheWriteUsdPerMillion": 6.25,
-      "outputUsdPerMillion": 30,
+      "inputUsdPerMillion": 4,
+      "cachedInputUsdPerMillion": 0.4,
+      "cacheWriteUsdPerMillion": 5,
+      "outputUsdPerMillion": 20,
       "longContext": {
         "thresholdInputTokensExclusive": 272000,
         "inputMultiplier": 2,

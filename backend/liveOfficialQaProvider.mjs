@@ -467,7 +467,7 @@ async function mapWithConcurrency(items, concurrency, mapper) {
 function dedupeCardsById(cards) {
   const seen = new Set();
   return (cards || []).flatMap((card) => {
-    const id = String(card.id || card.cardId || "").replace(/\D+/gu, "");
+    const id = normalizeNumericId(card.id || card.cardId);
     if (!id || seen.has(id)) return [];
     seen.add(id);
     return [{ ...card, id }];
@@ -475,7 +475,13 @@ function dedupeCardsById(cards) {
 }
 
 function uniqueNumericIds(values) {
-  return [...new Set((values || []).map((value) => String(value || "").replace(/\D+/gu, "")).filter(Boolean))];
+  return [...new Set((values || []).map(normalizeNumericId).filter(Boolean))];
+}
+
+function normalizeNumericId(value) {
+  const text = String(value ?? "").trim();
+  if (!/^\d+$/u.test(text)) return "";
+  return text.replace(/^0+(?=\d)/u, "");
 }
 
 function displayCardName(card = {}) {

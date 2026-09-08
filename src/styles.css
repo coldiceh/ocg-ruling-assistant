@@ -242,6 +242,24 @@ h3 {
   font-weight: 700;
 }
 
+.deployment-label[hidden] {
+  display: none;
+}
+
+.deployment-label {
+  color: var(--warn);
+  border-color: var(--warn);
+  background: var(--glass-strong);
+}
+
+.has-deployment-label .topbar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  background: var(--glass-strong);
+  backdrop-filter: blur(10px);
+}
+
 .theme-toggle:hover,
 .text-button:hover,
 .file-button:hover,
@@ -720,50 +738,6 @@ button:focus-visible {
   border: 1px solid var(--line);
   border-radius: 4px;
   background: var(--glass-soft);
-}
-
-.admin-risk-control-status {
-  margin-top: 12px;
-  padding: 11px 12px;
-  border: 1px solid var(--line);
-  border-left: 4px solid var(--line-strong);
-  background: var(--glass-strong);
-}
-
-.admin-risk-control-status strong,
-.admin-risk-control-status p {
-  display: block;
-}
-
-.admin-risk-control-status p {
-  margin: 5px 0 0;
-  color: var(--muted);
-  font-size: 13px;
-  line-height: 1.65;
-}
-
-.admin-risk-control-status.is-active {
-  border-left-color: var(--warn);
-}
-
-.admin-risk-control-status.is-active strong {
-  color: var(--warn);
-}
-
-.admin-risk-control-status.is-inactive {
-  border-left-color: var(--good);
-}
-
-.admin-risk-control-status.is-inactive strong {
-  color: var(--good);
-}
-
-.admin-risk-control-status.is-error {
-  border-left-color: var(--bad);
-}
-
-.admin-risk-control-status.is-error strong {
-  color: var(--bad);
 }
 
 .admin-comparison-options {

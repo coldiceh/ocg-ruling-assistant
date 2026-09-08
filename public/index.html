@@ -1,0 +1,390 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>游戏王 OCG AI裁定</title>
+    <meta
+      name="description"
+      content="游戏王 OCG AI裁定结合卡片文本、公开规则资料与官方 Q&amp;A，整理裁定结论、理由和可核对来源。"
+    />
+    <meta name="application-name" content="游戏王 OCG AI裁定" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="游戏王 OCG AI裁定" />
+    <meta
+      property="og:description"
+      content="结合卡片文本、公开规则资料与官方 Q&amp;A，分析游戏王 OCG 裁定问题。"
+    />
+    <link rel="stylesheet" href="src/styles.css?v=20260814-risk-control-1" />
+  </head>
+  <body class="theme-night">
+    <div class="page-background" aria-hidden="true"></div>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand-block">
+          <p class="eyebrow">卡片文本 / Q&amp;A / FAQ</p>
+          <h1>游戏王 OCG AI裁定</h1>
+        </div>
+        <div class="status-cluster" aria-label="页面状态与主题设置">
+          <span class="status-badge deployment-label" id="deploymentLabel" hidden></span>
+          <button class="theme-toggle" id="themeToggle" type="button" aria-label="切换白天或黑夜主题">白天模式</button>
+        </div>
+      </header>
+
+      <main class="workspace">
+        <section class="ask-panel" aria-labelledby="askTitle">
+          <div class="panel-head">
+            <div>
+              <h2 id="askTitle">输入问题</h2>
+              <p>输入卡片、场面、连锁和需要判断的处理节点。</p>
+            </div>
+            <button class="icon-button ghost" id="clearButton" type="button" aria-label="清空" title="清空">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" />
+              </svg>
+            </button>
+          </div>
+
+          <textarea id="questionInput" spellcheck="false" placeholder="输入需要分析的 OCG 裁定问题..."></textarea>
+
+          <div class="actions">
+            <label class="model-tier-label" for="rulingModelSelect">
+              <span>裁定模型</span>
+              <select id="rulingModelSelect" aria-describedby="rulingModelStatus rulingModelLatency" disabled>
+                <option value="relay-gpt-6-astra-low" selected>GPT-6 Astra · 思考 low</option>
+              </select>
+              <small id="rulingModelStatus" hidden></small>
+              <small id="rulingModelLatency" class="model-latency" aria-live="polite">正在读取平均出答案时间</small>
+            </label>
+            <div class="answer-version-selector" role="group" aria-label="回答版本">
+              <span>回答版本</span>
+              <button class="answer-version-button is-active" type="button" data-ruling-version="latest" aria-pressed="true">最新版</button>
+            </div>
+            <div class="model-strip" aria-live="polite">
+              <span>裁定流程</span>
+              <strong id="modelStatusText">准备就绪</strong>
+            </div>
+            <div class="judge-actions">
+              <button class="primary-button" id="analyzeButton" type="button">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M8 5h8M6 12h12M9 19h6" />
+                </svg>
+                <span id="analyzeButtonText">查询</span>
+              </button>
+            </div>
+          </div>
+
+          <details class="pipeline-debug-toggle" id="pipelineDebugToggle" hidden>
+            <summary>调试</summary>
+            <p>当前默认使用 RAG baseline；legacy / fastjudge 仅保留为内部显式 API mode。</p>
+          </details>
+
+          <div class="result-grid" id="resultGrid" hidden>
+            <section class="result-block verdict-block" aria-labelledby="verdictTitle">
+              <div class="block-title">
+                <span>裁定结论</span>
+                <strong id="confidenceText">未分析</strong>
+              </div>
+              <h3 id="verdictTitle"></h3>
+              <p class="basis-text" id="rulingBasisText"></p>
+              <p class="answer-version-note" id="answerVersionText" hidden></p>
+              <p id="verdictBody"></p>
+              <div class="sub-answers" id="subAnswersPanel" hidden></div>
+            </section>
+
+            <section class="result-block reason-block" aria-labelledby="stepsTitle">
+              <div class="block-title">
+                <span id="stepsTitle">理由</span>
+                <strong class="pipeline-elapsed" id="pipelineElapsedText" aria-live="polite"></strong>
+              </div>
+              <div class="pipeline-timing" id="pipelineTimingPanel" hidden>
+                <ol class="progress-steps" id="pipelineStageList" aria-label="裁定流程阶段"></ol>
+              </div>
+              <ol id="stepsList"></ol>
+            </section>
+
+            <section class="result-block simulation-panel" id="simulationPanel" aria-labelledby="simulationTitle" hidden>
+              <div class="block-title">
+                <span id="simulationTitle">模拟器验证</span>
+                <strong id="simulationStatus"></strong>
+              </div>
+              <p id="simulationSummary"></p>
+              <ul id="simulationDetails"></ul>
+            </section>
+
+            <section class="result-block card-panel" id="cardPanel" aria-labelledby="cardsTitle" hidden>
+              <div class="block-title">
+                <span id="cardsTitle">相关卡片</span>
+                <strong id="cardStatus"></strong>
+              </div>
+              <div class="card-tabs" id="cardTabs"></div>
+              <div class="card-preview" id="cardPreview" hidden>
+                <div class="card-image-box">
+                  <img id="cardImage" alt="" loading="lazy" />
+                  <p class="card-image-placeholder" id="cardImagePlaceholder" hidden>暂无卡图</p>
+                </div>
+                <div class="card-detail">
+                  <h3 id="cardName"></h3>
+                  <p id="cardMeta"></p>
+                  <p class="card-effect" id="cardEffect"></p>
+                  <a id="cardSourceLink" href="#" target="_blank" rel="noreferrer">在百鸽打开</a>
+                </div>
+              </div>
+            </section>
+
+            <section class="result-block source-trace" aria-labelledby="sourcesTitle">
+              <div class="block-title"><span id="sourcesTitle">资料来源</span></div>
+              <div id="sourcesList"></div>
+            </section>
+
+            <section class="result-block risk-block" aria-labelledby="questionsTitle">
+              <div class="block-title">
+                <span id="questionsTitle">风险提示</span>
+              </div>
+              <ul id="questionsList"></ul>
+            </section>
+
+            <details class="result-block parser-debug" id="parserDebugPanel" hidden>
+              <summary>DEBUG TRACE</summary>
+              <pre id="parserDebugOutput"></pre>
+            </details>
+          </div>
+
+          <section class="budget-panel" id="budgetPanel" aria-labelledby="budgetTitle">
+            <div>
+              <p class="budget-label" id="budgetTitle">今日 API 额度（分币种）</p>
+            </div>
+            <p id="budgetHint">统计后端今日累计模型用量。</p>
+            <div class="budget-buckets" id="budgetBucketList" aria-label="分模型今日用量"></div>
+          </section>
+
+          <section class="admin-lab" id="adminLabPanel" aria-labelledby="adminLabTitle" hidden>
+            <div class="admin-lab-head">
+              <div>
+                <p class="eyebrow">管理员专用 · 模型实验</p>
+                <h2 id="adminLabTitle">裁定模型实验室</h2>
+                <p>
+                  地址中的 <code>admin=1</code> 只负责显示本区域，并不代表已经登录。
+                  实验不会改变普通查询使用的模型。
+                </p>
+              </div>
+              <div class="admin-session-actions">
+                <span class="admin-session-badge" id="adminSessionBadge">未登录</span>
+                <button class="text-button" id="adminLogoutButton" type="button" hidden>退出</button>
+              </div>
+            </div>
+
+            <form class="admin-login" id="adminLoginForm">
+              <label for="adminPasswordInput">管理员密码</label>
+              <div class="admin-login-row">
+                <input id="adminPasswordInput" type="password" autocomplete="current-password" required />
+                <button class="primary-button" id="adminLoginButton" type="submit">登录实验室</button>
+              </div>
+              <p class="admin-status" id="adminLoginStatus" role="status">正在确认登录状态…</p>
+            </form>
+
+            <div id="adminLabWorkspace" hidden>
+              <section class="admin-lab-section" aria-labelledby="adminBudgetTitle">
+                <div class="admin-section-head">
+                  <div>
+                    <h3 id="adminBudgetTitle">模型实验今日额度</h3>
+                    <p>“实际结算”来自可靠 usage；“保留预约”只是防止重复扣费的账本占用，不代表供应商已经收费。</p>
+                  </div>
+                </div>
+                <div class="admin-budget-pools" id="adminBudgetPools">
+                  <p>登录后读取各模型预算池。</p>
+                </div>
+                <div class="admin-session-actions">
+                  <button class="text-button" id="budgetCapButton" type="button" hidden>立即将公开 ChatGPT 今日额度封顶至 10 美元</button>
+                  <button class="text-button" id="budgetResetButton" type="button" hidden>重置公开问答额度</button>
+                </div>
+              </section>
+
+              <section class="admin-lab-section" aria-labelledby="adminExperimentTitle">
+                <div class="admin-section-head">
+                  <div>
+                    <h3 id="adminExperimentTitle">新建实验</h3>
+                    <p>资料准备和最终裁定会分阶段记录；这里不会保存或显示任何 API 密钥。</p>
+                  </div>
+                  <button class="text-button" id="adminCopyPublicQuestionButton" type="button">复制上方问题</button>
+                </div>
+
+                <label class="admin-field admin-question-field" for="adminQuestionInput">
+                  <span>裁定问题</span>
+                  <textarea id="adminQuestionInput" spellcheck="false" placeholder="输入需要实验的完整裁定问题…"></textarea>
+                </label>
+
+                <div class="admin-controls">
+                  <label class="admin-field" for="adminPreparationProviderSelect">
+                    <span>资料准备服务</span>
+                    <select id="adminPreparationProviderSelect" disabled></select>
+                  </label>
+                  <label class="admin-field" for="adminPreparationModelSelect">
+                    <span>资料准备模型</span>
+                    <select id="adminPreparationModelSelect" disabled></select>
+                  </label>
+                  <label class="admin-field" for="adminPreparationEffortSelect">
+                    <span>准备推理强度</span>
+                    <select id="adminPreparationEffortSelect" disabled></select>
+                  </label>
+                  <label class="admin-field" for="adminPreparationModeSelect">
+                    <span>准备思考模式</span>
+                    <select id="adminPreparationModeSelect" disabled></select>
+                  </label>
+                  <label class="admin-field" for="adminProviderSelect">
+                    <span>最终裁定服务</span>
+                    <select id="adminProviderSelect" disabled></select>
+                  </label>
+                  <label class="admin-field" for="adminModelSelect">
+                    <span>最终裁定模型</span>
+                    <select id="adminModelSelect" disabled></select>
+                  </label>
+                  <label class="admin-field" for="adminEffortSelect">
+                    <span>推理强度</span>
+                    <select id="adminEffortSelect" disabled></select>
+                  </label>
+                  <label class="admin-field" for="adminModeSelect">
+                    <span>运行模式</span>
+                    <select id="adminModeSelect" disabled></select>
+                  </label>
+                  <label class="admin-field" for="adminPromptVersionSelect">
+                    <span>提示词版本</span>
+                    <select id="adminPromptVersionSelect" disabled></select>
+                  </label>
+                </div>
+
+                <div class="admin-run-actions">
+                  <button class="primary-button" id="adminStartButton" type="button" disabled>开始实验</button>
+                  <button class="danger-outline-button" id="adminCancelButton" type="button" disabled>取消运行</button>
+                  <span class="admin-status" id="adminRunStatus" role="status">登录后读取可用配置。</span>
+                </div>
+              </section>
+
+              <section class="admin-lab-section" id="adminProgressSection" aria-labelledby="adminProgressTitle">
+                <div class="admin-section-head">
+                  <div>
+                    <h3 id="adminProgressTitle">真实处理进度</h3>
+                    <p id="adminRunIdentity">尚未开始运行。</p>
+                  </div>
+                  <strong id="adminElapsedText">—</strong>
+                </div>
+                <ol class="admin-stage-list" id="adminStageList">
+                  <li data-admin-stage="understand"><span>1</span><div><strong>理解问题</strong><small>等待开始</small></div></li>
+                  <li data-admin-stage="extract_card_names"><span>2</span><div><strong>提取卡名</strong><small>等待开始</small></div></li>
+                  <li data-admin-stage="retrieve_card_texts"><span>3</span><div><strong>检索卡片文本</strong><small>等待开始</small></div></li>
+                  <li data-admin-stage="retrieve_rulings_evidence"><span>4</span><div><strong>检索裁定与证据</strong><small>等待开始</small></div></li>
+                  <li data-admin-stage="generate_ruling"><span>5</span><div><strong>生成最终裁定</strong><small>等待开始</small></div></li>
+                </ol>
+                <p class="admin-timing-note">FAST / NORMAL / SLOW 只是耗时标签，不会触发自动取消。</p>
+              </section>
+
+              <section class="admin-lab-section" id="adminResultSection" aria-labelledby="adminResultTitle">
+                <div class="admin-section-head">
+                  <div>
+                    <h3 id="adminResultTitle">实验结果</h3>
+                    <p>最终结果、用量和延迟以服务端记录为准。</p>
+                  </div>
+                  <div class="admin-export-actions">
+                    <button class="text-button" id="adminExportJsonButton" type="button" disabled>导出 JSON</button>
+                    <button class="text-button" id="adminExportCsvButton" type="button" disabled>导出 CSV</button>
+                  </div>
+                </div>
+                <div class="admin-result-summary" id="adminResultSummary">
+                  <p>运行完成后会在这里显示结构化裁定。</p>
+                </div>
+                <dl class="admin-metrics" id="adminMetrics"></dl>
+                <details class="admin-json-details" id="adminEvidenceDetails">
+                  <summary>Evidence Snapshot（冻结证据）</summary>
+                  <div id="adminEvidenceSummary"></div>
+                  <pre id="adminEvidenceJson"></pre>
+                </details>
+                <details class="admin-json-details">
+                  <summary>完整结构化结果</summary>
+                  <pre id="adminResultJson"></pre>
+                </details>
+
+                <form class="admin-rating" id="adminRatingForm">
+                  <h4>人工评分</h4>
+                  <label for="adminRatingSelect">正确程度</label>
+                  <select id="adminRatingSelect">
+                    <option value="correct">正确且完整</option>
+                    <option value="partially_correct">部分正确</option>
+                    <option value="incorrect">错误</option>
+                    <option value="needs_review">需要进一步复核</option>
+                  </select>
+                  <label for="adminRatingNotes">备注</label>
+                  <textarea id="adminRatingNotes" placeholder="记录错误点、遗漏资料或更正依据…"></textarea>
+                  <button class="text-button" id="adminRatingButton" type="submit" disabled>保存评分</button>
+                  <span class="admin-status" id="adminRatingStatus" role="status"></span>
+                </form>
+              </section>
+
+              <section class="admin-lab-section" id="adminComparisonSection" aria-labelledby="adminComparisonTitle">
+                <div class="admin-section-head">
+                  <div>
+                    <h3 id="adminComparisonTitle">同一冻结证据模型对比</h3>
+                    <p>源运行完成后，可用完全相同的 Evidence Snapshot 依次测试多个模型；不会重新检索资料。</p>
+                  </div>
+                  <button class="primary-button" id="adminCompareButton" type="button" disabled>开始对比</button>
+                </div>
+                <div class="admin-comparison-options" id="adminComparisonOptions" role="group" aria-label="选择对比模型"></div>
+                <p class="admin-status" id="adminComparisonStatus" role="status">先完成或载入一条已有实验。</p>
+                <div class="admin-comparison-results" id="adminComparisonResults"></div>
+              </section>
+
+              <div class="admin-lab-columns">
+                <section class="admin-lab-section" aria-labelledby="adminHistoryTitle">
+                  <div class="admin-section-head">
+                    <div>
+                      <h3 id="adminHistoryTitle">实验历史</h3>
+                      <p id="adminHistoryStatus">这里保存模型实验运行，与普通提问记录分开。</p>
+                    </div>
+                    <button class="text-button" id="adminHistoryRefreshButton" type="button">刷新</button>
+                  </div>
+                  <ol class="admin-history-list" id="adminHistoryList"></ol>
+                </section>
+
+                <section class="admin-lab-section" aria-labelledby="adminEvaluationTitle">
+                  <div class="admin-section-head">
+                    <div>
+                      <h3 id="adminEvaluationTitle">评估题集</h3>
+                      <p id="adminEvaluationStatus">可将固定错题载入新实验。</p>
+                    </div>
+                    <button class="text-button" id="adminEvaluationRefreshButton" type="button">读取</button>
+                  </div>
+                  <label class="admin-field" for="adminEvaluationSelect">
+                    <span>选择题目</span>
+                    <select id="adminEvaluationSelect"></select>
+                  </label>
+                  <button class="text-button" id="adminEvaluationLoadButton" type="button" disabled>载入到问题框</button>
+                </section>
+              </div>
+
+              <section class="admin-lab-section" aria-labelledby="adminQuestionHistoryTitle">
+                <div class="admin-section-head">
+                  <div>
+                    <h3 id="adminQuestionHistoryTitle">后台历史提问</h3>
+                    <p id="adminQuestionHistoryStatus">
+                      这里显示普通问答后台最近保存的提问，最多 100 条；不等同于上方的模型实验历史。
+                    </p>
+                  </div>
+                  <button class="text-button" id="adminQuestionHistoryRefreshButton" type="button">刷新</button>
+                </div>
+                <ol class="admin-history-list" id="adminQuestionHistoryList"></ol>
+              </section>
+            </div>
+          </section>
+          <section class="disclaimer-panel" aria-labelledby="disclaimerTitle">
+            <h2 id="disclaimerTitle">免责声明</h2>
+            <p>
+              本项目不是 KONAMI 官方项目，分析结果不代表官方裁定。AI 生成内容和规则检索可能存在错误；
+              正式比赛请以官方规则、官方数据库和现场裁判判断为准。
+            </p>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <script src="src/app.js?v=20260817-live-stage-timing-1"></script>
+  </body>
+</html>

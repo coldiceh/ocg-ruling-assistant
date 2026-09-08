@@ -1,0 +1,5 @@
+{
+  "answerApiUrl": "/api/answer",
+  "budgetApiUrl": "/api/budget",
+  "deploymentLabel": "Preview · 云端验证版"
+}

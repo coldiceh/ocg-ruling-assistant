@@ -3230,11 +3230,11 @@ function attachProvidedCandidateScope(cardResolution, providedCardNameCandidates
  * A caller-provided candidate list is a closed set, not a ban on improving the
  * identity of those exact candidates. The retriever may verify a new/community
  * translation through an external CID or passcode. Accept that stronger
- * identity only for a candidate that the deterministic pass left unresolved.
- * A locally resolved identity is authoritative and is never replaced by a
- * retrieval result. External upgrades require an explicit verification status,
- * a strong stable identifier, and a one-to-one mapping to the supplied surface;
- * never admit a preparation-model expansion.
+ * identity only for a candidate that the deterministic pass left unresolved or
+ * ambiguous, or resolved provisionally pending external verification. A local
+ * exact identity remains authoritative. External upgrades require an explicit
+ * verification status, a strong stable identifier, and a one-to-one mapping to
+ * the supplied surface; never admit a preparation-model expansion.
  */
 function reconcileProvidedCandidateCardResolution({
   cardResolution,
@@ -3249,22 +3249,31 @@ function reconcileProvidedCandidateCardResolution({
   );
   const currentResolvedByCandidate = new Map();
   for (const card of current.resolvedCards || []) {
+    if (providedCandidateNeedsExternalIdentityVerification(card)) continue;
     for (const candidateKey of providedCandidateCardKeys(card)) {
       if (candidateByKey.has(candidateKey) && !currentResolvedByCandidate.has(candidateKey)) {
         currentResolvedByCandidate.set(candidateKey, card);
       }
     }
   }
-  const currentUnresolvedKeys = new Set(
-    (current.unresolvedMentions || [])
+  const currentPendingKeys = new Set(
+    [
+      ...(current.unresolvedMentions || []),
+      ...(current.ambiguousMentions || []),
+    ]
       .flatMap(providedCandidateMentionKeys)
       .filter((key) => candidateByKey.has(key)),
   );
-  const ambiguousKeys = new Set(
-    [
-      ...(current.ambiguousMentions || []),
-      ...(retrieved.ambiguousMentions || []),
-    ]
+  for (const card of current.resolvedCards || []) {
+    if (!providedCandidateNeedsExternalIdentityVerification(card)) continue;
+    for (const candidateKey of providedCandidateCardKeys(card)) {
+      if (candidateByKey.has(candidateKey)) currentPendingKeys.add(candidateKey);
+    }
+  }
+  // Initial ambiguity is precisely what a stable external identity may resolve.
+  // Only ambiguity that remains after retrieval blocks an upgrade.
+  const retrievedAmbiguousKeys = new Set(
+    (retrieved.ambiguousMentions || [])
       .flatMap(providedCandidateMentionKeys)
       .filter((key) => candidateByKey.has(key)),
   );
@@ -3277,15 +3286,11 @@ function reconcileProvidedCandidateCardResolution({
     if (
       !candidateKey
       || currentResolvedByCandidate.has(candidateKey)
-      || !currentUnresolvedKeys.has(candidateKey)
-      || ambiguousKeys.has(candidateKey)
+      || !currentPendingKeys.has(candidateKey)
+      || retrievedAmbiguousKeys.has(candidateKey)
       || card?.identityCanonicalizationConflict === true
     ) continue;
-    if (![
-      "verified_same_identity",
-      "verified_external_replacement",
-    ].includes(String(card?.identityVerificationStatus || ""))) continue;
-    if (strongStableCardIdentityKeys(card).length === 0) continue;
+    if (!providedCandidateExternalIdentityProofIsMechanical(card)) continue;
     const matches = verifiedByCandidate.get(candidateKey) || [];
     matches.push(card);
     verifiedByCandidate.set(candidateKey, matches);
@@ -3312,19 +3317,42 @@ function reconcileProvidedCandidateCardResolution({
     const key = normalizeCardKey(mention?.input);
     return candidateByKey.has(key) && !resolvedKeys.has(key);
   });
+  const unresolvedMentions = scopedMentions([
+    ...(retrieved.unresolvedMentions || []),
+    ...(current.unresolvedMentions || []),
+  ]);
+  const ambiguousMentions = scopedMentions([
+    ...(retrieved.ambiguousMentions || []),
+    ...(current.ambiguousMentions || []),
+  ]);
+  const accountedPendingKeys = new Set([
+    ...unresolvedMentions.flatMap(providedCandidateMentionKeys),
+    ...ambiguousMentions.flatMap(providedCandidateMentionKeys),
+  ]);
+  for (const candidateKey of currentPendingKeys) {
+    if (resolvedKeys.has(candidateKey) || accountedPendingKeys.has(candidateKey)) continue;
+    const provisionalCards = (current.resolvedCards || []).filter((card) => (
+      providedCandidateNeedsExternalIdentityVerification(card)
+      && providedCandidateCardKeys(card).includes(candidateKey)
+    ));
+    unresolvedMentions.push({
+      input: candidateByKey.get(candidateKey) || candidateKey,
+      reason: "external_identity_verification_failed",
+      source: "provided_candidate_identity_reconciliation",
+      candidateCards: provisionalCards.map((card) => ({
+        id: String(card.id || card.cardId || ""),
+        name: String(card.name || card.cnName || card.jaName || card.enName || ""),
+        identityMatchKind: String(card.identityMatchKind || card.retrievalIdentityMatchKind || ""),
+      })),
+    });
+  }
 
   return attachProvidedCandidateScope({
     ...current,
     ...retrieved,
     resolvedCards,
-    unresolvedMentions: scopedMentions([
-      ...(retrieved.unresolvedMentions || []),
-      ...(current.unresolvedMentions || []),
-    ]),
-    ambiguousMentions: scopedMentions([
-      ...(retrieved.ambiguousMentions || []),
-      ...(current.ambiguousMentions || []),
-    ]),
+    unresolvedMentions,
+    ambiguousMentions,
     omittedResolvedCards: current.omittedResolvedCards || [],
     userProvidedCardTexts: current.userProvidedCardTexts || [],
     modelCardNameCandidates: current.modelCardNameCandidates || [],
@@ -3351,15 +3379,63 @@ function providedCandidateMentionKeys(mention = {}) {
   ].map(normalizeCardKey).filter(Boolean))];
 }
 
+function providedCandidateNeedsExternalIdentityVerification(card = {}) {
+  return card.requiresExternalIdentityVerification === true
+    || card.identityMatchKind === "edit_distance"
+    || card.retrievalIdentityMatchKind === "local_fuzzy"
+    || card.identityVerificationStatus === "unverified";
+}
+
+function providedCandidateExternalIdentityProofIsMechanical(card = {}) {
+  if (![
+    "verified_same_identity",
+    "verified_external_replacement",
+    "verified_external_resolution",
+  ].includes(String(card.identityVerificationStatus || ""))) return false;
+  if (strongStableCardIdentityKeys(card).length === 0) return false;
+  if (
+    card.externalSurfaceCompatible !== true
+    || card.externalIdentityUniqueConvergence !== true
+  ) return false;
+
+  const matchKind = String(card.externalSurfaceMatchKind || "");
+  const resolutionKind = String(card.externalSurfaceResolution || "");
+  if (matchKind === "provider_primary_name_exact") {
+    return [
+      "unique_exact_primary_name",
+      "canonical_identity_unique_surface_match",
+      "canonical_expansion_exact_primary_name",
+    ].includes(resolutionKind);
+  }
+  if (matchKind === "provider_alias_exact") {
+    return [
+      "unique_exact_provider_alias",
+      "canonical_identity_unique_surface_match",
+      "canonical_expansion_exact_primary_name",
+    ].includes(resolutionKind);
+  }
+  if (matchKind === "stable_cid_local_identity_intersection") {
+    return resolutionKind === "strong_identity_unique_local_convergence"
+      && ["cid", "passcode"].includes(String(card.identityCanonicalizationSource || ""));
+  }
+  if (matchKind === "stable_cid_intersection") {
+    return resolutionKind === "model_expansion_exact_cid_intersection"
+      && card.modelExpansionCidIntersectionVerified === true
+      && ["cid", "passcode"].includes(String(card.identityCanonicalizationSource || ""));
+  }
+  return false;
+}
+
 function strongStableCardIdentityKeys(card = {}) {
-  return [...new Set([
-    ["cid", card.cid],
-    ["passcode", card.passcode],
-    ["id", card.id],
-    ["cardId", card.cardId],
-  ].flatMap(([kind, value]) => {
+  const values = [
+    ["cid", card.cid, /^[1-9]\d{2,6}$/u],
+    ["passcode", card.passcode, /^[1-9]\d{4,9}$/u],
+    ["id", card.id, /^[1-9]\d{2,9}$/u],
+    ["cardId", card.cardId, /^[1-9]\d{2,9}$/u],
+  ];
+  return [...new Set(values.flatMap(([kind, value, pattern]) => {
     const normalized = String(value ?? "").trim();
-    return normalized ? [`${kind}:${normalized}`] : [];
+    return pattern.test(normalized) ? [`${kind}:${normalized}`] : [];
   }))];
 }
 

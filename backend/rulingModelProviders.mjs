@@ -627,6 +627,7 @@ export async function requestRelayChatCompletionSse({
           responseBody: payload,
           requestedModel: String(requestBody.model || "") || null,
           submittedModel: String(requestBody.model || "") || null,
+          requestId: relayHttpRequestId(response, payload),
           outcomeKnown,
           budgetReservationMayExist: !outcomeKnown,
           streamMetrics: makeRelayStreamMetrics({
@@ -1209,6 +1210,26 @@ function normalizeRelayStreamEndpoint(endpoint) {
   return parsed.toString();
 }
 
+function relayHttpRequestId(response, payload) {
+  const headers = response?.headers;
+  const candidates = [
+    payload?.request_id,
+    payload?.requestId,
+    payload?.id,
+    payload?.error?.request_id,
+    payload?.error?.requestId,
+    headers?.get?.("x-request-id"),
+    headers?.get?.("request-id"),
+    headers?.get?.("x-trace-id"),
+    headers?.get?.("cf-ray"),
+  ];
+  for (const candidate of candidates) {
+    const value = String(candidate || "").trim();
+    if (/^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,255}$/u.test(value)) return value;
+  }
+  return null;
+}
+
 async function readResponsePayload(response, { signal } = {}) {
   const contentType = String(response?.headers?.get?.("content-type") || "");
   if (contentType.includes("application/json") && typeof response.json === "function") {
@@ -1531,7 +1552,15 @@ async function readRelayChatCompletionSse(response, {
       // Best-effort cleanup only.
     }
   }
-  if (!state.done) {
+  // Some OpenAI-compatible relays close a healthy HTTP body immediately after
+  // the terminal choice instead of emitting the optional SSE [DONE] sentinel.
+  // An explicit `finish_reason: stop` plus a clean EOF is a complete model
+  // response; timeout/abort, missing finish reason and length truncation still
+  // fail closed below.
+  const cleanEofAfterStop = !state.done
+    && state.finishReason === "stop"
+    && Boolean(state.content.trim());
+  if (!state.done && !cleanEofAfterStop) {
     throw protocolError("relay stream closed without [DONE]", "relay_stream_incomplete");
   }
   if (!state.chunks) {
