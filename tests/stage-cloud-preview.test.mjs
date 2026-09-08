@@ -54,7 +54,7 @@ test("preview staging excludes private inputs and copies only selected current s
     await stageCloudPreview({ root, output, includeFiles });
     assert.equal(await readFile(join(output, "public", "src", "app.js"), "utf8"), "export const version = 2;\n");
     assert.deepEqual(JSON.parse(await readFile(join(output, "public", "config.json"), "utf8")), {
-      answerApiUrl: "/api/answer", budgetApiUrl: "/api/budget", deploymentLabel: "Preview · 云端验证版",
+      answerApiUrl: "/api/answer", budgetApiUrl: "/api/budget", deploymentLabel: "Preview · 未通过质量验收",
     });
     const assetDir = join(temp, "cloud-assets");
     await mkdir(assetDir);

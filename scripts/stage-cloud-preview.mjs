@@ -23,7 +23,7 @@ const BUILD_FILES = new Set([
 const SAME_ORIGIN_CONFIG = `${JSON.stringify({
   answerApiUrl: "/api/answer",
   budgetApiUrl: "/api/budget",
-  deploymentLabel: "Preview · 云端验证版",
+  deploymentLabel: "Preview · 未通过质量验收",
 }, null, 2)}\n`;
 
 // This is a filename allowlist, not a content or evidence classifier.
