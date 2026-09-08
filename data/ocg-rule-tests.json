@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-08T18:17:41.441Z",
+  "generatedAt": "2026-09-08T20:28:05.032Z",
   "source": {
     "name": "OCG Rule tests",
     "url": "https://ocg-rule.readthedocs.io/zh-cn/latest/",
@@ -14,7 +14,7 @@
     "successRatio": 0.975,
     "previousRecordCount": 39,
     "contentHash": "2383b2809b89a0290648deb84be44829535228e0da3c5d997de1a6402606224e",
-    "previousContentHash": "dc866cf7b4722b64a827607a94c61ca116f3c3da9b7b292f13262985d5b46d02",
+    "previousContentHash": "2383b2809b89a0290648deb84be44829535228e0da3c5d997de1a6402606224e",
     "failedDocnames": [
       "links"
     ],
