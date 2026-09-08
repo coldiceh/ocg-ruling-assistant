@@ -22,6 +22,18 @@ function flattenPromptEvidence(evidence) {
   ));
 }
 
+test("resolved card type line survives into the model-visible prompt", () => {
+  const typeLine = "[魔法|永续]";
+  const bundle = buildRagRulingPromptBundle({
+    userQuery: "测试卡片效果的发动时点。",
+    cardResolution: { resolvedCards: [{ id: "type-line-fixture", name: "测试卡片", cardType: "spell", typeLine, effectText: "测试原文。" }] },
+    evidence: { cardTexts: [{ id: "type-line-evidence", type: "card_text", text: "测试原文。" }] },
+  });
+  const payload = parsePromptPayload(bundle.prompt);
+  assert.equal(payload.resolvedCards[0].typeLine, typeLine);
+  assert.equal(payload.resolvedCards[0].effectText, "测试原文。");
+});
+
 test("serialized evidence authorization accepts matching ordinary buckets and compact arrays", () => {
   const marker = "本次用户问题、卡片原文与检索资料如下：\n";
   const bucketPayload = {

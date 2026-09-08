@@ -360,7 +360,7 @@ test("public pipeline timing is driven by backend SSE events without fixed stage
   assert.match(app, /accept:\s*"text\/event-stream"/u);
   assert.match(timingSource, /stage_start|stage_end|activeStageElapsedMs|serverElapsedMs/u);
   assert.match(timingSource, /后端实测 · 总计/u);
-  assert.match(timingSource, /浏览器已等待/u);
+  assert.match(timingSource, /浏览器总等待/u);
   assert.match(timingSource, /window\.setInterval\(\(\) => \{\s*renderPendingPipelineTotal\(\)/u);
   assert.doesNotMatch(timingSource, /setTimeout|pendingStageDelays|pendingStageEnteredAt/u);
   assert.doesNotMatch(app, /\[0,\s*700,\s*1600,\s*2900,\s*4500,\s*6000\]/u);
@@ -371,7 +371,7 @@ test("public pipeline timing is driven by backend SSE events without fixed stage
   );
   assert.match(timingSource, /payload\.status === "failed" \? "failed" : "done"/u);
   assert.match(timingSource, /state\.status === "waiting"\) state\.status = "skipped"/u);
-  assert.match(timingSource, /pendingPipelineTotalMs = pendingPipelineServerElapsedMs\s*\?\?/u);
+  assert.match(timingSource, /pendingPipelineTotalMs = pendingPipelineServerElapsedMs/u);
 });
 
 test("missing answer API fails closed instead of answering from local ruling notes", async () => {
@@ -421,6 +421,7 @@ test("versioned backend answers require a matching server confirmation", async (
     malformedAnswer = false,
     endBeforeAnswer = false,
     eventAfterEnd = false,
+    includePhases = false,
     byteChunks = false,
     tracker = null,
     errorPayload = null,
@@ -429,9 +430,11 @@ test("versioned backend answers require a matching server confirmation", async (
       ? "event: answer\ndata: {not-json}\n\n"
       : `event: answer\ndata: ${JSON.stringify({ answer })}\n\n`;
     const events = [
+      includePhases ? "event: phase_start\ndata: {\"phase\":\"official_qa_exact\",\"serverElapsedMs\":0}\n\n" : "",
       "event: stage_start\ndata: {\"stageId\":\"understand\",\"serverElapsedMs\":2}\n\n",
       "event: tick\ndata: {\"stageId\":\"understand\",\"serverElapsedMs\":5,\"activeStageElapsedMs\":3}\n\n",
       "event: stage_end\ndata: {\"stageId\":\"understand\",\"serverElapsedMs\":8,\"durationMs\":6}\n\n",
+      includePhases ? "event: phase_end\ndata: {\"phase\":\"official_qa_exact\",\"serverElapsedMs\":8,\"durationMs\":8}\n\n" : "",
       errorPayload ? `event: error\ndata: ${JSON.stringify(errorPayload)}\n\n` : "",
       includeEnd && endBeforeAnswer ? "event: end\ndata: {\"serverElapsedMs\":9,\"totalMs\":9}\n\n" : "",
       includeAnswer && !errorPayload ? answerEvent : "",
@@ -477,6 +480,7 @@ test("versioned backend answers require a matching server confirmation", async (
     return streamResponse({ rulingVersion: "latest", shortAnswer: "已确认中文" }, {
       byteChunks: true,
       tracker: confirmedStreamTracker,
+      includePhases: true,
     });
   }, progressEvents);
   const confirmed = await confirmedRequest("问题", "latest", {
@@ -493,9 +497,11 @@ test("versioned backend answers require a matching server confirmation", async (
   assert.equal(confirmed.shortAnswer, "已确认中文");
   assert.equal(confirmedStreamTracker.cancelCalls, 0, "a valid completed stream must not be cancelled");
   assert.deepEqual(progressEvents.map((event) => event.type), [
+    "phase_start",
     "stage_start",
     "tick",
     "stage_end",
+    "phase_end",
     "end",
   ]);
 
@@ -620,8 +626,8 @@ test("backend answers bypass persistent browser cache and bust static assets", a
     readFile(new URL("../config.json", import.meta.url), "utf8"),
   ]);
   const config = JSON.parse(configText.replace(/^\uFEFF/u, ""));
-  assert.match(html, /src\/app\.js\?v=20260908-daily-budget-1/u);
-  assert.match(html, /src\/styles\.css\?v=20260814-risk-control-1/u);
+  assert.match(html, /src\/app\.js\?v=20260908-player-pipeline-2/u);
+  assert.match(html, /src\/styles\.css\?v=20260908-player-pipeline-2/u);
   assert.equal(config.answerApiUrl, "https://ocg-ruling-assistant.vercel.app/api/answer");
   assert.match(app, /cache: "no-store"/u);
   assert.doesNotMatch(app, /backendAnswerCacheTtlMs|buildBackendCacheKey|readCachedBackendAnswer|writeCachedBackendAnswer|ocg-ruling-answer:v/u);
@@ -1813,13 +1819,14 @@ test("rag UI presents provider failures as model service unavailable in Chinese"
   assert.match(app, /providerFailureState\s*\? "模型服务暂不可用"\s*:\s*\(systemFailureState \? "裁定生成异常" : "分析完成"\)/u);
 });
 
-test("renderBackendAnswer displays the complete cloud evidence answer and source links", async () => {
+test("renderBackendAnswer formats markdown safely and presents titled source links", async () => {
   const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
   const source = [
     sourceBetween(app, "function renderBackendAnswer", "function renderAnswerVersion"),
     sourceBetween(app, "function providerFailurePresentation", "async function loadBudgetStatus"),
     sourceBetween(app, "function formatRiskFlag", "function formatProvisionalVerdict"),
     sourceBetween(app, "function renderList", "function startPendingStages"),
+    sourceBetween(app, "function safeHttpUrl", "function startPendingStages"),
     sourceBetween(app, "function renderSources", "function renderFeedbackPanel"),
   ].join("\n");
   const document = createTestDocument();
@@ -1840,7 +1847,7 @@ test("renderBackendAnswer displays the complete cloud evidence answer and source
   `)(ui, document, clearTestElement, appendTestText);
   const answer = {
     answerLevel: "rule_analysis",
-    shortAnswer: "第一部分：完整裁定正文。\n".repeat(300) + "最后部分：完整结论。",
+    shortAnswer: "# 结论\n\n**可以发动。**\n\n- 第一项理由\n- 【官方参考资料】\n\n<script>alert(1)</script>",
     reasoning: ["第一项理由", "第二项理由"],
     usedEvidence: [
       { id: "ui-reference-1", type: "official_qa", title: "官方参考资料", sourceUrl: "https://example.test/reference/1" },
@@ -1850,17 +1857,113 @@ test("renderBackendAnswer displays the complete cloud evidence answer and source
   };
   for (const mode of ["rag_baseline", "cloud_evidence_v1"]) {
     render({ ...answer, mode });
-    assert.equal(ui.verdictBody.textContent === answer.shortAnswer, true, `${mode}: complete shortAnswer must display`);
+    assert.match(testNodeText(ui.verdictBody), /结论/u);
+    assert.match(testNodeText(ui.verdictBody), /第一项理由/u);
+    assert.match(testNodeText(ui.verdictBody), /alert\(1\)/u);
+    assert.equal(ui.verdictBody.childNodes[0].tagName, "h1");
+    assert.equal(ui.verdictBody.childNodes[1].childNodes[0].tagName, "strong");
+    const bodyLink = ui.verdictBody.childNodes[2].childNodes[1].childNodes[0];
+    assert.equal(bodyLink.textContent, "官方参考资料");
+    assert.equal(bodyLink.href, "https://example.test/reference/1");
     assert.equal(ui.verdictTitle.textContent, "裁定分析");
-    assert.deepEqual(ui.stepsList.childNodes.map((node) => node.textContent), answer.reasoning);
+    assert.deepEqual(ui.stepsList.childNodes.map(testNodeText), answer.reasoning);
     assert.equal(ui.sourcesList.childNodes.length, answer.usedEvidence.length);
     for (let index = 0; index < answer.usedEvidence.length; index += 1) {
       const reference = answer.usedEvidence[index];
       const sourceNode = ui.sourcesList.childNodes[index];
-      assert.equal(sourceNode.childNodes[1].textContent, `${reference.title} (${reference.id})`);
-      assert.equal(sourceNode.childNodes[2].href, reference.sourceUrl);
+      assert.equal(sourceNode.childNodes[1].textContent, reference.title);
+      assert.equal(sourceNode.childNodes[1].href, reference.sourceUrl);
+      assert.doesNotMatch(testNodeText(sourceNode), new RegExp(reference.id, "u"));
     }
+
+    const paragraph = "第一部分：完整裁定正文。";
+    const longText = `${paragraph}\n`.repeat(300) + "最后部分：完整结论。";
+    render({ ...answer, mode, shortAnswer: longText });
+    const renderedLongText = testNodeText(ui.verdictBody);
+    assert.equal(renderedLongText.split(paragraph).length - 1, 300);
+    assert.ok(renderedLongText.endsWith("最后部分：完整结论。"));
   }
+});
+
+test("an empty reason list keeps the timing panel titled as ruling flow", async () => {
+  const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+  const source = sourceBetween(app, "function renderList", "function startPendingStages");
+  const document = createTestDocument();
+  const stepsList = { ...document.createElement("ol"), classList: { remove() {} } };
+  const questionsList = { ...document.createElement("ul"), classList: { remove() {} } };
+  const ui = {
+    stepsTitle: { textContent: "理由" },
+    stepsList,
+    questionsList,
+    pipelineTimingPanel: { hidden: false },
+    reasonBlock: { hidden: false },
+    riskBlock: { hidden: false },
+  };
+  const { renderList } = new Function("ui", "document", "clearElement", "appendText", `${source}\nreturn { renderList };`)(
+    ui,
+    document,
+    clearTestElement,
+    appendTestText,
+  );
+
+  renderList(stepsList, []);
+  assert.equal(ui.stepsTitle.textContent, "裁定流程");
+  renderList(stepsList, ["已核对理由"]);
+  assert.equal(ui.stepsTitle.textContent, "理由");
+  ui.stepsTitle.textContent = "处理结果";
+  renderList(stepsList, ["当前版本不可用"]);
+  assert.equal(ui.stepsTitle.textContent, "处理结果");
+  ui.stepsTitle.textContent = "理由";
+  ui.pipelineTimingPanel.hidden = true;
+  renderList(stepsList, []);
+  assert.equal(ui.stepsTitle.textContent, "理由");
+});
+
+test("sourcePageUrl mechanically maps only canonical mirror QA URLs", async () => {
+  const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+  const source = sourceBetween(app, "function safeHttpUrl", "function startPendingStages");
+  const { sourcePageUrl, buildSourceLinkMap } = new Function(`${source}\nreturn { sourcePageUrl, buildSourceLinkMap };`)();
+  const officialUrl = "https://www.db.yugioh-card.com/yugiohdb/faq_search.action?fid=22804&ope=5&request_locale=ja";
+
+  assert.equal(sourcePageUrl(new URL("https://db.ygoresources.com/data/qa/22804")), officialUrl);
+  assert.equal(sourcePageUrl("https://db.ygoresources.com/data/qa/22804"), officialUrl);
+  assert.equal(
+    buildSourceLinkMap([{ title: "官方 Q&A", sourceUrl: "https://db.ygoresources.com/data/qa/22804" }])[0].url,
+    officialUrl,
+  );
+  assert.equal(sourcePageUrl("https://db.ygoresources.com/data/qa/22804/"), "https://db.ygoresources.com/data/qa/22804/");
+  assert.equal(sourcePageUrl("https://db.ygoresources.com/data/qa/22804?format=json"), "https://db.ygoresources.com/data/qa/22804?format=json");
+  assert.equal(sourcePageUrl("https://other.example/data/qa/22804"), "https://other.example/data/qa/22804");
+  assert.equal(sourcePageUrl("http://db.ygoresources.com/data/qa/22804"), "http://db.ygoresources.com/data/qa/22804");
+});
+
+test("completed timing keeps browser wait and server processing totals separate", async () => {
+  const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+  const source = sourceBetween(app, "function renderPendingPipelineTotal", "function readFiniteDuration");
+  const elapsed = { textContent: "" };
+  const render = new Function("ui", "readMonotonicNow", "formatPendingStageDuration", `
+    let pendingPipelineStartedAt = 0;
+    let pendingPipelineBrowserTotalMs = 109_000;
+    let pendingPipelineTotalMs = 81_000;
+    let pendingPipelineServerElapsedMs = 5_100;
+    let pendingPipelineStatus = "completed";
+    ${source}
+    return { render: renderPendingPipelineTotal, setRunning() { pendingPipelineStatus = "running"; } };
+  `)(
+    { pipelineElapsedText: elapsed },
+    () => 109_000,
+    (milliseconds) => `${Math.round(milliseconds / 1000)} 秒`,
+  );
+
+  const timing = render;
+  timing.render();
+  assert.match(elapsed.textContent, /浏览器总等待 109 秒/u);
+  assert.match(elapsed.textContent, /后端实测 · 总计 81 秒/u);
+  assert.doesNotMatch(elapsed.textContent, /^后端实测/u);
+  timing.setRunning();
+  timing.render();
+  assert.match(elapsed.textContent, /浏览器总等待 109 秒/u);
+  assert.match(elapsed.textContent, /后端最近反馈 · 已用 5 秒/u);
 });
 
 function sourceBetween(source, startMarker, endMarker) {

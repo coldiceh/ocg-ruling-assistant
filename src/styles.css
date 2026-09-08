@@ -1339,6 +1339,19 @@ svg {
   line-height: 1.72;
 }
 
+#verdictBody > p {
+  margin: 0 0 12px;
+}
+
+#verdictBody > p:last-child {
+  margin-bottom: 0;
+}
+
+#verdictBody > ul,
+#verdictBody > ol {
+  margin: 0 0 12px;
+}
+
 ol,
 ul {
   margin: 0;

@@ -42,7 +42,7 @@ const GENERIC_DECISION_CHECKLIST = Object.freeze([
 const GENERAL_INSTRUCTIONS = Object.freeze([
   "你是游戏王 OCG 规则分析助手。只依据用户原始问题、已解析卡片的原始卡文和所给检索资料回答，不得编造规则、卡文、资料或来源。",
   "先完整阅读用户问题，识别其中每一个子问题；逐个子问题给出直接结论，并说明结论所依据的题面事实、卡片原文和资料。不要漏答，也不要自行补造题面没有给出的状态。",
-  "resolvedCards 是已经匹配成功的卡片；其中的 effectText 是原始卡文依据。只有 unresolvedMentions 或 ambiguousMentions 中仍存在的项目才算没有确定。",
+  "resolvedCards 是已经匹配成功的卡片；其中的 effectText 是原始卡文依据，typeLine 保留来源的完整卡片类型。resolutionSource 为 card_text_reference 的卡片来自卡文引用，不代表题面中存在该卡。场面状态以用户题面为准。只有 unresolvedMentions 或 ambiguousMentions 中仍存在的项目才算没有确定。",
   "严格区分证据层级：只有确实对应本题完整场景的 officialQaDirectCandidates 可以支持 official_confirmed；officialQaRelated、faqRelated、provisionalOfficialResponses、卡文和 rawRelatedEvidence 都只能作为相关资料或推导依据。",
   "每条资料中的 official、recordType、source、sourceTier 和 sourceAuthority 表示来源层级，不表示它必然适用于本题。official=true 只说明资料来自官方数据库或官方来源；仍须核对其问题场景后才能采用。community_reference（包括 ocg-rule 等社区整理）只能作为辅助；与适用于本题的官方 Q&A/FAQ 冲突时，以官方资料为准。",
   "相关资料不是本题原题时，必须比较它与题面的卡片、条件、位置、时点、对象、玩家和处理过程；只采用可迁移的部分，不得直接复制其结论或把它伪装成官方直接裁定。",
@@ -58,8 +58,8 @@ const GENERAL_INSTRUCTIONS = Object.freeze([
   "decisionChecklist 是所有问题共用的内部自检维度，decisionPlan 是查询模型从本题生成的补充核对计划；两者都不是规则证据或预设答案。作答前仅在内部检查适用项，确认每个 subclaim/checkpoint 已由题面、卡文或所给资料处理；不要输出该检查过程，也不要因此编造缺失结论。",
   "不得根据卡名、题号、题型标签或历史答案套用预设结论。每次都从本次用户问题、原始卡文和本次证据重新推理。",
   "不得把 card_text、baige_card_text、user_provided_text、FAQ、rulebook、related evidence 或 rawRelatedEvidence 称为官方直接 Q&A。",
-  "直接输出完整中文裁定正文，不要输出 JSON、代码围栏、字段名或程序状态。先明确回答全部子问题，再说明依据和处理过程。",
-  "如需引用资料，只能引用 allowedEvidenceIds 中真实存在的 id 或对应标题；不得自造来源。",
+  "面向玩家输出中文裁定：先用一句话回答，再用短段落或列表解释关键处理与依据。可用 Markdown 标题、粗体和列表，不要输出 JSON 或代码围栏。",
+  "引用资料时写【资料标题】，且标题必须对应 allowedEvidenceIds 中的真实资料；不要输出资料 ID 或编造来源。来源适用范围用玩家能理解的话说明，例如‘这是根据卡文和相关规则作出的分析’，不要解释检索系统。relatedOnly、officialQaDirectCandidates、sourceAuthority、decisionChecklist 等字段名、布尔值和程序状态仅供内部阅读，不得写入裁定正文。",
   "存在不确定或资料不足时，在正文中直接说明具体缺口和条件分支，不要用格式化失败信息代替裁定。",
 ]);
 
@@ -628,8 +628,8 @@ function buildOfficialDirectPrompt({
     "以该官方 Q&A 为裁定依据，完整回答用户的全部子问题；保留其中所有实质条件、例外、后续处理、次数和限制，不得添加原文没有说明的处理。",
     "decisionChecklist 和 decisionPlan 都不是证据；输出前仅在内部确认适用项均已由该官方 Q&A 处理，不要展示检查过程。",
     "resolvedCards 仅用于理解卡片身份和还原资料中的卡名占位符。",
-    `正文中注明依据的官方 Q&A ID：${String(directQa.id || "")}。`,
-    "直接输出完整中文裁定正文，不要输出 JSON、代码围栏或字段名。",
+    "正文引用所给官方 Q&A 的资料标题。",
+    "面向玩家输出中文裁定：先回答，再用短段落或列表解释处理与依据。可用 Markdown，不输出 JSON、代码围栏或内部字段。引用写【资料标题】，不要输出资料 ID。",
   ];
   const cards = resolvedCards.map((card) => ({ id: card.id, name: card.name, aliases: card.aliases || [] }));
   const sourceBody = compactEvidenceTextFields(capturePromptEvidenceBody(directQa));
@@ -1229,7 +1229,8 @@ function buildCompactPromptVariants(payload = {}) {
     },
     render: (compactPayload) => [
       "仅依据用户问题、卡片原文和所给资料，逐个子问题推理；不得编造。先在内部逐项核对 decisionChecklist 和 decisionPlan，但不得把它们当证据或输出检查过程。只有完整对应本题的 official direct Q&A 才能称为官方直接裁定，相关资料与卡文只能支持分析。",
-      "直接输出完整中文裁定正文，不要 JSON、代码围栏或字段名；引用资料时只能使用 allowedEvidenceIds 中真实存在的 id。",
+      "typeLine 为来源的完整卡片类型；resolutionSource 为 card_text_reference 的卡片只是卡文引用，不能据此添加题面状态。",
+      "面向玩家输出中文裁定：先回答，再用短段落或列表解释处理与依据。可用 Markdown，不输出 JSON、代码围栏或内部字段。引用写【资料标题】，标题须对应 allowedEvidenceIds 中真实资料；不要输出资料 ID。用自然中文说明证据范围，不解释 relatedOnly、officialQaDirectCandidates、sourceAuthority 等内部字段或程序状态。",
       JSON.stringify(modelVisiblePromptPayload(compactPayload)),
     ].join("\n"),
   }];
@@ -1563,6 +1564,8 @@ function summarizeCards(cards, limit) {
     name: card.name || card.cnName || card.jaName || card.enName || "",
     aliases: card.aliases || [],
     cardType: card.cardType || card.type || "",
+    typeLine: card.typeLine || "",
+    resolutionSource: card.resolutionSource || "",
     attribute: card.attribute ?? "",
     race: card.race ?? "",
     atk: card.atk ?? null,

@@ -57,6 +57,23 @@ test("normalization preserves detailed official-question identity and hashes det
   assert.equal(diff.report.changedItems, 1);
 });
 
+test("evidence snapshot normalization retains question locale metadata", () => {
+  const record = normalizeEvidenceRecord({
+    id: "qa-locales",
+    recordType: "qa",
+    question: "日本語の質問?",
+    answer: "日本語の回答。",
+    questionLocales: {
+      cn: { title: "中文问题？", question: "中文问题？" },
+    },
+  });
+
+  assert.deepEqual(record.questionLocales, {
+    cn: { title: "中文问题？", question: "中文问题？" },
+  });
+  assert.equal("answer" in record.questionLocales.cn, false);
+});
+
 test("bounded detail rotation keeps compact current QA in the version-diff input", () => {
   const merged = mergeRulingDetailsWithQaIndex([
     { id: "qa-current-detail", recordType: "qa", answer: "rich" },

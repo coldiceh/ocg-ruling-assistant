@@ -71,6 +71,10 @@ test("runtime bundle is byte-exact deterministic and preserves all legacy normal
     assert.deepEqual(loaded.data.cards, legacy.cards);
     assert.deepEqual(loaded.data.records, legacy.records);
     assert.deepEqual(loaded.data.qaRecords, legacy.qaRecords);
+    assert.deepEqual(loaded.data.qaRecords[0].questionLocales, {
+      ja: { title: "この効果を発動できますか?", question: "この効果を発動できますか?" },
+      cn: { title: "这个效果可以发动吗？", question: "这个效果可以发动吗？" },
+    });
     for (const corpus of RAG_RUNTIME_CORPORA) {
       assert.equal(
         loaded.manifest.corpora[corpus.key].canonicalSha256,
@@ -291,7 +295,17 @@ async function createFixture() {
       records: [{ id: "rule-synthetic-1", title: "合成规则", text: "规则正文。", cards: ["合成甲"] }],
     }),
     writeJson(join(dataDir, "qa-index.json"), {
-      records: [{ id: "qa-synthetic-1", recordType: "qa", question: "可以发动吗？", answer: "可以。", cardIds: ["30001"] }],
+      records: [{
+        id: "qa-synthetic-1",
+        recordType: "qa",
+        question: "可以发动吗？",
+        answer: "可以。",
+        cardIds: ["30001"],
+        questionLocales: {
+          ja: { title: "この効果を発動できますか?", question: "この効果を発動できますか?" },
+          cn: { title: "这个效果可以发动吗？", question: "这个效果可以发动吗？" },
+        },
+      }],
     }),
     writeJson(join(dataDir, "evidence-index.json"), {
       records: [

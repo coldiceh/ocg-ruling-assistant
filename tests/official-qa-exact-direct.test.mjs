@@ -67,6 +67,43 @@ test("HTML, Unicode width, punctuation and whitespace variants retain the same e
   assert.equal(result.route, "official_qa_exact_direct");
 });
 
+test("an explicit Chinese qaData question surface matches the same current official Q&A", async () => {
+  const current = recordsById.get("10072");
+  const cards = fixture.cards.map((card) => {
+    if (card.id === "4956") return { ...card, cnName: "停战协定", aliases: [...card.aliases, "停战协定"] };
+    if (card.id === "4758") return { ...card, cnName: "人造人间－赛克·休克", aliases: [...card.aliases, "人造人间－赛克·休克"] };
+    return card;
+  });
+  const chineseQuestion = "「停战协定」让里侧守备表示的「人造人间－赛克·休克」变成表侧表示时，效果会适用吗？";
+  const result = await retrieveExactOfficialQaDirect({
+    question: chineseQuestion,
+    cards,
+    qaRecords: [{
+      ...current,
+      qaData: {
+        ja: {
+          title: current.title,
+          question: current.rawDetailedQuestion,
+          answer: current.rawAnswer,
+        },
+        cn: {
+          title: chineseQuestion,
+          question: chineseQuestion,
+          answer: "会适用。",
+        },
+      },
+    }],
+    candidatePoolComplete: true,
+    fetchImpl: null,
+  });
+
+  assert.equal(result.status, "matched");
+  assert.equal(result.route, "official_qa_exact_direct");
+  assert.equal(result.qaId, "10072");
+  assert.equal(result.officialQuestionJapanese, materialize(current.rawDetailedQuestion));
+  assert.equal(result.officialAnswerJapanese, materialize(current.rawAnswer));
+});
+
 test("same-card different official questions remain distinct", async () => {
   const other = recordsById.get("21546");
   const result = await retrieveExactOfficialQaDirect({

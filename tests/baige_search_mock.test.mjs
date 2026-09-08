@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { clearBaigeSearchCache, searchCards } from "../backend/baigeCardProvider.mjs";
+import { clearBaigeSearchCache, normalizeBaigeCard, searchCards } from "../backend/baigeCardProvider.mjs";
 import { extractRagCards } from "../backend/ragCardExtractor.mjs";
 import { loadRagData, retrieveRagEvidence } from "../backend/ragEvidenceRetriever.mjs";
 import { buildRagRulingPromptBundle } from "../backend/ragRulingPrompt.mjs";
@@ -131,6 +131,55 @@ const numberedRawCards = [
   { cid: 23364, id: 101306042, cn_name: "No.104 假面魔蹈士 闪光·杠然", text: { desc: "新卡文本。" } },
   { cid: 10684, id: 55888045, cn_name: "混沌No.106 熔岩掌 巨手·红掌", text: { desc: "新卡文本。" } },
 ];
+
+test("baige adapter preserves the provider type line alongside its generic card type", () => {
+  const normalized = normalizeBaigeCard(mindScanRawCard, "心灵透视眼");
+
+  assert.equal(normalized.cardType, "[魔法|永续]");
+  assert.equal(normalized.type, "[魔法|永续]");
+  assert.equal(normalized.typeLine, "[魔法|永续]");
+  assert.equal(normalized.raw.data.type, 131074);
+});
+
+test("provider type line survives identity resolution into card text evidence", async () => {
+  const evidence = await retrieveRagEvidence({
+    userQuery: "看透心灵之眼是什么类型？",
+    cardResolution: {
+      resolvedCards: [],
+      unresolvedMentions: [{ input: "看透心灵之眼" }],
+      ambiguousMentions: [],
+    },
+    cards: [],
+    records: [],
+    qaRecords: [],
+    preparedEvidenceProvider: async (input) => input,
+    fetchImpl: async () => jsonResponse({ result: [mindScanRawCard], next: 0 }),
+  });
+
+  assert.equal(evidence.retrievedCards[0].typeLine, "[魔法|永续]");
+  assert.equal(evidence.cardTexts[0].typeLine, "[魔法|永续]");
+});
+
+test("enabled model card-name extraction preserves source type line in resolved cards", () => {
+  const resolution = extractRagCards("看透心灵之眼是什么类型？", {
+    cards: [{
+      id: "17815",
+      name: "看透心灵之眼",
+      aliases: ["看透心灵之眼"],
+      type: "spell",
+      cardType: "spell",
+      typeLine: "[魔法|永续]",
+      effectText: "公开手牌。",
+    }],
+    modelCardNameCandidates: [{
+      name: "看透心灵之眼",
+      originalText: "看透心灵之眼",
+      confidence: "high",
+    }],
+  });
+
+  assert.equal(resolution.resolvedCards[0].typeLine, "[魔法|永续]");
+});
 
 test("baige_search_mock_returns_enigmaster_packbit", async () => {
   clearBaigeSearchCache();
@@ -567,6 +616,7 @@ test("baige_card_text_enters_rag_context", async () => {
   assert.equal(evidence.baigeResolvedCards[0].name, "谜式密码大师·紧缩位压缩员");
   assert.equal(evidence.cardTexts[0].type, "baige_card_text");
   assert.equal(evidence.cardTexts[0].source, "baige");
+  assert.equal(evidence.cardTexts[0].typeLine, "[怪兽|效果|同调]");
   assert.equal(evidence.cardTexts[0].official, false);
   assert.match(evidence.cardTexts[0].text, /永续陷阱卡/u);
 

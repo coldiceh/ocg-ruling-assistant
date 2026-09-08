@@ -18,6 +18,8 @@ export function createPublicAnswerProgress({
   let activeStageStartedAtMs = 0;
   let lastStageIndex = -1;
   let finished = false;
+  let started = false;
+  let exactCheckStartedAtMs = null;
 
   function elapsedMs() {
     return Math.max(0, Math.floor(now() - startedAt));
@@ -43,11 +45,23 @@ export function createPublicAnswerProgress({
     });
   }
 
+  function endExactCheck(serverElapsedMs) {
+    if (exactCheckStartedAtMs === null) return;
+    safeEmit("phase_end", {
+      phase: "official_qa_exact",
+      serverElapsedMs,
+      durationMs: Math.max(0, serverElapsedMs - exactCheckStartedAtMs),
+      status: "completed",
+    });
+    exactCheckStartedAtMs = null;
+  }
+
   function transition(stageId) {
     if (finished || !STAGE_INDEX.has(stageId)) return false;
     const nextIndex = STAGE_INDEX.get(stageId);
     if (nextIndex < lastStageIndex || activeStageId === stageId) return false;
     const serverElapsedMs = elapsedMs();
+    if (activeStageId) endExactCheck(serverElapsedMs);
     endActiveStage(serverElapsedMs);
     activeStageId = stageId;
     activeStageStartedAtMs = serverElapsedMs;
@@ -71,6 +85,7 @@ export function createPublicAnswerProgress({
   function finish(status) {
     if (finished) return snapshot();
     const totalMs = elapsedMs();
+    endExactCheck(totalMs);
     endActiveStage(totalMs, status);
     finished = true;
     activeStageId = "";
@@ -86,7 +101,16 @@ export function createPublicAnswerProgress({
   }
 
   return {
-    start: () => transition(PUBLIC_ANSWER_PROGRESS_STAGES[0].id),
+    start: () => {
+      if (started || finished) return false;
+      started = true;
+      exactCheckStartedAtMs = elapsedMs();
+      safeEmit("phase_start", {
+        phase: "official_qa_exact",
+        serverElapsedMs: exactCheckStartedAtMs,
+      });
+      return transition(PUBLIC_ANSWER_PROGRESS_STAGES[0].id);
+    },
     transition,
     tick,
     complete: () => finish("completed"),

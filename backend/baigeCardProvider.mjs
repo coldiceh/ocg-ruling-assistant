@@ -169,6 +169,7 @@ export function normalizeBaigeCard(card = {}, query = "", warnings = []) {
   const name = providerPrimaryNames[0] || String(id || cid || "");
   const text = extractEffectText(card);
   const type = readFirst(card, ["type", "cardType"]) || card?.text?.types || card?.data?.type || "";
+  const typeLine = readFirst(card, ["typeLine", "type_line"]) || card?.text?.types || "";
   const attribute = normalizeAttribute(readFirst(card, ["attribute"]) || card?.data?.attribute || "", type);
   const race = normalizeRace(readFirst(card, ["race"]) || card?.data?.race || "", type);
   const atk = readStat(card, "atk");
@@ -199,6 +200,7 @@ export function normalizeBaigeCard(card = {}, query = "", warnings = []) {
     effectText: text,
     type: String(type || ""),
     cardType: String(type || ""),
+    typeLine: String(typeLine || ""),
     attribute: attribute === undefined || attribute === null ? "" : attribute,
     race: race === undefined || race === null ? "" : race,
     atk: atk === undefined ? null : atk,

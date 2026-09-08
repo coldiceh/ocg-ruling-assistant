@@ -851,6 +851,7 @@ export function normalizeQa(payload, id, cards) {
   const involvedCards = detectCards(text, cards);
   const sourceCardIds = uniqueIds(Array.isArray(payload?.cards) ? payload.cards : []);
   const title = truncate(question.replace(/\s+/g, " "), 90);
+  const questionLocales = normalizeQuestionLocales(payload?.qaData);
   return {
     id: `ygoresources-qa-${id}`,
     recordType: "qa",
@@ -877,8 +878,30 @@ export function normalizeQa(payload, id, cards) {
     questionLocale: headingSelection?.locale || detailedQuestionSelection?.locale || "unknown",
     detailedQuestionLocale: detailedQuestionSelection?.locale || headingSelection?.locale || "unknown",
     answerLocale: answerSelection?.locale || "unknown",
+    ...(questionLocales ? { questionLocales } : {}),
     updatedAt: new Date().toISOString(),
   };
+}
+
+function normalizeQuestionLocales(localizations = {}) {
+  if (!localizations || typeof localizations !== "object" || Array.isArray(localizations)) return null;
+  const result = {};
+  for (const [locale, localized] of Object.entries(localizations)) {
+    if (!localized || typeof localized !== "object" || Array.isArray(localized)) continue;
+    const title = normalizeQuestionLocaleField(localized.title);
+    const question = normalizeQuestionLocaleField(localized.question || localized.q);
+    if (!title && !question) continue;
+    result[locale] = {
+      ...(title ? { title } : {}),
+      ...(question ? { question } : {}),
+    };
+  }
+  return Object.keys(result).length ? result : null;
+}
+
+function normalizeQuestionLocaleField(value) {
+  const text = String(value || "").normalize("NFKC").trim();
+  return text && !detectTranslationPlaceholder(text) ? text : "";
 }
 
 export function quarantineConflictingTrackedAliases(cardPayloads = [], onWarning = addAliasWarning) {

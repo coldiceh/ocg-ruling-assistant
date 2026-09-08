@@ -13,7 +13,7 @@ import {
 import { normalizeOfficialResponses } from "./officialResponses.mjs";
 import { isRulebookRecord, retrieveRulebookPassages } from "./rulebookPassageRetriever.mjs";
 import { extractNumberedCardIdentities, hasNumberedCardIdentityConflict } from "./numberedCardIdentity.mjs";
-import { retrieveLiveOfficialQa } from "./liveOfficialQaProvider.mjs";
+import { retrieveCardMetadata, retrieveLiveOfficialQa } from "./liveOfficialQaProvider.mjs";
 import { normalizeCardPasscode } from "./cardPasscode.mjs";
 import { projectOfficialQaQuestion } from "./officialQaQuestionProjection.mjs";
 import {
@@ -337,6 +337,40 @@ export async function retrieveRagEvidence({
     },
   );
 
+  let preparedCardMetadata = {
+    cardMetadata: [],
+    warnings: [],
+    debug: {
+      requestedCardCount: 0,
+      fetchedCardCount: 0,
+      httpRequestCount: 0,
+      elapsedMs: 0,
+    },
+  };
+  if (typeof preparedEvidenceProvider === "function"
+    && !isDisabled(env.RAG_LIVE_OFFICIAL_QA)
+    && retrievalCards.length) {
+    preparedCardMetadata = await retrieveCardMetadata({
+      resolvedCards: retrievalCards,
+      fetchImpl,
+      baseUrl: env.YGORESOURCES_BASE_URL || "https://db.ygoresources.com",
+      timeoutMs: readPositiveNumber(env.RAG_LIVE_QA_TIMEOUT_MS, 1800),
+      cacheTtlMs: readPositiveNumber(env.RAG_LIVE_QA_CACHE_TTL_MS, 10 * 60 * 1000),
+      signal,
+    });
+    retrievalWarnings.push(...(preparedCardMetadata.warnings || []));
+    const metadataById = new Map((preparedCardMetadata.cardMetadata || [])
+      .map((item) => [String(item.id), item]));
+    retrievalCards = retrievalCards.map((card) => ({
+      ...card,
+      ...(metadataById.get(String(card.id || card.cardId)) || {}),
+    }));
+    effectiveQaIdentityCards = canonicalizeQaIdentityCards(
+      retrievalCards.filter((card) => card.resolutionSource !== "card_text_reference"),
+      data.cards,
+      retrievalWarnings,
+    );
+  }
   const cardTexts = retrievalCards
     .map((card) => mergeCanonicalCardEvidenceProfile(
       card,
@@ -368,7 +402,7 @@ export async function retrieveRagEvidence({
       baigeAmbiguousMentions: baigeDebug.ambiguousMentions,
       ruleSearchQueries: [], retrievalWarnings,
       debug: {baigeSearchCount:baigeDebug.searchCount, baigeCacheHitCount:baigeDebug.cacheHitCount,
-        baigeWarnings:baigeDebug.warnings, timingsMs},
+        baigeWarnings:baigeDebug.warnings, cardMetadataHydration: preparedCardMetadata.debug, timingsMs},
     });
   }
   onProgressStage?.("retrieve_rulings");
@@ -1417,6 +1451,7 @@ export async function retrieveRagEvidence({
       baigeSearchCount: baigeDebug.searchCount,
       baigeCacheHitCount: baigeDebug.cacheHitCount,
       baigeWarnings: baigeDebug.warnings,
+      cardMetadataHydration: preparedCardMetadata.debug,
       liveOfficialQa: liveOfficialQa.debug || {},
       officialQaDiscoveryRelations: getOfficialQaDiscoveryRelationStatus(data),
     },
@@ -1926,6 +1961,7 @@ function mergeCanonicalIdentityCard(card, canonical, canonicalId) {
     enName: canonical.enName || card.enName,
     type: canonical.type || canonical.cardType || card.type || card.cardType,
     cardType: canonical.cardType || canonical.type || card.cardType || card.type,
+    typeLine: card.typeLine || canonical.typeLine || card.raw?.text?.types || canonical.raw?.text?.types || "",
     attribute: hasValue(canonical.attribute) ? canonical.attribute : card.attribute,
     race: hasValue(canonical.race) ? canonical.race : card.race,
     atk: canonical.atk ?? canonical.attack ?? card.atk ?? card.attack,
@@ -2122,8 +2158,11 @@ function cardTextEvidence(card, maxTextChars, warnings) {
     source: isBaige ? "baige" : card.source || "",
     resolutionSource: card.resolutionSource || "",
     cardType: card.cardType || card.type || "",
+    typeLine: card.typeLine || card.raw?.text?.types || "",
     attribute: card.attribute ?? "",
     race: card.race ?? "",
+    properties: Array.isArray(card.properties) ? [...card.properties] : [],
+    monsterProperties: Array.isArray(card.monsterProperties) ? [...card.monsterProperties] : [],
     atk: card.atk ?? null,
     def: card.def ?? null,
     level: card.level ?? card.rank ?? card.link ?? null,
@@ -2141,6 +2180,11 @@ function mergeCanonicalCardEvidenceProfile(resolvedCard = {}, canonicalCard = nu
     matchedQuery: resolvedCard.matchedQuery || canonicalCard.matchedQuery || "",
     aliases: cardIdentityNames(resolvedCard, canonicalCard),
     confidence: resolvedCard.confidence ?? canonicalCard.confidence,
+    typeLine: resolvedCard.typeLine
+      || canonicalCard.typeLine
+      || resolvedCard.raw?.text?.types
+      || canonicalCard.raw?.text?.types
+      || "",
   };
 }
 
@@ -6042,6 +6086,7 @@ function toRagCard(card, input, confidence) {
     enName: card.enName || "",
     cardType: card.cardType || card.type || "",
     type: card.type || card.cardType || "",
+    typeLine: card.typeLine || card.raw?.text?.types || "",
     attribute: card.attribute ?? "",
     race: card.race ?? "",
     atk: card.atk ?? null,
@@ -6081,6 +6126,7 @@ function mergeCard(localCard, baigeCard) {
     enName: localCard.enName || baigeCard.enName,
     cardType: localCard.cardType || baigeCard.cardType,
     type: localCard.type || baigeCard.type,
+    typeLine: localCard.typeLine || baigeCard.typeLine || localCard.raw?.text?.types || baigeCard.raw?.text?.types || "",
     attribute: hasValue(localCard.attribute) ? localCard.attribute : baigeCard.attribute,
     race: hasValue(localCard.race) ? localCard.race : baigeCard.race,
     atk: localCard.atk ?? baigeCard.atk,

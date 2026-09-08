@@ -153,6 +153,80 @@ export async function retrieveLiveOfficialQa({
   };
 }
 
+// Cloud evidence preparation returns before the full live-QA path. Reuse the
+// same source card endpoint and cache to hydrate only confirmed cards whose
+// explicit subtype metadata is absent; no Q&A discovery or model call is
+// needed for this mechanical projection.
+export async function retrieveCardMetadata({
+  resolvedCards = [],
+  fetchImpl = globalThis.fetch,
+  baseUrl = DEFAULT_BASE_URL,
+  timeoutMs = DEFAULT_TIMEOUT_MS,
+  cacheTtlMs = DEFAULT_CACHE_TTL_MS,
+  signal,
+} = {}) {
+  const startedAt = performance.now();
+  const cards = dedupeCardsById(resolvedCards)
+    .filter((card) => !hasExplicitSubtypeMetadata(card))
+    .slice(0, 6);
+  let httpRequestCount = 0;
+  if (!cards.length) {
+    return {
+      cardMetadata: [],
+      warnings: [],
+      debug: {
+        requestedCardCount: 0,
+        fetchedCardCount: 0,
+        httpRequestCount: 0,
+        elapsedMs: performance.now() - startedAt,
+      },
+    };
+  }
+  if (typeof fetchImpl !== "function") {
+    return {
+      cardMetadata: [],
+      warnings: ["card_metadata_fetch_unavailable"],
+      debug: {
+        requestedCardCount: cards.length,
+        fetchedCardCount: 0,
+        httpRequestCount: 0,
+        elapsedMs: performance.now() - startedAt,
+      },
+    };
+  }
+
+  const warnings = [];
+  const metadata = (await Promise.all(cards.map(async (card) => {
+    try {
+      const payload = await fetchJsonResilient(
+        fetchImpl,
+        `${baseUrl}/data/card/${encodeURIComponent(card.id)}`,
+        {
+          timeoutMs,
+          cacheTtlMs,
+          signal,
+          onRequest: () => { httpRequestCount += 1; },
+        },
+      );
+      return normalizeCardMetadata(card, payload, []);
+    } catch (error) {
+      throwIfAborted(signal);
+      warnings.push(`card_metadata_fetch_failed:${card.id}:${errorCode(error)}`);
+      return null;
+    }
+  }))).filter(Boolean);
+  return {
+    cardMetadata: metadata,
+    warnings,
+    debug: {
+      requestedCardCount: cards.length,
+      fetchedCardCount: metadata.length,
+      httpRequestCount,
+      elapsedMs: performance.now() - startedAt,
+    },
+  };
+}
+
 export function selectRelevantQaIds(cardQaEntries = [], maxCandidates = 8) {
   const safeLimit = positiveInteger(maxCandidates, 8);
   const entries = (cardQaEntries || [])
@@ -266,6 +340,11 @@ export function normalizeCardMetadata(card, payload, propertyMetadata) {
   const propertyLabels = propertyIds
     .map((id) => propertyMetadata?.[Number(id)]?.en || "")
     .filter(Boolean);
+  const property = String(localized?.property || "").trim();
+  const properties = [...new Set([
+    ...propertyLabels,
+    ...(property ? [property] : []),
+  ])];
   const race = propertyLabels.find((label) => !NON_RACE_PROPERTIES.has(String(label).toLowerCase())) || "";
   const type = String(localized?.cardType || "").trim();
   const attack = optionalNumber(localized?.atk);
@@ -281,7 +360,8 @@ export function normalizeCardMetadata(card, payload, propertyMetadata) {
     ...(propertyIds.length ? { monsterPropertyIds: propertyIds } : {}),
     ...(propertyLabels.length ? { monsterProperties: propertyLabels } : {}),
     ...(propertyIds.length ? { propertyIds } : {}),
-    ...(propertyLabels.length ? { properties: propertyLabels } : {}),
+    ...(property ? { property } : {}),
+    ...(properties.length ? { properties } : {}),
     ...(attack !== null ? { attack, atk: attack } : {}),
     ...(defense !== null ? { defense, def: defense } : {}),
     ...(level !== null ? { level } : {}),
@@ -389,7 +469,7 @@ function collectQaIds(value) {
   });
 }
 
-async function fetchJsonCached(fetchImpl, url, { timeoutMs, cacheTtlMs, signal }) {
+async function fetchJsonCached(fetchImpl, url, { timeoutMs, cacheTtlMs, signal, onRequest }) {
   throwIfAborted(signal);
   let cache = cacheByFetchImpl.get(fetchImpl);
   if (!cache) {
@@ -411,6 +491,7 @@ async function fetchJsonCached(fetchImpl, url, { timeoutMs, cacheTtlMs, signal }
   );
   timer.unref?.();
   try {
+    onRequest?.(url);
     const response = await fetchImpl(url, {
       headers: { accept: "application/json" },
       signal: controller.signal,
@@ -472,6 +553,12 @@ function dedupeCardsById(cards) {
     seen.add(id);
     return [{ ...card, id }];
   });
+}
+
+function hasExplicitSubtypeMetadata(card = {}) {
+  if (String(card.typeLine || "").trim() || String(card.property || "").trim()) return true;
+  return Array.isArray(card.properties)
+    && card.properties.some((value) => String(value || "").trim());
 }
 
 function uniqueNumericIds(values) {
