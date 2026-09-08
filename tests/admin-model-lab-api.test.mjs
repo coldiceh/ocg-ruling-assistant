@@ -412,6 +412,24 @@ test("maintenance mode keeps reads available and rejects every authenticated wri
   assert.equal(createCalls, 0);
 });
 
+test('public evidence capture requires session and CSRF before dispatch', async () => {
+  let calls = 0;
+  const {handler, cookie, csrfToken} = await createHarness({login:true,
+    service:{capturePublicEvidence:async()=>{calls += 1;return {status:'evidence_captured'};}},
+  });
+  const body = {action:'capture-public-evidence',question:'example'};
+  for (const headers of [{}, {cookie}]) {
+    const response = createResponse();
+    await handler(request({method:'POST',body,headers}),response);
+    assert.ok([401,403].includes(response.statusCode));
+    assert.equal(calls, 0);
+  }
+  const response = createResponse();
+  await handler(request({method:'POST',body,headers:{cookie,'x-csrf-token':csrfToken}}),response);
+  assert.equal(response.statusCode, 200);
+  assert.equal(calls, 1);
+});
+
 async function createHarness({
   service,
   login = false,

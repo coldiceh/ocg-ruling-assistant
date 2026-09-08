@@ -136,6 +136,7 @@ async function answerRagRulingQuestionInternal({
   officialQaExactAlreadyChecked = false,
   evidenceSelectionProvider,
   frozenCardResolution,
+  captureEvidenceOnly = false,
   progress,
 } = {}) {
   const pipelineStartedAt = Date.now();
@@ -371,6 +372,23 @@ async function answerRagRulingQuestionInternal({
   } catch (error) {
     promptStage.fail(error);
     throw error;
+  }
+
+  // Server-owned admin capture exits at the exact final-model boundary.
+  // Public request payloads never forward this option.
+  if (captureEvidenceOnly === true) {
+    timingsMs.finalModel = 0;
+    timingsMs.total = elapsedMs(pipelineStartedAt);
+    return {
+      status: 'evidence_captured',
+      mode: cloudEvidence ? 'cloud_evidence_v1' : 'rag_baseline',
+      capture: {
+        dataRevision, evidenceFingerprint, finalPromptSha256,
+        promptBundle, evidence, cardResolution: effectiveCardResolution,
+        cardNameModel, ruleQueryModel,
+      },
+      debug: { timingsMs },
+    };
   }
 
   const finalModelStartedAt = Date.now();

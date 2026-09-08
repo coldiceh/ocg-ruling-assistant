@@ -4053,6 +4053,41 @@ async function exportAdminRun(format) {
   }
 }
 
+async function handleAdminEvidenceCapture(event) {
+  event.preventDefault();
+  if (!adminSession.authenticated) return;
+  const field = id => document.getElementById(id);
+  const button = field('adminCaptureButton');
+  const status = field('adminCaptureStatus');
+  const resultField = field('adminCaptureResult');
+  button.disabled = true;
+  resultField.value = '';
+  field('adminCaptureDetails').hidden = true;
+  field('adminCaptureDownload').hidden = true;
+  status.textContent = '正在生成线上证据，完成后会停在最终回答之前…';
+  try {
+    const result = await requestAdminLab({method:'POST',action:'capture-public-evidence',body:{
+      question:field('adminCaptureQuestion').value,
+      rulingModelProfile:ui.rulingModelSelect.value,
+      budget:{runId:field('adminCaptureRunId').value,
+        actualLimitCny:Number(field('adminCaptureCny').value),
+        theoreticalLimitUsd:Number(field('adminCaptureUsd').value)},
+    }});
+    resultField.value = JSON.stringify(result, null, 2);
+    field('adminCaptureDetails').hidden = false;
+    field('adminCaptureDownload').hidden = false;
+    status.textContent = result.answer?.status === 'evidence_captured'
+      ? '完整证据包已生成；最终回答未调用。请下载保存。'
+      : result.status === 'failed'
+        ? `生成未完成：${result.error?.code || '未知错误'}。已保留本次费用记录。`
+        : '本题命中官方原题直接回答，未调用最终模型。请下载检查记录。';
+  } catch (error) {
+    status.textContent = `检查未完成：${error.message}。不要在费用状态不明时重复提交。`;
+  } finally {
+    button.disabled = false;
+  }
+}
+
 async function requestAdminLab({
   method = "GET",
   action,
@@ -5545,6 +5580,11 @@ async function init() {
   ui.budgetResetButton?.addEventListener("click", () => resetBudgetStatus());
   ui.budgetCapButton?.addEventListener("click", () => capPublicChatGptBudgetStatus());
   ui.adminLoginForm?.addEventListener("submit", handleAdminLogin);
+  document.getElementById('adminEvidenceCaptureForm')?.addEventListener('submit', handleAdminEvidenceCapture);
+  document.getElementById('adminCaptureDownload')?.addEventListener('click', () => {
+    const value = document.getElementById('adminCaptureResult').value;
+    if (value) downloadAdminFile(`evidence-${Date.now()}.private.json`, value, 'application/json');
+  });
   ui.adminLogoutButton?.addEventListener("click", handleAdminLogout);
   ui.adminCopyPublicQuestionButton?.addEventListener("click", () => {
     ui.adminQuestionInput.value = ui.questionInput.value;
