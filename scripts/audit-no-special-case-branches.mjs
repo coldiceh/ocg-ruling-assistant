@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 const repositoryRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const productionRoots = ["backend", "api", "src"];
 const excludedDirectories = new Set([
+  ".vs",
   "data",
   "fixtures",
   "generated",
@@ -167,7 +168,9 @@ for (const file of productionFiles) {
     }
   }
   if (displayPath === "backend/formalEngineShadow.mjs") {
-    if (!/VALIDATED_FORMAL_EVIDENCE\.has\s*\(/u.test(source)) {
+    if (!/VALIDATED_CLIENT_ANALYSES\.add\s*\(analysis\)/u.test(source)
+        || !/VALIDATED_CLIENT_ANALYSES\.has\s*\(analysis\)/u.test(source)
+        || /export\s+function\s+formalResultToEvidence\s*\(/u.test(source)) {
       failures.push(`${displayPath}: formal-evidence-origin-not-branded`);
     }
     const planningOffset = source.indexOf("planFormalScenario(");
