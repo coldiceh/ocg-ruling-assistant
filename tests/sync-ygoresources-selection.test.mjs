@@ -20,6 +20,7 @@ import {
   selectQaIdsForSync,
 } from "../scripts/sync-ygoresources.mjs";
 import { quarantineRulingData } from "../backend/rulingDataQuality.mjs";
+import { buildQaIndex } from "../backend/dataIndex.mjs";
 
 test("manifest parser reads real nested paths and response-header revision", () => {
   const parsed = parseManifestPayload({
@@ -253,6 +254,10 @@ test("QA normalization falls back from translation placeholders to the Japanese 
   assert.equal(record.conclusion, "この効果は発動でき、通常通り処理します。");
   assert.equal(record.questionLocale, "ja");
   assert.equal(record.answerLocale, "ja");
+  assert.deepEqual(record.questionLocales, {
+    en: { question: "Can this effect be activated?" },
+    ja: { question: "この効果を発動できますか?" },
+  });
   assert.deepEqual(record.cardIds, ["12345"]);
 });
 
@@ -270,6 +275,9 @@ test("QA normalization retains a clean non-Japanese locale when no Japanese text
   assert.equal(record.conclusion, "It can be activated.");
   assert.equal(record.questionLocale, "en");
   assert.equal(record.answerLocale, "en");
+  assert.deepEqual(record.questionLocales, {
+    en: { question: "Can this effect be activated?" },
+  });
 });
 
 test("QA normalization preserves a short official heading separately from its detailed scenario", () => {
@@ -292,6 +300,30 @@ test("QA normalization preserves a short official heading separately from its de
   );
   assert.match(record.rawDetailedQuestion, /条件\(A\)/u);
   assert.match(record.conclusion, /\(A\)は維持/u);
+  assert.deepEqual(record.questionLocales, {
+    ja: {
+      title: "一時的に除外されたモンスターのコントロールはどうなりますか?",
+      question: "条件(A)と条件(B)では、戻ったモンスターのコントロールはどうなりますか?",
+    },
+  });
+});
+
+test("QA index keeps synchronized question locale metadata without answers", () => {
+  const index = buildQaIndex([{
+    id: "ygoresources-qa-123",
+    recordType: "qa",
+    question: "日本語の質問?",
+    conclusion: "日本語の回答。",
+    questionLocales: {
+      ja: { title: "日本語の質問?", question: "日本語の質問?", answer: "日本語の回答。" },
+      cn: { title: "中文问题？", question: "中文问题？", answer: "中文答案。" },
+    },
+  }], []);
+
+  assert.deepEqual(index[0].questionLocales, {
+    ja: { title: "日本語の質問?", question: "日本語の質問?" },
+    cn: { title: "中文问题？", question: "中文问题？" },
+  });
 });
 
 test("card normalization persists structured monster metadata without a card-specific branch", () => {

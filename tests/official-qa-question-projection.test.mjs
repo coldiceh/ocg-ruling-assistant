@@ -38,6 +38,71 @@ test("rich and compact QA shapes share one question identity projection", () => 
   assert.ok(compact.branches.every((branch) => branch.startsWith("复合官方问题。")));
 });
 
+test("QA projection exposes only explicit localized title and question surfaces", () => {
+  const projected = projectOfficialQaQuestion({
+    title: "この効果を発動できますか?",
+    question: "この効果を発動できますか?",
+    answer: "発動できます。",
+    qaData: {
+      ja: {
+        title: "この効果を発動できますか?",
+        question: "この効果を発動できますか?",
+        answer: "発動できます。",
+      },
+      cn: {
+        title: "这个效果可以发动吗？",
+        question: "这个效果可以发动吗？",
+        answer: "可以发动。",
+      },
+    },
+  });
+
+  assert.ok(projected.surfaces.includes("这个效果可以发动吗？"));
+  assert.ok(projected.principalSurfaces.includes("这个效果可以发动吗？"));
+  assert.equal(projected.answerText, "発動できます。");
+  assert.equal(projected.surfaces.some((surface) => surface.includes("可以发动。")), false);
+});
+
+test("QA projection reads synchronized questionLocales without exposing localized answers", () => {
+  const projected = projectOfficialQaQuestion({
+    title: "この効果を発動できますか?",
+    question: "この効果を発動できますか?",
+    answer: "発動できます。",
+    questionLocales: {
+      cn: {
+        title: "这个效果可以发动吗？",
+        question: "这个效果可以发动吗？",
+        answer: "答案侧不应成为问题身份。",
+      },
+    },
+  });
+
+  assert.ok(projected.principalSurfaces.includes("这个效果可以发动吗？"));
+  assert.equal(projected.surfaces.some((surface) => surface.includes("答案侧不应成为问题身份")), false);
+});
+
+test("matcher can use an explicit localized question surface for direct identity", () => {
+  const matches = searchOfficialQaEvidence({
+    question: "这个效果可以发动吗？",
+    records: [{
+      id: "localized-question-surface",
+      recordType: "qa",
+      title: "この効果を発動できますか?",
+      question: "この効果を発動できますか?",
+      answer: "発動できます。",
+      qaData: {
+        ja: { title: "この効果を発動できますか?", question: "この効果を発動できますか?" },
+        cn: { title: "这个效果可以发动吗？", question: "这个效果可以发动吗？" },
+      },
+    }],
+    resolvedCards: [],
+    limit: 5,
+  });
+
+  assert.equal(matches.exact[0]?.id, "localized-question-surface");
+  assert.equal(matches.exact[0]?.matchLevel, "official_qa_exact");
+});
+
 test("one compatible branch of a compound QA remains related without becoming direct", () => {
   const query = [
     "自己场上有「匿名素材甲」，是否可以将其除外来特殊召唤「匿名终端乙」？",

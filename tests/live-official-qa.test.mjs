@@ -77,6 +77,77 @@ test("shared card-QA intersection retrieves the unique official interaction and 
   assert.ok(matches.exact[0]?.matchedBy.includes("unique_exact_card_set"));
 });
 
+test("live card metadata preserves the singular source property without monster projection", async () => {
+  const fetchImpl = async (url) => {
+    const value = String(url);
+    if (value.endsWith("/data/meta/mprop")) return jsonResponse([]);
+    if (value.endsWith("/data/card/901")) {
+      return jsonResponse({
+        cardData: { en: { cardType: "spell", property: "quickplay" } },
+        qaIndex: [],
+      });
+    }
+    throw new Error(`unexpected_url:${url}`);
+  };
+  const result = await retrieveLiveOfficialQa({
+    resolvedCards: [{ id: "901", name: "Fixture Spell" }],
+    fetchImpl,
+  });
+
+  assert.equal(result.cardMetadata[0].property, "quickplay");
+  assert.deepEqual(result.cardMetadata[0].properties, ["quickplay"]);
+  assert.equal("monsterProperties" in result.cardMetadata[0], false);
+  assert.equal("monsterPropertyIds" in result.cardMetadata[0], false);
+});
+
+test("cloud prepared retrieval hydrates explicit source property into resolved cards", async () => {
+  const calls = [];
+  const card = {
+    id: "901",
+    name: "Fixture Spell",
+    aliases: ["Fixture Spell"],
+    type: "spell",
+    cardType: "spell",
+    effectText: "Fixture text.",
+  };
+  const fetchImpl = async (url) => {
+    const value = String(url);
+    calls.push(value);
+    if (value.endsWith("/data/card/901")) {
+      return jsonResponse({
+        cardData: { en: { cardType: "spell", property: "continuous" } },
+        qaIndex: [],
+      });
+    }
+    throw new Error(`unexpected_url:${url}`);
+  };
+  const result = await retrieveRagEvidence({
+    userQuery: "Fixture Spell 的类型是什么？",
+    cardResolution: {
+      resolvedCards: [card],
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+    },
+    cards: [card],
+    records: [],
+    qaRecords: [],
+    enableLiveOfficialQa: true,
+    env: { RAG_LIVE_OFFICIAL_QA: "true" },
+    fetchImpl,
+    preparedEvidenceProvider: async (prepared) => prepared,
+  });
+
+  const resolved = result.cardResolution.resolvedCards[0];
+  assert.equal(resolved.property, "continuous");
+  assert.deepEqual(resolved.properties, ["continuous"]);
+  assert.equal("monsterProperties" in resolved, false);
+  assert.deepEqual(result.cardTexts[0].properties, ["continuous"]);
+  assert.equal(result.debug.cardMetadataHydration.requestedCardCount, 1);
+  assert.equal(result.debug.cardMetadataHydration.fetchedCardCount, 1);
+  assert.equal(result.debug.cardMetadataHydration.httpRequestCount, 1);
+  assert.equal(calls.filter((url) => url.endsWith("/data/card/901")).length, 1);
+});
+
 test("the Dark-Law-style activation wording is classified and promoted by an exact two-card set", async () => {
   const fixture = liveFetchFixture({
     cardIds: [7445, 11313],

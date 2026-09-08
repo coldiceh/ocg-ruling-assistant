@@ -1986,6 +1986,7 @@ function addResolved(
     enName: card.enName || "",
     type: card.type || card.cardType || "",
     cardType: card.cardType || card.type || "",
+    typeLine: card.typeLine || card.raw?.text?.types || "",
     race: card.race || "",
     attribute: card.attribute || "",
     ...(attack !== null ? { attack, atk: attack } : {}),

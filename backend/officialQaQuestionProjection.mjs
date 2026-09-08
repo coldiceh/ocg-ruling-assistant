@@ -13,6 +13,7 @@ export function projectOfficialQaQuestion(record = {}) {
     record.rawDetailedQuestion,
     record.question,
     record.rawQuestion,
+    ...extractLocalizedQuestionSurfaces(record),
   ]);
   const leadingQuestion = extractLeadingQuestion(text, title);
   const answerText = extractAnswerText(record, text, title, leadingQuestion);
@@ -46,6 +47,26 @@ export function projectOfficialQaQuestion(record = {}) {
 
 export function extractInlineOfficialCardIds(value) {
   return extractInlineCardIds(value);
+}
+
+// YGOResources' source payload keeps the question in a locale map under
+// qaData. Synchronized snapshots retain the same question-only projection as
+// questionLocales even when the selected `question` field is another locale.
+// Only title/question fields are identity-bearing; answer fields must never
+// become question surfaces.
+function extractLocalizedQuestionSurfaces(record = {}) {
+  return unique([
+    ...extractLocalizedSurfaces(record?.qaData),
+    ...extractLocalizedSurfaces(record?.questionLocales),
+  ]);
+}
+
+function extractLocalizedSurfaces(localizations) {
+  if (!localizations || typeof localizations !== "object" || Array.isArray(localizations)) return [];
+  return Object.values(localizations).flatMap((localized) => {
+    if (!localized || typeof localized !== "object" || Array.isArray(localized)) return [];
+    return [localized.title, localized.question];
+  });
 }
 
 function extractLeadingQuestion(text, title) {

@@ -27,6 +27,7 @@ export function buildQaIndex(rulings, cards) {
     .map((record) => {
       const answer = record.answer || record.officialAnswer || record.conclusion || "";
       const detailedQuestion = record.detailedQuestion || record.rawDetailedQuestion || "";
+      const questionLocales = projectQuestionLocales(record.questionLocales);
       const preserveStructuredAnswer = ["qa", "official-database", "official-response"]
         .includes(record.recordType);
       return {
@@ -60,8 +61,27 @@ export function buildQaIndex(rulings, cards) {
         questionLocale: record.questionLocale,
         detailedQuestionLocale: record.detailedQuestionLocale,
         answerLocale: record.answerLocale,
+        ...(questionLocales
+          ? { questionLocales }
+          : {}),
       };
     });
+}
+
+function projectQuestionLocales(locales) {
+  if (!locales || typeof locales !== "object" || Array.isArray(locales)) return null;
+  const result = {};
+  for (const [locale, value] of Object.entries(locales)) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+    const title = String(value.title || "").trim();
+    const question = String(value.question || "").trim();
+    if (!title && !question) continue;
+    result[locale] = {
+      ...(title ? { title } : {}),
+      ...(question ? { question } : {}),
+    };
+  }
+  return Object.keys(result).length ? result : null;
 }
 
 export function normalizeIndexKey(value) {

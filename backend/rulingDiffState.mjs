@@ -39,6 +39,7 @@ export function normalizeEvidenceRecord(record = {}, options = {}) {
   const textHash = record.textHash || evidenceTextHash(record);
   const now = options.now || new Date().toISOString();
   const status = allowedStatuses.has(record.status) ? record.status : "current";
+  const questionLocales = projectQuestionLocales(record.questionLocales);
   return {
     evidenceId: String(record.evidenceId || `${stableId}@${textHash.slice(0, 12)}`),
     stableId,
@@ -52,6 +53,9 @@ export function normalizeEvidenceRecord(record = {}, options = {}) {
     question: String(record.question || ""),
     rawQuestion: String(record.rawQuestion || ""),
     rawDetailedQuestion: String(record.rawDetailedQuestion || record.detailedQuestion || ""),
+    ...(questionLocales
+      ? { questionLocales }
+      : {}),
     answer: String(record.answer || record.conclusion || ""),
     text: String(record.text || [record.question, record.conclusion || record.answer].filter(Boolean).join("\n")),
     keywords: unique(record.keywords || []),
@@ -63,6 +67,22 @@ export function normalizeEvidenceRecord(record = {}, options = {}) {
     lastSeenAt: record.lastSeenAt || now,
     fetchedAt: record.fetchedAt || options.fetchedAt || now,
   };
+}
+
+function projectQuestionLocales(locales) {
+  if (!locales || typeof locales !== "object" || Array.isArray(locales)) return null;
+  const result = {};
+  for (const [locale, value] of Object.entries(locales)) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+    const title = String(value.title || "").trim();
+    const question = String(value.question || "").trim();
+    if (!title && !question) continue;
+    result[locale] = {
+      ...(title ? { title } : {}),
+      ...(question ? { question } : {}),
+    };
+  }
+  return Object.keys(result).length ? result : null;
 }
 
 export function diffRulingSnapshot({ previousEvidence = [], currentEvidence = [], sourceRevision = "", now = new Date().toISOString(), syncSucceeded = true } = {}) {

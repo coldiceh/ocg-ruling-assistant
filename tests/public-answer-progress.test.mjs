@@ -66,6 +66,31 @@ test("ticks report the backend active stage instead of advancing it", () => {
   assert.equal(progress.activeStageId, "understand");
 });
 
+test("the direct official-Q&A probe is reported as a measured phase", () => {
+  let currentMs = 0;
+  const events = [];
+  const progress = createPublicAnswerProgress({
+    now: () => currentMs,
+    emit: (type, data) => events.push({ type, ...data }),
+  });
+
+  progress.start();
+  progress.start();
+  currentMs = 5_100;
+  progress.transition("extract_card_names");
+
+  assert.deepEqual(events.filter((event) => event.type === "phase_start"), [
+    { type: "phase_start", phase: "official_qa_exact", serverElapsedMs: 0 },
+  ]);
+  assert.deepEqual(events.find((event) => event.type === "phase_end"), {
+    type: "phase_end",
+    phase: "official_qa_exact",
+    serverElapsedMs: 5_100,
+    durationMs: 5_100,
+    status: "completed",
+  });
+});
+
 test("progress streaming is opt-in for the web request shape only", () => {
   const request = {
     url: "/api/answer?progress=1",

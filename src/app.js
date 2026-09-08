@@ -97,8 +97,11 @@ const ui = {
   pipelineTimingPanel: document.querySelector("#pipelineTimingPanel"),
   pipelineStageList: document.querySelector("#pipelineStageList"),
   pipelineElapsedText: document.querySelector("#pipelineElapsedText"),
+  reasonBlock: document.querySelector(".reason-block"),
   questionsList: document.querySelector("#questionsList"),
+  riskBlock: document.querySelector(".risk-block"),
   sourcesList: document.querySelector("#sourcesList"),
+  sourceTrace: document.querySelector(".source-trace"),
   simulationPanel: document.querySelector("#simulationPanel"),
   simulationStatus: document.querySelector("#simulationStatus"),
   simulationSummary: document.querySelector("#simulationSummary"),
@@ -234,10 +237,12 @@ let pendingStageIndex = -1;
 let pendingBrowserElapsedTimer = 0;
 let pendingStageStates = [];
 let pendingPipelineStartedAt = null;
+let pendingPipelineBrowserTotalMs = null;
 let pendingPipelineTotalMs = null;
 let pendingPipelineServerElapsedMs = null;
 let pendingPipelineUsesServerTiming = false;
 let pendingPipelineStatus = "idle";
+let pendingPipelinePhase = "";
 
 function normalizeText(value) {
   return String(value || "")
@@ -1084,7 +1089,7 @@ function renderBackendAnswer(answer) {
       ? "卡名需要确认"
       : answer?.verdictTitle || "后端没有返回结论";
   ui.rulingBasisText.textContent = answer?.rulingBasis || basisFromBackendMode(answer?.mode);
-  ui.verdictBody.textContent = answer?.verdict || "暂时不能给确定裁定。";
+  renderMarkdown(ui.verdictBody, answer?.verdict || "暂时不能给确定裁定。", buildSourceLinkMap(answer?.sources));
   renderSubAnswers(answer?.subAnswers || []);
   renderParserDebug(answer?.parserDebug || null);
   renderList(ui.stepsList, answer?.steps || []);
@@ -1242,7 +1247,7 @@ function renderRagAnswer(answer) {
   ui.confidenceText.textContent = state.confidence;
   ui.verdictTitle.textContent = state.title;
   ui.rulingBasisText.textContent = state.basis;
-  ui.verdictBody.textContent = answer.shortAnswer || "当前无法给出可靠分析。";
+  renderMarkdown(ui.verdictBody, answer.shortAnswer || "当前无法给出可靠分析。", buildSourceLinkMap(answer?.usedEvidence));
   renderSubAnswers([]);
   ui.stepsTitle.textContent = "理由";
   ui.stepsList.hidden = false;
@@ -1522,7 +1527,7 @@ function renderFastJudgeAnswer(answer) {
   };
   ui.verdictTitle.textContent = answer.pending ? "正在深度判断" : routeTitles[answer.answerRoute] || "结论";
   ui.rulingBasisText.textContent = state?.basis || "验证未通过";
-  ui.verdictBody.textContent = answer.shortAnswer || "当前无法安全判断。";
+  renderMarkdown(ui.verdictBody, answer.shortAnswer || "当前无法安全判断。", buildSourceLinkMap(answer?.sourceSummary));
   renderSubAnswers([]);
   renderList(ui.stepsList, [
     ...(answer.normalRuling?.reason ? [`正常情况下：${answer.normalRuling.reason}`] : []),
@@ -4874,17 +4879,166 @@ function formatProvisionalVerdict(verdict, fallback) {
 function renderList(container, items) {
   clearElement(container);
   container.classList.remove("progress-steps");
+  container.hidden = !items.length;
+  if (container === ui.stepsList || container === ui.questionsList) syncPlayerResultPanelVisibility();
   if (!items.length) {
-    const li = document.createElement("li");
-    li.textContent = "暂无";
-    container.appendChild(li);
     return;
   }
   for (const item of items) {
     const li = document.createElement("li");
-    li.textContent = item;
+    renderMarkdown(li, item);
     container.appendChild(li);
   }
+  if (container === ui.stepsList || container === ui.questionsList) syncPlayerResultPanelVisibility();
+}
+
+function syncPlayerResultPanelVisibility() {
+  if (ui.stepsTitle && ui.stepsList && ["理由", "裁定流程"].includes(ui.stepsTitle.textContent)) {
+    const timingVisible = Boolean(ui.pipelineTimingPanel && !ui.pipelineTimingPanel.hidden);
+    if (!ui.stepsList.childNodes.length && timingVisible) {
+      ui.stepsTitle.textContent = "裁定流程";
+    } else {
+      ui.stepsTitle.textContent = "理由";
+    }
+  }
+  if (ui.reasonBlock && ui.stepsList) {
+    const timingVisible = Boolean(ui.pipelineTimingPanel && !ui.pipelineTimingPanel.hidden);
+    ui.reasonBlock.hidden = !timingVisible && !ui.stepsList.childNodes.length;
+  }
+  if (ui.riskBlock && ui.questionsList) {
+    ui.riskBlock.hidden = !ui.questionsList.childNodes.length;
+  }
+}
+
+function renderMarkdown(container, value, sourceLinks = []) {
+  clearElement(container);
+  const text = String(value ?? "").replace(/\r\n?/gu, "\n").trim();
+  if (!text) return;
+  const lines = text.split(/\n/u);
+  let paragraph = [];
+  let list = null;
+  let listType = "";
+
+  const flushParagraph = () => {
+    if (!paragraph.length) return;
+    const node = document.createElement("p");
+    renderMarkdownInline(node, paragraph.join(" ").trim(), sourceLinks);
+    container.appendChild(node);
+    paragraph = [];
+  };
+  const flushList = () => {
+    if (!list) return;
+    container.appendChild(list);
+    list = null;
+    listType = "";
+  };
+
+  for (const line of lines) {
+    const heading = /^\s*(#{1,6})\s+(.+)$/u.exec(line);
+    if (heading) {
+      flushParagraph();
+      flushList();
+      const node = document.createElement(`h${heading[1].length}`);
+      renderMarkdownInline(node, heading[2], sourceLinks);
+      container.appendChild(node);
+      continue;
+    }
+    const unordered = /^\s*[-*+]\s+(.+)$/u.exec(line);
+    const ordered = /^\s*\d+[.)]\s+(.+)$/u.exec(line);
+    if (unordered || ordered) {
+      flushParagraph();
+      const nextType = unordered ? "ul" : "ol";
+      if (!list || listType !== nextType) {
+        flushList();
+        listType = nextType;
+        list = document.createElement(nextType);
+      }
+      const item = document.createElement("li");
+      renderMarkdownInline(item, (unordered || ordered)[1], sourceLinks);
+      list.appendChild(item);
+      continue;
+    }
+    if (!line.trim()) {
+      flushParagraph();
+      flushList();
+      continue;
+    }
+    flushList();
+    paragraph.push(line.trim());
+  }
+  flushParagraph();
+  flushList();
+}
+
+function renderMarkdownInline(parent, value, sourceLinks = []) {
+  const source = String(value || "");
+  const tokenPattern = /\*\*([^*\n]+)\*\*|\[([^\]\n]+)\]\((https?:\/\/[^)\s]+)\)|【([^】\n]+)】/gu;
+  let cursor = 0;
+  for (const match of source.matchAll(tokenPattern)) {
+    const index = Number(match.index || 0);
+    if (index > cursor) appendText(parent, "span", source.slice(cursor, index));
+    if (match[1] !== undefined) {
+      appendText(parent, "strong", match[1]);
+    } else {
+      const title = match[2] ?? match[4] ?? "";
+      const url = safeHttpUrl(match[3]) || sourceLinks.find((item) => item.title === title)?.url || "";
+      if (!url) {
+        appendText(parent, "span", match[0]);
+      } else {
+        const link = document.createElement("a");
+        link.href = url;
+        link.target = "_blank";
+        link.rel = "noreferrer noopener";
+        link.textContent = title;
+        parent.appendChild(link);
+      }
+    }
+    cursor = index + match[0].length;
+  }
+  if (cursor < source.length) appendText(parent, "span", source.slice(cursor));
+}
+
+function safeHttpUrl(value) {
+  try {
+    const url = new URL(String(value || ""));
+    return url.protocol === "http:" || url.protocol === "https:" ? url.href : "";
+  } catch {
+    return "";
+  }
+}
+
+function sourcePageUrl(value) {
+  const safeUrl = safeHttpUrl(value);
+  if (!safeUrl) return "";
+  try {
+    const url = new URL(safeUrl);
+    const qaMatch = /^\/data\/qa\/(\d+)$/u.exec(url.pathname);
+    if (
+      url.protocol === "https:"
+      && url.hostname === "db.ygoresources.com"
+      && !url.port
+      && !url.username
+      && !url.password
+      && !url.search
+      && !url.hash
+      && qaMatch
+    ) {
+      return `https://www.db.yugioh-card.com/yugiohdb/faq_search.action?fid=${encodeURIComponent(qaMatch[1])}&ope=5&request_locale=ja`;
+    }
+  } catch {
+    return "";
+  }
+  return safeUrl;
+}
+
+function buildSourceLinkMap(sources = []) {
+  return (Array.isArray(sources) ? sources : [])
+    .map((source) => typeof source === "string" ? { detail: source } : source)
+    .map((source) => ({
+      title: String(source?.title || source?.detail || "").trim(),
+      url: sourcePageUrl(source?.sourceUrl || source?.url),
+    }))
+    .filter((source) => source.title && source.url);
 }
 
 function startPendingStages() {
@@ -4897,10 +5051,12 @@ function startPendingStages() {
     activeElapsedMs: null,
   }));
   pendingPipelineStartedAt = readMonotonicNow();
+  pendingPipelineBrowserTotalMs = null;
   pendingPipelineTotalMs = null;
   pendingPipelineServerElapsedMs = null;
   pendingPipelineUsesServerTiming = false;
   pendingPipelineStatus = "running";
+  pendingPipelinePhase = "";
   if (ui.pipelineTimingPanel) ui.pipelineTimingPanel.hidden = false;
   renderPendingStages(stages);
   pendingBrowserElapsedTimer = window.setInterval(() => {
@@ -4914,10 +5070,12 @@ function clearPendingStages(clearClass = true) {
   if (clearClass) {
     pendingStageIndex = -1;
     pendingPipelineStartedAt = null;
+    pendingPipelineBrowserTotalMs = null;
     pendingPipelineTotalMs = null;
     pendingPipelineServerElapsedMs = null;
     pendingPipelineUsesServerTiming = false;
     pendingPipelineStatus = "idle";
+    pendingPipelinePhase = "";
     pendingStageStates = [];
     if (ui.pipelineTimingPanel) ui.pipelineTimingPanel.hidden = true;
     if (ui.pipelineStageList) clearElement(ui.pipelineStageList);
@@ -4939,6 +5097,14 @@ function applyPendingStageProgressEvent(event) {
       pendingPipelineServerElapsedMs = totalMs;
       pendingPipelineUsesServerTiming = true;
     }
+    return;
+  }
+
+  if (type === "phase_start" || type === "phase_end") {
+    pendingPipelinePhase = type === "phase_start"
+      ? String(payload.phase || "")
+      : "";
+    renderPendingStages(getPendingStages());
     return;
   }
 
@@ -5023,6 +5189,11 @@ function renderPendingStages(stages = getPendingStages()) {
   });
   renderPendingPipelineTotal();
   if (pendingPipelineStatus !== "running") return;
+  if (pendingPipelinePhase === "official_qa_exact") {
+    ui.verdictTitle.textContent = "正在查询官方直接 Q&A";
+    ui.verdictBody.textContent = "正在检查是否存在完全同场景的官方 Q&A；完成后才会进入后续阶段。";
+    return;
+  }
   const stage = pendingStageIndex >= 0 ? stages[pendingStageIndex] : null;
   if (!stage) {
     ui.verdictTitle.textContent = "正在等待后端开始处理";
@@ -5044,7 +5215,9 @@ function completePendingStages(answer) {
     ?? readFiniteDuration(answer?.timingsMs?.total);
   clearPendingStages(false);
   pendingPipelineStatus = "completed";
-  pendingPipelineTotalMs = backendTotalMs ?? clientTotalMs ?? 0;
+  pendingPipelinePhase = "";
+  pendingPipelineBrowserTotalMs = clientTotalMs;
+  pendingPipelineTotalMs = backendTotalMs;
   pendingPipelineUsesServerTiming = backendTotalMs !== null || pendingPipelineUsesServerTiming;
   for (const state of pendingStageStates) {
     if (state.status === "waiting") state.status = "skipped";
@@ -5053,8 +5226,8 @@ function completePendingStages(answer) {
   if (ui.pipelineTimingPanel) ui.pipelineTimingPanel.hidden = false;
   if (ui.pipelineElapsedText) {
     ui.pipelineElapsedText.title = pendingPipelineUsesServerTiming
-      ? "后端实测墙钟耗时；各阶段由后端实际开始和结束事件记录。"
-      : "后端未返回总耗时，当前采用浏览器单调计时。";
+      ? "浏览器总等待使用浏览器单调时钟；后端实测为服务端阶段计时，两者起点可能不同。"
+      : "浏览器总等待使用浏览器单调时钟；后端没有返回可用总耗时。";
   }
   renderPendingStages(stages);
 }
@@ -5070,16 +5243,17 @@ function failPendingStages() {
   if (pendingStageIndex >= 0 && pendingStageStates[pendingStageIndex]?.status === "running") {
     pendingStageStates[pendingStageIndex].status = "failed";
   }
-  pendingPipelineTotalMs = pendingPipelineServerElapsedMs
-    ?? Math.max(0, now - pendingPipelineStartedAt);
+  pendingPipelineBrowserTotalMs = Math.max(0, now - pendingPipelineStartedAt);
+  pendingPipelineTotalMs = pendingPipelineServerElapsedMs;
   pendingPipelineUsesServerTiming = pendingPipelineServerElapsedMs !== null
     || pendingPipelineUsesServerTiming;
   pendingPipelineStatus = "failed";
+  pendingPipelinePhase = "";
   if (ui.pipelineTimingPanel) ui.pipelineTimingPanel.hidden = false;
   if (ui.pipelineElapsedText) {
     ui.pipelineElapsedText.title = pendingPipelineUsesServerTiming
-      ? "请求失败前的后端实测墙钟耗时。"
-      : "请求失败前的浏览器单调计时。";
+      ? "浏览器总等待使用浏览器单调时钟；后端实测是请求失败前收到的服务端计时。"
+      : "浏览器总等待使用浏览器单调时钟；后端没有返回可用总耗时。";
   }
   renderPendingStages(stages);
 }
@@ -5089,15 +5263,22 @@ function renderPendingPipelineTotal() {
   const runningMs = pendingPipelineStartedAt === null
     ? null
     : Math.max(0, readMonotonicNow() - pendingPipelineStartedAt);
-  const durationMs = pendingPipelineTotalMs ?? runningMs;
-  if (durationMs === null) {
+  const browserDurationMs = pendingPipelineStatus === "running"
+    ? runningMs
+    : pendingPipelineBrowserTotalMs;
+  const serverDurationMs = pendingPipelineStatus === "running"
+    ? pendingPipelineServerElapsedMs
+    : pendingPipelineTotalMs;
+  if (browserDurationMs === null) {
     ui.pipelineElapsedText.textContent = "";
-  } else if (pendingPipelineStatus === "running") {
-    ui.pipelineElapsedText.textContent = `浏览器已等待 ${formatPendingStageDuration(durationMs)}`;
-  } else if (pendingPipelineUsesServerTiming) {
-    ui.pipelineElapsedText.textContent = `后端实测 · 总计 ${formatPendingStageDuration(durationMs)}`;
   } else {
-    ui.pipelineElapsedText.textContent = `浏览器计时 · 总计 ${formatPendingStageDuration(durationMs)}`;
+    const browserText = `浏览器总等待 ${formatPendingStageDuration(browserDurationMs)}`;
+    const serverText = serverDurationMs === null
+      ? "后端尚无耗时反馈"
+      : pendingPipelineStatus === "running"
+        ? `后端最近反馈 · 已用 ${formatPendingStageDuration(serverDurationMs)}`
+        : `后端实测 · 总计 ${formatPendingStageDuration(serverDurationMs)}`;
+    ui.pipelineElapsedText.textContent = `${browserText}；${serverText}`;
   }
 }
 
@@ -5224,31 +5405,30 @@ function enginePromptSummary(simulation) {
 function renderSources(sources) {
   clearElement(ui.sourcesList);
   if (!sources.length) {
-    const empty = document.createElement("p");
-    empty.className = "empty";
-    empty.textContent = "暂无出处";
-    ui.sourcesList.appendChild(empty);
+    ui.sourcesList.hidden = true;
+    if (ui.sourceTrace) ui.sourceTrace.hidden = true;
     return;
   }
+  ui.sourcesList.hidden = false;
+  if (ui.sourceTrace) ui.sourceTrace.hidden = false;
 
   for (const source of sources) {
     const normalizedSource = typeof source === "string" ? { label: "资料来源", detail: source } : source;
-    const detail = normalizedSource.detail || normalizedSource.title || "";
-    const url = normalizedSource.url || normalizedSource.sourceUrl || (/^https?:\/\//i.test(detail) ? detail : "");
+    const detail = String(normalizedSource.detail || normalizedSource.title || "").trim();
+    const url = sourcePageUrl(normalizedSource.url || normalizedSource.sourceUrl || (/^https?:\/\//i.test(detail) ? detail : ""));
+    const title = String(normalizedSource.title || (url && detail !== url ? detail : "资料来源")).trim() || "资料来源";
     const node = document.createElement("div");
     node.className = "source-item";
     appendText(node, "strong", normalizedSource.label || normalizedSource.name || "资料来源");
-    const hasDetailLine = Boolean(detail && detail !== url);
-    if (hasDetailLine) appendText(node, "p", normalizedSource.id ? `${detail} (${normalizedSource.id})` : detail);
-    if (/^https?:\/\//i.test(url)) {
+    if (url) {
       const link = document.createElement("a");
       link.href = url;
       link.target = "_blank";
-      link.rel = "noreferrer";
-      link.textContent = url;
+      link.rel = "noreferrer noopener";
+      link.textContent = title;
       node.appendChild(link);
-    } else if (!hasDetailLine) {
-      appendText(node, "p", detail || "未提供链接");
+    } else if (detail) {
+      appendText(node, "p", title);
     }
     ui.sourcesList.appendChild(node);
   }
