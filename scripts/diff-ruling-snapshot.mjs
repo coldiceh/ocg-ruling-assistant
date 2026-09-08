@@ -6,6 +6,7 @@ import {
   mergeRulingDetailsWithQaIndex,
   normalizeEvidenceRecord,
 } from "../backend/rulingDiffState.mjs";
+import { readOptionalRagDataSourceJson, writeEvidenceIndexJson } from "../backend/ragDataSourceFile.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const dataDir = join(root, "data");
@@ -13,7 +14,7 @@ const meta = await readJson(join(dataDir, "snapshot-meta.json"), {});
 const rulings = await readJson(join(dataDir, "rulings.json"), { records: [] });
 const qaIndex = await readJson(join(dataDir, "qa-index.json"), { records: [] });
 const rules = await readJson(join(dataDir, "ocg-rule-corpus.json"), { records: [] });
-const previous = await readJson(join(dataDir, "evidence-index.json"), { records: [] });
+const previous = await readOptionalRagDataSourceJson(dataDir, "evidence-index.json", { records: [] });
 const now = new Date().toISOString();
 const raw = [
   ...mergeRulingDetailsWithQaIndex(rulings.records || [], qaIndex.records || []),
@@ -32,7 +33,7 @@ const result = diffRulingSnapshot({
   syncSucceeded: meta.sourceFreshness !== "unknown",
 });
 const report = { ...result.report, sourceFreshness: meta.sourceFreshness || result.report.sourceFreshness };
-await writeCompactJson(join(dataDir, "evidence-index.json"), { schemaVersion: 1, generatedAt: now, sourceRevision: meta.sourceRevision || "", records: result.records });
+await writeEvidenceIndexJson(dataDir, { schemaVersion: 1, generatedAt: now, sourceRevision: meta.sourceRevision || "", records: result.records });
 await writeCompactJson(join(dataDir, "ruling-sync-state.json"), {
   schemaVersion: 1,
   ...report,

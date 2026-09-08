@@ -774,18 +774,17 @@ function buildCardTextRecords(cardPayloads) {
     }));
 }
 
-function buildFaqRecords(cardPayloads) {
+export function buildFaqRecords(cardPayloads) {
   const records = [];
 
   for (const { record, payload } of cardPayloads) {
     const entries = payload?.faqData?.entries || {};
     for (const [effectNo, blocks] of Object.entries(entries)) {
       const lines = [];
-      for (const block of blocks || []) {
-        const selected = selectUsableLocalizedRulingText(block, [], {
-          localeOrder: ["cn", "zh-CN", "ja", "en"],
-        });
-        if (selected) lines.push(selected.text);
+      const blockList = Array.isArray(blocks) ? blocks : [blocks];
+      for (const block of blockList) {
+        const selected = selectFaqBlockText(block);
+        if (selected) lines.push(selected);
       }
       if (!lines.length) continue;
 
@@ -813,6 +812,65 @@ function buildFaqRecords(cardPayloads) {
   }
 
   return records;
+}
+
+function selectFaqBlockText(block) {
+  if (typeof block === "string") return decodeFaqHtml(block);
+
+  const localized = selectUsableLocalizedRulingText(block, [], {
+    localeOrder: ["cn", "zh-CN", "ja", "en"],
+  });
+  if (localized) return decodeFaqHtml(localized.text);
+  return "";
+}
+
+export function decodeFaqHtml(value) {
+  const source = String(value || "");
+  if (!source) return "";
+
+  const protectedCids = [];
+  const protectedSource = source.replace(/<<[^<>]*>>/gu, (token) => {
+    const index = protectedCids.push(token) - 1;
+    return `\u0000FAQ_CID_${index}\u0000`;
+  });
+  const withLinks = protectedSource.replace(
+    /<a\b([^>]*)>([\s\S]*?)<\/a>/giu,
+    (_match, attributes, body) => {
+      const href = String(attributes || "").match(/\bhref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/iu);
+      const linkText = decodeFaqHtmlFragment(body).trim();
+      const linkHref = decodeFaqHtmlFragment(href?.[1] ?? href?.[2] ?? href?.[3] ?? "").trim();
+      if (!linkHref) return linkText;
+      if (!linkText) return linkHref;
+      return `${linkText} [${linkHref}]`;
+    },
+  );
+  const text = decodeFaqHtmlFragment(withLinks)
+    .replace(/\u0000FAQ_CID_(\d+)\u0000/gu, (_match, index) => protectedCids[Number(index)] || "")
+    .replace(/[ \t]+\n/gu, "\n")
+    .replace(/\n{3,}/gu, "\n\n")
+    .trim();
+  return text;
+}
+
+function decodeFaqHtmlFragment(value) {
+  const named = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " " };
+  return String(value || "")
+    .replace(/<br\s*\/?\s*>/giu, "\n")
+    .replace(/<\/(p|div|li|tr|section|article|h[1-6])\s*>/giu, "\n")
+    .replace(/<\/?(?:p|div|li|ul|ol|span|b|strong|em|i|u|small|sup|sub|table|tbody|thead|tr|td|th|section|article|h[1-6])\b[^>]*>/giu, "")
+    .replace(/&(#(?:x[0-9a-f]+|[0-9]+)|[a-z]+);/giu, (match, entity) => {
+      const lower = String(entity).toLowerCase();
+      if (lower[0] === "#") {
+        const isHex = lower[1] === "x";
+        const codePoint = Number.parseInt(lower.slice(isHex ? 2 : 1), isHex ? 16 : 10);
+        const validCodePoint = Number.isInteger(codePoint)
+          && codePoint >= 0
+          && codePoint <= 0x10ffff
+          && !(codePoint >= 0xd800 && codePoint <= 0xdfff);
+        return validCodePoint ? String.fromCodePoint(codePoint) : match;
+      }
+      return Object.prototype.hasOwnProperty.call(named, lower) ? named[lower] : match;
+    });
 }
 
 export function normalizeQa(payload, id, cards) {
@@ -1019,7 +1077,7 @@ function detectCards(text, cards) {
   return cards.filter((card) => (card.aliases || []).some((alias) => normalized.includes(normalizeKey(alias))));
 }
 
-function extractKeywords(text) {
+export function extractKeywords(text) {
   const keywords = [
     ["发动", "能否发动", "可以发动"],
     ["连锁", "C1", "C2"],

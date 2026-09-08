@@ -28,6 +28,7 @@ import {
   validateRagDataRevisionManifest,
 } from "./ragDataRevisionManifest.mjs";
 import { loadRagRuntimeBundle } from "./ragRuntimeBundle.mjs";
+import { readRagDataSourceBytes } from "./ragDataSourceFile.mjs";
 import {
   getRegisteredCanonicalNormalizedRagData,
   isCanonicalNormalizedRagArray,
@@ -7110,7 +7111,7 @@ function officialRelatedResolvedQuestionIdentityCount(item = {}, resolvedCards =
 async function readRequiredJsonSource(dataDir, name, arrayKeys) {
   let raw;
   try {
-    raw = await readFile(join(dataDir, name));
+    raw = await readRagDataSourceBytes(dataDir, name);
   } catch (error) {
     throw unavailableRagDataError({
       phase: "raw_fallback",

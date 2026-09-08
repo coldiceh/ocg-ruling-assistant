@@ -12,6 +12,7 @@ import {
   retrieveRagEvidence,
 } from "../backend/ragEvidenceRetriever.mjs";
 import { buildRagRulingPromptBundle } from "../backend/ragRulingPrompt.mjs";
+import { bindOfficialQaDiscoveryRelations } from "../backend/officialQaDiscoveryRelations.mjs";
 import {
   canonicalJsonBytes,
   loadRagRuntimeBundle,
@@ -97,6 +98,14 @@ test("precompiled RAG runtime is byte-exact with the raw loader and four real re
   const runtimeBundle = await loadRagRuntimeBundle({ dataDir });
 
   assert.equal(runtimeBundle.ok, true, runtimeFailureDiagnostic(runtimeBundle));
+  // The production loadRagData path binds this weak discovery sidecar after
+  // loading either raw or precompiled data. The parity test injects the
+  // bundle directly, so reproduce that lifecycle before comparing retrieval.
+  await bindOfficialQaDiscoveryRelations({
+    dataDir,
+    data: runtimeBundle.data,
+    requireTrustedData: true,
+  });
   assert.equal(fixture.cases.length, 4, "the parity gate must retain all four real dry-run cases");
 
   for (const corpus of RAG_RUNTIME_CORPORA) {

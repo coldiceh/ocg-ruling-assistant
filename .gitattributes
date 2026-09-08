@@ -4,6 +4,7 @@
 /data/rulings.json text eol=lf
 /data/qa-index.json text eol=lf
 /data/evidence-index.json text eol=lf
+/data/evidence-index.json.gz binary
 /data/ocg-rule-corpus.json text eol=lf
 /data/official-responses.json text eol=lf
 /data/rag-data-revision-manifest.json text eol=lf

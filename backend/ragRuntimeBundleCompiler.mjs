@@ -9,6 +9,7 @@ import {
   RAG_DATA_REVISION_SOURCE_FILES,
 } from "./ragDataRevisionManifest.mjs";
 import { compileRagCardAliasRuntimeIndex } from "./ragCardExtractor.mjs";
+import { readRagDataSourceBytes } from "./ragDataSourceFile.mjs";
 import {
   canonicalJsonBytes,
   loadRagRuntimeBundle,
@@ -196,7 +197,7 @@ export async function checkRagRuntimeBundle({
 
 export async function readRagRuntimeSources(dataDir) {
   return await Promise.all(RAG_DATA_REVISION_SOURCE_FILES.map(async (path) => {
-    const raw = await readFile(join(dataDir, path));
+    const raw = await readRagDataSourceBytes(dataDir, path);
     let payload;
     try {
       payload = JSON.parse(raw.toString("utf8"));

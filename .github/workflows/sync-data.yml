@@ -47,7 +47,9 @@ jobs:
           SYNC_ONLY_RELEASED_CARDS: "true"
           CARD_INDEX_LANGUAGES: "en,ja"
           FETCH_CONCURRENCY: "8"
-          MAX_QA_TOTAL: "3000"
+          # Keep each CPU embedding increment within the job's time budget;
+          # the existing cursor rotates coverage and retains prior Q&A.
+          MAX_QA_TOTAL: "500"
         run: node scripts/sync-data.mjs
 
       - name: Sync OCG rule corpus
@@ -58,7 +60,9 @@ jobs:
 
       - name: Validate synchronized data
         id: data_validation
-        run: pnpm check:data
+        run: |
+          pnpm check:data
+          cp data/cards-lite.json data/snapshot-meta.json public/data/
 
       - name: Diff ruling snapshot
         run: pnpm diff:rulings
@@ -78,6 +82,35 @@ jobs:
       - name: Verify runtime behavior matches the raw snapshot
         id: runtime_parity
         run: node --test --test-concurrency=1 tests/rag-runtime-parity.test.mjs
+
+      - name: Setup Python for incremental cloud embeddings
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Cache fixed Qwen embedding snapshot
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/huggingface/hub
+          key: qwen3-embedding-0.6b-97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3
+
+      - name: Install fixed CPU embedding runtime
+        run: |
+          python -m pip install --disable-pip-version-check \
+            --index-url https://download.pytorch.org/whl/cpu torch==2.8.0
+          python -m pip install --disable-pip-version-check \
+            transformers==4.56.1 safetensors==0.6.2
+
+      - name: Incrementally synchronize and mechanically verify cloud evidence assets
+        env:
+          CLOUD_EMBED_CPU_THREADS: "4"
+          CLOUD_EMBED_BATCH_SIZE: "8"
+          TOKENIZERS_PARALLELISM: "false"
+        run: |
+          node scripts/sync-cloud-evidence-assets.mjs \
+            --data-dir data \
+            --cloud-dir data/cloud-evidence-v1 \
+            --python python
 
       - name: Verify source freshness and index ordering
         run: pnpm check:freshness
@@ -105,7 +138,9 @@ jobs:
           name: failed-synced-rag-data-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             data/*.json
+            data/*.json.gz
             data/rag-runtime-v1/**
+            data/cloud-evidence-v1/**
           if-no-files-found: error
           retention-days: 1
           compression-level: 9
@@ -125,7 +160,8 @@ jobs:
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/*.json data/rag-runtime-v1/**
+          git add -u -- data
+          git add data/*.json data/*.json.gz data/rag-runtime-v1/** data/cloud-evidence-v1/** public/data/cards-lite.json public/data/snapshot-meta.json
           if git diff --cached --quiet; then
             echo "No data changes."
             echo "data_changed=false" >> "$GITHUB_OUTPUT"
