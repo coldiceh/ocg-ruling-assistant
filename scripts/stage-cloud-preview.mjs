@@ -98,12 +98,17 @@ export async function planCloudPreview({ root, includeFiles = [], assetDir }) {
     assetDir = await realpath(resolve(assetDir));
     await selectedSource(assetDir, "evidence-vector-index.json");
     const vectorManifest = JSON.parse(await readFile(join(assetDir, "evidence-vector-index.json"), "utf8"));
+    const corpusManifest = JSON.parse(await readFile(join(assetDir, "corpus-manifest.json"), "utf8"));
+    const lexicalFiles = corpusManifest.lexicalIndex ? ["lexical-index.bin.gz"] : [];
+    if (corpusManifest.lexicalIndex && corpusManifest.lexicalIndex.file !== lexicalFiles[0]) {
+      throw new Error("Cloud lexical manifest must name the ordinary lexical index file");
+    }
     const shardFiles = vectorManifest.shards?.map((shard) => shard.file);
     if (!Array.isArray(shardFiles) || !shardFiles.length
       || shardFiles.some((file) => typeof file !== "string" || !/^evidence-vectors-[0-9]{3}\.f32$/u.test(file))) {
       throw new Error("Cloud asset manifest must name ordinary vector shard files");
     }
-    for (const file of [...new Set(["corpus-manifest.json", "corpus.json.gz", "evidence-vector-index.json", ...shardFiles])].sort()) {
+    for (const file of [...new Set(["corpus-manifest.json", "corpus.json.gz", "evidence-vector-index.json", ...shardFiles, ...lexicalFiles])].sort()) {
       const source = await selectedSource(assetDir, file);
       files.push({ ...source, path: `data/cloud-evidence-v1/${file}`, sourceKind: "cloud-asset" });
     }
