@@ -40,14 +40,14 @@ test("successful data pushes explicitly call the Pages workflow", async () => {
   assert.match(workflow, /^      id-token: write\s*$/mu);
 });
 
-test("data sync rebuilds and commits the versioned RAG runtime before snapshot tests", async () => {
+test("data sync rebuilds and commits the versioned RAG runtime before synchronization checks", async () => {
   const workflow = await readWorkflow("sync-data.yml");
   const evidence = workflow.indexOf("pnpm build:evidence");
   const revision = workflow.indexOf("pnpm build:rag-revision");
   const runtime = workflow.indexOf("pnpm build:rag-runtime");
   const verifyRuntime = workflow.indexOf("pnpm check:rag-runtime");
   const parity = workflow.indexOf("tests/rag-runtime-parity.test.mjs");
-  const snapshotTests = workflow.indexOf("pnpm test");
+  const snapshotTests = workflow.indexOf("id: snapshot_tests");
 
   assert.ok(evidence >= 0 && evidence < revision);
   assert.ok(revision < runtime && runtime < verifyRuntime);
@@ -55,6 +55,37 @@ test("data sync rebuilds and commits the versioned RAG runtime before snapshot t
   assert.match(workflow, /git add -u -- data/u);
   assert.match(workflow, /git add data\/\*\.json data\/\*\.json\.gz data\/rag-runtime-v1\/\*\* data\/cloud-evidence-v1\/\*\*/u);
   assert.match(workflow, /cp data\/cards-lite\.json data\/snapshot-meta\.json public\/data\//u);
+});
+
+test("data sync runs the bounded synchronization checks and keeps the complete suite separate", async () => {
+  const workflow = await readWorkflow("sync-data.yml");
+  const previewWorkflow = await readWorkflow("validate-preview.yml");
+  const syncTests = [
+    "tests/sync-ygoresources-selection.test.mjs",
+    "tests/sync-ocg-rule.test.mjs",
+    "tests/source-freshness.test.mjs",
+    "tests/rag-data-source-file.test.mjs",
+    "tests/rag-data-revision-manifest.test.mjs",
+    "tests/rag-runtime-bundle.test.mjs",
+    "tests/rag-runtime-deployment-safety.test.mjs",
+    "tests/cloud-evidence-assets.test.mjs",
+    "tests/cloud-evidence-incremental-sync.test.mjs",
+    "tests/evidence-vector-index.test.mjs",
+    "tests/deployment-workflows.test.mjs",
+  ];
+  const targetedCommand = [
+    "node --test --test-concurrency=1",
+    ...syncTests,
+  ].join(" ");
+
+  assert.match(workflow, new RegExp(targetedCommand.replaceAll(".", "\\."), "u"));
+  const targeted = workflow.indexOf(targetedCommand);
+  const parity = workflow.indexOf("tests/rag-runtime-parity.test.mjs");
+  assert.ok(parity >= 0 && parity < targeted);
+  assert.equal(workflow.indexOf("run: pnpm test"), -1);
+  assert.match(previewWorkflow, /node --test --test-force-exit --test-concurrency=1/u);
+  assert.match(previewWorkflow, /--test-isolation=none/u);
+  assert.match(previewWorkflow, /--test-reporter=spec/u);
 });
 
 test("a failed but validated synchronized snapshot is retained briefly for diagnosis", async () => {
@@ -91,7 +122,10 @@ test("Vercel verifies source, runtime, and cloud asset bindings before deploymen
     "pnpm run check:rag-revision && pnpm run check:rag-runtime && node scripts/sync-cloud-evidence-assets.mjs --data-dir data --cloud-dir data/cloud-evidence-v1 --check-only",
   );
   assert.equal(config.outputDirectory, "public");
-  assert.equal(await readFile(new URL("../public/.gitkeep", import.meta.url), "utf8"), "\n");
+  assert.equal(
+    (await readFile(new URL("../public/.gitkeep", import.meta.url), "utf8")).replaceAll("\r\n", "\n"),
+    "\n",
+  );
   for (const route of ["api/answer.js", "api/admin-model-lab.js"]) {
     const excluded = String(config.functions?.[route]?.excludeFiles || "");
     assert.match(excluded, /data\/\{cards,rulings,qa-index,evidence-index,ocg-rule-corpus,official-responses\}\.json/u);
