@@ -1227,7 +1227,7 @@ function renderRagAnswer(answer) {
   void loadBudgetStatus();
   renderEngineSimulation(answer?.engine || null, answer?.engineSimulation || null);
   const labels = {
-    official_confirmed: { confidence: "官方依据", className: "is-confirmed", title: "官方直接裁定", basis: "官方 direct Q&A" },
+    official_confirmed: { confidence: "官方依据", className: "is-confirmed", title: "官方直接裁定", basis: "官方问答原文" },
     rule_analysis: { confidence: "规则分析", className: "is-rule-derived", title: "裁定分析", basis: "卡片文本 / FAQ / 相关资料" },
     low_confidence_analysis: { confidence: "需要核对", className: "is-caution", title: "条件性规则分析", basis: "已有资料可供分析，但部分条件仍需核对" },
     needs_more_info: { confidence: "需要补充", className: "is-caution", title: "需要补充信息", basis: "缺少作出判断所需的场景或卡片资料" },
@@ -1508,7 +1508,7 @@ function renderFastJudgeAnswer(answer) {
   ui.resultGrid.hidden = false;
   renderCards(answer?.cards || []);
   const labels = {
-    direct_official: { confidence: "官方依据", className: "is-confirmed", basis: "官方 direct Q&A" },
+    direct_official: { confidence: "官方依据", className: "is-confirmed", basis: "官方问答原文" },
     official_case_based: { confidence: "官方相似案例", className: "is-rule-derived", basis: "官方相似案例 / 条件推导" },
     rule_judgment: { confidence: "规则判断", className: "is-rule-derived", basis: "卡片文本与公开规则" },
     needs_clarification: { confidence: "需要补充", className: "is-risky", basis: "当前信息不足" },
@@ -5196,8 +5196,8 @@ function renderPendingStages(stages = getPendingStages()) {
   }
   const stage = pendingStageIndex >= 0 ? stages[pendingStageIndex] : null;
   if (!stage) {
-    ui.verdictTitle.textContent = "正在等待后端开始处理";
-    ui.verdictBody.textContent = "阶段将在后端实际开始时显示，不再由浏览器定时器预估。";
+    ui.verdictTitle.textContent = "正在准备查询";
+    ui.verdictBody.textContent = "开始处理后，这里会显示当前进度。";
     return;
   }
   ui.verdictTitle.textContent = stage.id === "generate_ruling" ? "正在核对资料并生成裁定" : `正在${stage.label}`;
