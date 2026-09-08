@@ -1,10 +1,10 @@
 {
   "generatedAt": "2026-09-08T20:28:01.460Z",
   "cardCount": 14379,
-  "rulingCount": 30601,
+  "rulingCount": 31004,
   "cardAliasCount": 35966,
-  "qaIndexCount": 24895,
-  "qaIndexBytes": 47288029,
+  "qaIndexCount": 25298,
+  "qaIndexBytes": 47720481,
   "maxQaIndexBytes": 94371840,
   "syncAllReleasedCards": true,
   "syncOnlyReleasedCards": true,

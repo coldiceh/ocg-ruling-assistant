@@ -787,36 +787,40 @@ export function buildFaqRecords(cardPayloads) {
   const records = [];
 
   for (const { record, payload } of cardPayloads) {
-    const entries = payload?.faqData?.entries || {};
-    for (const [effectNo, blocks] of Object.entries(entries)) {
-      const lines = [];
-      const blockList = Array.isArray(blocks) ? blocks : [blocks];
-      for (const block of blockList) {
-        const selected = selectFaqBlockText(block);
-        if (selected) lines.push(selected);
-      }
-      if (!lines.length) continue;
+    for (const { entries, idMarker, titleMarker } of [
+      { entries: payload?.faqData?.entries || {}, idMarker: "", titleMarker: "" },
+      { entries: payload?.faqData?.pendEntries || {}, idMarker: "-pendulum", titleMarker: "Pendulum " },
+    ]) {
+      for (const [effectNo, blocks] of Object.entries(entries)) {
+        const lines = [];
+        const blockList = Array.isArray(blocks) ? blocks : [blocks];
+        for (const block of blockList) {
+          const selected = selectFaqBlockText(block);
+          if (selected) lines.push(selected);
+        }
+        if (!lines.length) continue;
 
-      records.push({
-        id: `card-faq-${record.id}-${effectNo}`,
-        recordType: "card-faq",
-        title: `${record.name} FAQ ${effectNo}`,
-        status: "confirmed",
-        cards: [record.name],
-        cardIds: [record.id],
-        question: "",
-        keywords: extractKeywords(lines.join("\n")),
-        conclusion: lines.join("\n"),
-        steps: ["按同步 FAQ 的说明处理。", "若对局条件与 FAQ 不同，继续查对应官方 Q&A。"],
-        questions: [],
-        sources: [
-          {
-            label: "YGOResources Card FAQ",
-            detail: record.sourceUrl,
-          },
-        ],
-        updatedAt: payload?.faqData?.meta?.ja?.date || payload?.faqData?.meta?.en?.date || record.updatedAt,
-      });
+        records.push({
+          id: `card-faq-${record.id}${idMarker}-${effectNo}`,
+          recordType: "card-faq",
+          title: `${record.name} ${titleMarker}FAQ ${effectNo}`,
+          status: "confirmed",
+          cards: [record.name],
+          cardIds: [record.id],
+          question: "",
+          keywords: extractKeywords(lines.join("\n")),
+          conclusion: lines.join("\n"),
+          steps: ["按同步 FAQ 的说明处理。", "若对局条件与 FAQ 不同，继续查对应官方 Q&A。"],
+          questions: [],
+          sources: [
+            {
+              label: "YGOResources Card FAQ",
+              detail: record.sourceUrl,
+            },
+          ],
+          updatedAt: payload?.faqData?.meta?.ja?.date || payload?.faqData?.meta?.en?.date || record.updatedAt,
+        });
+      }
     }
   }
 
