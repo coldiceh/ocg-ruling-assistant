@@ -1,5 +1,5 @@
 {
-  "answerApiUrl": "/api/answer",
+  "deploymentLabel": "试用版 · 复杂裁定请核对依据",
   "budgetApiUrl": "/api/budget",
-  "deploymentLabel": "Preview · 未通过质量验收"
+  "answerApiUrl": "/api/answer"
 }

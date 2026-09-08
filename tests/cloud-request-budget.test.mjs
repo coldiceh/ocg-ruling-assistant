@@ -73,3 +73,17 @@ test('actual SiliconFlow client carries its reservation to settlement with compl
   assert.equal(result.debug.cloudCosts.theoreticalUsd,0);
   assert.equal(redis.calls.length,2);
 });
+
+test('production daily budget follows the configured day and preserves cumulative experiment keys',async()=>{
+  const keys=[];
+  const command=async args=>{keys.push(args[3]);return ['reserved'];};
+  const dailyEnv={...env,CLOUD_BUDGET_PERIOD:'daily',API_BUDGET_TIMEZONE:'Asia/Shanghai'};
+  for(const instant of ['2026-09-08T15:59:59.000Z','2026-09-08T16:00:00.000Z']) {
+    const budget=createCloudRequestBudget({env:dailyEnv,command,now:new Date(instant)});
+    await budget.beforeSend({operation:'embeddings',model:'synthetic',count:1});
+  }
+  const cumulative=createCloudRequestBudget({env,command,now:new Date('2026-09-08T16:00:00.000Z')});
+  await cumulative.beforeSend({operation:'embeddings',model:'synthetic',count:1});
+  assert.deepEqual(keys,['ruling-cloud-budget:v1:test-scope:2026-09-08',
+    'ruling-cloud-budget:v1:test-scope:2026-09-09','ruling-cloud-budget:v1:test-scope']);
+});
