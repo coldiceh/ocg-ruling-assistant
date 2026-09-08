@@ -73,6 +73,7 @@ test(`cloud production path preserves the complete wire prompt and captures it o
   context.after(()=>fs.rmSync(assetDir,{recursive:true,force:true}));
   const card={id:'integration-card',name:'整合测试龙',cnName:'整合测试龙',jaName:'統合テストドラゴン',
     enName:'Integration Test Dragon',aliases:['整合测试龙'],cardType:'monster',
+    pendulumEffectText:'①：另一个区域的完整原文。',
     effectText:'①：自己主要阶段可以发动。抽1张卡。',sourceUrl:'https://example.test/card/integration'};
   const data={cards:[card],records:[],qaRecords:[]};
   const dataRevision=computeRagDataRevision(data);
@@ -121,6 +122,12 @@ test(`cloud production path preserves the complete wire prompt and captures it o
   assert.equal(planInput.question,question);
   assert.ok(planInput.cardTexts.some(item=>item.cardIds.includes(card.id)));
   assert.ok(JSON.stringify(planInput.cardTexts).includes(card.effectText));
+  assert.equal(planInput.cardTexts.find(item=>item.cardIds.includes(card.id)).text,
+    card.effectText);
+  assert.equal(planInput.cardTexts.find(item=>item.cardIds.includes(card.id)).pendulumEffectText,
+    card.pendulumEffectText);
+  const finalPayload=JSON.parse(finalPrompt.split('\n').at(-1));
+  assert.equal(finalPayload.resolvedCards.find(item=>item.id===card.id).pendulumEffectText,card.pendulumEffectText);
   assert.ok(finalPrompt.includes(body));
   assert.ok(finalPrompt.length>8000&&finalPrompt.length<=36000);
   assert.equal(answer.mode,'cloud_evidence_v1');

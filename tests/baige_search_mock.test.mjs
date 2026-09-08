@@ -141,6 +141,23 @@ test("baige adapter preserves the provider type line alongside its generic card 
   assert.equal(normalized.raw.data.type, 131074);
 });
 
+test("baige pendulum source section survives adapter and prepared evidence", async () => {
+  clearBaigeSearchCache();
+  const raw = { id: 12345678, cid: 8765, cn_name: "匿名灵摆资料龙",
+    text: { types: "[怪兽|效果|灵摆]", desc: "怪兽原文。", pdesc: "灵摆原文。" } };
+  const normalized = normalizeBaigeCard(raw);
+  assert.equal(normalized.effectText, raw.text.desc);
+  assert.equal(normalized.pendulumEffectText, raw.text.pdesc);
+  const evidence = await retrieveRagEvidence({
+    userQuery: "匿名灵摆资料龙如何处理？",
+    cardResolution: { resolvedCards: [], unresolvedMentions: [{ input: raw.cn_name }], ambiguousMentions: [] },
+    cards: [], records: [], qaRecords: [], preparedEvidenceProvider: async input => input,
+    fetchImpl: async () => jsonResponse({ result: [raw], next: 0 }),
+  });
+  assert.equal(evidence.retrievedCards[0].pendulumEffectText, raw.text.pdesc);
+  assert.equal(evidence.cardTexts[0].pendulumEffectText, raw.text.pdesc);
+});
+
 test("provider type line survives identity resolution into card text evidence", async () => {
   const evidence = await retrieveRagEvidence({
     userQuery: "看透心灵之眼是什么类型？",

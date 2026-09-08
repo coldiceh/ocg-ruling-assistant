@@ -2000,6 +2000,8 @@ function addResolved(
     ...(Array.isArray(card.monsterPropertyIds) ? { monsterPropertyIds: [...card.monsterPropertyIds] } : {}),
     ...(Array.isArray(card.monsterProperties) ? { monsterProperties: [...card.monsterProperties] } : {}),
     effectText: card.effectText || "",
+    ...(card.pendulumEffectText ? { pendulumEffectText: card.pendulumEffectText } : {}),
+    ...(card.pendulumScale != null ? { pendulumScale: card.pendulumScale } : {}),
     sourceUrl: card.sourceUrl || "",
     ...(card.formalDefinitionId ? { formalDefinitionId: String(card.formalDefinitionId) } : {}),
     ...(card.formalDefinitionSnapshotId

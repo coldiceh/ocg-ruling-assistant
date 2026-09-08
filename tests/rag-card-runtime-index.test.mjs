@@ -44,6 +44,15 @@ function makeCards() {
   }];
 }
 
+test("separate pendulum text survives canonical card resolution", () => {
+  const card = { id: "pendulum-fixture", name: "匿名灵摆测试龙", aliases: [],
+    effectText: "怪兽效果原文。", pendulumEffectText: "灵摆效果原文。", pendulumScale: 4 };
+  const result = extractRagCards("「匿名灵摆测试龙」如何处理？", { cards: [card] });
+  assert.equal(result.resolvedCards[0].effectText, card.effectText);
+  assert.equal(result.resolvedCards[0].pendulumEffectText, card.pendulumEffectText);
+  assert.equal(result.resolvedCards[0].pendulumScale, card.pendulumScale);
+});
+
 const QUERIES = [
   "发动「匿名长名龙G」的效果。",
   "「匿名长龙G」处理后，另一张匿名长名龙发动效果。",

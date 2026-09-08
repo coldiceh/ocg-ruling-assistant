@@ -198,6 +198,8 @@ export function normalizeBaigeCard(card = {}, query = "", warnings = []) {
     providerPrimaryNames,
     text,
     effectText: text,
+    ...(typeof card?.text?.pdesc === "string" && card.text.pdesc.trim()
+      ? { pendulumEffectText: cleanText(card.text.pdesc) } : {}),
     type: String(type || ""),
     cardType: String(type || ""),
     typeLine: String(typeLine || ""),

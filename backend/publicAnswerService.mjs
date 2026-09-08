@@ -164,6 +164,7 @@ export async function answerPublicRulingQuestion({
   answerOfficialExact = answerExactOfficialQaQuestionForVersion,
   answerRuling = answerRagRulingQuestionForVersion,
 } = {}) {
+  const publicRequestStartedAt = Date.now();
   progress?.start?.();
   const normalizedPayload = parsePublicAnswerPayload(payload);
   const mode = String(normalizedPayload.mode || "rag").toLowerCase();
@@ -182,6 +183,7 @@ export async function answerPublicRulingQuestion({
     env,
   }).catch(() => null);
 
+  const exactMatchStartedAt = Date.now();
   const exactAnswer = await answerOfficialExact({
     rulingVersion: normalizedPayload.rulingVersion,
     question: normalizedPayload.question,
@@ -189,6 +191,7 @@ export async function answerPublicRulingQuestion({
     signal,
     progress,
   });
+  const exactMatchMs = Math.max(0, Date.now() - exactMatchStartedAt);
   if (exactAnswer) {
     await auditPromise;
     return { answer: exactAnswer, latency: null };
@@ -199,8 +202,6 @@ export async function answerPublicRulingQuestion({
   );
   assertPublicRulingModelProfileAvailable(profile, env);
   const publicEnv = createPublicAnswerModelEnv(env, profile.id);
-  const answerStartedAt = Date.now();
-
   try {
     const answer = await answerRuling({
       rulingVersion: normalizedPayload.rulingVersion,
@@ -215,7 +216,10 @@ export async function answerPublicRulingQuestion({
       answer,
       latency: {
         profileId: profile.id,
-        durationMs: Math.max(0, Date.now() - answerStartedAt),
+        // durationMs covers the public service from entry through the answer;
+        // exactMatchMs isolates the preceding official-question lookup.
+        durationMs: Math.max(0, Date.now() - publicRequestStartedAt),
+        exactMatchMs,
       },
     };
   } catch (error) {

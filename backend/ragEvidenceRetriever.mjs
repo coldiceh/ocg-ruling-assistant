@@ -1971,6 +1971,10 @@ function mergeCanonicalIdentityCard(card, canonical, canonicalId) {
     rank: canonical.rank ?? card.rank,
     link: canonical.link ?? canonical.linkRating ?? card.link ?? card.linkRating,
     effectText: canonical.effectText || card.effectText || card.text,
+    ...((canonical.pendulumEffectText || card.pendulumEffectText)
+      ? { pendulumEffectText: canonical.pendulumEffectText || card.pendulumEffectText } : {}),
+    ...((canonical.pendulumScale ?? card.pendulumScale) != null
+      ? { pendulumScale: canonical.pendulumScale ?? card.pendulumScale } : {}),
     text: canonical.text || canonical.effectText || card.text || card.effectText,
     sourceUrl: canonical.sourceUrl || card.sourceUrl,
     aliases: cardIdentityNames(card, canonical),
@@ -2155,6 +2159,8 @@ function cardTextEvidence(card, maxTextChars, warnings) {
     enName: card.enName || "",
     aliases: card.aliases || [],
     text: truncated ? `${text.slice(0, Math.max(0, maxTextChars - 1))}…` : text,
+    ...(card.pendulumEffectText ? { pendulumEffectText: card.pendulumEffectText } : {}),
+    ...(card.pendulumScale != null ? { pendulumScale: card.pendulumScale } : {}),
     sourceUrl: card.sourceUrl || "",
     source: isBaige ? "baige" : card.source || "",
     resolutionSource: card.resolutionSource || "",
@@ -6096,6 +6102,8 @@ function toRagCard(card, input, confidence) {
     rank: card.rank ?? null,
     link: card.link ?? null,
     effectText: card.effectText || card.text || "",
+    ...(card.pendulumEffectText ? { pendulumEffectText: card.pendulumEffectText } : {}),
+    ...(card.pendulumScale != null ? { pendulumScale: card.pendulumScale } : {}),
     text: card.text || card.effectText || "",
     source: "baige",
     sourceLabel: "百鸽",
@@ -6136,6 +6144,10 @@ function mergeCard(localCard, baigeCard) {
     rank: localCard.rank ?? baigeCard.rank,
     link: localCard.link ?? baigeCard.link,
     effectText: localCard.effectText || baigeCard.effectText,
+    ...((localCard.pendulumEffectText || baigeCard.pendulumEffectText)
+      ? { pendulumEffectText: localCard.pendulumEffectText || baigeCard.pendulumEffectText } : {}),
+    ...((localCard.pendulumScale ?? baigeCard.pendulumScale) != null
+      ? { pendulumScale: localCard.pendulumScale ?? baigeCard.pendulumScale } : {}),
     text: localCard.text || localCard.effectText || baigeCard.text,
     source: localCard.source || baigeCard.source,
     sourceLabel: localCard.sourceLabel || baigeCard.sourceLabel,
