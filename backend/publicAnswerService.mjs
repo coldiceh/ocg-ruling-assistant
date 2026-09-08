@@ -23,6 +23,10 @@ import {
 
 export const PUBLIC_ANSWER_REQUEST_BODY_LIMIT_BYTES = 64 * 1024;
 export const PUBLIC_ANSWER_QUESTION_LIMIT_CHARACTERS = 12_000;
+// The public exact-question shortcut is temporarily disabled. Keep the
+// underlying matcher and pipeline available for internal evaluation and a
+// future, explicitly reviewed re-enable.
+export const PUBLIC_EXACT_QA_ROUTE_ENABLED = false;
 
 export function parsePublicAnswerPayload(body, {
   declaredBytes = null,
@@ -183,18 +187,23 @@ export async function answerPublicRulingQuestion({
     env,
   }).catch(() => null);
 
-  const exactMatchStartedAt = Date.now();
-  const exactAnswer = await answerOfficialExact({
-    rulingVersion: normalizedPayload.rulingVersion,
-    question: normalizedPayload.question,
-    env,
-    signal,
-    progress,
-  });
-  const exactMatchMs = Math.max(0, Date.now() - exactMatchStartedAt);
-  if (exactAnswer) {
-    await auditPromise;
-    return { answer: exactAnswer, latency: null };
+  // Do not invoke the exact-question route from public requests. The RAG
+  // pipeline still searches ordinary official Q&A and FAQ evidence.
+  let exactMatchMs = 0;
+  if (PUBLIC_EXACT_QA_ROUTE_ENABLED) {
+    const exactMatchStartedAt = Date.now();
+    const exactAnswer = await answerOfficialExact({
+      rulingVersion: normalizedPayload.rulingVersion,
+      question: normalizedPayload.question,
+      env,
+      signal,
+      progress,
+    });
+    exactMatchMs = Math.max(0, Date.now() - exactMatchStartedAt);
+    if (exactAnswer) {
+      await auditPromise;
+      return { answer: exactAnswer, latency: null };
+    }
   }
 
   const profile = resolvePublicRulingModelProfile(
@@ -217,7 +226,7 @@ export async function answerPublicRulingQuestion({
       latency: {
         profileId: profile.id,
         // durationMs covers the public service from entry through the answer;
-        // exactMatchMs isolates the preceding official-question lookup.
+        // exactMatchMs remains a compatibility field while the shortcut is disabled.
         durationMs: Math.max(0, Date.now() - publicRequestStartedAt),
         exactMatchMs,
       },

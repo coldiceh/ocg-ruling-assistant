@@ -66,7 +66,7 @@ test("ticks report the backend active stage instead of advancing it", () => {
   assert.equal(progress.activeStageId, "understand");
 });
 
-test("the direct official-Q&A probe is reported as a measured phase", () => {
+test("the disabled direct official-Q&A probe is absent from the progress stream", () => {
   let currentMs = 0;
   const events = [];
   const progress = createPublicAnswerProgress({
@@ -79,16 +79,9 @@ test("the direct official-Q&A probe is reported as a measured phase", () => {
   currentMs = 5_100;
   progress.transition("extract_card_names");
 
-  assert.deepEqual(events.filter((event) => event.type === "phase_start"), [
-    { type: "phase_start", phase: "official_qa_exact", serverElapsedMs: 0 },
-  ]);
-  assert.deepEqual(events.find((event) => event.type === "phase_end"), {
-    type: "phase_end",
-    phase: "official_qa_exact",
-    serverElapsedMs: 5_100,
-    durationMs: 5_100,
-    status: "completed",
-  });
+  assert.deepEqual(events.filter((event) => event.type === "phase_start"), []);
+  assert.deepEqual(events.filter((event) => event.type === "phase_end"), []);
+  assert.equal(events.find((event) => event.type === "stage_start")?.stageId, "understand");
 });
 
 test("progress streaming is opt-in for the web request shape only", () => {

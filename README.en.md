@@ -27,7 +27,7 @@ flowchart TD
     G --> H["Conclusion, reasoning, sources, and uncertainties"]
 ```
 
-The public online route uses `cloud_evidence_v1`. It first confirms the card identities in the question and obtains the corresponding original card text; mentions that cannot be confirmed remain marked as unconfirmed. A complete direct match to an official Q&A can be answered from that source, while other questions continue through evidence preparation.
+The public online route uses `cloud_evidence_v1`. It first confirms the card identities in the question and obtains the corresponding original card text; mentions that cannot be confirmed remain marked as unconfirmed. Exact-question lookup and direct answers from that shortcut are temporarily disabled. All public questions proceed through evidence retrieval and analysis, with official Q&A and FAQ retained as reference sources.
 
 Based on the question and confirmed card text, the cloud route generates information needs and Japanese retrieval queries, then retrieves official Q&A, rules, and FAQs from the corpus. Production uses `Qwen/Qwen3-Embedding-0.6B` through SiliconFlow for dense retrieval combined with lexical retrieval; `Qwen/Qwen3-Reranker-8B` is currently disabled. Evidence selected for the prompt remains as complete entries: if a whole record does not fit the roughly 36,000-character prompt budget, that record is skipped instead of truncating retained entries.
 

@@ -3,9 +3,10 @@ import test from "node:test";
 
 import { answerPublicRulingQuestion } from "../backend/publicAnswerService.mjs";
 
-test("public latency includes exact matching and reports its separate duration", async () => {
+test("public latency reports no exact-match duration while the shortcut is disabled", async () => {
   const originalNow = Date.now;
   let now = 1_000;
+  let exactCalls = 0;
   Date.now = () => now;
   try {
     const result = await answerPublicRulingQuestion({
@@ -13,6 +14,7 @@ test("public latency includes exact matching and reports its separate duration",
       env: { MODEL_PROVIDER: "mock" },
       appendAudit: async () => null,
       answerOfficialExact: async () => {
+        exactCalls += 1;
         now += 700;
         return null;
       },
@@ -22,8 +24,9 @@ test("public latency includes exact matching and reports its separate duration",
       },
     });
 
-    assert.equal(result.latency.durationMs, 3_000);
-    assert.equal(result.latency.exactMatchMs, 700);
+    assert.equal(exactCalls, 0);
+    assert.equal(result.latency.durationMs, 2_300);
+    assert.equal(result.latency.exactMatchMs, 0);
   } finally {
     Date.now = originalNow;
   }
