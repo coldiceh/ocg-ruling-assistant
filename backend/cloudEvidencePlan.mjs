@@ -31,11 +31,11 @@ export async function generateCloudEvidencePlan({question,cardTexts,signal,env={
   const started=performance.now();
   const result=await invokeTask({
     prompt:buildCloudEvidencePlanPrompt({question,cardTexts}),
-    modelName:'gpt-5.6-sol',reasoningEffort:'low',maxTokens:4096,
+    modelName:'gpt-6-astra',reasoningEffort:'low',maxTokens:4096,
     env,fetchImpl,signal,
   });
   return {...normalizeCloudEvidencePlan(result),telemetry:{
-    modelUsed:result.requestedModel||'gpt-5.6-sol',returnedModel:result.returnedModel,
+    modelUsed:result.requestedModel||'gpt-6-astra',returnedModel:result.returnedModel,
     providerUsed:'relay',reasoningEffort:'low',tokenUsage:result.usage||{},
     estimatedCostCny:result.estimatedCostCny||0,estimatedCostUsd:result.estimatedCostUsd||0,
     budgetStatus:result.budgetStatus,warnings:result.warnings||[],dryRun:false,
