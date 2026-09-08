@@ -1438,12 +1438,9 @@ async function capPublicChatGptBudgetStatus() {
 
 function renderBudgetStatus(status, message = "") {
   if (!ui.budgetPanel) return;
-  const storage = status?.budgetStorage ? `存储：${status.budgetStorage}` : "";
-  const mode = status?.budgetMode ? `模式：${status.budgetMode}` : "";
   ui.budgetHint.textContent = message
     || status?.storageWarning
-    || [storage, mode].filter(Boolean).join(" · ")
-    || "统计后端今日累计模型用量。";
+    || "每日额度于北京时间 0 点更新；ChatGPT 按理论美元费用统计。";
   renderBudgetBuckets(status?.buckets || (status?.bucket ? [status.bucket] : []));
 }
 
@@ -1476,8 +1473,8 @@ function renderBudgetBuckets(buckets = []) {
     value.textContent = Number.isFinite(limit) && limit > 0
       ? currency === "USD"
         ? `${spentText} / $${formatUsd(limit)}`
-        : `${spentText} / ${formatCny(limit)} 元`
-      : `${spentText}（计入总额度）`;
+        : `${Number.isFinite(spent) ? formatCny(spent) : "未读取"} / ${formatCny(limit)} 元`
+      : spentText;
     row.append(label, value);
     ui.budgetBucketList.appendChild(row);
   }

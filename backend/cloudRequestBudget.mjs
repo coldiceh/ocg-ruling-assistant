@@ -57,7 +57,7 @@ function usagePresent(usage) {
     && (usage.total_tokens === undefined || usage.total_tokens === input + output);
 }
 
-export function createCloudRequestBudget({env, fetchImpl = globalThis.fetch, command, now = new Date()} = {}) {
+function cloudBudgetScope(env, now) {
   const namespace = String(env.CLOUD_BUDGET_RUN_ID || '');
   if (!/^[a-zA-Z0-9_-]{1,100}$/u.test(namespace)) throw new Error('cloud_budget_run_id_required');
   // Production may reuse its daily allowance. Experiment scopes stay cumulative.
@@ -70,6 +70,40 @@ export function createCloudRequestBudget({env, fetchImpl = globalThis.fetch, com
   }).formatToParts(now).map(part=>[part.type,part.value])) : null;
   const dayKey = day ? `${day.year}-${day.month}-${day.day}` : null;
   const key = `ruling-cloud-budget:v1:${namespace}${dayKey ? `:${dayKey}` : ''}`;
+  return {namespace, period, dayKey, key};
+}
+
+// Read the same durable tickets used by the production dispatcher. Only stored
+// provider IDs, statuses and currency amounts are used; no answer text is read.
+export async function getCloudEvidenceBudgetStatus({env, fetchImpl = globalThis.fetch, now = new Date()} = {}) {
+  const {key} = cloudBudgetScope(env, now);
+  const redis = redisConfig(env);
+  const response = await fetchImpl(redis.url, {
+    method:'POST', headers:{authorization:`Bearer ${redis.token}`,'content-type':'application/json'},
+    body:JSON.stringify(['HGETALL', key]), signal:AbortSignal.timeout(5000),
+  });
+  if (!response.ok) throw new Error(`cloud_budget_store_http_${response.status}`);
+  const payload = await response.json();
+  if (payload.error || !Array.isArray(payload.result) || payload.result.length % 2 !== 0) {
+    throw new Error('cloud_budget_store_invalid_response');
+  }
+  let spentNano = 0;
+  let reservedNano = 0;
+  for (let index = 0; index < payload.result.length; index += 2) {
+    if (['actualNano','theoreticalNano'].includes(payload.result[index])) continue;
+    const ticket = JSON.parse(payload.result[index + 1]);
+    if (ticket.provider !== 'siliconflow') continue;
+    if (!Number.isSafeInteger(ticket.actualNano) || ticket.actualNano < 0
+        || !['reserved','usage_settled'].includes(ticket.status)) throw new Error('cloud_budget_ticket_invalid');
+    spentNano += ticket.actualNano;
+    if (ticket.status === 'reserved') reservedNano += ticket.actualNano;
+  }
+  return {spentTodayCny:spentNano / UNIT, reservedTodayCny:reservedNano / UNIT,
+    dailyBudgetCny:amount(env.CLOUD_BUDGET_ACTUAL_LIMIT_CNY,'actual_limit')};
+}
+
+export function createCloudRequestBudget({env, fetchImpl = globalThis.fetch, command, now = new Date()} = {}) {
+  const {namespace, period, dayKey, key} = cloudBudgetScope(env, now);
   const limits = {
     actualCny:amount(env.CLOUD_BUDGET_ACTUAL_LIMIT_CNY,'actual_limit'),
     theoreticalUsd:amount(env.CLOUD_BUDGET_THEORETICAL_LIMIT_USD,'theoretical_limit'),

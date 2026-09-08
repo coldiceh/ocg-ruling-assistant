@@ -15,7 +15,7 @@ import {
   privateEvaluationFailureChain,
 } from "./privateEvaluationDiagnostics.mjs";
 import { normalizeRuleSearchQueryText } from "./ruleSearchQueryText.mjs";
-import { runCloudRelayRequest } from './cloudRequestBudget.mjs';
+import { runCloudRelayRequest, getCloudEvidenceBudgetStatus } from './cloudRequestBudget.mjs';
 
 const DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com";
 const DEFAULT_DEEPSEEK_MODEL = "deepseek-v4-flash";
@@ -2034,7 +2034,9 @@ export async function getRagBudgetStatus({
       })),
     };
   }
-  const [spent, manualChatGptClose, ...bucketSpent] = await Promise.all([
+  const cloudDaily = env.RAG_EVIDENCE_PIPELINE === 'cloud_evidence_v1' && env.CLOUD_BUDGET_PERIOD === 'daily';
+  const [cloudEvidence, spent, manualChatGptClose, ...bucketSpent] = await Promise.all([
+    cloudDaily ? getCloudEvidenceBudgetStatus({env, fetchImpl, now}) : null,
     readBudgetSpent({ storage, dayKey, env, fetchImpl, ioDeadline }),
     readPublicChatGptClosed({ storage, timezone: config.timezone, now, env, fetchImpl, ioDeadline }),
     ...PUBLIC_BUDGET_BUCKETS.map((bucket) => readBudgetSpent({
@@ -2048,7 +2050,16 @@ export async function getRagBudgetStatus({
   return {
     ...budgetStatusPayload({ config, storage, dayKey, spent, estimated: 0, blocked: false }),
     currency: "CNY",
-    buckets: PUBLIC_BUDGET_BUCKETS.map((bucket, index) => budgetBucketStatusPayload({
+    buckets: PUBLIC_BUDGET_BUCKETS.map((bucket, index) => cloudEvidence && bucket.id === 'evidence_preparation:deepseek'
+      ? {
+        ...budgetBucketStatusPayload({
+          bucket:{id:'evidence_preparation:siliconflow',stage:'evidence_preparation',provider:'siliconflow',label:'Qwen3 资料检索（硅基流动）',currency:'CNY'},
+          bucketConfig:{currency:'CNY',dailyBudgetAmount:cloudEvidence.dailyBudgetCny},
+          spent:cloudEvidence.spentTodayCny,
+        }),
+        reservedTodayCny:cloudEvidence.reservedTodayCny,
+      }
+      : budgetBucketStatusPayload({
       bucket,
       bucketConfig: budgetBucketConfig(env, bucket),
       spent: bucketSpent[index],
@@ -4529,7 +4540,8 @@ function budgetBucketConfig(env, bucket) {
       ? "API_GLM_FINAL_DAILY_BUDGET_CNY"
       : "API_DEEPSEEK_FINAL_DAILY_BUDGET_CNY";
   const configured = String(env[envName] ?? "").trim();
-  const parsed = configured === "" ? null : Number(configured);
+  const defaultAmount = env.RAG_EVIDENCE_PIPELINE === 'cloud_evidence_v1' && bucket.id === 'final_ruling:deepseek' ? 10 : null;
+  const parsed = configured === "" ? defaultAmount : Number(configured);
   return {
     envName,
     currency: "CNY",

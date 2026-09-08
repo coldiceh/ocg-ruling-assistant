@@ -620,63 +620,29 @@ test("backend answers bypass persistent browser cache and bust static assets", a
     readFile(new URL("../config.json", import.meta.url), "utf8"),
   ]);
   const config = JSON.parse(configText.replace(/^\uFEFF/u, ""));
-  assert.match(html, /src\/app\.js\?v=20260817-live-stage-timing-1/u);
+  assert.match(html, /src\/app\.js\?v=20260908-daily-budget-1/u);
   assert.match(html, /src\/styles\.css\?v=20260814-risk-control-1/u);
-  assert.match(config.answerApiUrl, /\?client=20260722-answer-version-1$/u);
+  assert.equal(config.answerApiUrl, "https://ocg-ruling-assistant.vercel.app/api/answer");
   assert.match(app, /cache: "no-store"/u);
   assert.doesNotMatch(app, /backendAnswerCacheTtlMs|buildBackendCacheKey|readCachedBackendAnswer|writeCachedBackendAnswer|ocg-ruling-answer:v/u);
 });
 
-test("readme_keeps_only_requested_future_plans", async () => {
-  const [readme, english, japanese] = await Promise.all([
-    readFile(new URL("../README.md", import.meta.url), "utf8"),
-    readFile(new URL("../README.en.md", import.meta.url), "utf8"),
-    readFile(new URL("../README.ja.md", import.meta.url), "utf8"),
-  ]);
-  assert.doesNotMatch(readme, /## 技术架构|## 本地运行|## 贡献|## 未来计划/u);
-  assert.match(readme, /```mermaid[\s\S]*裁定模型分析/u);
-  assert.match(readme, /MODEL_EFFORT_MATRIX:START/u);
-  assert.doesNotMatch(readme, /Lua|Fluorohydride\/ygopro-core/u);
-  assert.match(readme, /space\.bilibili\.com\/869711/u);
-  assert.match(readme, /\[English\]\(README\.en\.md\)/u);
-  assert.match(readme, /\[日本語\]\(README\.ja\.md\)/u);
-  assert.match(readme, /^# 游戏王 OCG AI裁定 \/ Yu-Gi-Oh! OCG AI Rulings/mu);
-  assert.match(english, /^# Yu-Gi-Oh! OCG AI Rulings/mu);
-  assert.match(japanese, /^# 遊戯王OCG AI裁定/mu);
-  assert.doesNotMatch(`${readme}\n${english}\n${japanese}`, /规则助手|Ruling Assistant|裁定アシスタント/u);
-  assert.match(english, /## How it works/u);
-  assert.match(japanese, /## 仕組み/u);
-  assert.match(readme, /旧的 10 题小样本.*Luna low/u);
-  assert.match(readme, /样本外规则问题中出现错误/u);
-  assert.match(readme, /当前公开版本默认使用 \*\*GPT‑6 Astra low\*\*/u);
-  assert.match(readme, /Astra 尚未完成同条件的最终裁定正确率评测/u);
-  assert.match(readme, /Luna \| low \| 10\/10[\s\S]*120,457 \/ 18,133 \/ 2,014 \/ 138,590[\s\S]*USD 0\.045851/u);
-  assert.match(readme, /Terra \| low \| 10\/10[\s\S]*120,457 \/ 21,090 \/ 3,307 \/ 141,547[\s\S]*USD 0\.493994/u);
-  assert.match(readme, /全部输入 Token 当作未缓存输入/u);
-  assert.doesNotMatch(readme, /因此当前公开版本使用它/u);
-  assert.match(english, /old, small 10-case sample/u);
-  assert.match(english, /failed an out-of-sample ruling question/u);
-  assert.match(english, /The current public default is \*\*GPT‑6 Astra low\*\*, with Sol low and the other model options retained\./u);
-  assert.match(english, /every input token as uncached/u);
-  assert.match(japanese, /以前の小規模な 10 問サンプル/u);
-  assert.match(japanese, /サンプル外のルール問題で誤答/u);
-  assert.match(japanese, /公開版の現在のデフォルトは \*\*GPT‑6 Astra low\*\*/u);
-  assert.match(japanese, /すべての入力 Token をキャッシュなし/u);
-  assert.doesNotMatch(english, /Lua|Fluorohydride\/ygopro-core/u);
-  assert.doesNotMatch(japanese, /Lua|Fluorohydride\/ygopro-core/u);
-  for (const localizedReadme of [readme, english, japanese]) {
-    const publicMatrix = localizedReadme.match(
-      /<!-- MODEL_EFFORT_MATRIX:START -->([\s\S]*?)<!-- MODEL_EFFORT_MATRIX:END -->/u,
-    )?.[1] || "";
-    assert.ok(publicMatrix);
-    assert.doesNotMatch(
-      publicMatrix,
-      /Validator|Case ID|Full question|完整问题|質問全文|prompt SHA|Q1(?:\D|$)/u,
-    );
-    assert.match(publicMatrix, /Luna[\s\S]*Terra[\s\S]*Sol[\s\S]*DeepSeek/u);
+test("localized readmes describe the current cloud route without retired evaluations or removed reference", async () => {
+  const readmes = await Promise.all(["README.md", "README.en.md", "README.ja.md"]
+    .map(file => readFile(new URL(`../${file}`, import.meta.url), "utf8")));
+  for (const readme of readmes) {
+    assert.match(readme, /```mermaid/u);
+    assert.match(readme, /cloud_evidence_v1/u);
+    assert.match(readme, /GPT[-‑]6 Astra/u);
+    assert.match(readme, /low/u);
+    assert.match(readme, /Qwen\/Qwen3-Embedding-0\.6B/u);
+    assert.match(readme, /https:\/\/www\.db\.yugioh-card\.com\/yugiohdb\//u);
+    assert.doesNotMatch(readme, /MODEL_EFFORT_MATRIX|space\.bilibili\.com\/869711/u);
   }
+  assert.match(readmes[0], /## 工作原理/u);
+  assert.match(readmes[1], /## How it works/u);
+  assert.match(readmes[2], /## 仕組み/u);
 });
-
 test("ui_hides_engine_details_by_default", async () => {
   const [html, app] = await Promise.all([
     readFile(new URL("../index.html", import.meta.url), "utf8"),
