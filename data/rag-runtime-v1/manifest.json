@@ -8,13 +8,13 @@
     "algorithm": "brotli",
     "quality": 5
   },
-  "dataRevision": "5cbee646d55b15c720e9151bbbd0048e668fb1f6a5712b8e13f2efca4069a81e",
-  "sourceSetDigest": "185c5caa2c3db9bade993814c8ad8ed5371324fc069f10d5c085ecd3ca279183",
+  "dataRevision": "392432957c9cd0dd8987458ac815607f05599d3c018624a8f2b1d54e00fee782",
+  "sourceSetDigest": "648d0eb96fd01ac9183e60c35f8429469ba59e73f60de1bdc30bd9b9d371899b",
   "sources": [
     {
       "path": "cards.json",
-      "bytes": 16868842,
-      "sha256": "e958dcb4a002ac593deb1bf407bfc77879c95ee804e383f7517488c2110a62b4",
+      "bytes": 16982235,
+      "sha256": "4bfa29ea7e9cfbb6bce0a6572255983ccfa53668663355c86dcbf24ce80772c4",
       "count": 14379
     },
     {
@@ -58,10 +58,10 @@
       "key": "cards",
       "file": "cards.json.br",
       "encoding": "br",
-      "bytes": 1717338,
-      "sha256": "9b62a8bcd59d95cfe32c8166909d4d0c0b0fb2352d5322de4050c9d395143a25",
-      "canonicalBytes": 14524429,
-      "canonicalSha256": "81c522670e7229e34824af0147e75d5211295c8063d1ac7cafd3ce6b12c5f568",
+      "bytes": 1730635,
+      "sha256": "e2df4e3af48185b875046243ac619d0678fd6607b1f227e8060a1585d7d14809",
+      "canonicalBytes": 14631614,
+      "canonicalSha256": "456034d1bf0a6ce03c88b5f6e7ad7c5876441b61b4ed44d0539acaae09fab8c0",
       "count": 14379
     },
     "records": {
@@ -99,5 +99,5 @@
       "count": 14379
     }
   },
-  "bundleRevision": "3451d6c44c14ca723a06af0169db977f9c1815c42d8a8585b298e571ece12050"
+  "bundleRevision": "72a9a140cc6168fb2564c142622b517b010c4e5180f3ab048bd09c1d800e75d7"
 }

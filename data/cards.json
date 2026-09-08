@@ -1990,7 +1990,9 @@
         "Abyss Actor - Comic Relief"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/13863",
-      "updatedAt": "2026-09-08T20:24:53.276Z"
+      "updatedAt": "2026-09-08T20:24:53.276Z",
+      "pendulumEffectText": "此卡名的灵摆效果1回合仅可使用1次。①：可以对手场上的1只怪兽和自己场上的1只“魔界剧团”灵摆怪兽为对象发动。交换该2只怪兽的控制权。然后，将此卡破坏。",
+      "pendulumScale": 8
     },
     {
       "id": "13137",
@@ -2035,7 +2037,9 @@
         "Abyss Actor - Curtain Raiser"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/13137",
-      "updatedAt": "2026-09-08T20:24:53.278Z"
+      "updatedAt": "2026-09-08T20:24:53.278Z",
+      "pendulumEffectText": "此卡名的灵摆效果在决斗中仅可使用１次。①：自己场上不存在怪兽的情况下可以发动。将灵摆区域的此卡特殊召唤。",
+      "pendulumScale": 7
     },
     {
       "id": "12697",
@@ -2080,7 +2084,9 @@
         "Abyss Actor - Trendy Understudy"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12697",
-      "updatedAt": "2026-09-08T20:24:53.289Z"
+      "updatedAt": "2026-09-08T20:24:53.289Z",
+      "pendulumEffectText": "①：自己灵摆召唤成功时可以发动。从自己的额外牌组将1只表侧表示的等级1或等级8的“魔界剧团”灵摆怪兽加入手牌。",
+      "pendulumScale": 8
     },
     {
       "id": "12710",
@@ -2125,7 +2131,9 @@
         "Abyss Actor - Evil Heel"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12710",
-      "updatedAt": "2026-09-08T20:24:53.294Z"
+      "updatedAt": "2026-09-08T20:24:53.294Z",
+      "pendulumEffectText": "①：１回合１次，解放自己场上的１只“魔界剧团”怪兽，以对手场上的１只表侧表示怪兽为对象可以发动。该怪兽的攻击力直至回合结束时为止，下降相当于所解放怪兽原本攻击力的数值。",
+      "pendulumScale": 1
     },
     {
       "id": "12714",
@@ -2170,7 +2178,9 @@
         "Abyss Actor - Extras"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12714",
-      "updatedAt": "2026-09-08T20:24:53.320Z"
+      "updatedAt": "2026-09-08T20:24:53.320Z",
+      "pendulumEffectText": "此卡名的灵摆效果１回合仅可使用１次。①：对手场上有怪兽存在的情况下可以发动。将灵摆区域的此卡特殊召唤。",
+      "pendulumScale": 3
     },
     {
       "id": "12711",
@@ -2215,7 +2225,9 @@
         "Abyss Actor - Funky Comedian"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12711",
-      "updatedAt": "2026-09-08T20:24:53.320Z"
+      "updatedAt": "2026-09-08T20:24:53.320Z",
+      "pendulumEffectText": "①：１回合１次，解放自己场上的１只“魔界剧团”怪兽，以自己场上的１只“魔界剧团”怪兽为对象可以发动。该怪兽的攻击力直至回合结束时为止，上升相当于所解放怪兽原本攻击力的数值。",
+      "pendulumScale": 8
     },
     {
       "id": "14945",
@@ -2305,7 +2317,9 @@
         "Abyss Actor - Leading Lady"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12715",
-      "updatedAt": "2026-09-08T20:24:53.328Z"
+      "updatedAt": "2026-09-08T20:24:53.328Z",
+      "pendulumEffectText": "①：1回合1次，因对手怪兽的攻击自己受到战斗伤害时，可从以下效果中选择1个发动。\n●该对手怪兽的攻击力下降受到的伤害的数值。\n●从自己的额外牌组将1只攻击力在所受伤害数值以下的表侧表示“魔界剧团”灵摆怪兽加入手牌。",
+      "pendulumScale": 2
     },
     {
       "id": "18161",
@@ -2350,7 +2364,9 @@
         "Abyss Actor - Liberty Dramatist"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/18161",
-      "updatedAt": "2026-09-08T20:24:53.350Z"
+      "updatedAt": "2026-09-08T20:24:53.350Z",
+      "pendulumEffectText": "此卡名的灵摆效果１回合仅可使用１次。①：自己或对手的怪兽的攻击宣言时，舍弃１张手牌可以发动。将此卡特殊召唤至对手场上。",
+      "pendulumScale": 8
     },
     {
       "id": "13862",
@@ -2395,7 +2411,9 @@
         "Abyss Actor - Mellow Madonna"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/13862",
-      "updatedAt": "2026-09-08T20:24:53.353Z"
+      "updatedAt": "2026-09-08T20:24:53.353Z",
+      "pendulumEffectText": "此卡名的灵摆效果1回合仅可使用1次。①：支付1000LP可以发动。从牌组将1只“魔界剧团-成熟女演员”以外的“魔界剧团”灵摆怪兽加入手牌。此效果发动后，直至回合结束时为止，自己仅可特殊召唤“魔界剧团”灵摆怪兽。",
+      "pendulumScale": 0
     },
     {
       "id": "12713",
@@ -2440,7 +2458,9 @@
         "Abyss Actor - Sassy Rookie"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12713",
-      "updatedAt": "2026-09-08T20:24:53.364Z"
+      "updatedAt": "2026-09-08T20:24:53.364Z",
+      "pendulumEffectText": "①：自己场上的“魔界剧团”怪兽将被战斗或对手的效果破坏的情况下，可将此卡破坏作为代替。",
+      "pendulumScale": 2
     },
     {
       "id": "18194",
@@ -2530,7 +2550,9 @@
         "Abyss Actor - Superstar"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12712",
-      "updatedAt": "2026-09-08T20:24:53.394Z"
+      "updatedAt": "2026-09-08T20:24:53.394Z",
+      "pendulumEffectText": "①：1回合1次，可解放自己场上的1只“魔界剧团”怪兽，以自己墓地的1张“魔界剧本”魔法卡为对象发动。将该卡加入手牌。",
+      "pendulumScale": 3
     },
     {
       "id": "12865",
@@ -2575,7 +2597,9 @@
         "Abyss Actor - Twinkle Little Star"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12865",
-      "updatedAt": "2026-09-08T20:24:53.396Z"
+      "updatedAt": "2026-09-08T20:24:53.396Z",
+      "pendulumEffectText": "①：自己仅可灵摆召唤“魔界剧团”怪兽。此效果不会被无效化。②：１回合１次，以自己场上的１只“魔界剧团”怪兽为对象可以发动。此回合，该怪兽在１次战斗阶段中最多可攻击怪兽３次，对象怪兽以外的自己的怪兽不可攻击。",
+      "pendulumScale": 9
     },
     {
       "id": "12716",
@@ -2620,7 +2644,9 @@
         "Abyss Actor - Wild Hope"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12716",
-      "updatedAt": "2026-09-08T20:24:53.405Z"
+      "updatedAt": "2026-09-08T20:24:53.405Z",
+      "pendulumEffectText": "①：1回合1次，可以另一方的自己灵摆区域的1张“魔界剧团”卡为对象发动。该卡的灵摆刻度直至回合结束时为止变为9。此效果发动后，直至回合结束时为止自己仅可特殊召唤“魔界剧团”怪兽。",
+      "pendulumScale": 2
     },
     {
       "id": "12722",
@@ -4057,7 +4083,9 @@
         "Acrobatic Magician"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12408",
-      "updatedAt": "2026-09-08T20:24:53.880Z"
+      "updatedAt": "2026-09-08T20:24:53.880Z",
+      "pendulumEffectText": "「曲芸の魔術師」のP効果は１ターンに１度しか使用できない。①：自分フィールドのモンスターが効果で破壊された時に発動できる。Pゾーンのこのカードを特殊召喚する。",
+      "pendulumScale": 2
     },
     {
       "id": "5705",
@@ -5857,7 +5885,9 @@
         "Aether, the Evil Empowering Dragon"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11873",
-      "updatedAt": "2026-09-08T20:24:54.380Z"
+      "updatedAt": "2026-09-08T20:24:54.380Z",
+      "pendulumEffectText": "①：１ターンに１度、自分の墓地の「魔装戦士」モンスター１体を除外し、フィールドのカード１枚を対象として発動できる。そのカードを破壊する。",
+      "pendulumScale": 4
     },
     {
       "id": "10425",
@@ -8503,7 +8533,9 @@
         "All-Eyes Phantom Dragon"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/14363",
-      "updatedAt": "2026-09-08T20:24:55.044Z"
+      "updatedAt": "2026-09-08T20:24:55.044Z",
+      "pendulumEffectText": "①：１ターンに１度、自分のドラゴン族Pモンスターが相手モンスターに攻撃したダメージステップ終了時に発動できる。その自分のモンスターは続けて攻撃できる。この効果を発動するターン、自分はそのモンスターでしか攻撃宣言できない。",
+      "pendulumScale": 0
     },
     {
       "id": "7474",
@@ -12198,7 +12230,9 @@
         "Amazoness Golden Whip Master"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/17610",
-      "updatedAt": "2026-09-08T20:24:56.036Z"
+      "updatedAt": "2026-09-08T20:24:56.036Z",
+      "pendulumEffectText": "このカード名の②のP効果は１ターンに１度しか使用できない。①：自分フィールドの「アマゾネス」モンスターの攻撃力は自身のレベル×１００アップする。②：自分の「アマゾネス」モンスターが戦闘を行う攻撃宣言時、フィールドの魔法・罠カード１枚を対象として発動できる。そのカードを破壊する。",
+      "pendulumScale": 1
     },
     {
       "id": "17654",
@@ -12677,7 +12711,9 @@
         "Amazoness Silver Sword Master"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/17611",
-      "updatedAt": "2026-09-08T20:24:56.171Z"
+      "updatedAt": "2026-09-08T20:24:56.171Z",
+      "pendulumEffectText": "このカード名の②のP効果は１ターンに１度しか使用できない。①：自分フィールドの「アマゾネス」モンスターの攻撃力は自身のレベル×１００アップする。②：自分の「アマゾネス」モンスターが戦闘を行う攻撃宣言時、自分の墓地の「アマゾネス」魔法・罠カード１枚を対象として発動できる。そのカードを手札に加える。",
+      "pendulumScale": 7
     },
     {
       "id": "5296",
@@ -13319,7 +13355,9 @@
         "Amorphage Envy"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12299",
-      "updatedAt": "2026-09-08T20:24:56.337Z"
+      "updatedAt": "2026-09-08T20:24:56.337Z",
+      "pendulumEffectText": "このカードのコントローラーは、自分スタンバイフェイズ毎に自分フィールドのモンスター１体をリリースする。またはリリースせずにこのカードを破壊する。①：自分フィールドに「アモルファージ」モンスターが存在する限り、お互いに魔法・罠・モンスターの効果をチェーンして発動できない。",
+      "pendulumScale": 5
     },
     {
       "id": "12296",
@@ -13362,7 +13400,9 @@
         "Amorphage Gluttony"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12296",
-      "updatedAt": "2026-09-08T20:24:56.353Z"
+      "updatedAt": "2026-09-08T20:24:56.353Z",
+      "pendulumEffectText": "このカードのコントローラーは、自分スタンバイフェイズ毎に自分フィールドのモンスター１体をリリースする。またはリリースせずにこのカードを破壊する。①：自分フィールドに「アモルファージ」モンスターが存在する限り、お互いに「アモルファージ」モンスター以外のモンスターの効果を発動できない。",
+      "pendulumScale": 5
     },
     {
       "id": "12303",
@@ -13405,7 +13445,9 @@
         "Amorphage Goliath"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12303",
-      "updatedAt": "2026-09-08T20:24:56.352Z"
+      "updatedAt": "2026-09-08T20:24:56.352Z",
+      "pendulumEffectText": "このカードのコントローラーは、自分スタンバイフェイズ毎に自分フィールドのモンスター１体をリリースする。またはリリースせずにこのカードを破壊する。①：自分フィールドに「アモルファージ」モンスターが存在する限り、「アモルファージ」カード以外のお互いの墓地へ送られるカードは墓地へは行かず除外される。",
+      "pendulumScale": 5
     },
     {
       "id": "12298",
@@ -13448,7 +13490,9 @@
         "Amorphage Greed"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12298",
-      "updatedAt": "2026-09-08T20:24:56.389Z"
+      "updatedAt": "2026-09-08T20:24:56.389Z",
+      "pendulumEffectText": "このカードのコントローラーは、自分スタンバイフェイズ毎に自分フィールドのモンスター１体をリリースする。またはリリースせずにこのカードを破壊する。①：自分フィールドに「アモルファージ」モンスターが存在する限り、お互いに「アモルファージ」カード以外の罠カードの効果を発動できない。",
+      "pendulumScale": 3
     },
     {
       "id": "12301",
@@ -13491,7 +13535,9 @@
         "Amorphage Pride"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12301",
-      "updatedAt": "2026-09-08T20:24:56.392Z"
+      "updatedAt": "2026-09-08T20:24:56.392Z",
+      "pendulumEffectText": "このカードのコントローラーは、自分スタンバイフェイズ毎に自分フィールドのモンスター１体をリリースする。またはリリースせずにこのカードを破壊する。①：自分フィールドに「アモルファージ」モンスターが存在する限り、お互いが受ける効果ダメージは０になる。",
+      "pendulumScale": 3
     },
     {
       "id": "12335",
@@ -13554,7 +13600,9 @@
         "Amorphage Lechery"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12297",
-      "updatedAt": "2026-09-08T20:24:56.400Z"
+      "updatedAt": "2026-09-08T20:24:56.400Z",
+      "pendulumEffectText": "このカードのコントローラーは、自分スタンバイフェイズ毎に自分フィールドのモンスター１体をリリースする。またはリリースせずにこのカードを破壊する。①：自分フィールドに「アモルファージ」モンスターが存在する限り、お互いに「アモルファージ」カード以外の魔法カードの効果を発動できない。",
+      "pendulumScale": 5
     },
     {
       "id": "12344",
@@ -13617,7 +13665,9 @@
         "Amorphage Sloth"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12302",
-      "updatedAt": "2026-09-08T20:24:56.411Z"
+      "updatedAt": "2026-09-08T20:24:56.411Z",
+      "pendulumEffectText": "このカードのコントローラーは、自分スタンバイフェイズ毎に自分フィールドのモンスター１体をリリースする。またはリリースせずにこのカードを破壊する。①：自分フィールドに「アモルファージ」モンスターが存在する限り、お互いにドロー以外の方法でデッキからカードを手札に加える事はできない。",
+      "pendulumScale": 3
     },
     {
       "id": "12300",
@@ -13660,7 +13710,9 @@
         "Amorphage Wrath"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12300",
-      "updatedAt": "2026-09-08T20:24:56.426Z"
+      "updatedAt": "2026-09-08T20:24:56.426Z",
+      "pendulumEffectText": "このカードのコントローラーは、自分スタンバイフェイズ毎に自分フィールドのモンスター１体をリリースする。またはリリースせずにこのカードを破壊する。①：自分フィールドに「アモルファージ」モンスターが存在する限り、お互いに「アモルファージ」モンスター以外のモンスターをリリースできない。",
+      "pendulumScale": 3
     },
     {
       "id": "12334",
@@ -14219,7 +14271,9 @@
         "Anchamoufrite"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/15987",
-      "updatedAt": "2026-09-08T20:24:56.578Z"
+      "updatedAt": "2026-09-08T20:24:56.578Z",
+      "pendulumEffectText": "此卡名的灵摆效果１回合仅可使用１次。①：自己的额外牌组不存在卡的情况下，或仅有“潜伏修道士”的情况下可以发动。将此卡破坏。然后自己从牌组抽１张。",
+      "pendulumScale": 4
     },
     {
       "id": "21902",
@@ -17762,7 +17816,9 @@
         "Angello Vaalmonica"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/19381",
-      "updatedAt": "2026-09-08T20:24:57.552Z"
+      "updatedAt": "2026-09-08T20:24:57.552Z",
+      "pendulumEffectText": "①：只要另一方自己的灵摆区域有恶魔族怪兽卡存在，每次自己的LP恢复，在此卡上放１个响鸣计数物。\n②：１回合１次，对手怪兽攻击宣言时可以发动。进行１只“华耳琴璃”连接怪兽的连接召唤。",
+      "pendulumScale": 3
     },
     {
       "id": "12254",
@@ -18314,7 +18370,9 @@
         "Antihuman Intelligence ME-PSY-YA"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/16213",
-      "updatedAt": "2026-09-08T20:24:57.680Z"
+      "updatedAt": "2026-09-08T20:24:57.680Z",
+      "pendulumEffectText": "①：只要此卡存在于灵摆区域，双方除怪兽卡以外的、被送往墓地的卡不去墓地而直接被除外。",
+      "pendulumScale": 0
     },
     {
       "id": "5608",
@@ -21926,7 +21984,9 @@
         "Archfiend Eccentrick"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11826",
-      "updatedAt": "2026-09-08T20:24:58.754Z"
+      "updatedAt": "2026-09-08T20:24:58.754Z",
+      "pendulumEffectText": "此卡名的灵摆效果1回合仅可使用1次。\n①：以场上1张其他的魔法・陷阱卡为对象可以发动。将该卡和此卡破坏。",
+      "pendulumScale": 7
     },
     {
       "id": "22134",
@@ -21975,7 +22035,9 @@
         "Archfiend Emperor"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/22134",
-      "updatedAt": "2026-09-08T20:24:58.797Z"
+      "updatedAt": "2026-09-08T20:24:58.797Z",
+      "pendulumEffectText": "此卡名的灵摆效果1回合仅可使用1次。\n①：以场上的1张其他的表侧表示魔法・陷阱卡为对象可以发动。将该卡和此卡破坏。",
+      "pendulumScale": 0
     },
     {
       "id": "10634",
@@ -22370,7 +22432,9 @@
         "Archfiend Matriarch"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/22539",
-      "updatedAt": "2026-09-08T20:24:58.874Z"
+      "updatedAt": "2026-09-08T20:24:58.874Z",
+      "pendulumEffectText": "此卡名的灵摆效果1回合仅可使用1次。\n①：以自己墓地・除外状态的1张“恶魔”魔法・陷阱卡为对象可以发动。将此卡破坏，将对象卡加入手牌。",
+      "pendulumScale": 9
     },
     {
       "id": "4267",
@@ -23673,7 +23737,9 @@
         "Arktos XII - Chronochasm Vaylantz"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/18182",
-      "updatedAt": "2026-09-08T20:24:59.205Z"
+      "updatedAt": "2026-09-08T20:24:59.205Z",
+      "pendulumEffectText": "此卡名的灵摆效果１回合仅可使用１次。①：可从以下效果中选择１个发动。●将此卡特殊召唤至正面的自己主要怪兽区域。●挑选１只自己主要怪兽区域的怪兽，将其位置移动至其相邻的怪兽区域。",
+      "pendulumScale": 12
     },
     {
       "id": "4186",
@@ -29934,7 +30000,9 @@
         "Astrograph Sorcerer"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12906",
-      "updatedAt": "2026-09-08T20:25:00.969Z"
+      "updatedAt": "2026-09-08T20:25:00.969Z",
+      "pendulumEffectText": "此卡名的灵摆效果１回合仅可使用１次。①：在自己的主要阶段可以发动。破坏此卡，从手牌・牌组挑选１只“星读的魔术师”，放在自己的灵摆区域或特殊召唤。",
+      "pendulumScale": 1
     },
     {
       "id": "22704",
@@ -29979,7 +30047,9 @@
         "Astrograph Sorcerer, the Starfrost Magician"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/22704",
-      "updatedAt": "2026-09-08T20:25:00.971Z"
+      "updatedAt": "2026-09-08T20:25:00.971Z",
+      "pendulumEffectText": "此卡名的灵摆效果1回合仅可使用1次。\n①：在自己的主要阶段可以发动。将此卡破坏，从手牌・牌组将“星霜的魔术师－宙读阵魔术士”以外的、1只灵摆刻度为1的灵摆怪兽放在自己的灵摆区域。以此效果所放的卡的灵摆效果此回合不可发动。",
+      "pendulumScale": 1
     },
     {
       "id": "5381",
@@ -42993,7 +43063,9 @@
         "Black Fang Magician"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12909",
-      "updatedAt": "2026-09-08T20:25:04.633Z"
+      "updatedAt": "2026-09-08T20:25:04.633Z",
+      "pendulumEffectText": "①：１回合１次，以对手场上的１只表侧表示怪兽为对象可以发动。该怪兽的攻击力直至回合结束时为止改成一半。然后将此卡破坏。",
+      "pendulumScale": 8
     },
     {
       "id": "9245",
@@ -56155,7 +56227,9 @@
         "Bujin Hiruko"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12025",
-      "updatedAt": "2026-09-08T20:25:08.356Z"
+      "updatedAt": "2026-09-08T20:25:08.356Z",
+      "pendulumEffectText": "①：自分のPゾーンのこのカードを除外し、自分フィールドの「武神」Xモンスター１体を対象として発動できる。その自分のモンスターとカード名が異なる「武神」Xモンスター１体を、対象のモンスターの上に重ねてX召喚扱いとしてエクストラデッキから特殊召喚する。",
+      "pendulumScale": 3
     },
     {
       "id": "11053",
@@ -66049,7 +66123,9 @@
         "Chaos Emperor, the Dragon of Armageddon"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/13975",
-      "updatedAt": "2026-09-08T20:25:11.238Z"
+      "updatedAt": "2026-09-08T20:25:11.238Z",
+      "pendulumEffectText": "此卡名的灵摆效果１回合仅可使用１次。\n①：支付１０００LP，以自己除外状态的１只龙族怪兽为对象可以发动。将此卡破坏，将该怪兽加入手牌。",
+      "pendulumScale": 1
     },
     {
       "id": "5841",
@@ -67671,7 +67747,9 @@
         "Chef de Nouvelles"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/21434",
-      "updatedAt": "2026-09-08T20:25:11.718Z"
+      "updatedAt": "2026-09-08T20:25:11.718Z",
+      "pendulumEffectText": "此卡名的①②灵摆效果1回合仅可各使用1次。\n①：在发动了此卡的回合的自己的主要阶段可以发动。从牌组将灵摆怪兽以外的1张“饿魔新飨”卡加入手牌。\n②：有怪兽被特殊召唤至对手场上的情况下可以发动。将此卡特殊召唤。",
+      "pendulumScale": 0
     },
     {
       "id": "18750",
@@ -69408,7 +69486,9 @@
         "Chronograph Sorcerer"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12907",
-      "updatedAt": "2026-09-08T20:25:12.160Z"
+      "updatedAt": "2026-09-08T20:25:12.160Z",
+      "pendulumEffectText": "此卡名的灵摆效果１回合仅可使用１次。①：在自己的主要阶段可以发动。破坏此卡，从手牌・牌组挑选１只“时读的魔术师”，放在自己的灵摆区域或特殊召唤。",
+      "pendulumScale": 8
     },
     {
       "id": "16203",
@@ -71769,7 +71849,9 @@
         "Clear Wing Fast Dragon"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12828",
-      "updatedAt": "2026-09-08T20:25:12.774Z"
+      "updatedAt": "2026-09-08T20:25:12.774Z",
+      "pendulumEffectText": "此卡名的灵摆效果1回合仅可使用1次。①：为使合计等级为7，将自己场上1只表侧表示的“疾行机人”协调和1只协调以外的怪兽送至墓地可以发动。将灵摆区域的此卡特殊召唤。",
+      "pendulumScale": 4
     },
     {
       "id": "11721",
@@ -72020,7 +72102,9 @@
         "Clock Arc"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/15991",
-      "updatedAt": "2026-09-08T20:25:12.847Z"
+      "updatedAt": "2026-09-08T20:25:12.847Z",
+      "pendulumEffectText": "①：自分フィールドのモンスターが、存在しない場合またはPモンスターのみの場合、このカードのPゾーンの位置によって以下の効果を適用する。\n●左側：このカードのPスケールは３つ下がる。\n●右側：このカードのPスケールは４つ上がる。\n②：相手スタンバイフェイズに発動できる。Pゾーンのこのカードを特殊召喚する。",
+      "pendulumScale": 4
     },
     {
       "id": "14124",
@@ -73240,7 +73324,9 @@
         "Clown Crew Cappello"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/22920",
-      "updatedAt": "2026-09-08T20:25:13.224Z"
+      "updatedAt": "2026-09-08T20:25:13.224Z",
+      "pendulumEffectText": "このカード名のP効果は１ターンに１度しか使用できない。\n①：自分メインフェイズに発動できる。デッキからPモンスター以外の「道化の一座」カード１枚を墓地へ送り、このカードを特殊召喚する。この効果の発動後、次のターンの終了時まで自分はデッキ・EXデッキから特殊召喚されたモンスターの効果を発動できない。",
+      "pendulumScale": 7
     },
     {
       "id": "22991",
@@ -78974,7 +79060,9 @@
         "Couplet the Melodious Songstress"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/19851",
-      "updatedAt": "2026-09-08T20:25:14.918Z"
+      "updatedAt": "2026-09-08T20:25:14.918Z",
+      "pendulumEffectText": "此卡名的②灵摆效果１回合仅可使用１次。\n①：自己仅可灵摆召唤光属性怪兽。此效果不会被无效化。\n②：自己场上不存在“幻奏”怪兽以外的表侧表示怪兽的情况下可以发动。从牌组将１张“幻奏”魔法・陷阱卡加入手牌。",
+      "pendulumScale": 9
     },
     {
       "id": "16484",
@@ -82670,7 +82758,9 @@
         "Crystal Keeper"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11602",
-      "updatedAt": "2026-09-08T20:25:15.917Z"
+      "updatedAt": "2026-09-08T20:25:15.917Z",
+      "pendulumEffectText": "①：このカードがPゾーンに存在する限り、１ターンに１度だけ、自分フィールドの「究極宝玉神」モンスター及び「宝玉獣」カードは効果では破壊されない。",
+      "pendulumScale": 2
     },
     {
       "id": "11601",
@@ -82713,7 +82803,9 @@
         "Crystal Master"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11601",
-      "updatedAt": "2026-09-08T20:25:15.946Z"
+      "updatedAt": "2026-09-08T20:25:15.946Z",
+      "pendulumEffectText": "①：このカードがPゾーンに存在する限り、自分フィールドの「究極宝玉神」モンスター及び「宝玉獣」カードは、相手の効果の対象にならない。",
+      "pendulumScale": 5
     },
     {
       "id": "17732",
@@ -91390,7 +91482,9 @@
         "D/D Ark"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/14448",
-      "updatedAt": "2026-09-08T20:25:18.437Z"
+      "updatedAt": "2026-09-08T20:25:18.437Z",
+      "pendulumEffectText": "このカード名のP効果は１ターンに１度しか使用できない。①：相手フィールドのP召喚されたモンスター１体を対象として発動できる。そのモンスターとこのカードを破壊する。",
+      "pendulumScale": 1
     },
     {
       "id": "11954",
@@ -91476,7 +91570,9 @@
         "D/D Cerberus"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11458",
-      "updatedAt": "2026-09-08T20:25:18.443Z"
+      "updatedAt": "2026-09-08T20:25:18.443Z",
+      "pendulumEffectText": "①：１回合１次，以自己场上的１只“DD”怪兽为对象可以发动。将该怪兽的等级改成４，攻击力・守备力上升４００。",
+      "pendulumScale": 6
     },
     {
       "id": "21069",
@@ -91521,7 +91617,9 @@
         "D/D Count Surveyor"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/21069",
-      "updatedAt": "2026-09-08T20:25:18.461Z"
+      "updatedAt": "2026-09-08T20:25:18.461Z",
+      "pendulumEffectText": "①：1回合1次，自己将“DDD”怪兽灵摆召唤的情况下，以对手场上的、3只种族相同的怪兽或3只属性相同的怪兽为对象可以发动。将该3只表侧表示怪兽中的2只解放。剩余的1只的攻击力・守备力上升相当于所解放怪兽的相应数值的合计。",
+      "pendulumScale": 1
     },
     {
       "id": "21768",
@@ -91607,7 +91705,9 @@
         "D/D Dog"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/15181",
-      "updatedAt": "2026-09-08T20:25:18.510Z"
+      "updatedAt": "2026-09-08T20:25:18.510Z",
+      "pendulumEffectText": "此卡名的灵摆效果１回合仅可使用１次。\n①：以对手场上的１只融合・同步・超量怪兽为对象可以发动。将该怪兽的效果直至回合结束时为止无效。然后，将灵摆区域的此卡破坏。",
+      "pendulumScale": 3
     },
     {
       "id": "14739",
@@ -91650,7 +91750,9 @@
         "D/D Evil"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/14739",
-      "updatedAt": "2026-09-08T20:25:18.511Z"
+      "updatedAt": "2026-09-08T20:25:18.511Z",
+      "pendulumEffectText": "①：このカードがPゾーンに存在する限り１度だけ、相手がモンスターのP召喚に成功した時に発動できる。このターン、そのP召喚されたモンスターは攻撃できず、効果は無効化される。",
+      "pendulumScale": 8
     },
     {
       "id": "21071",
@@ -91695,7 +91797,9 @@
         "D/D Extra Surveyor"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/21071",
-      "updatedAt": "2026-09-08T20:25:18.583Z"
+      "updatedAt": "2026-09-08T20:25:18.583Z",
+      "pendulumEffectText": "此卡名的灵摆效果1回合仅可使用1次。\n①：对手场上表侧表示的怪兽卡因战斗・效果被破坏的情况下，以自己场上的1只“DDD”怪兽为对象可以发动。将自己灵摆区域的2张卡除外，此回合，对象怪兽在1次战斗阶段中可攻击2次。",
+      "pendulumScale": 4
     },
     {
       "id": "12929",
@@ -91785,7 +91889,9 @@
         "D/D Gryphon"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/16818",
-      "updatedAt": "2026-09-08T20:25:18.515Z"
+      "updatedAt": "2026-09-08T20:25:18.515Z",
+      "pendulumEffectText": "此卡名的灵摆效果１回合仅可使用１次。①：以自己场上的１只恶魔族怪兽为对象可以发动。该怪兽的攻击力直至回合结束时为止，上升相当于自己的场上・墓地的“契约书”魔法・陷阱卡种类×５００的数值。然后，将此卡破坏。",
+      "pendulumScale": 1
     },
     {
       "id": "12229",
@@ -92051,7 +92157,9 @@
         "D/D Orthros"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12228",
-      "updatedAt": "2026-09-08T20:25:18.588Z"
+      "updatedAt": "2026-09-08T20:25:18.588Z",
+      "pendulumEffectText": "①：１回合１次，以场上的１张魔法・陷阱卡和自己场上此卡以外的１张“DD”卡或“契约书”卡为对象可以发动。将该卡破坏。",
+      "pendulumScale": 3
     },
     {
       "id": "11795",
@@ -92135,7 +92243,9 @@
         "D/D Proud Chevalier"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11330",
-      "updatedAt": "2026-09-08T20:25:18.590Z"
+      "updatedAt": "2026-09-08T20:25:18.590Z",
+      "pendulumEffectText": "①：１ターンに１度、５００LPを払い、相手フィールドの表側表示モンスター１体を対象として発動できる。そのモンスターの攻撃力は５００ダウンする。②：もう片方の自分のPゾーンに「DD」カードが存在しない場合、このカードのPスケールは５になる。",
+      "pendulumScale": 6
     },
     {
       "id": "11329",
@@ -92178,7 +92288,9 @@
         "D/D Proud Ogre"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11329",
-      "updatedAt": "2026-09-08T20:25:18.609Z"
+      "updatedAt": "2026-09-08T20:25:18.609Z",
+      "pendulumEffectText": "①：１ターンに１度、５００LPを払い、自分フィールドの「DD」モンスター１体を対象として発動できる。そのモンスターの攻撃力は５００アップする。②：もう片方の自分のPゾーンに「DD」カードが存在しない場合、このカードのPスケールは５になる。",
+      "pendulumScale": 8
     },
     {
       "id": "12231",
@@ -92263,7 +92375,9 @@
         "D/D Savant Copernicus"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12227",
-      "updatedAt": "2026-09-08T20:25:18.659Z"
+      "updatedAt": "2026-09-08T20:25:18.659Z",
+      "pendulumEffectText": "①：自己仅可灵摆召唤“DD”怪兽。此效果不会被无效化。\n②：只要此卡存在于灵摆区域，仅限1次，给予自己伤害的魔法卡的效果的处理时，可将该效果无效。然后将此卡破坏。",
+      "pendulumScale": 1
     },
     {
       "id": "11441",
@@ -92308,7 +92422,9 @@
         "D/D Savant Galilei"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11441",
-      "updatedAt": "2026-09-08T20:25:18.663Z"
+      "updatedAt": "2026-09-08T20:25:18.663Z",
+      "pendulumEffectText": "①：自己仅可灵摆召唤“DD”怪兽。此效果不会被无效化。②：在自己的准备阶段发动。此卡的灵摆刻度上升２（最高升至１０）。然后，将自己场上等级在此卡灵摆刻度以下的“DD”怪兽以外的怪兽全部破坏。",
+      "pendulumScale": 1
     },
     {
       "id": "11442",
@@ -92353,7 +92469,9 @@
         "D/D Savant Kepler"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11442",
-      "updatedAt": "2026-09-08T20:25:18.664Z"
+      "updatedAt": "2026-09-08T20:25:18.664Z",
+      "pendulumEffectText": "①：自己仅可灵摆召唤“DD”怪兽。此效果不会被无效化。\n②：在自己的准备阶段发动。此卡的灵摆刻度下降2（最低下降至1）。然后，将自己场上等级在此卡灵摆刻度数值以上的“DD”怪兽以外的怪兽全部破坏。",
+      "pendulumScale": 10
     },
     {
       "id": "12226",
@@ -92398,7 +92516,9 @@
         "D/D Savant Newton"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12226",
-      "updatedAt": "2026-09-08T20:25:18.664Z"
+      "updatedAt": "2026-09-08T20:25:18.664Z",
+      "pendulumEffectText": "①：自己仅可灵摆召唤“DD”怪兽。此效果不会被无效化。②：只要此卡存在于灵摆区域，仅限１次，给予自己伤害的陷阱卡的效果发动的情况下，可将该效果无效。然后将此卡破坏。",
+      "pendulumScale": 10
     },
     {
       "id": "12410",
@@ -92443,7 +92563,9 @@
         "D/D Savant Nikola"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12410",
-      "updatedAt": "2026-09-08T20:25:18.665Z"
+      "updatedAt": "2026-09-08T20:25:18.665Z",
+      "pendulumEffectText": "①：自己仅可灵摆召唤“DD”怪兽。此效果不会被无效化。②：１回合１次，从手牌将１只“DDD”怪兽舍弃，以自己场上１只等级６以下的“DD”怪兽为对象可以发动。该怪兽的攻击力・守备力直至回合结束时为止上升２０００。",
+      "pendulumScale": 8
     },
     {
       "id": "12409",
@@ -92488,7 +92610,9 @@
         "D/D Savant Thomas"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12409",
-      "updatedAt": "2026-09-08T20:25:18.683Z"
+      "updatedAt": "2026-09-08T20:25:18.683Z",
+      "pendulumEffectText": "此卡名的灵摆效果１回合仅可使用１次。①：在自己的主要阶段可以发动。从自己的额外牌组将１只表侧表示的“DD”灵摆怪兽加入手牌。",
+      "pendulumScale": 6
     },
     {
       "id": "21070",
@@ -92533,7 +92657,9 @@
         "D/D Scale Surveyor"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/21070",
-      "updatedAt": "2026-09-08T20:25:18.710Z"
+      "updatedAt": "2026-09-08T20:25:18.710Z",
+      "pendulumEffectText": "此卡名的灵摆效果1回合仅可使用1次。\n①：在自己・对手的准备阶段，以自己・对手的灵摆区域的最多2张卡为对象可以发动。将该卡的灵摆刻度直至回合结束时为止改成0。",
+      "pendulumScale": 9
     },
     {
       "id": "11955",
@@ -92754,7 +92880,9 @@
         "D/D/D Deviser King Deus Machinex"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/16849",
-      "updatedAt": "2026-09-08T20:25:18.741Z"
+      "updatedAt": "2026-09-08T20:25:18.741Z",
+      "pendulumEffectText": "此卡名的灵摆效果１回合仅可使用１次。①：另一方的自己的灵摆区域有卡存在的情况下，以自己的场上・墓地的１只灵摆怪兽为对象可以发动。将另一方的自己的灵摆区域的卡特殊召唤，将对象的灵摆怪兽放在自己的灵摆区域。",
+      "pendulumScale": 10
     },
     {
       "id": "12959",
@@ -92844,7 +92972,9 @@
         "D/D/D Chaos King Apocalypse"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12225",
-      "updatedAt": "2026-09-08T20:25:18.758Z"
+      "updatedAt": "2026-09-08T20:25:18.758Z",
+      "pendulumEffectText": "①：将自己墓地的２只“DD”怪兽除外可以发动。将灵摆区域的此卡特殊召唤。",
+      "pendulumScale": 4
     },
     {
       "id": "12012",
@@ -92997,7 +93127,9 @@
         "D/D/D Destiny King Zero Laplace"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/13121",
-      "updatedAt": "2026-09-08T20:25:18.810Z"
+      "updatedAt": "2026-09-08T20:25:18.810Z",
+      "pendulumEffectText": "此卡名的灵摆效果1回合仅可使用1次。\n①：在自己的主要阶段可以发动。从自己额外牌组（表侧）将“DDD 命运王零拉普拉斯”以外的1只“DDD”灵摆怪兽加入手牌。",
+      "pendulumScale": 1
     },
     {
       "id": "11443",
@@ -93042,7 +93174,9 @@
         "D/D/D Doom King Armageddon"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11443",
-      "updatedAt": "2026-09-08T20:25:18.814Z"
+      "updatedAt": "2026-09-08T20:25:18.814Z",
+      "pendulumEffectText": "①：1回合1次，以自己场上的1只“DD”怪兽为对象可以发动。该怪兽的攻击力直至回合结束时为止上升800。",
+      "pendulumScale": 4
     },
     {
       "id": "11769",
@@ -93173,7 +93307,9 @@
         "D/D/D Vice King Requiem"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/14961",
-      "updatedAt": "2026-09-08T20:25:18.835Z"
+      "updatedAt": "2026-09-08T20:25:18.835Z",
+      "pendulumEffectText": "此卡名的灵摆效果１回合仅可使用１次。①：以自己场上任意数量的“契约书”卡为对象可以发动。将该卡破坏，将灵摆区域的此卡特殊召唤。然后可将此卡的等级上升或下降相当于所破坏数量的数值。",
+      "pendulumScale": 4
     },
     {
       "id": "21804",
@@ -93524,7 +93660,9 @@
         "D/D/D Oblivion King Abyss Ragnarok"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11616",
-      "updatedAt": "2026-09-08T20:25:18.937Z"
+      "updatedAt": "2026-09-08T20:25:18.937Z",
+      "pendulumEffectText": "此卡名的灵摆效果１回合仅可使用１次。①：自己特殊召唤“DD”怪兽成功的情况下，以自己墓地的１只“DD”怪兽为对象可以发动。将该怪兽特殊召唤，自己受到１０００伤害。此回合，对手所受战斗伤害变为一半。",
+      "pendulumScale": 5
     },
     {
       "id": "11830",
@@ -93614,7 +93752,9 @@
         "D/D/D Rebel King Leonidas"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11460",
-      "updatedAt": "2026-09-08T20:25:18.955Z"
+      "updatedAt": "2026-09-08T20:25:18.955Z",
+      "pendulumEffectText": "①：自己受到效果伤害时可以发动。将此卡破坏，在此回合，给予LP伤害的效果变为恢复LP的效果。",
+      "pendulumScale": 3
     },
     {
       "id": "21815",
@@ -93708,7 +93848,9 @@
         "D/D/D Super Doom King Bright Armageddon"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/13132",
-      "updatedAt": "2026-09-08T20:25:18.962Z"
+      "updatedAt": "2026-09-08T20:25:18.962Z",
+      "pendulumEffectText": "①：1回合1次，对手怪兽攻击宣言时，以自己场上的1只“DDD”同步怪兽为对象可以发动。将对手场上守备力为该怪兽攻击力以下的怪兽全部破坏，给予对手所破坏数量×1000的伤害。",
+      "pendulumScale": 1
     },
     {
       "id": "13133",
@@ -93757,7 +93899,9 @@
         "D/D/D Super Doom King Dark Armageddon"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/13133",
-      "updatedAt": "2026-09-08T20:25:18.964Z"
+      "updatedAt": "2026-09-08T20:25:18.964Z",
+      "pendulumEffectText": "①：1回合1次，另一方自己的灵摆区域存在“DD”卡的情况下可以发动。从额外牌组将“DDD 超死伟王黯黑地狱末日”以外的1只“DDD”超量怪兽特殊召唤。",
+      "pendulumScale": 1
     },
     {
       "id": "13123",
@@ -93806,7 +93950,9 @@
         "D/D/D Super Doom King Purple Armageddon"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/13123",
-      "updatedAt": "2026-09-08T20:25:18.968Z"
+      "updatedAt": "2026-09-08T20:25:18.968Z",
+      "pendulumEffectText": "①：1回合1次，自己的“DDD”融合怪兽与对手怪兽进行战斗的伤害计算前可以发动。该对手怪兽的攻击力直至回合结束时为止下降1000。",
+      "pendulumScale": 1
     },
     {
       "id": "13304",
@@ -93851,7 +93997,9 @@
         "D/D/D Supersight King Zero Maxwell"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/13304",
-      "updatedAt": "2026-09-08T20:25:18.988Z"
+      "updatedAt": "2026-09-08T20:25:18.988Z",
+      "pendulumEffectText": "此卡名的灵摆效果１回合仅可使用１次。\n①：以场上的１只表侧表示怪兽为对象可以发动。将该怪兽的守备力直至回合结束时为止改成０。",
+      "pendulumScale": 4
     },
     {
       "id": "11328",
@@ -94115,7 +94263,9 @@
         "D/D/D Zero Doom Queen Machinex"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/21769",
-      "updatedAt": "2026-09-08T20:25:19.040Z"
+      "updatedAt": "2026-09-08T20:25:19.040Z",
+      "pendulumEffectText": "此卡名的灵摆效果1回合仅可使用1次。\n①：在发动了此卡的回合的自己的主要阶段可以发动。从牌组将1张“契约书”永续魔法・永续陷阱卡以表侧表示放在自己场上。",
+      "pendulumScale": 0
     },
     {
       "id": "21801",
@@ -94164,7 +94314,9 @@
         "D/D/D/D Dimensional King Arc Crisis"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/21801",
-      "updatedAt": "2026-09-08T20:25:19.042Z"
+      "updatedAt": "2026-09-08T20:25:19.042Z",
+      "pendulumEffectText": "此卡名的灵摆效果1回合仅可使用1次。\n①：以自己场上任意数量的“契约书”卡为对象可以发动。将该卡破坏。然后，可依破坏的数量为上限，从牌组・额外牌组将“死伟王”灵摆怪兽特殊召唤。",
+      "pendulumScale": 13
     },
     {
       "id": "18440",
@@ -94209,7 +94361,9 @@
         "D/D/D/D Super-Dimensional Sovereign Emperor Zero Paradox"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/18440",
-      "updatedAt": "2026-09-08T20:25:19.063Z"
+      "updatedAt": "2026-09-08T20:25:19.063Z",
+      "pendulumEffectText": "此卡名的灵摆效果1回合仅可使用1次。\n①：以对手灵摆区域的1张卡为对象可以发动。将此卡特殊召唤，将对象卡放在自己的灵摆区域。以此效果所放的卡将在下个回合的结束阶段被破坏。",
+      "pendulumScale": 10
     },
     {
       "id": "9140",
@@ -94720,7 +94874,9 @@
         "Daidaratant the Ooze Giant"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/15467",
-      "updatedAt": "2026-09-08T20:25:19.211Z"
+      "updatedAt": "2026-09-08T20:25:19.211Z",
+      "pendulumEffectText": "此卡名的灵摆效果１回合仅可使用１次。\n①：以自己场上的１只超量怪兽为对象可以发动。将此卡作为该怪兽的超量素材。",
+      "pendulumScale": 3
     },
     {
       "id": "9181",
@@ -95070,7 +95226,9 @@
         "Gigathunder Giclops"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/15723",
-      "updatedAt": "2026-09-08T20:25:19.288Z"
+      "updatedAt": "2026-09-08T20:25:19.288Z",
+      "pendulumEffectText": "①：１ターンに１度、自分フィールドのPモンスター１体と相手フィールドのモンスター１体を対象として発動できる。そのモンスターの表示形式を変更する。",
+      "pendulumScale": 5
     },
     {
       "id": "14033",
@@ -96456,7 +96614,9 @@
         "Dark Anthelion Dragon"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/14342",
-      "updatedAt": "2026-09-08T20:25:19.702Z"
+      "updatedAt": "2026-09-08T20:25:19.702Z",
+      "pendulumEffectText": "①：１ターンに１度、相手フィールドの表側表示モンスター１体を対象として発動できる。そのモンスターの元々の攻撃力はターン終了時まで半分になる。",
+      "pendulumScale": 10
     },
     {
       "id": "7421",
@@ -97820,7 +97980,9 @@
         "Dark Doriado"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12143",
-      "updatedAt": "2026-09-08T20:25:20.120Z"
+      "updatedAt": "2026-09-08T20:25:20.120Z",
+      "pendulumEffectText": "①：自己场上的地・水・炎・风属性怪兽的攻击力・守备力上升相当于自己场上怪兽属性的种类×200的数值。",
+      "pendulumScale": 5
     },
     {
       "id": "11897",
@@ -106357,7 +106519,9 @@
         "Deftero Enneacraft - \"alazoneIA\""
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/21943",
-      "updatedAt": "2026-09-08T20:25:22.476Z"
+      "updatedAt": "2026-09-08T20:25:22.476Z",
+      "pendulumEffectText": "此卡名的②灵摆效果1回合仅可使用1次。\n①：每当有怪兽反转，就在此卡上放1个纠罪计数物。\n②：支付900LP可以发动。从牌组将3张“纠罪巧”卡出示给对手，对手从其中随机挑选1张。将该1张加入自己手牌，剩余的放回牌组。",
+      "pendulumScale": 0
     },
     {
       "id": "9947",
@@ -107013,7 +107177,9 @@
         "Dimonno Vaalmonica"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/19382",
-      "updatedAt": "2026-09-08T20:25:22.688Z"
+      "updatedAt": "2026-09-08T20:25:22.688Z",
+      "pendulumEffectText": "①：只要另一方自己的灵摆区域有天使族怪兽卡存在，每次自己受到效果伤害，在此卡上放１个响鸣计数物。\n②：对手场上的怪兽的攻击力下降相当于自己场上响鸣计数物数量×１００的数值。",
+      "pendulumScale": 5
     },
     {
       "id": "5603",
@@ -107733,7 +107899,9 @@
         "Dragoncaller Magician"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12736",
-      "updatedAt": "2026-09-08T20:25:22.852Z"
+      "updatedAt": "2026-09-08T20:25:22.852Z",
+      "pendulumEffectText": "①：１ターンに１度、フィールドの表側表示モンスター１体を対象として発動できる。そのモンスターの種族は相手ターン終了時までドラゴン族になる。",
+      "pendulumScale": 2
     },
     {
       "id": "8060",
@@ -108164,7 +108332,9 @@
         "Deskbot 005"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11828",
-      "updatedAt": "2026-09-08T20:25:22.985Z"
+      "updatedAt": "2026-09-08T20:25:22.985Z",
+      "pendulumEffectText": "①：自己仅可灵摆召唤“文具博格”怪兽。此效果不会被无效化。",
+      "pendulumScale": 10
     },
     {
       "id": "11983",
@@ -108209,7 +108379,9 @@
         "Deskbot 006"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11983",
-      "updatedAt": "2026-09-08T20:25:22.986Z"
+      "updatedAt": "2026-09-08T20:25:22.986Z",
+      "pendulumEffectText": "①：自己仅可灵摆召唤“文具博格”怪兽。此效果不会被无效化。",
+      "pendulumScale": 1
     },
     {
       "id": "12147",
@@ -108254,7 +108426,9 @@
         "Deskbot 007"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12147",
-      "updatedAt": "2026-09-08T20:25:22.999Z"
+      "updatedAt": "2026-09-08T20:25:22.999Z",
+      "pendulumEffectText": "①：自己仅可灵摆召唤“文具博格”怪兽。此效果不会被无效化。",
+      "pendulumScale": 10
     },
     {
       "id": "12148",
@@ -108299,7 +108473,9 @@
         "Deskbot 008"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12148",
-      "updatedAt": "2026-09-08T20:25:23.001Z"
+      "updatedAt": "2026-09-08T20:25:23.001Z",
+      "pendulumEffectText": "①：自己仅可灵摆召唤“文具博格”怪兽。此效果不会被无效化。",
+      "pendulumScale": 1
     },
     {
       "id": "12314",
@@ -111481,7 +111657,9 @@
         "Dharma-Eye Magician"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11933",
-      "updatedAt": "2026-09-08T20:25:23.839Z"
+      "updatedAt": "2026-09-08T20:25:23.839Z",
+      "pendulumEffectText": "①：１回合１次，将手牌的１只灵摆怪兽出示给对手，以自己灵摆区域的１张“魔术师”卡为对象可以发动。该“魔术师”卡的灵摆刻度直至回合结束时为止，变为与所出示的灵摆怪兽的灵摆刻度相同。",
+      "pendulumScale": 2
     },
     {
       "id": "20219",
@@ -113982,7 +114160,9 @@
         "Dinomight Powerload, the Dracoslayer"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/17780",
-      "updatedAt": "2026-09-08T20:25:24.643Z"
+      "updatedAt": "2026-09-08T20:25:24.643Z",
+      "pendulumEffectText": "此卡名的灵摆效果１回合仅可使用１次。\n①：以另一方自己的灵摆区域的１张“龙剑士”卡或“机动雾龙”卡为对象可以发动。将该卡特殊召唤。",
+      "pendulumScale": 6
     },
     {
       "id": "12425",
@@ -114027,7 +114207,9 @@
         "Dinomist Ankylos"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12425",
-      "updatedAt": "2026-09-08T20:25:24.642Z"
+      "updatedAt": "2026-09-08T20:25:24.642Z",
+      "pendulumEffectText": "①：只要此卡存在于灵摆区域，仅限１次，可将以自己场上的其他“机动雾龙”卡为对象发动的效果无效。然后，将此卡破坏。",
+      "pendulumScale": 6
     },
     {
       "id": "12135",
@@ -114072,7 +114254,9 @@
         "Dinomist Brachion"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12135",
-      "updatedAt": "2026-09-08T20:25:24.655Z"
+      "updatedAt": "2026-09-08T20:25:24.655Z",
+      "pendulumEffectText": "①：只要此卡存在于灵摆区域，仅限１次，可将以自己场上的其他“机动雾龙”卡为对象发动的效果无效。然后，将此卡破坏。",
+      "pendulumScale": 6
     },
     {
       "id": "12136",
@@ -114117,7 +114301,9 @@
         "Dinomist Ceratops"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12136",
-      "updatedAt": "2026-09-08T20:25:24.663Z"
+      "updatedAt": "2026-09-08T20:25:24.663Z",
+      "pendulumEffectText": "①：自己场上的其他“机动雾龙”卡将被战斗或对手的效果破坏的情况下，作为代替可将此卡破坏。",
+      "pendulumScale": 3
     },
     {
       "id": "12171",
@@ -114224,7 +114410,9 @@
         "Dinomist Plesios"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12133",
-      "updatedAt": "2026-09-08T20:25:24.715Z"
+      "updatedAt": "2026-09-08T20:25:24.715Z",
+      "pendulumEffectText": "①：只要此卡存在于灵摆区域，仅限１次，可将以自己场上的其他“机动雾龙”卡为对象发动的效果无效。然后，将此卡破坏。",
+      "pendulumScale": 6
     },
     {
       "id": "12134",
@@ -114269,7 +114457,9 @@
         "Dinomist Pteran"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12134",
-      "updatedAt": "2026-09-08T20:25:24.716Z"
+      "updatedAt": "2026-09-08T20:25:24.716Z",
+      "pendulumEffectText": "①：自己场上的其他“机动雾龙”卡将被战斗或对手的效果破坏的情况下，作为代替可将此卡破坏。",
+      "pendulumScale": 3
     },
     {
       "id": "12137",
@@ -114314,7 +114504,9 @@
         "Dinomist Rex"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12137",
-      "updatedAt": "2026-09-08T20:25:24.719Z"
+      "updatedAt": "2026-09-08T20:25:24.719Z",
+      "pendulumEffectText": "①：只要此卡存在于灵摆区域，仅限１次，可将以自己场上的其他“机动雾龙”卡为对象发动的效果无效。然后，将此卡破坏。",
+      "pendulumScale": 6
     },
     {
       "id": "12181",
@@ -114377,7 +114569,9 @@
         "Dinomist Spinos"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12304",
-      "updatedAt": "2026-09-08T20:25:24.737Z"
+      "updatedAt": "2026-09-08T20:25:24.737Z",
+      "pendulumEffectText": "①：自己场上的其他“机动雾龙”卡将被战斗或对手的效果破坏的情况下，作为代替可将此卡破坏。",
+      "pendulumScale": 3
     },
     {
       "id": "12132",
@@ -114422,7 +114616,9 @@
         "Dinomist Stegosaur"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12132",
-      "updatedAt": "2026-09-08T20:25:24.742Z"
+      "updatedAt": "2026-09-08T20:25:24.742Z",
+      "pendulumEffectText": "①：自己场上的其他“机动雾龙”卡将被战斗或对手的效果破坏的情况下，作为代替可将此卡破坏。",
+      "pendulumScale": 3
     },
     {
       "id": "16874",
@@ -115767,7 +115963,9 @@
         "Disablaster the Negation Fortress"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/20205",
-      "updatedAt": "2026-09-08T20:25:25.094Z"
+      "updatedAt": "2026-09-08T20:25:25.094Z",
+      "pendulumEffectText": "①：此卡只要存在于灵摆区域，在与此卡同一纵列发动的魔法・陷阱・怪兽的效果无效化。",
+      "pendulumScale": 5
     },
     {
       "id": "5397",
@@ -116770,7 +116968,9 @@
         "Go! - D/D/D Divine Zero King Rage"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/14708",
-      "updatedAt": "2026-09-08T20:25:25.389Z"
+      "updatedAt": "2026-09-08T20:25:25.389Z",
+      "pendulumEffectText": "此卡名的①②灵摆效果１回合仅可各使用１次。\n①：此卡存在于灵摆区域，自己将受到效果伤害的情况下，该伤害变为０。\n②：只要此卡存在于灵摆区域，自己召唤等级５以上的“DD”怪兽的情况下，可免除所必须的解放。",
+      "pendulumScale": 0
     },
     {
       "id": "20280",
@@ -117700,7 +117900,9 @@
         "DoSolfachord Coolia"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/16091",
-      "updatedAt": "2026-09-08T20:25:25.638Z"
+      "updatedAt": "2026-09-08T20:25:25.638Z",
+      "pendulumEffectText": "①：自己的“音服和弦”灵摆怪兽灵摆召唤成功时，对手不可发动怪兽的效果・魔法・陷阱卡。",
+      "pendulumScale": 1
     },
     {
       "id": "16084",
@@ -117745,7 +117947,9 @@
         "DoSolfachord Cutia"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/16084",
-      "updatedAt": "2026-09-08T20:25:25.637Z"
+      "updatedAt": "2026-09-08T20:25:25.637Z",
+      "pendulumEffectText": "①：自己的“音服和弦”灵摆怪兽的灵摆召唤不会被无效化。",
+      "pendulumScale": 8
     },
     {
       "id": "11166",
@@ -121797,7 +122001,9 @@
         "Double Iris Magician"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12908",
-      "updatedAt": "2026-09-08T20:25:26.832Z"
+      "updatedAt": "2026-09-08T20:25:26.832Z",
+      "pendulumEffectText": "①：１回合１次，以自己场上的１只魔法师族・暗属性怪兽为对象可以发动。此回合，该怪兽因与对手怪兽的战斗给予对手的战斗伤害变为两倍。然后将此卡破坏。",
+      "pendulumScale": 8
     },
     {
       "id": "11893",
@@ -123430,7 +123636,9 @@
         "Dragodies, the Empowered Warrior"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11871",
-      "updatedAt": "2026-09-08T20:25:27.323Z"
+      "updatedAt": "2026-09-08T20:25:27.323Z",
+      "pendulumEffectText": "①：自分のモンスターが相手の表側表示モンスターと戦闘を行うダメージステップ開始時に手札を１枚捨てて発動できる。その戦闘を行う相手モンスターの攻撃力・守備力は半分になる。",
+      "pendulumScale": 2
     },
     {
       "id": "20835",
@@ -123697,7 +123905,9 @@
         "Dragon Horn Hunter"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11315",
-      "updatedAt": "2026-09-08T20:25:27.398Z"
+      "updatedAt": "2026-09-08T20:25:27.398Z",
+      "pendulumEffectText": "①：场上的通常怪兽的攻击力上升２００，因自己通常怪兽的战斗对自己造成的战斗伤害变为０。",
+      "pendulumScale": 3
     },
     {
       "id": "7484",
@@ -124885,7 +125095,8 @@
         "Dragong"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11658",
-      "updatedAt": "2026-09-08T20:25:27.733Z"
+      "updatedAt": "2026-09-08T20:25:27.733Z",
+      "pendulumScale": 7
     },
     {
       "id": "5279",
@@ -125609,7 +125820,9 @@
         "Dragonox, the Empowered Warrior"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11872",
-      "updatedAt": "2026-09-08T20:25:27.946Z"
+      "updatedAt": "2026-09-08T20:25:27.946Z",
+      "pendulumEffectText": "①：相手モンスターの攻撃宣言時に発動できる。このカードを破壊し、そのバトルフェイズを終了する。",
+      "pendulumScale": 7
     },
     {
       "id": "11935",
@@ -125654,7 +125867,9 @@
         "Dragonpit Magician"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11935",
-      "updatedAt": "2026-09-08T20:25:27.961Z"
+      "updatedAt": "2026-09-08T20:25:27.961Z",
+      "pendulumEffectText": "①：１回合１次，另一方自己的灵摆区域有“魔术师”卡存在的情况下，舍弃手牌的１只灵摆怪兽，以场上１张魔法・陷阱卡为对象可以发动。将该卡破坏。",
+      "pendulumScale": 8
     },
     {
       "id": "11934",
@@ -125699,7 +125914,9 @@
         "Dragonpulse Magician"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11934",
-      "updatedAt": "2026-09-08T20:25:27.997Z"
+      "updatedAt": "2026-09-08T20:25:27.997Z",
+      "pendulumEffectText": "①：１回合１次，另一方自己的灵摆区域有“魔术师”卡存在的情况下，舍弃手牌的１只灵摆怪兽，以场上的１只表侧表示怪兽为对象可以发动。将该怪兽破坏。",
+      "pendulumScale": 1
     },
     {
       "id": "16407",
@@ -125783,7 +126000,9 @@
         "Dragoons of Draconia"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11630",
-      "updatedAt": "2026-09-08T20:25:28.004Z"
+      "updatedAt": "2026-09-08T20:25:28.004Z",
+      "pendulumEffectText": "①：１回合１次，自己的通常怪兽战斗破坏对手怪兽的伤害计算后可以发动。从牌组将１只等级４以上的通常怪兽加入手牌。",
+      "pendulumScale": 2
     },
     {
       "id": "10997",
@@ -128876,7 +129095,9 @@
         "Dreaming Nemleria"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/18478",
-      "updatedAt": "2026-09-08T20:25:28.830Z"
+      "updatedAt": "2026-09-08T20:25:28.830Z",
+      "pendulumEffectText": "①：１回合１次，在自己的主要阶段可以发动。从自己的牌组・墓地挑选１张“妮梦雷莉娅”永续魔法卡，以表侧表示放在自己场上，将此卡以表侧表示加入额外牌组。发动此效果的回合中，自己不可特殊召唤“眠梦中的妮梦雷莉娅”。",
+      "pendulumScale": 8
     },
     {
       "id": "18802",
@@ -133799,7 +134020,9 @@
         "Edge Imp Cotton Eater"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/13038",
-      "updatedAt": "2026-09-08T20:25:30.244Z"
+      "updatedAt": "2026-09-08T20:25:30.244Z",
+      "pendulumEffectText": "①：自己场上的融合怪兽的攻击力上升300。②：1回合1次，“魔玩具”融合怪兽被融合召唤至自己场上的情况下可以发动。自己从牌组抽1张。",
+      "pendulumScale": 1
     },
     {
       "id": "11690",
@@ -134544,7 +134767,9 @@
         "Ekto Enneacraft - \"tromarIA\""
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/21944",
-      "updatedAt": "2026-09-08T20:25:30.410Z"
+      "updatedAt": "2026-09-08T20:25:30.410Z",
+      "pendulumEffectText": "此卡名的②灵摆效果1回合仅可使用1次。\n①：每当有怪兽反转，就在此卡上放1个纠罪计数物。\n②：支付900LP可以发动。从牌组将3张“纠罪巧”卡出示给对手，对手从其中随机挑选1张。将该1张加入自己手牌，剩余的放回牌组。",
+      "pendulumScale": 0
     },
     {
       "id": "15132",
@@ -141654,7 +141879,9 @@
         "Enato Enneacraft - \"oknirIA\""
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/21945",
-      "updatedAt": "2026-09-08T20:25:32.202Z"
+      "updatedAt": "2026-09-08T20:25:32.202Z",
+      "pendulumEffectText": "此卡名的②灵摆效果1回合仅可使用1次。\n①：每当有怪兽反转，就在此卡上放1个纠罪计数物。\n②：支付900LP可以发动。从牌组将3张“纠罪巧”卡出示给对手，对手从其中随机挑选1张。将该1张加入自己手牌，剩余的放回牌组。",
+      "pendulumScale": 0
     },
     {
       "id": "4992",
@@ -142181,7 +142408,9 @@
         "Endymion, the Mighty Master of Magic"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/14439",
-      "updatedAt": "2026-09-08T20:25:32.355Z"
+      "updatedAt": "2026-09-08T20:25:32.355Z",
+      "pendulumEffectText": "此卡名的灵摆效果1回合仅可使用1次。\n①：去除自己场上的6个魔力计数物可以发动。将此卡特殊召唤。然后，以自己场上的能放魔力计数物的卡的数量为上限，将场上的卡破坏，依所破坏的数量在此卡上放魔力计数物。",
+      "pendulumScale": 8
     },
     {
       "id": "5505",
@@ -142665,7 +142894,9 @@
         "Enneacraft - Aiza.LEON"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/21946",
-      "updatedAt": "2026-09-08T20:25:32.504Z"
+      "updatedAt": "2026-09-08T20:25:32.504Z",
+      "pendulumEffectText": "①：每当有怪兽反转，就在此卡上放1个纠罪计数物。\n②：在自己・对手的战斗阶段结束时，另一方自己的灵摆区域存在“纠罪巧”卡的情况下，以对手场上的1只攻击力低于此卡的怪兽为对象可以发动。将该怪兽破坏。",
+      "pendulumScale": 0
     },
     {
       "id": "21949",
@@ -142714,7 +142945,9 @@
         "Enneacraft - Archa.TAIL"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/21949",
-      "updatedAt": "2026-09-08T20:25:32.550Z"
+      "updatedAt": "2026-09-08T20:25:32.550Z",
+      "pendulumEffectText": "①：每当有怪兽反转，就在此卡上放1个纠罪计数物。\n②：在自己・对手的战斗阶段结束时，另一方自己的灵摆区域存在“纠罪巧”卡的情况下，以对手场上的1只攻击力低于此卡的怪兽为对象可以发动。将该怪兽破坏。",
+      "pendulumScale": 0
     },
     {
       "id": "21947",
@@ -142763,7 +142996,9 @@
         "Enneacraft - Asta.PIXEA"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/21947",
-      "updatedAt": "2026-09-08T20:25:32.551Z"
+      "updatedAt": "2026-09-08T20:25:32.551Z",
+      "pendulumEffectText": "①：每当有怪兽反转，就在此卡上放1个纠罪计数物。\n②：在自己・对手的战斗阶段结束时，另一方自己的灵摆区域存在“纠罪巧”卡的情况下，以对手场上的1只攻击力低于此卡的怪兽为对象可以发动。将该怪兽破坏。",
+      "pendulumScale": 0
     },
     {
       "id": "22530",
@@ -142812,7 +143047,9 @@
         "Enneacraft - Atil.SPIA"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/22530",
-      "updatedAt": "2026-09-08T20:25:32.558Z"
+      "updatedAt": "2026-09-08T20:25:32.558Z",
+      "pendulumEffectText": "①：每当有怪兽反转，就在此卡上放1个纠罪计数物。\n②：在自己・对手的战斗阶段结束时，另一方自己的灵摆区域存在“纠罪巧”卡的情况下，以对手场上的1只攻击力低于此卡的怪兽为对象可以发动。将该怪兽破坏。",
+      "pendulumScale": 0
     },
     {
       "id": "21948",
@@ -142861,7 +143098,9 @@
         "Enneacraft - Atori.MAR"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/21948",
-      "updatedAt": "2026-09-08T20:25:32.565Z"
+      "updatedAt": "2026-09-08T20:25:32.565Z",
+      "pendulumEffectText": "①：每当有怪兽反转，就在此卡上放1个纠罪计数物。\n②：在自己・对手的战斗阶段结束时，另一方自己的灵摆区域存在“纠罪巧”卡的情况下，以对手场上的1只攻击力低于此卡的怪兽为对象可以发动。将该怪兽破坏。",
+      "pendulumScale": 0
     },
     {
       "id": "21952",
@@ -142964,7 +143203,9 @@
         "Proto Enneacraft - \"orgIA\""
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/21942",
-      "updatedAt": "2026-09-08T20:25:32.580Z"
+      "updatedAt": "2026-09-08T20:25:32.580Z",
+      "pendulumEffectText": "此卡名的②灵摆效果1回合仅可使用1次。\n①：每当有怪兽反转，就在此卡上放1个纠罪计数物。\n②：支付900LP可以发动。从牌组将3张“纠罪巧”卡出示给对手，对手从其中随机挑选1张。将该1张加入自己手牌，剩余的放回牌组。",
+      "pendulumScale": 0
     },
     {
       "id": "21950",
@@ -151645,7 +151886,9 @@
         "FaSolfachord Fancia"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/16087",
-      "updatedAt": "2026-09-08T20:25:35.023Z"
+      "updatedAt": "2026-09-08T20:25:35.023Z",
+      "pendulumEffectText": "①：自己的“音服和弦”灵摆怪兽的灵摆召唤不会被无效化。",
+      "pendulumScale": 5
     },
     {
       "id": "15735",
@@ -158733,7 +158976,8 @@
         "Fire Opal Head"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/13453",
-      "updatedAt": "2026-09-08T20:25:37.124Z"
+      "updatedAt": "2026-09-08T20:25:37.124Z",
+      "pendulumScale": 0
     },
     {
       "id": "14855",
@@ -162232,7 +162476,8 @@
         "Flash Knight"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11210",
-      "updatedAt": "2026-09-08T20:25:38.021Z"
+      "updatedAt": "2026-09-08T20:25:38.021Z",
+      "pendulumScale": 7
     },
     {
       "id": "21193",
@@ -163740,7 +163985,9 @@
         "Fluffal Angel"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/13701",
-      "updatedAt": "2026-09-08T20:25:38.469Z"
+      "updatedAt": "2026-09-08T20:25:38.469Z",
+      "pendulumEffectText": "このカード名のP効果は１ターンに１度しか使用できない。①：自分の墓地の、「ファーニマル」モンスターまたは「エッジインプ」モンスター１体を対象として発動できる。そのモンスターを特殊召喚する。この効果の発動後、ターン終了時まで自分は融合モンスターしかEXデッキから特殊召喚できない。",
+      "pendulumScale": 8
     },
     {
       "id": "11348",
@@ -167114,7 +167361,9 @@
         "Foucault's Cannon"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11211",
-      "updatedAt": "2026-09-08T20:25:39.452Z"
+      "updatedAt": "2026-09-08T20:25:39.452Z",
+      "pendulumEffectText": "①：在发动了此卡的回合的结束阶段，以场上的１张表侧表示的魔法・陷阱卡为对象可以发动。将该卡破坏。",
+      "pendulumScale": 2
     },
     {
       "id": "6198",
@@ -167918,7 +168167,9 @@
         "Frightfur Meister"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/13991",
-      "updatedAt": "2026-09-08T20:25:39.678Z"
+      "updatedAt": "2026-09-08T20:25:39.678Z",
+      "pendulumEffectText": "このカード名のP効果は１ターンに１度しか使用できない。①：自分フィールドのレベル４以下の、「デストーイ」、「ファーニマル」、「エッジインプ」モンスターのいずれか１体をリリースして発動できる。リリースしたモンスターと同じレベルでカード名が異なる悪魔族モンスター１体をデッキから特殊召喚する。",
+      "pendulumScale": 4
     },
     {
       "id": "12866",
@@ -174866,7 +175117,8 @@
         "Gallugallud the Endless Enigma"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/21760",
-      "updatedAt": "2026-09-08T20:25:41.670Z"
+      "updatedAt": "2026-09-08T20:25:41.670Z",
+      "pendulumScale": 9
     },
     {
       "id": "4950",
@@ -182310,7 +182562,9 @@
         "Ghost Beef"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12394",
-      "updatedAt": "2026-09-08T20:25:43.530Z"
+      "updatedAt": "2026-09-08T20:25:43.530Z",
+      "pendulumEffectText": "①：１回合１次，在自己的主要阶段可以发动。掷１次骰子。直至回合结束时为止，此卡的灵摆刻度上升所掷出的数字（最多上升至１０）。",
+      "pendulumScale": 4
     },
     {
       "id": "13587",
@@ -201070,7 +201324,9 @@
         "Sosei Ryu-Ge Mistva"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/20595",
-      "updatedAt": "2026-09-08T20:25:48.533Z"
+      "updatedAt": "2026-09-08T20:25:48.533Z",
+      "pendulumEffectText": "此卡名的灵摆效果１回合仅可使用１次。\n①：在自己的主要阶段可以发动。从牌组将灵摆怪兽以外的１张“龙华”卡加入手牌。然后，将此卡破坏。",
+      "pendulumScale": 0
     },
     {
       "id": "6697",
@@ -202600,7 +202856,9 @@
         "Guiding Ariadne"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12144",
-      "updatedAt": "2026-09-08T20:25:48.932Z"
+      "updatedAt": "2026-09-08T20:25:48.932Z",
+      "pendulumEffectText": "①：只要此卡存在于灵摆区域，适用以下效果。\n●自己不需为发动反击陷阱卡支付LP。\n●自己不需为发动反击陷阱卡舍弃手牌。",
+      "pendulumScale": 3
     },
     {
       "id": "11127",
@@ -204570,7 +204828,9 @@
         "Hallohallo"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/13361",
-      "updatedAt": "2026-09-08T20:25:49.470Z"
+      "updatedAt": "2026-09-08T20:25:49.470Z",
+      "pendulumEffectText": "①：１回合１次，以场上的１只表侧表示怪兽为对象可以发动。掷１次骰子。该怪兽的等级直至回合结束时为止，变为与出现的数字相同。",
+      "pendulumScale": 2
     },
     {
       "id": "6149",
@@ -204790,7 +205050,9 @@
         "Han-Shi Kyudo Spirit"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/17787",
-      "updatedAt": "2026-09-08T20:25:49.530Z"
+      "updatedAt": "2026-09-08T20:25:49.530Z",
+      "pendulumEffectText": "①：フィールドにモンスターがP召喚された場合に発動する。このカードを持ち主の手札に戻す。",
+      "pendulumScale": 9
     },
     {
       "id": "7389",
@@ -205474,7 +205736,9 @@
         "Harmonizing Magician"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12855",
-      "updatedAt": "2026-09-08T20:25:49.729Z"
+      "updatedAt": "2026-09-08T20:25:49.729Z",
+      "pendulumEffectText": "①：只要此卡存在于灵摆区域，自己场上怪兽的攻击力・守备力上升相当于自己额外牌组的表侧表示“魔术师”灵摆怪兽种类×１００的数值。",
+      "pendulumScale": 8
     },
     {
       "id": "12271",
@@ -206383,7 +206647,9 @@
         "Harvest Angel of Doom"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/18489",
-      "updatedAt": "2026-09-08T20:25:49.974Z"
+      "updatedAt": "2026-09-08T20:25:49.974Z",
+      "pendulumEffectText": "此卡名的灵摆效果１回合仅可使用１次。\n①：在自己的主要阶段可以发动。将此卡破坏，从牌组将１张“升天之黑角笛”加入手牌。",
+      "pendulumScale": 8
     },
     {
       "id": "7048",
@@ -213369,7 +213635,9 @@
         "Hojo the Vaylantz Warrior"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/17350",
-      "updatedAt": "2026-09-08T20:25:51.928Z"
+      "updatedAt": "2026-09-08T20:25:51.928Z",
+      "pendulumEffectText": "此卡名的灵摆效果１回合仅可使用１次。①：场地区域有“弈勇世界－真罗万象”存在的情况下，或自己场上有水属性的“弈勇”怪兽存在的情况下可以发动。将此卡特殊召唤至正面的自己的主要怪兽区域。",
+      "pendulumScale": 1
     },
     {
       "id": "10112",
@@ -214077,7 +214345,9 @@
         "Magician of Hope"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/13840",
-      "updatedAt": "2026-09-08T20:25:52.124Z"
+      "updatedAt": "2026-09-08T20:25:52.124Z",
+      "pendulumEffectText": "①：１回合１次，自己或对手的怪兽的攻击宣言时可以发动。将该攻击无效。然后破坏此卡。",
+      "pendulumScale": 8
     },
     {
       "id": "9354",
@@ -214320,7 +214590,9 @@
         "Horoscope Sorcerer, the Stargazer Magician"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/22703",
-      "updatedAt": "2026-09-08T20:25:52.205Z"
+      "updatedAt": "2026-09-08T20:25:52.205Z",
+      "pendulumEffectText": "此卡名的灵摆效果1回合仅可使用1次。\n①：对手发动的魔法卡的效果处理时，自己场上存在“魔术师”灵摆怪兽或“异色眼”怪兽的情况下，可将该发动的效果无效。然后，将此卡破坏。",
+      "pendulumScale": 1
     },
     {
       "id": "16412",
@@ -218319,7 +218591,9 @@
         "Igknight Cavalier"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11974",
-      "updatedAt": "2026-09-08T20:25:53.262Z"
+      "updatedAt": "2026-09-08T20:25:53.262Z",
+      "pendulumEffectText": "①：另一方自己的灵摆区域存在“点火骑士”卡的情况下可以发动。将自己的灵摆区域的２张卡破坏，从自己的牌组・墓地将１只战士族・炎属性怪兽加入手牌。",
+      "pendulumScale": 2
     },
     {
       "id": "11817",
@@ -218405,7 +218679,9 @@
         "Igknight Crusader"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11811",
-      "updatedAt": "2026-09-08T20:25:53.285Z"
+      "updatedAt": "2026-09-08T20:25:53.285Z",
+      "pendulumEffectText": "①：另一方自己的灵摆区域存在“点火骑士”卡的情况下可以发动。将自己的灵摆区域的２张卡破坏，从自己的牌组・墓地将１只战士族・炎属性怪兽加入手牌。",
+      "pendulumScale": 2
     },
     {
       "id": "11815",
@@ -218450,7 +218726,9 @@
         "Igknight Gallant"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11815",
-      "updatedAt": "2026-09-08T20:25:53.324Z"
+      "updatedAt": "2026-09-08T20:25:53.324Z",
+      "pendulumEffectText": "①：另一方自己的灵摆区域存在“点火骑士”卡的情况下可以发动。将自己的灵摆区域的２张卡破坏，从自己的牌组・墓地将１只战士族・炎属性怪兽加入手牌。",
+      "pendulumScale": 2
     },
     {
       "id": "11816",
@@ -218536,7 +218814,9 @@
         "Igknight Margrave"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11814",
-      "updatedAt": "2026-09-08T20:25:53.328Z"
+      "updatedAt": "2026-09-08T20:25:53.328Z",
+      "pendulumEffectText": "①：另一方自己的灵摆区域存在“点火骑士”卡的情况下可以发动。将自己的灵摆区域的２张卡破坏，从自己的牌组・墓地将１只战士族・炎属性怪兽加入手牌。",
+      "pendulumScale": 7
     },
     {
       "id": "11813",
@@ -218581,7 +218861,9 @@
         "Igknight Paladin"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11813",
-      "updatedAt": "2026-09-08T20:25:53.337Z"
+      "updatedAt": "2026-09-08T20:25:53.337Z",
+      "pendulumEffectText": "①：另一方自己的灵摆区域存在“点火骑士”卡的情况下可以发动。将自己的灵摆区域的２张卡破坏，从自己的牌组・墓地将１只战士族・炎属性怪兽加入手牌。",
+      "pendulumScale": 2
     },
     {
       "id": "12005",
@@ -218648,7 +218930,9 @@
         "Igknight Squire"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11810",
-      "updatedAt": "2026-09-08T20:25:53.340Z"
+      "updatedAt": "2026-09-08T20:25:53.340Z",
+      "pendulumEffectText": "①：另一方自己的灵摆区域存在“点火骑士”卡的情况下可以发动。将自己的灵摆区域的２张卡破坏，从自己的牌组・墓地将１只战士族・炎属性怪兽加入手牌。",
+      "pendulumScale": 7
     },
     {
       "id": "11812",
@@ -218693,7 +218977,9 @@
         "Igknight Templar"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11812",
-      "updatedAt": "2026-09-08T20:25:53.348Z"
+      "updatedAt": "2026-09-08T20:25:53.348Z",
+      "pendulumEffectText": "①：另一方自己的灵摆区域存在“点火骑士”卡的情况下可以发动。将自己的灵摆区域的２张卡破坏，从自己的牌组・墓地将１只战士族・炎属性怪兽加入手牌。",
+      "pendulumScale": 7
     },
     {
       "id": "12651",
@@ -218760,7 +219046,9 @@
         "Igknight Veteran"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11975",
-      "updatedAt": "2026-09-08T20:25:53.398Z"
+      "updatedAt": "2026-09-08T20:25:53.398Z",
+      "pendulumEffectText": "①：另一方自己的灵摆区域存在“点火骑士”卡的情况下可以发动。将自己的灵摆区域的２张卡破坏，从自己的牌组・墓地将１只战士族・炎属性怪兽加入手牌。",
+      "pendulumScale": 7
     },
     {
       "id": "20476",
@@ -218887,7 +219175,9 @@
         "Ignis Phoenix, the Dracoslayer"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/17778",
-      "updatedAt": "2026-09-08T20:25:53.412Z"
+      "updatedAt": "2026-09-08T20:25:53.412Z",
+      "pendulumEffectText": "此卡名的灵摆效果１回合仅可使用１次。\n①：在自己的主要阶段可以发动。从自己的额外牌组（表侧）将１只灵摆怪兽放回牌组。然后，从牌组将灵摆怪兽以外的、１只“龙剑士”怪兽或“点火骑士”怪兽加入手牌。",
+      "pendulumScale": 7
     },
     {
       "id": "14859",
@@ -231299,7 +231589,9 @@
         "Juno, the Celestial Goddess"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12732",
-      "updatedAt": "2026-09-08T20:25:56.888Z"
+      "updatedAt": "2026-09-08T20:25:56.888Z",
+      "pendulumEffectText": "①：１ターンに１度、自分フィールドの表側表示の天使族Pモンスター３体を除外し、自分フィールドのPモンスター１体を対象として発動できる。このターンそのモンスターが直接攻撃で相手のLPを０にした場合、自分はマッチに勝利する。",
+      "pendulumScale": 1
     },
     {
       "id": "22522",
@@ -231344,7 +231636,9 @@
         "Junoldo the Shadespirit Power Patron"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/22522",
-      "updatedAt": "2026-09-08T20:25:56.898Z"
+      "updatedAt": "2026-09-08T20:25:56.898Z",
+      "pendulumEffectText": "此卡名的灵摆效果1回合仅可使用1次。\n①：此卡存在于灵摆区域的状态下，有“狱神”怪兽或“耀圣”怪兽被特殊召唤至自己场上的情况下可以发动。将此卡破坏，自己抽2张。然后，挑选自己的1张手牌舍弃。",
+      "pendulumScale": 1
     },
     {
       "id": "22142",
@@ -231479,7 +231773,9 @@
         "Jupredo the Shademachine Power Patron"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/22521",
-      "updatedAt": "2026-09-08T20:25:56.903Z"
+      "updatedAt": "2026-09-08T20:25:56.903Z",
+      "pendulumEffectText": "此卡名的灵摆效果1回合仅可使用1次。\n①：在自己的主要阶段可以发动。将此卡与自己手牌・场上（表侧表示）的1只“狱神”怪兽或“终刻”怪兽破坏。然后，可将场上的1张卡破坏。",
+      "pendulumScale": 1
     },
     {
       "id": "21180",
@@ -233709,7 +234005,9 @@
         "Kai-Den Kendo Spirit"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/13702",
-      "updatedAt": "2026-09-08T20:25:57.485Z"
+      "updatedAt": "2026-09-08T20:25:57.485Z",
+      "pendulumEffectText": "①：フィールドにモンスターがP召喚された場合に発動する。Pゾーンのこのカードを持ち主の手札に戻す。",
+      "pendulumScale": 9
     },
     {
       "id": "6298",
@@ -243044,7 +243342,9 @@
         "Kuro-Obi Karate Spirit"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/13533",
-      "updatedAt": "2026-09-08T20:25:59.813Z"
+      "updatedAt": "2026-09-08T20:25:59.813Z",
+      "pendulumEffectText": "①：フィールドにモンスターがP召喚された場合に発動する。Pゾーンのこのカードを持ち主の手札に戻す。",
+      "pendulumScale": 9
     },
     {
       "id": "4486",
@@ -243167,7 +243467,9 @@
         "Kuzunoha, the Onmyojin"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12045",
-      "updatedAt": "2026-09-08T20:25:59.878Z"
+      "updatedAt": "2026-09-08T20:25:59.878Z",
+      "pendulumEffectText": "①：１ターンに１度、自分のモンスターゾーンの魔法使い族Pモンスター３体を除外し、自分のモンスターゾーンのPモンスター１体を対象として発動できる。このターンそのモンスターが直接攻撃で相手のLPを０にした場合、自分はマッチに勝利する。",
+      "pendulumScale": 1
     },
     {
       "id": "4539",
@@ -243517,7 +243819,9 @@
         "LaSolfachord Angelia"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/16089",
-      "updatedAt": "2026-09-08T20:25:59.951Z"
+      "updatedAt": "2026-09-08T20:25:59.951Z",
+      "pendulumEffectText": "①：自己的“音服和弦”灵摆怪兽灵摆召唤成功时，对手不可发动怪兽的效果・魔法・陷阱卡。",
+      "pendulumScale": 3
     },
     {
       "id": "10732",
@@ -244730,7 +245034,9 @@
         "Lancephorhynchus"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11503",
-      "updatedAt": "2026-09-08T20:26:00.250Z"
+      "updatedAt": "2026-09-08T20:26:00.250Z",
+      "pendulumEffectText": "①：自己的通常怪兽攻击了守备表示怪兽的情况下，依攻击力超出该怪兽守备力的数值来给予对手战斗伤害。",
+      "pendulumScale": 7
     },
     {
       "id": "9086",
@@ -247003,7 +247309,9 @@
         "Lector Pendulum, the Dracoverlord"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12295",
-      "updatedAt": "2026-09-08T20:26:00.866Z"
+      "updatedAt": "2026-09-08T20:26:00.866Z",
+      "pendulumEffectText": "①：只要此卡存在于灵摆区域，对手场上表侧表示的灵摆怪兽的效果无效化。",
+      "pendulumScale": 5
     },
     {
       "id": "13783",
@@ -248870,7 +249178,9 @@
         "Leonardo's Silver Skyship"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11456",
-      "updatedAt": "2026-09-08T20:26:01.370Z"
+      "updatedAt": "2026-09-08T20:26:01.370Z",
+      "pendulumEffectText": "①：１ターンに１度、自分フィールドの表側表示の機械族Pモンスター３体を除外し、自分フィールドのPモンスター１体を対象として発動できる。このターンそのモンスターが直接攻撃で相手のLPを０にした場合、自分はマッチに勝利する。",
+      "pendulumScale": 10
     },
     {
       "id": "10401",
@@ -256607,7 +256917,9 @@
         "Lunalight Tiger"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12285",
-      "updatedAt": "2026-09-08T20:26:03.632Z"
+      "updatedAt": "2026-09-08T20:26:03.632Z",
+      "pendulumEffectText": "①：1回合1次，以自己墓地的1只“月光”怪兽为对象可以发动。将该怪兽特殊召唤。以此效果特殊召唤的怪兽不可攻击，效果无效化，将在结束阶段被破坏。",
+      "pendulumScale": 5
     },
     {
       "id": "12282",
@@ -256692,7 +257004,9 @@
         "Lunalight Wolf"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12284",
-      "updatedAt": "2026-09-08T20:26:03.635Z"
+      "updatedAt": "2026-09-08T20:26:03.635Z",
+      "pendulumEffectText": "①：自己仅可灵摆召唤“月光”怪兽。此效果不会被无效化。\n②：1回合1次，在自己的主要阶段可以发动。将自己场上・墓地的怪兽作为融合素材除外，将1只“月光”融合怪兽融合召唤。",
+      "pendulumScale": 1
     },
     {
       "id": "14187",
@@ -256947,7 +257261,9 @@
         "Luster Pendulum, the Dracoslayer"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11809",
-      "updatedAt": "2026-09-08T20:26:03.709Z"
+      "updatedAt": "2026-09-08T20:26:03.709Z",
+      "pendulumEffectText": "①：１回合１次，另一方自己的灵摆区域存在卡的情况下可以发动。将该卡破坏，从牌组将该卡的１张同名卡加入手牌。",
+      "pendulumScale": 5
     },
     {
       "id": "6991",
@@ -260833,7 +261149,9 @@
         "Magical Abductor"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11825",
-      "updatedAt": "2026-09-08T20:26:04.787Z"
+      "updatedAt": "2026-09-08T20:26:04.787Z",
+      "pendulumEffectText": "①：只要此卡存在于灵摆区域，每当自己或对手发动魔法卡，就在此卡上放1个魔力计数物。\n②：1回合1次，去除此卡的3个魔力计数物可以发动。从牌组将1只灵摆怪兽加入手牌。",
+      "pendulumScale": 3
     },
     {
       "id": "7737",
@@ -260992,7 +261310,8 @@
         "Magical Cavalry of Cxulub"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12383",
-      "updatedAt": "2026-09-08T20:26:04.836Z"
+      "updatedAt": "2026-09-08T20:26:04.836Z",
+      "pendulumScale": 3
     },
     {
       "id": "8135",
@@ -262303,7 +262622,9 @@
         "Magicalibra"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/14485",
-      "updatedAt": "2026-09-08T20:26:05.239Z"
+      "updatedAt": "2026-09-08T20:26:05.239Z",
+      "pendulumEffectText": "此卡名的灵摆效果1回合仅可使用1次。①：宣言1～6为止的任意等级，以自己场上的2只表侧表示怪兽为对象可以发动。直至回合结束时为止，其中1只对象怪兽的等级下降所宣言等级数值，另1只怪兽的等级上升所宣言等级的数值。",
+      "pendulumScale": 5
     },
     {
       "id": "10800",
@@ -263643,7 +263964,9 @@
         "Magister of Endymion"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/14441",
-      "updatedAt": "2026-09-08T20:26:05.617Z"
+      "updatedAt": "2026-09-08T20:26:05.617Z",
+      "pendulumEffectText": "①：每当自己或对手发动魔法卡，就在此卡上放1个魔力计数物。\n②：去除此卡的3个魔力计数物可以发动。将自己额外牌组（表侧）的1只能放魔力计数物的怪兽和此卡特殊召唤，在该2只上各放1个魔力计数物。",
+      "pendulumScale": 8
     },
     {
       "id": "14914",
@@ -265447,7 +265770,8 @@
         "Majespecter Cat - Nekomata"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11969",
-      "updatedAt": "2026-09-08T20:26:06.112Z"
+      "updatedAt": "2026-09-08T20:26:06.112Z",
+      "pendulumScale": 2
     },
     {
       "id": "11971",
@@ -265492,7 +265816,8 @@
         "Majespecter Crow - Yata"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11971",
-      "updatedAt": "2026-09-08T20:26:06.133Z"
+      "updatedAt": "2026-09-08T20:26:06.133Z",
+      "pendulumScale": 5
     },
     {
       "id": "12004",
@@ -265563,7 +265888,9 @@
         "Majespecter Draco - Ryu"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/19504",
-      "updatedAt": "2026-09-08T20:26:06.157Z"
+      "updatedAt": "2026-09-08T20:26:06.157Z",
+      "pendulumEffectText": "此卡名的灵摆效果１回合仅可使用１次。\n①：另一方自己的灵摆区域存在“威风魔灵”卡或“龙剑士”卡的情况下可以发动。从牌组将１张“威风魔灵”卡加入手牌。然后，可将自己的灵摆区域的１张卡破坏。",
+      "pendulumScale": 5
     },
     {
       "id": "11972",
@@ -265608,7 +265935,8 @@
         "Majespecter Fox - Kyubi"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11972",
-      "updatedAt": "2026-09-08T20:26:06.186Z"
+      "updatedAt": "2026-09-08T20:26:06.186Z",
+      "pendulumScale": 2
     },
     {
       "id": "12810",
@@ -265716,7 +266044,8 @@
         "Majespecter Porcupine - Yamarashi"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/19478",
-      "updatedAt": "2026-09-08T20:26:06.187Z"
+      "updatedAt": "2026-09-08T20:26:06.187Z",
+      "pendulumScale": 2
     },
     {
       "id": "11970",
@@ -265761,7 +266090,8 @@
         "Majespecter Raccoon - Bunbuku"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11970",
-      "updatedAt": "2026-09-08T20:26:06.188Z"
+      "updatedAt": "2026-09-08T20:26:06.188Z",
+      "pendulumScale": 5
     },
     {
       "id": "12172",
@@ -265890,7 +266220,8 @@
         "Majespecter Toad - Ogama"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12138",
-      "updatedAt": "2026-09-08T20:26:06.258Z"
+      "updatedAt": "2026-09-08T20:26:06.258Z",
+      "pendulumScale": 5
     },
     {
       "id": "12016",
@@ -265953,7 +266284,8 @@
         "Majespecter Unicorn - Kirin"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11973",
-      "updatedAt": "2026-09-08T20:26:06.263Z"
+      "updatedAt": "2026-09-08T20:26:06.263Z",
+      "pendulumScale": 2
     },
     {
       "id": "19524",
@@ -266459,7 +266791,9 @@
         "Majesty Pegasus, the Dracoslayer"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/17779",
-      "updatedAt": "2026-09-08T20:26:06.408Z"
+      "updatedAt": "2026-09-08T20:26:06.408Z",
+      "pendulumEffectText": "此卡名的灵摆效果１回合仅可使用１次。\n①：另一方自己的灵摆区域存在“龙剑士”卡或“威风魔灵”卡的情况下可以发动。从牌组将原本卡名与该卡不同的１只“龙剑士”灵摆怪兽加入手牌。然后，可将自己的灵摆区域的１张卡破坏。",
+      "pendulumScale": 2
     },
     {
       "id": "20606",
@@ -268260,7 +268594,9 @@
         "Mamonaka the Vaylantz United"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/17355",
-      "updatedAt": "2026-09-08T20:26:06.934Z"
+      "updatedAt": "2026-09-08T20:26:06.934Z",
+      "pendulumEffectText": "此卡名的灵摆效果１回合仅可使用１次。①：可从以下效果中选择１个发动。\n●将此卡特殊召唤至正面的自己主要怪兽区域。\n●挑选１只自己主要怪兽区域的怪兽，将其位置移动至其相邻的怪兽区域。",
+      "pendulumScale": 10
     },
     {
       "id": "6894",
@@ -268875,7 +269211,8 @@
         "Mandragon"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11659",
-      "updatedAt": "2026-09-08T20:26:07.082Z"
+      "updatedAt": "2026-09-08T20:26:07.082Z",
+      "pendulumScale": 2
     },
     {
       "id": "4733",
@@ -272659,7 +272996,9 @@
         "Master Pendulum, the Dracoslayer"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12131",
-      "updatedAt": "2026-09-08T20:26:08.056Z"
+      "updatedAt": "2026-09-08T20:26:08.056Z",
+      "pendulumEffectText": "①：只要此卡存在于灵摆区域，仅限１次，以自己或对手的灵摆区域的１张卡为对象可以发动。将该卡破坏。",
+      "pendulumScale": 3
     },
     {
       "id": "22714",
@@ -272708,7 +273047,9 @@
         "Master Spirit Tech Force - Pendulum Ruler"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/22714",
-      "updatedAt": "2026-09-08T20:26:08.057Z"
+      "updatedAt": "2026-09-08T20:26:08.057Z",
+      "pendulumEffectText": "此卡名的灵摆效果1回合仅可使用1次。\n①：在自己的主要阶段可以发动。将此卡放回额外牌组。然后，可从自己牌组・额外牌组（表侧）将1只等级7的灵摆怪兽加入手牌。",
+      "pendulumScale": 1
     },
     {
       "id": "19167",
@@ -274289,7 +274630,9 @@
         "Mayosenju Daibak"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11471",
-      "updatedAt": "2026-09-08T20:26:08.501Z"
+      "updatedAt": "2026-09-08T20:26:08.501Z",
+      "pendulumEffectText": "①：自分フィールドの「妖仙獣」モンスターの攻撃宣言時に発動できる。その攻撃モンスターの攻撃力はバトルフェイズ終了時まで３００アップする。",
+      "pendulumScale": 7
     },
     {
       "id": "14469",
@@ -274332,7 +274675,9 @@
         "Mayosenju Hitot"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/14469",
-      "updatedAt": "2026-09-08T20:26:08.505Z"
+      "updatedAt": "2026-09-08T20:26:08.505Z",
+      "pendulumEffectText": "このカード名の①②のP効果はそれぞれ１ターンに１度しか使用できない。①：自分のPゾーンの「妖仙獣」カード１枚を対象として発動できる。そのPスケールはターン終了時まで１１になる。このターン、自分は「妖仙獣」モンスターしか特殊召喚できない。②：自分エンドフェイズに発動する。このカードを持ち主の手札に戻す。",
+      "pendulumScale": 3
     },
     {
       "id": "5996",
@@ -281444,7 +281789,9 @@
         "Metalfoes Goldriver"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12422",
-      "updatedAt": "2026-09-08T20:26:10.373Z"
+      "updatedAt": "2026-09-08T20:26:10.373Z",
+      "pendulumEffectText": "①：１ターンに１度、このカード以外の自分フィールドの表側表示のカード１枚を対象として発動できる。そのカードを破壊し、デッキから「メタルフォーゼ」魔法・罠カード１枚を選んで自分フィールドにセットする。",
+      "pendulumScale": 1
     },
     {
       "id": "12630",
@@ -281573,7 +281920,9 @@
         "Metalfoes Silverd"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12421",
-      "updatedAt": "2026-09-08T20:26:10.378Z"
+      "updatedAt": "2026-09-08T20:26:10.378Z",
+      "pendulumEffectText": "①：１ターンに１度、このカード以外の自分フィールドの表側表示のカード１枚を対象として発動できる。そのカードを破壊し、デッキから「メタルフォーゼ」魔法・罠カード１枚を選んで自分フィールドにセットする。",
+      "pendulumScale": 1
     },
     {
       "id": "12420",
@@ -281616,7 +281965,9 @@
         "Metalfoes Steelen"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12420",
-      "updatedAt": "2026-09-08T20:26:10.383Z"
+      "updatedAt": "2026-09-08T20:26:10.383Z",
+      "pendulumEffectText": "①：１ターンに１度、このカード以外の自分フィールドの表側表示のカード１枚を対象として発動できる。そのカードを破壊し、デッキから「メタルフォーゼ」魔法・罠カード１枚を選んで自分フィールドにセットする。",
+      "pendulumScale": 8
     },
     {
       "id": "15712",
@@ -281659,7 +282010,9 @@
         "Metalfoes Vanisher"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/15712",
-      "updatedAt": "2026-09-08T20:26:10.425Z"
+      "updatedAt": "2026-09-08T20:26:10.425Z",
+      "pendulumEffectText": "このカード名のP効果は１ターンに１度しか使用できない。①：自分フィールドのモンスターが効果で破壊された場合に発動できる。自分の墓地から「メタルフォーゼ・バニッシャー」以外の「メタルフォーゼ」カード１枚を選んで手札に加える。",
+      "pendulumScale": 1
     },
     {
       "id": "12423",
@@ -281702,7 +282055,9 @@
         "Metalfoes Volflame"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12423",
-      "updatedAt": "2026-09-08T20:26:10.424Z"
+      "updatedAt": "2026-09-08T20:26:10.424Z",
+      "pendulumEffectText": "①：１ターンに１度、このカード以外の自分フィールドの表側表示のカード１枚を対象として発動できる。そのカードを破壊し、デッキから「メタルフォーゼ」魔法・罠カード１枚を選んで自分フィールドにセットする。",
+      "pendulumScale": 8
     },
     {
       "id": "12513",
@@ -282225,7 +282580,9 @@
         "Metaphys Decoy Dragon"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/13734",
-      "updatedAt": "2026-09-08T20:26:10.598Z"
+      "updatedAt": "2026-09-08T20:26:10.598Z",
+      "pendulumEffectText": "このカード名のP効果は１ターンに１度しか使用できない。①：自分のモンスターが攻撃対象に選択された時、自分の墓地のモンスター及び除外されている自分のモンスターの中から、「メタファイズ」モンスター１体を対象として発動できる。このカードを除外し、対象のモンスターを攻撃表示で特殊召喚する。",
+      "pendulumScale": 1
     },
     {
       "id": "13291",
@@ -282845,7 +283202,9 @@
         "Metrognome"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12769",
-      "updatedAt": "2026-09-08T20:26:10.749Z"
+      "updatedAt": "2026-09-08T20:26:10.749Z",
+      "pendulumEffectText": "①：１ターンに１度、このカード以外の自分または相手のPゾーンのカード１枚を対象として発動できる。このカードのPスケールはターン終了時まで、そのカードのPスケールと同じになる。",
+      "pendulumScale": 4
     },
     {
       "id": "7359",
@@ -282931,7 +283290,9 @@
         "MiSolfachord Eliteia"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/16086",
-      "updatedAt": "2026-09-08T20:26:10.799Z"
+      "updatedAt": "2026-09-08T20:26:10.799Z",
+      "pendulumEffectText": "①：自己的“音服和弦”灵摆怪兽的灵摆召唤不会被无效化。",
+      "pendulumScale": 6
     },
     {
       "id": "21431",
@@ -283714,7 +284075,9 @@
         "Mild Turkey"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12393",
-      "updatedAt": "2026-09-08T20:26:11.026Z"
+      "updatedAt": "2026-09-08T20:26:11.026Z",
+      "pendulumEffectText": "①：１回合１次，在自己的主要阶段可以发动。掷１次骰子。直至回合结束时为止，此卡的灵摆刻度下降所掷出的数字（最低下降至１）。",
+      "pendulumScale": 7
     },
     {
       "id": "9655",
@@ -286190,7 +286553,9 @@
         "Miracle Raven"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/21627",
-      "updatedAt": "2026-09-08T20:26:11.721Z"
+      "updatedAt": "2026-09-08T20:26:11.721Z",
+      "pendulumEffectText": "①：１ターンに１度、自分メインフェイズに発動できる。レベルの合計が１以上になるように、自分の手札・フィールドのモンスターをリリースし、このカードを儀式召喚する。",
+      "pendulumScale": 0
     },
     {
       "id": "5681",
@@ -288717,7 +289082,9 @@
         "Moissa Knight, the Comet General"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/18665",
-      "updatedAt": "2026-09-08T20:26:12.529Z"
+      "updatedAt": "2026-09-08T20:26:12.529Z",
+      "pendulumEffectText": "①：自己将怪兽灵摆召唤的情况下发动。将此卡放回牌组最上面或最下面。",
+      "pendulumScale": 11
     },
     {
       "id": "21166",
@@ -295028,7 +295395,9 @@
         "Mythical Beast Bashilisk"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/13395",
-      "updatedAt": "2026-09-08T20:26:14.324Z"
+      "updatedAt": "2026-09-08T20:26:14.324Z",
+      "pendulumEffectText": "此卡名的灵摆效果1回合仅可使用1次。\n①：自己另一方的灵摆区域不存在卡的情况下可以发动。将此卡破坏，从自己额外牌组（表侧）将“魔导兽 巴西利斯克”以外的1只魔法师族灵摆怪兽放回牌组。然后，自己抽1张。",
+      "pendulumScale": 4
     },
     {
       "id": "6531",
@@ -295114,7 +295483,9 @@
         "Mythical Beast Garuda"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/13393",
-      "updatedAt": "2026-09-08T20:26:14.327Z"
+      "updatedAt": "2026-09-08T20:26:14.327Z",
+      "pendulumEffectText": "此卡名的灵摆效果1回合仅可使用1次。\n①：自己另一方的灵摆区域不存在卡的情况下，以场上1张其他魔法・陷阱卡为对象可以发动。将该卡和此卡破坏。",
+      "pendulumScale": 4
     },
     {
       "id": "13392",
@@ -295159,7 +295530,9 @@
         "Mythical Beast Jackal"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/13392",
-      "updatedAt": "2026-09-08T20:26:14.325Z"
+      "updatedAt": "2026-09-08T20:26:14.325Z",
+      "pendulumEffectText": "此卡名的灵摆效果1回合仅可使用1次。\n①：自己另一方的灵摆区域不存在卡的情况下，以自己场上的1张能放魔力计数物的卡为对象可以发动。将此卡破坏，在对象卡上放1个魔力计数物。",
+      "pendulumScale": 4
     },
     {
       "id": "13396",
@@ -295204,7 +295577,9 @@
         "Mythical Beast Jackal King"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/13396",
-      "updatedAt": "2026-09-08T20:26:14.333Z"
+      "updatedAt": "2026-09-08T20:26:14.333Z",
+      "pendulumEffectText": "此卡名的灵摆效果1回合仅可使用1次。\n①：自己另一方的灵摆区域不存在卡的情况下可以发动。将此卡破坏，从自己额外牌组（表侧）将“魔导兽 胡狼王”以外的1只“魔导兽”灵摆怪兽特殊召唤。",
+      "pendulumScale": 4
     },
     {
       "id": "13397",
@@ -295249,7 +295624,9 @@
         "Mythical Beast Master Cerberus"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/13397",
-      "updatedAt": "2026-09-08T20:26:14.350Z"
+      "updatedAt": "2026-09-08T20:26:14.350Z",
+      "pendulumEffectText": "此卡名的灵摆效果1回合仅可使用1次。\n①：自己另一方的灵摆区域不存在卡的情况下可以发动。将此卡破坏，从牌组将1只等级7以下的“魔导兽”效果怪兽加入手牌。",
+      "pendulumScale": 4
     },
     {
       "id": "13394",
@@ -295294,7 +295671,9 @@
         "Mythical Beast Medusa"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/13394",
-      "updatedAt": "2026-09-08T20:26:14.351Z"
+      "updatedAt": "2026-09-08T20:26:14.351Z",
+      "pendulumEffectText": "此卡名的灵摆效果1回合仅可使用1次。\n①：自己另一方的灵摆区域不存在卡的情况下，以自己墓地的1只能放魔力计数物的怪兽为对象可以发动。将此卡破坏，将该怪兽特殊召唤，在该怪兽上放1个魔力计数物。",
+      "pendulumScale": 4
     },
     {
       "id": "13444",
@@ -297996,7 +298375,9 @@
         "Nazuki the Vaylantz Ninja"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/17349",
-      "updatedAt": "2026-09-08T20:26:15.072Z"
+      "updatedAt": "2026-09-08T20:26:15.072Z",
+      "pendulumEffectText": "此卡名的灵摆效果１回合仅可使用１次。①：场地区域有“弈勇世界－真罗万象”存在的情况下，或自己场上有水属性的“弈勇”怪兽存在的情况下可以发动。将此卡特殊召唤至正面的自己的主要怪兽区域。",
+      "pendulumScale": 1
     },
     {
       "id": "14642",
@@ -299650,7 +300031,9 @@
         "Nekroz of Metaltron"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/20937",
-      "updatedAt": "2026-09-08T20:26:15.520Z"
+      "updatedAt": "2026-09-08T20:26:15.520Z",
+      "pendulumEffectText": "此卡名的灵摆效果1回合仅可使用1次。\n①：自己的“影灵衣”卡以表侧被除外的情况下，以场上的1张魔法・陷阱卡为对象可以发动。将该卡除外。",
+      "pendulumScale": 5
     },
     {
       "id": "11713",
@@ -301675,7 +302058,9 @@
         "Nervedo the Shadebeast Power Patron"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/22520",
-      "updatedAt": "2026-09-08T20:26:16.004Z"
+      "updatedAt": "2026-09-08T20:26:16.004Z",
+      "pendulumEffectText": "此卡名的灵摆效果1回合仅可使用1次。\n①：连锁“狱神”怪兽或“神艺”怪兽的效果的发动，对手发动怪兽的效果的处理时，可将该效果无效。然后，将此卡破坏。",
+      "pendulumScale": 1
     },
     {
       "id": "17793",
@@ -303884,7 +304269,9 @@
         "Nirvana High Paladin"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12445",
-      "updatedAt": "2026-09-08T20:26:16.665Z"
+      "updatedAt": "2026-09-08T20:26:16.665Z",
+      "pendulumEffectText": "①：自己的灵摆怪兽攻击的情况下，该怪兽不会因该战斗被破坏，因该战斗对自己造成的战斗伤害变为０。②：自己的灵摆怪兽攻击的伤害步骤结束时发动。对手场上所有怪兽的攻击力直至回合结束时为止，下降相当于攻击的该怪兽攻击力的数值。",
+      "pendulumScale": 8
     },
     {
       "id": "7700",
@@ -304922,7 +305309,9 @@
         "Nobledragon Magician"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11936",
-      "updatedAt": "2026-09-08T20:26:16.971Z"
+      "updatedAt": "2026-09-08T20:26:16.971Z",
+      "pendulumEffectText": "①：另一方自己的灵摆区域没有“魔术师”卡存在的情况下，此卡将被破坏。",
+      "pendulumScale": 5
     },
     {
       "id": "4963",
@@ -313657,7 +314046,9 @@
         "Oafdragon Magician"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11937",
-      "updatedAt": "2026-09-08T20:26:18.990Z"
+      "updatedAt": "2026-09-08T20:26:18.990Z",
+      "pendulumEffectText": "此卡名的灵摆效果１回合仅可使用１次。①：另一方自己的灵摆区域有“魔术师”卡存在的情况下可以发动。将自己额外牌组“贱龙的魔术师”以外的１只表侧表示“魔术师”灵摆怪兽或“异色眼”灵摆怪兽加入手牌。",
+      "pendulumScale": 2
     },
     {
       "id": "11409",
@@ -314312,7 +314703,9 @@
         "Odd-Eyes Arc Pendulum Dragon"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/13359",
-      "updatedAt": "2026-09-08T20:26:19.172Z"
+      "updatedAt": "2026-09-08T20:26:19.172Z",
+      "pendulumEffectText": "此卡名的灵摆效果１回合仅可使用１次。\n①：自己场上表侧表示的“异色眼”卡因战斗・效果被破坏的情况下可以发动。从自己的手牌・牌组・墓地将１只“异色眼”怪兽特殊召唤。",
+      "pendulumScale": 8
     },
     {
       "id": "19172",
@@ -314361,7 +314754,9 @@
         "Odd-Eyes Arcray Dragon"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/19172",
-      "updatedAt": "2026-09-08T20:26:19.186Z"
+      "updatedAt": "2026-09-08T20:26:19.186Z",
+      "pendulumEffectText": "此卡名的灵摆效果1回合仅可使用1次。\n①：自己的灵摆区域存在2张卡的情况下可以发动。将此卡特殊召唤。然后，可适用以下内容。\n●将自己的灵摆区域的1张卡放回牌组。放回了自己的额外牌组的情况下，可进而将该怪兽无视召唤条件特殊召唤。",
+      "pendulumScale": 13
     },
     {
       "id": "11148",
@@ -314594,7 +314989,9 @@
         "Odd-Eyes Mirage Dragon"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12481",
-      "updatedAt": "2026-09-08T20:26:19.221Z"
+      "updatedAt": "2026-09-08T20:26:19.221Z",
+      "pendulumEffectText": "①：１回合１次，自己场上表侧表示的“异色眼”灵摆怪兽因战斗・效果被破坏的情况下可以发动。将自己的灵摆区域的１张卡破坏，从自己的额外牌组（表侧）将“异色眼幻象龙”以外的１只“异色眼”灵摆怪兽放在自己的灵摆区域。",
+      "pendulumScale": 8
     },
     {
       "id": "23419",
@@ -314680,7 +315077,9 @@
         "Odd-Eyes Pendulum Dragon"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11213",
-      "updatedAt": "2026-09-08T20:26:19.260Z"
+      "updatedAt": "2026-09-08T20:26:19.260Z",
+      "pendulumEffectText": "此卡名的①②的灵摆效果1回合仅可各使用1次。\n①：可将自己的灵摆怪兽战斗对自己造成的战斗伤害改成0。\n②：在自己的结束阶段可以发动。将此卡破坏，从牌组将1只攻击力1500以下的灵摆怪兽加入手牌。",
+      "pendulumScale": 4
     },
     {
       "id": "22702",
@@ -314725,7 +315124,9 @@
         "Odd-Eyes Pendulum Dragon, Four Heavenly Dragons"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/22702",
-      "updatedAt": "2026-09-08T20:26:19.260Z"
+      "updatedAt": "2026-09-08T20:26:19.260Z",
+      "pendulumEffectText": "此卡名的灵摆效果1回合仅可使用1次。\n①：在自己的主要阶段可以发动。将此卡破坏，从牌组将1只攻击力1500以下的灵摆怪兽加入手牌。此回合，自己只要未灵摆召唤成功，则不可发动场上怪兽的效果。",
+      "pendulumScale": 4
     },
     {
       "id": "17145",
@@ -314774,7 +315175,9 @@
         "Odd-Eyes Pendulumgraph Dragon"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/17145",
-      "updatedAt": "2026-09-08T20:26:19.270Z"
+      "updatedAt": "2026-09-08T20:26:19.270Z",
+      "pendulumEffectText": "此卡名的灵摆效果１回合仅可使用１次。①：在自己・对手的结束阶段可以发动。从自己的牌组・墓地挑选１张仪式魔法卡加入手牌。然后，将此卡放回持有者的手牌。",
+      "pendulumScale": 4
     },
     {
       "id": "12480",
@@ -314819,7 +315222,9 @@
         "Odd-Eyes Persona Dragon"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12480",
-      "updatedAt": "2026-09-08T20:26:19.268Z"
+      "updatedAt": "2026-09-08T20:26:19.268Z",
+      "pendulumEffectText": "①：仅以自己场上的１只“异色眼”灵摆怪兽为对象的对手效果发动的情况下，将在该回合的结束阶段发动。将灵摆区域的此卡特殊召唤，从自己的额外牌组（表侧）将“异色眼复面龙”以外的１只“异色眼”灵摆怪兽放在自己的灵摆区域。",
+      "pendulumScale": 1
     },
     {
       "id": "13839",
@@ -314864,7 +315269,9 @@
         "Odd-Eyes Phantasma Dragon"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/13839",
-      "updatedAt": "2026-09-08T20:26:19.289Z"
+      "updatedAt": "2026-09-08T20:26:19.289Z",
+      "pendulumEffectText": "此卡名的灵摆效果１回合仅可使用１次。\n①：舍弃１张手牌可以发动。从自己的额外牌组将１只表侧的龙族灵摆怪兽加入手牌。",
+      "pendulumScale": 0
     },
     {
       "id": "12482",
@@ -314909,7 +315316,9 @@
         "Odd-Eyes Phantom Dragon"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12482",
-      "updatedAt": "2026-09-08T20:26:19.290Z"
+      "updatedAt": "2026-09-08T20:26:19.290Z",
+      "pendulumEffectText": "①：１回合１次，另一方自己的灵摆区域存在“异色眼”卡的情况下，自己的表侧表示怪兽与对手怪兽进行战斗的攻击宣言时可以发动。该自己的怪兽的攻击力直至战斗阶段结束时为止上升１２００。",
+      "pendulumScale": 4
     },
     {
       "id": "12783",
@@ -314958,7 +315367,9 @@
         "Odd-Eyes Raging Dragon"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12783",
-      "updatedAt": "2026-09-08T20:26:19.295Z"
+      "updatedAt": "2026-09-08T20:26:19.295Z",
+      "pendulumEffectText": "①：１回合１次，另一方自己的灵摆区域没有卡存在的情况下可以发动。从牌组挑选１只灵摆怪兽，放在自己的灵摆区域。",
+      "pendulumScale": 1
     },
     {
       "id": "11835",
@@ -315007,7 +315418,9 @@
         "Odd-Eyes Rebellion Dragon"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11835",
-      "updatedAt": "2026-09-08T20:26:19.323Z"
+      "updatedAt": "2026-09-08T20:26:19.323Z",
+      "pendulumEffectText": "①：１回合１次，另一方自己的灵摆区域没有卡存在的情况下可以发动。从牌组挑选１只灵摆怪兽，放在自己的灵摆区域。",
+      "pendulumScale": 4
     },
     {
       "id": "14960",
@@ -315056,7 +315469,9 @@
         "Odd-Eyes Rebellion Dragon Overlord"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/14960",
-      "updatedAt": "2026-09-08T20:26:19.337Z"
+      "updatedAt": "2026-09-08T20:26:19.337Z",
+      "pendulumEffectText": "①：１回合１次，在自己的主要阶段可以发动。将灵摆区域的此卡特殊召唤，将１只“反叛”怪兽或“魅影骑士团”怪兽重叠在此卡上面，视为超量召唤从额外牌组特殊召唤。然后，可将自己的灵摆区域的１张卡作为该怪兽的超量素材。",
+      "pendulumScale": 4
     },
     {
       "id": "18429",
@@ -315105,7 +315520,9 @@
         "Odd-Eyes Rebellion Xyz Dragon"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/18429",
-      "updatedAt": "2026-09-08T20:26:19.337Z"
+      "updatedAt": "2026-09-08T20:26:19.337Z",
+      "pendulumEffectText": "此卡名的灵摆效果１回合仅可使用１次。\n①：在自己的主要阶段可以发动。将此卡特殊召唤。然后，可从自己的墓地将１只暗属性怪兽作为此卡的超量素材。",
+      "pendulumScale": 4
     },
     {
       "id": "13462",
@@ -315150,7 +315567,9 @@
         "Odd-Eyes Revolution Dragon"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/13462",
-      "updatedAt": "2026-09-08T20:26:19.342Z"
+      "updatedAt": "2026-09-08T20:26:19.342Z",
+      "pendulumEffectText": "①：自己仅可灵摆召唤龙族怪兽。此效果不会被无效化。\n②：以自己墓地的１只龙族融合・同步・超量怪兽为对象可以发动。将此卡破坏，将该怪兽特殊召唤。",
+      "pendulumScale": 12
     },
     {
       "id": "11768",
@@ -315289,7 +315708,9 @@
         "Odd-Eyes Venom Dragon"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/13131",
-      "updatedAt": "2026-09-08T20:26:19.365Z"
+      "updatedAt": "2026-09-08T20:26:19.365Z",
+      "pendulumEffectText": "①：1回合1次，以自己场上的1只融合怪兽为对象可以发动。该怪兽的攻击力直至回合结束时为止，上升对手场上的怪兽数量×1000的数值。",
+      "pendulumScale": 1
     },
     {
       "id": "11989",
@@ -315383,7 +315804,9 @@
         "Odd-Eyes Wing Dragon"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/13122",
-      "updatedAt": "2026-09-08T20:26:19.397Z"
+      "updatedAt": "2026-09-08T20:26:19.397Z",
+      "pendulumEffectText": "①：1回合1次，自己的怪兽与对手怪兽进行战斗的伤害计算前可以发动。该自己的怪兽的攻击力直至该伤害步骤结束时为止上升相当于该对手怪兽的攻击力的数值。",
+      "pendulumScale": 10
     },
     {
       "id": "14926",
@@ -320065,7 +320488,9 @@
         "P.M. Captor"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11433",
-      "updatedAt": "2026-09-08T20:26:20.865Z"
+      "updatedAt": "2026-09-08T20:26:20.865Z",
+      "pendulumEffectText": "①：自分がアンデット族モンスターのP召喚に成功した時に発動できる。そのモンスターはこのターン戦闘・効果では破壊されない。",
+      "pendulumScale": 5
     },
     {
       "id": "17448",
@@ -321704,7 +322129,9 @@
         "Pandora's Jewelry Box"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12624",
-      "updatedAt": "2026-09-08T20:26:21.314Z"
+      "updatedAt": "2026-09-08T20:26:21.314Z",
+      "pendulumEffectText": "①：自分のエクストラデッキにカードが存在しない場合、相手のPゾーンのカード１枚を対象として発動できる。そのカードを破壊し、Pゾーンのこのカードを相手のPゾーンに置く。",
+      "pendulumScale": 4
     },
     {
       "id": "10491",
@@ -322163,7 +322590,9 @@
         "Parametalfoes Azortless"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/15730",
-      "updatedAt": "2026-09-08T20:26:21.463Z"
+      "updatedAt": "2026-09-08T20:26:21.463Z",
+      "pendulumEffectText": "このカード名のP効果は１ターンに１度しか使用できない。①：自分フィールドの表側表示の「メタルフォーゼ」カードが効果で破壊された場合、フィールドの表側表示のカード１枚を対象として発動できる。そのカードを破壊する。",
+      "pendulumScale": 8
     },
     {
       "id": "15752",
@@ -322222,7 +322651,9 @@
         "Parametalfoes Melcaster"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/15711",
-      "updatedAt": "2026-09-08T20:26:21.499Z"
+      "updatedAt": "2026-09-08T20:26:21.499Z",
+      "pendulumEffectText": "①：１ターンに１度、このカード以外の自分フィールドの表側表示のカード１枚を対象として発動できる。そのカードを破壊し、デッキから「メタルフォーゼ」魔法・罠カード１枚を選んで自分フィールドにセットする。",
+      "pendulumScale": 1
     },
     {
       "id": "4769",
@@ -322677,7 +323108,9 @@
         "Patissciel Couverture"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/17391",
-      "updatedAt": "2026-09-08T20:26:21.614Z"
+      "updatedAt": "2026-09-08T20:26:21.614Z",
+      "pendulumEffectText": "此卡名的灵摆效果１回合仅可使用１次。①：另一方自己的灵摆区域没有卡存在的情况下可以发动。从自己的额外牌组挑选１只表侧表示灵摆怪兽，放在自己的灵摆区域。",
+      "pendulumScale": 1
     },
     {
       "id": "5020",
@@ -322837,7 +323270,9 @@
         "Pazuzule"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/16624",
-      "updatedAt": "2026-09-08T20:26:21.654Z"
+      "updatedAt": "2026-09-08T20:26:21.654Z",
+      "pendulumEffectText": "①：１ターンに１度、もう片方の自分のPゾーンのカード１枚を対象として発動できる。このカードのPスケールはターン終了時まで、対象のPモンスターカードのレベルの数値と同じになる。この効果の発動後、ターン終了時まで自分はP召喚以外の特殊召喚ができない。",
+      "pendulumScale": 1
     },
     {
       "id": "14704",
@@ -323103,7 +323538,9 @@
         "PenduLuMoon"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/18493",
-      "updatedAt": "2026-09-08T20:26:21.743Z"
+      "updatedAt": "2026-09-08T20:26:21.743Z",
+      "pendulumEffectText": "此卡名的灵摆效果１回合仅可使用１次。①：在自己的主要阶段可以发动。从自己的额外牌组将１只表侧表示的“灵摆”灵摆怪兽加入手牌。然后将此卡破坏。",
+      "pendulumScale": 0
     },
     {
       "id": "12020",
@@ -323555,7 +323992,9 @@
         "Pendulum Witch"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/19716",
-      "updatedAt": "2026-09-08T20:26:21.966Z"
+      "updatedAt": "2026-09-08T20:26:21.966Z",
+      "pendulumEffectText": "此卡名的灵摆效果1回合仅可使用1次。\n①：此卡存在于灵摆区域的状态下，且自己场上表侧表示的融合・同步・超量怪兽因战斗或对手的效果被破坏的情况下可以发动。从牌组将1只原本种族与其中1只相同的灵摆怪兽以表侧加入额外牌组。",
+      "pendulumScale": 8
     },
     {
       "id": "14983",
@@ -323662,7 +324101,9 @@
         "Pendulumucho"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12947",
-      "updatedAt": "2026-09-08T20:26:21.991Z"
+      "updatedAt": "2026-09-08T20:26:21.991Z",
+      "pendulumEffectText": "①：在发动了此卡的回合的自己的主要阶段仅１次，以“灵摆姆啾”以外的、自己墓地・除外状态的１只灵摆怪兽为对象可以发动。将该怪兽以表侧加入自己的额外牌组。",
+      "pendulumScale": 0
     },
     {
       "id": "22317",
@@ -324440,7 +324881,9 @@
         "Performage Ball Balancer"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/20486",
-      "updatedAt": "2026-09-08T20:26:22.190Z"
+      "updatedAt": "2026-09-08T20:26:22.190Z",
+      "pendulumEffectText": "此卡名的灵摆效果１回合仅可使用１次。\n①：在自己的主要阶段可以发动。从自己额外牌组（表侧）将１只“娱乐巫师”灵摆怪兽送至墓地。然后，此卡的灵摆刻度可上升相当于送至墓地的怪兽的灵摆刻度的数值。",
+      "pendulumScale": 3
     },
     {
       "id": "20408",
@@ -324485,7 +324928,9 @@
         "Performage Cup Tricker"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/20408",
-      "updatedAt": "2026-09-08T20:26:22.192Z"
+      "updatedAt": "2026-09-08T20:26:22.192Z",
+      "pendulumEffectText": "此卡名的①②灵摆效果1回合仅可各使用1次。\n①：以自己场上的1只“娱乐巫师”超量怪兽为对象可以发动。将此卡作为该怪兽的超量素材。\n②：有卡加入自己额外牌组的情况下可以发动。从自己额外牌组（表侧）将1只“娱乐巫师”灵摆怪兽加入手牌。",
+      "pendulumScale": 1
     },
     {
       "id": "11799",
@@ -324571,7 +325016,9 @@
         "Performage Fire Dancer"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/20405",
-      "updatedAt": "2026-09-08T20:26:22.215Z"
+      "updatedAt": "2026-09-08T20:26:22.215Z",
+      "pendulumEffectText": "①：1回合1次，以自己场上的1只“娱乐巫师”怪兽为对象可以发动。此回合，该怪兽攻击守备表示怪兽的情况下，依攻击力超出该怪兽守备力的数值来给予对手战斗伤害。",
+      "pendulumScale": 6
     },
     {
       "id": "11800",
@@ -324698,7 +325145,9 @@
         "Performage Mirror Conductor"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11959",
-      "updatedAt": "2026-09-08T20:26:22.266Z"
+      "updatedAt": "2026-09-08T20:26:22.266Z",
+      "pendulumEffectText": "①：１回合１次，以场上的１只被特殊召唤的表侧表示怪兽为对象可以发动。该怪兽的攻击力・守备力直至回合结束时为止，变为其攻击力和守备力中较低一方的数值。",
+      "pendulumScale": 3
     },
     {
       "id": "11960",
@@ -324743,7 +325192,9 @@
         "Performage Plushfire"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11960",
-      "updatedAt": "2026-09-08T20:26:22.264Z"
+      "updatedAt": "2026-09-08T20:26:22.264Z",
+      "pendulumEffectText": "此卡名的灵摆效果1回合仅可使用1次。\n①：自己场上的表侧表示“娱乐巫师”怪兽因战斗・效果被破坏的情况下可以发动。将此卡特殊召唤。然后，自己受到500伤害。",
+      "pendulumScale": 5
     },
     {
       "id": "20410",
@@ -325050,7 +325501,9 @@
         "Performage Water Dancer"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/20406",
-      "updatedAt": "2026-09-08T20:26:22.339Z"
+      "updatedAt": "2026-09-08T20:26:22.339Z",
+      "pendulumEffectText": "此卡名的①②灵摆效果1回合仅可各使用1次。\n①：自己场上存在“娱乐巫师”怪兽的情况下可以发动。将此卡特殊召唤。\n②：自己或对手的怪兽的攻击宣言时，以场上1只攻击表示的怪兽为对象可以发动。将该怪兽改成守备表示。",
+      "pendulumScale": 2
     },
     {
       "id": "20407",
@@ -325095,7 +325548,9 @@
         "Performage Wind Drainer"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/20407",
-      "updatedAt": "2026-09-08T20:26:22.339Z"
+      "updatedAt": "2026-09-08T20:26:22.339Z",
+      "pendulumEffectText": "①：1回合1次，以自己场上的1只“娱乐巫师”灵摆怪兽为对象，可从以下效果中选择1个发动。\n●对象怪兽的等级下降1。\n●此卡的灵摆刻度上升相当于对象怪兽的灵摆刻度的数值。",
+      "pendulumScale": 4
     },
     {
       "id": "12164",
@@ -325232,7 +325687,9 @@
         "Performapal Ballad"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12881",
-      "updatedAt": "2026-09-08T20:26:22.364Z"
+      "updatedAt": "2026-09-08T20:26:22.364Z",
+      "pendulumEffectText": "①：１ターンに１度、自分の「EM」モンスターが相手の表側表示モンスターと戦闘を行うダメージステップ開始時に発動できる。その相手モンスターの攻撃力は６００ダウンする。",
+      "pendulumScale": 2
     },
     {
       "id": "17111",
@@ -325275,7 +325732,9 @@
         "Performapal Barokuriboh"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/17111",
-      "updatedAt": "2026-09-08T20:26:22.380Z"
+      "updatedAt": "2026-09-08T20:26:22.380Z",
+      "pendulumEffectText": "①：１ターンに１度、自分・相手のバトルフェイズ開始時に発動できる。デッキから攻撃力３００／守備力２００のモンスター１体を手札に加える。その後、このカードを破壊する。",
+      "pendulumScale": 1
     },
     {
       "id": "12882",
@@ -325318,7 +325777,9 @@
         "Performapal Barracuda"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12882",
-      "updatedAt": "2026-09-08T20:26:22.404Z"
+      "updatedAt": "2026-09-08T20:26:22.404Z",
+      "pendulumEffectText": "①：１ターンに１度、自分の「EM」モンスターが相手モンスターと戦闘を行うダメージ計算前に発動できる。その相手モンスターの攻撃力は、その元々の攻撃力との差分だけダウンする。",
+      "pendulumScale": 5
     },
     {
       "id": "12403",
@@ -325400,7 +325861,9 @@
         "Performapal Bit Bite Turtle"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12113",
-      "updatedAt": "2026-09-08T20:26:22.414Z"
+      "updatedAt": "2026-09-08T20:26:22.414Z",
+      "pendulumEffectText": "①：１ターンに１度、自分メインフェイズに発動できる。手札の「EM」モンスターまたは「オッドアイズ」モンスター１体を相手に見せる。このターン、そのモンスター及び自分の手札の同名モンスターのレベルを１つ下げる。",
+      "pendulumScale": 3
     },
     {
       "id": "12400",
@@ -325521,7 +325984,9 @@
         "Performapal Bubblebowwow"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12405",
-      "updatedAt": "2026-09-08T20:26:22.440Z"
+      "updatedAt": "2026-09-08T20:26:22.440Z",
+      "pendulumEffectText": "①：Pモンスター以外の、エクストラデッキから特殊召喚された自分フィールドの表側表示モンスターが戦闘・効果で破壊される場合、代わりにこのカードを破壊できる。",
+      "pendulumScale": 5
     },
     {
       "id": "11587",
@@ -325580,7 +326045,9 @@
         "Performapal Camelump"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11789",
-      "updatedAt": "2026-09-08T20:26:22.457Z"
+      "updatedAt": "2026-09-08T20:26:22.457Z",
+      "pendulumEffectText": "①：１ターンに１度、自分フィールドの表側表示モンスター１体を対象として発動できる。相手フィールドの全てのモンスターの守備力はターン終了時まで８００ダウンし、このターン対象のモンスターが守備表示モンスターを攻撃した場合、その守備力を攻撃力が超えた分だけ相手に戦闘ダメージを与える。",
+      "pendulumScale": 2
     },
     {
       "id": "13037",
@@ -325623,7 +326090,9 @@
         "Performapal Card Gardna"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/13037",
-      "updatedAt": "2026-09-08T20:26:22.478Z"
+      "updatedAt": "2026-09-08T20:26:22.478Z",
+      "pendulumEffectText": "①：１ターンに１度、自分フィールドの表側守備表示モンスター１体を対象として発動できる。そのモンスターの守備力は、自分フィールドの全ての表側守備表示モンスターの元々の守備力を合計した数値になる。",
+      "pendulumScale": 8
     },
     {
       "id": "14925",
@@ -325668,7 +326137,9 @@
         "Performapal Celestial Magician"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/14925",
-      "updatedAt": "2026-09-08T20:26:22.489Z"
+      "updatedAt": "2026-09-08T20:26:22.489Z",
+      "pendulumEffectText": "此卡名的灵摆效果１回合仅可使用１次。①：自己场上仅１只从额外牌组被特殊召唤的融合・同步・超量怪兽因战斗或对手的效果被破坏时可以发动。将该被破坏的怪兽特殊召唤。然后将此卡破坏。",
+      "pendulumScale": 8
     },
     {
       "id": "12595",
@@ -325711,7 +326182,9 @@
         "Performapal Changeraffe"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12595",
-      "updatedAt": "2026-09-08T20:26:22.488Z"
+      "updatedAt": "2026-09-08T20:26:22.488Z",
+      "pendulumEffectText": "①：自分のモンスター１体が戦闘で破壊された時に発動できる。このカードを破壊し、その戦闘で破壊されたモンスターを攻撃表示で特殊召喚する。この効果で特殊召喚したモンスターは、このターン戦闘では破壊されない。",
+      "pendulumScale": 5
     },
     {
       "id": "11333",
@@ -325754,7 +326227,9 @@
         "Performapal Cheermole"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11333",
-      "updatedAt": "2026-09-08T20:26:22.488Z"
+      "updatedAt": "2026-09-08T20:26:22.488Z",
+      "pendulumEffectText": "①：自分フィールドのPモンスターの攻撃力は３００アップする。",
+      "pendulumScale": 5
     },
     {
       "id": "17112",
@@ -325797,7 +326272,9 @@
         "Performapal Classikuriboh"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/17112",
-      "updatedAt": "2026-09-08T20:26:22.491Z"
+      "updatedAt": "2026-09-08T20:26:22.491Z",
+      "pendulumEffectText": "①：相手モンスターの直接攻撃宣言時にこのカードは破壊される。",
+      "pendulumScale": 8
     },
     {
       "id": "13700",
@@ -325879,7 +326356,9 @@
         "Performapal Coin Dragon"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12919",
-      "updatedAt": "2026-09-08T20:26:22.514Z"
+      "updatedAt": "2026-09-08T20:26:22.514Z",
+      "pendulumEffectText": "①：１ターンに１度、エクストラデッキから特殊召喚された自分フィールドのドラゴン族モンスター１体を対象として発動できる。このターン、その自分のモンスターが相手モンスターと戦闘を行った場合、その相手モンスターはダメージ計算後に除外される。",
+      "pendulumScale": 5
     },
     {
       "id": "12531",
@@ -325961,7 +326440,9 @@
         "Performapal Dag Daggerman"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12738",
-      "updatedAt": "2026-09-08T20:26:22.555Z"
+      "updatedAt": "2026-09-08T20:26:22.555Z",
+      "pendulumEffectText": "「EMダグ・ダガーマン」のP効果は１ターンに１度しか使用できない。①：このカードを発動したターンの自分メインフェイズに自分の墓地の「EM」モンスター１体を対象として発動できる。そのモンスターを手札に加える。",
+      "pendulumScale": 2
     },
     {
       "id": "12378",
@@ -326024,7 +326505,9 @@
         "Performapal Drummerilla"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11790",
-      "updatedAt": "2026-09-08T20:26:22.561Z"
+      "updatedAt": "2026-09-08T20:26:22.561Z",
+      "pendulumEffectText": "①：１ターンに１度、自分のモンスターが相手モンスターと戦闘を行う攻撃宣言時に、その自分のモンスター１体を対象として発動できる。そのモンスターの攻撃力はバトルフェイズ終了時まで６００アップする。",
+      "pendulumScale": 2
     },
     {
       "id": "17258",
@@ -326069,7 +326552,9 @@
         "Performapal Duelist Extraordinaire"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/17258",
-      "updatedAt": "2026-09-08T20:26:22.563Z"
+      "updatedAt": "2026-09-08T20:26:22.563Z",
+      "pendulumEffectText": "①：１回合１次，怪兽之间进行战斗的伤害步骤开始时可以发动。将此卡放回手牌，从牌组将１张魔法卡除外。自己的怪兽不会因该战斗被破坏，因该战斗对自己造成的战斗伤害变为一半。",
+      "pendulumScale": 8
     },
     {
       "id": "11677",
@@ -326151,7 +326636,9 @@
         "Performapal Extra Slinger"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12402",
-      "updatedAt": "2026-09-08T20:26:22.586Z"
+      "updatedAt": "2026-09-08T20:26:22.586Z",
+      "pendulumEffectText": "「EMエクストラ・シューター」のP効果は１ターンに１度しか使用できず、この効果を発動するターン、自分はP召喚できない。①：自分メインフェイズに発動できる。自分のエクストラデッキの表側表示のPモンスターの数×３００ダメージを相手に与える。",
+      "pendulumScale": 6
     },
     {
       "id": "11521",
@@ -326194,7 +326681,9 @@
         "Performapal Fire Mufflerlion"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11521",
-      "updatedAt": "2026-09-08T20:26:22.588Z"
+      "updatedAt": "2026-09-08T20:26:22.588Z",
+      "pendulumEffectText": "①：自分フィールドのPモンスターが戦闘で破壊された時に発動できる。Pゾーンのこのカードを特殊召喚する。",
+      "pendulumScale": 5
     },
     {
       "id": "12277",
@@ -326237,7 +326726,9 @@
         "Performapal Fireflux"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12277",
-      "updatedAt": "2026-09-08T20:26:22.607Z"
+      "updatedAt": "2026-09-08T20:26:22.607Z",
+      "pendulumEffectText": "①：１ターンに１度、相手モンスターの攻撃宣言時に自分フィールドの「EM」モンスター１体をリリースして発動できる。その攻撃を無効にし、その後バトルフェイズを終了する。",
+      "pendulumScale": 5
     },
     {
       "id": "13130",
@@ -326282,7 +326773,9 @@
         "Performapal Five-Rainbow Magician"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/13130",
-      "updatedAt": "2026-09-08T20:26:22.631Z"
+      "updatedAt": "2026-09-08T20:26:22.631Z",
+      "pendulumEffectText": "①：自己仅可从额外牌组灵摆召唤。此效果不会被无效化。\n②：双方根据自身的魔法与陷阱区域的里侧表示卡的数量适用以下内容。\n●0张：自己场上的怪兽不可攻击，自己不可发动其效果。\n●4张以上：自己场上的怪兽的攻击力变为原本数值的两倍。",
+      "pendulumScale": 12
     },
     {
       "id": "11523",
@@ -326364,7 +326857,9 @@
         "Performapal U Go Golem"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12918",
-      "updatedAt": "2026-09-08T20:26:22.636Z"
+      "updatedAt": "2026-09-08T20:26:22.636Z",
+      "pendulumEffectText": "①：１ターンに１度、自分フィールドにモンスターが融合召喚された場合に発動できる。自分の墓地のPモンスター及び自分のエクストラデッキの表側表示のPモンスターの中から、「EM」モンスター、「オッドアイズ」モンスター、「魔術師」モンスターの内、いずれか１体を選んで手札に加える。",
+      "pendulumScale": 1
     },
     {
       "id": "12954",
@@ -326454,7 +326949,9 @@
         "Performapal Gentrude"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/17113",
-      "updatedAt": "2026-09-08T20:26:22.641Z"
+      "updatedAt": "2026-09-08T20:26:22.641Z",
+      "pendulumEffectText": "此卡名的灵摆效果１回合仅可使用１次。①：另一方的自己的灵摆区域存在“娱乐伙伴 天使女士”，且自己场上不存在怪兽的情况下或仅有灵摆怪兽的情况下可以发动。从牌组将１张“异色眼”卡加入手牌。",
+      "pendulumScale": 8
     },
     {
       "id": "12701",
@@ -326497,7 +326994,9 @@
         "Performapal Gold Fang"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12701",
-      "updatedAt": "2026-09-08T20:26:22.662Z"
+      "updatedAt": "2026-09-08T20:26:22.662Z",
+      "pendulumEffectText": "①：１ターンに１度、自分の「EM」モンスターが戦闘で相手モンスターを破壊した場合に発動する。相手に１０００ダメージを与える。",
+      "pendulumScale": 3
     },
     {
       "id": "12401",
@@ -326540,7 +327039,9 @@
         "Performapal Gongato"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12401",
-      "updatedAt": "2026-09-08T20:26:22.662Z"
+      "updatedAt": "2026-09-08T20:26:22.662Z",
+      "pendulumEffectText": "①：１ターンに１度、相手モンスターの直接攻撃宣言時に発動できる。その戦闘で発生する自分への戦闘ダメージは０になる。",
+      "pendulumScale": 2
     },
     {
       "id": "12112",
@@ -326583,7 +327084,9 @@
         "Performapal Guitartle"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12112",
-      "updatedAt": "2026-09-08T20:26:22.682Z"
+      "updatedAt": "2026-09-08T20:26:22.682Z",
+      "pendulumEffectText": "「EMギタートル」のP効果は１ターンに１度しか使用できない。①：もう片方の自分のPゾーンに「EM」カードが発動した場合に発動できる。自分はデッキから１枚ドローする。",
+      "pendulumScale": 6
     },
     {
       "id": "12404",
@@ -326626,7 +327129,9 @@
         "Performapal Gumgumouton"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12404",
-      "updatedAt": "2026-09-08T20:26:22.706Z"
+      "updatedAt": "2026-09-08T20:26:22.706Z",
+      "pendulumEffectText": "①：１ターンに１度、自分のモンスターが相手モンスターと戦闘を行う攻撃宣言時に発動できる。その自分のモンスターはその戦闘では破壊されない。",
+      "pendulumScale": 1
     },
     {
       "id": "12673",
@@ -326708,7 +327213,9 @@
         "Performapal Handstandaccoon"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12737",
-      "updatedAt": "2026-09-08T20:26:22.711Z"
+      "updatedAt": "2026-09-08T20:26:22.711Z",
+      "pendulumEffectText": "「EMリターンタンタン」のP効果は１ターンに１度しか使用できない。①：自分フィールドの「EM」カード１枚を対象として発動できる。そのカードを持ち主の手札に戻す。このターン、自分はこの効果で手札に戻したカード及びその同名カードの発動ができない。",
+      "pendulumScale": 3
     },
     {
       "id": "11947",
@@ -326833,7 +327340,9 @@
         "Performapal Kaleidoscorp"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11218",
-      "updatedAt": "2026-09-08T20:26:22.738Z"
+      "updatedAt": "2026-09-08T20:26:22.738Z",
+      "pendulumEffectText": "①：自分フィールドの光属性モンスターの攻撃力は３００アップする。",
+      "pendulumScale": 4
     },
     {
       "id": "12372",
@@ -326876,7 +327385,9 @@
         "Performapal King Bear"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12372",
-      "updatedAt": "2026-09-08T20:26:22.737Z"
+      "updatedAt": "2026-09-08T20:26:22.737Z",
+      "pendulumEffectText": "①：このカードを発動したターンのエンドフェイズに発動できる。このカードを破壊し、自分のエクストラデッキの表側表示のPモンスター及び自分の墓地のモンスターの中からレベル７以上のモンスター１体を選んで手札に加える。",
+      "pendulumScale": 7
     },
     {
       "id": "14341",
@@ -326960,7 +327471,9 @@
         "Performapal Ladyange"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/17114",
-      "updatedAt": "2026-09-08T20:26:22.781Z"
+      "updatedAt": "2026-09-08T20:26:22.781Z",
+      "pendulumEffectText": "①：１回合１次，自己的怪兽与对手的怪兽进行战斗的攻击宣言时，从手牌将１只灵摆怪兽舍弃可以发动。该对手怪兽的攻击力直至回合结束时为止下降１０００。",
+      "pendulumScale": 1
     },
     {
       "id": "12274",
@@ -327003,7 +327516,9 @@
         "Performapal Sellshell Crab"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12274",
-      "updatedAt": "2026-09-08T20:26:22.785Z"
+      "updatedAt": "2026-09-08T20:26:22.785Z",
+      "pendulumEffectText": "①：１ターンに１度、自分の「EM」モンスターが戦闘で破壊された時、自分のPゾーンの「EM」カードまたは「オッドアイズ」カード１枚を対象として発動できる。そのカードを特殊召喚する。",
+      "pendulumScale": 2
     },
     {
       "id": "12739",
@@ -327046,7 +327561,9 @@
         "Performapal Laugh Maker"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12739",
-      "updatedAt": "2026-09-08T20:26:22.785Z"
+      "updatedAt": "2026-09-08T20:26:22.785Z",
+      "pendulumEffectText": "①：１ターンに１度、相手フィールドに元々の攻撃力より高い攻撃力を持つモンスターが存在する場合に発動できる。自分は１０００LP回復する。",
+      "pendulumScale": 5
     },
     {
       "id": "12693",
@@ -327089,7 +327606,9 @@
         "Performapal Lebellman"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12693",
-      "updatedAt": "2026-09-08T20:26:22.789Z"
+      "updatedAt": "2026-09-08T20:26:22.789Z",
+      "pendulumEffectText": "①：１ターンに１度、自分メインフェイズに発動できる。自分フィールドのP召喚された全てのモンスターのレベルを１つ上げる。",
+      "pendulumScale": 1
     },
     {
       "id": "12407",
@@ -327171,7 +327690,9 @@
         "Performapal Lizardraw"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11679",
-      "updatedAt": "2026-09-08T20:26:22.810Z"
+      "updatedAt": "2026-09-08T20:26:22.810Z",
+      "pendulumEffectText": "「EMリザードロー」のP効果は１ターンに１度しか使用できない。①：自分メインフェイズにもう片方の自分のPゾーンに「EMリザードロー」以外の「EM」カードが存在する場合に発動できる。このカードを破壊し、自分はデッキから１枚ドローする。",
+      "pendulumScale": 6
     },
     {
       "id": "12376",
@@ -327300,7 +327821,9 @@
         "Performapal Momoncarpet"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12374",
-      "updatedAt": "2026-09-08T20:26:22.858Z"
+      "updatedAt": "2026-09-08T20:26:22.858Z",
+      "pendulumEffectText": "①：もう片方の自分のPゾーンにカードが存在しない場合にこのカードは破壊される。②：このカードがPゾーンに存在する限り、自分が受ける戦闘ダメージは半分になる。",
+      "pendulumScale": 7
     },
     {
       "id": "12111",
@@ -327345,7 +327868,9 @@
         "Performapal Monkeyboard"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12111",
-      "updatedAt": "2026-09-08T20:26:22.859Z"
+      "updatedAt": "2026-09-08T20:26:22.859Z",
+      "pendulumEffectText": "此卡名的②灵摆效果１回合仅可使用１次。\n①：另一方自己的灵摆区域不存在“娱乐伙伴”卡的情况下，此卡的灵摆刻度变为４。\n②：在发动了此卡的回合的自己的主要阶段可以发动。从牌组将等级４以下的１只“娱乐伙伴”怪兽加入手牌。",
+      "pendulumScale": 1
     },
     {
       "id": "17109",
@@ -327390,7 +327915,9 @@
         "Performapal Odd-Eyes Butler"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/17109",
-      "updatedAt": "2026-09-08T20:26:22.858Z"
+      "updatedAt": "2026-09-08T20:26:22.858Z",
+      "pendulumEffectText": "①：１回合１次，对手怪兽攻击宣言时可以发动。从自己的墓地将１只“异色眼”灵摆怪兽以表侧加入额外牌组，将该攻击无效。然后，可依该灵摆怪兽的攻击力数值恢复自己的LP。",
+      "pendulumScale": 2
     },
     {
       "id": "13128",
@@ -327435,7 +327962,9 @@
         "Performapal Odd-Eyes Dissolver"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/13128",
-      "updatedAt": "2026-09-08T20:26:22.863Z"
+      "updatedAt": "2026-09-08T20:26:22.863Z",
+      "pendulumEffectText": "①：１回合１次，在自己的主要阶段可以发动。从自己的手牌・场上，将由龙族融合怪兽卡决定的融合素材怪兽送至墓地，将该１只融合怪兽从额外牌组融合召唤。",
+      "pendulumScale": 4
     },
     {
       "id": "12275",
@@ -327478,7 +328007,9 @@
         "Performapal Odd-Eyes Light Phoenix"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12275",
-      "updatedAt": "2026-09-08T20:26:22.867Z"
+      "updatedAt": "2026-09-08T20:26:22.867Z",
+      "pendulumEffectText": "①：もう片方の自分のPゾーンにカードが存在する場合、相手モンスターの直接攻撃宣言時に発動できる。もう片方の自分のPゾーンのカードを破壊し、このカードを特殊召喚する。",
+      "pendulumScale": 3
     },
     {
       "id": "12698",
@@ -327566,7 +328097,9 @@
         "Performapal Odd-Eyes Minitaurus"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/13127",
-      "updatedAt": "2026-09-08T20:26:22.885Z"
+      "updatedAt": "2026-09-08T20:26:22.885Z",
+      "pendulumEffectText": "①：自分の「EM」モンスターまたは「オッドアイズ」モンスターが守備表示モンスターを攻撃した場合、その守備力を攻撃力が超えた分だけ相手に戦闘ダメージを与える。",
+      "pendulumScale": 6
     },
     {
       "id": "17647",
@@ -327611,7 +328144,9 @@
         "Performapal Odd-Eyes Seer"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/17647",
-      "updatedAt": "2026-09-08T20:26:22.907Z"
+      "updatedAt": "2026-09-08T20:26:22.907Z",
+      "pendulumEffectText": "此卡名的灵摆效果１回合仅可使用１次。①：以自己墓地的１张“娱乐伙伴”卡或“异色眼”卡为对象可以发动。将该卡加入手牌。然后破坏此卡。",
+      "pendulumScale": 1
     },
     {
       "id": "13129",
@@ -327660,7 +328195,9 @@
         "Performapal Odd-Eyes Synchron"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/13129",
-      "updatedAt": "2026-09-08T20:26:22.936Z"
+      "updatedAt": "2026-09-08T20:26:22.936Z",
+      "pendulumEffectText": "①：１回合１次，以自己场上的１只“娱乐伙伴”怪兽或“异色眼”怪兽为对象可以发动。此回合，该表侧表示怪兽视为协调，等级变为１。",
+      "pendulumScale": 6
     },
     {
       "id": "12276",
@@ -327703,7 +328240,9 @@
         "Performapal Odd-Eyes Unicorn"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12276",
-      "updatedAt": "2026-09-08T20:26:22.934Z"
+      "updatedAt": "2026-09-08T20:26:22.934Z",
+      "pendulumEffectText": "①：このカードがPゾーンに存在する限り１度だけ、自分の「オッドアイズ」モンスターの攻撃宣言時、そのモンスター以外の自分フィールドの「EM」モンスター１体を対象として発動できる。その攻撃モンスターの攻撃力はバトルフェイズ終了時まで、対象のモンスターの元々の攻撃力分アップする。",
+      "pendulumScale": 8
     },
     {
       "id": "17110",
@@ -327748,7 +328287,9 @@
         "Performapal Odd-Eyes Valet"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/17110",
-      "updatedAt": "2026-09-08T20:26:22.933Z"
+      "updatedAt": "2026-09-08T20:26:22.933Z",
+      "pendulumEffectText": "①：１回合１次，对手怪兽攻击宣言时可以发动。该对手怪兽的攻击力下降相当于自己的额外牌组的表侧灵摆怪兽的数量×３００的数值。",
+      "pendulumScale": 8
     },
     {
       "id": "12375",
@@ -327791,7 +328332,9 @@
         "Performapal Parrotrio"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12375",
-      "updatedAt": "2026-09-08T20:26:22.938Z"
+      "updatedAt": "2026-09-08T20:26:22.938Z",
+      "pendulumEffectText": "①：１ターンに１度、もう片方の自分のPゾーンに「EMインコーラス」以外の「EM」カード、「魔術師」カード、「オッドアイズ」カードの内、いずれかが存在する場合に発動できる。このカードのPスケールはターン終了時まで７になる。",
+      "pendulumScale": 2
     },
     {
       "id": "11522",
@@ -327834,7 +328377,9 @@
         "Performapal Partnaga"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11522",
-      "updatedAt": "2026-09-08T20:26:22.941Z"
+      "updatedAt": "2026-09-08T20:26:22.941Z",
+      "pendulumEffectText": "①：１ターンに１度、自分フィールドのモンスター１体を対象として発動できる。そのモンスターの攻撃力はターン終了時まで、自分フィールドの「EM」カードの数×３００アップする。",
+      "pendulumScale": 3
     },
     {
       "id": "11615",
@@ -327879,7 +328424,9 @@
         "Performapal Pendulum Sorcerer"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11615",
-      "updatedAt": "2026-09-08T20:26:22.960Z"
+      "updatedAt": "2026-09-08T20:26:22.960Z",
+      "pendulumEffectText": "①：“娱乐伙伴”怪兽被灵摆召唤至自己场上的情况下发动。自己场上的“娱乐伙伴”怪兽的攻击力直至回合结束时为止上升１０００。",
+      "pendulumScale": 2
     },
     {
       "id": "11741",
@@ -327960,7 +328507,9 @@
         "Performapal Radish Horse"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12406",
-      "updatedAt": "2026-09-08T20:26:23.008Z"
+      "updatedAt": "2026-09-08T20:26:23.008Z",
+      "pendulumEffectText": "①：１ターンに１度、相手フィールドの表側表示モンスター１体と、自分フィールドの「EM」モンスター１体を対象として発動できる。その相手モンスターの攻撃力は、その自分の「EM」モンスターの攻撃力分ダウンする。",
+      "pendulumScale": 3
     },
     {
       "id": "12114",
@@ -328154,7 +328703,9 @@
         "Performapal Seal Eel"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12594",
-      "updatedAt": "2026-09-08T20:26:23.034Z"
+      "updatedAt": "2026-09-08T20:26:23.034Z",
+      "pendulumEffectText": "①：１回合１次，以对手场上的１只表侧表示怪兽为对象可以发动。将该怪兽的效果直至回合结束时为止无效。",
+      "pendulumScale": 3
     },
     {
       "id": "11945",
@@ -328252,7 +328803,9 @@
         "Performapal Silver Claw"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11301",
-      "updatedAt": "2026-09-08T20:26:23.084Z"
+      "updatedAt": "2026-09-08T20:26:23.084Z",
+      "pendulumEffectText": "①：自分フィールドの「EM」モンスターの攻撃力は３００アップする。",
+      "pendulumScale": 5
     },
     {
       "id": "11214",
@@ -328336,7 +328889,9 @@
         "Performapal Skullcrobat Joker"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11938",
-      "updatedAt": "2026-09-08T20:26:23.089Z"
+      "updatedAt": "2026-09-08T20:26:23.089Z",
+      "pendulumEffectText": "①：自己仅可灵摆召唤“娱乐伙伴”怪兽、“魔术师”灵摆怪兽、“异色眼”怪兽。此效果不会被无效化。",
+      "pendulumScale": 8
     },
     {
       "id": "12915",
@@ -328535,7 +329090,9 @@
         "Performapal Smile Sorcerer"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/14224",
-      "updatedAt": "2026-09-08T20:26:23.161Z"
+      "updatedAt": "2026-09-08T20:26:23.161Z",
+      "pendulumEffectText": "このカード名のP効果は１ターンに１度しか使用できない。①：元々の攻撃力より高い攻撃力を持つ自分フィールドのモンスターが戦闘・効果で破壊された場合に発動できる。Pゾーンのこのカードを特殊召喚する。",
+      "pendulumScale": 1
     },
     {
       "id": "11524",
@@ -328619,7 +329176,9 @@
         "Performapal Splashmammoth"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11946",
-      "updatedAt": "2026-09-08T20:26:23.161Z"
+      "updatedAt": "2026-09-08T20:26:23.161Z",
+      "pendulumEffectText": "①：１回合１次，融合怪兽被特殊召唤至自己场上时可以发动。从自己的额外牌组将１只表侧表示的“异色眼”灵摆怪兽特殊召唤。",
+      "pendulumScale": 4
     },
     {
       "id": "11680",
@@ -328740,7 +329299,9 @@
         "Performapal Swincobra"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12373",
-      "updatedAt": "2026-09-08T20:26:23.183Z"
+      "updatedAt": "2026-09-08T20:26:23.183Z",
+      "pendulumEffectText": "①：１ターンに１度、自分のモンスターが相手に戦闘ダメージを与えた時に発動できる。相手のデッキの一番上のカードを墓地へ送る。",
+      "pendulumScale": 2
     },
     {
       "id": "11216",
@@ -328900,7 +329461,9 @@
         "Performapal Trampolynx"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11334",
-      "updatedAt": "2026-09-08T20:26:23.234Z"
+      "updatedAt": "2026-09-08T20:26:23.234Z",
+      "pendulumEffectText": "「EMトランポリンクス」のP効果は１ターンに１度しか使用できない。①：自分がP召喚に成功した時、自分または相手のPゾーンのカード１枚を対象として発動できる。そのカードを持ち主の手札に戻す。",
+      "pendulumScale": 4
     },
     {
       "id": "12115",
@@ -328943,7 +329506,8 @@
         "Performapal Trump Girl"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12115",
-      "updatedAt": "2026-09-08T20:26:23.237Z"
+      "updatedAt": "2026-09-08T20:26:23.237Z",
+      "pendulumScale": 4
     },
     {
       "id": "11526",
@@ -328986,7 +329550,9 @@
         "Performapal Trump Witch"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11526",
-      "updatedAt": "2026-09-08T20:26:23.238Z"
+      "updatedAt": "2026-09-08T20:26:23.238Z",
+      "pendulumEffectText": "①：１ターンに１度、自分メインフェイズに発動できる。自分フィールドから、融合モンスターカードによって決められた融合素材モンスターを墓地へ送り、その融合モンスター１体をエクストラデッキから融合召喚する。",
+      "pendulumScale": 4
     },
     {
       "id": "12030",
@@ -329029,7 +329595,9 @@
         "Performapal Trumpanda"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12030",
-      "updatedAt": "2026-09-08T20:26:23.240Z"
+      "updatedAt": "2026-09-08T20:26:23.240Z",
+      "pendulumEffectText": "①：１ターンに１度、自分メインフェイズに発動できる。このカードのPスケールを１つ上げる（最大１２まで）。",
+      "pendulumScale": 3
     },
     {
       "id": "11219",
@@ -329072,7 +329640,9 @@
         "Performapal Turn Toad"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11219",
-      "updatedAt": "2026-09-08T20:26:23.259Z"
+      "updatedAt": "2026-09-08T20:26:23.259Z",
+      "pendulumEffectText": "①：１ターンに１度、フィールドの表側表示モンスター１体を対象として発動できる。そのモンスターの攻撃力・守備力をターン終了時まで入れ替える。",
+      "pendulumScale": 3
     },
     {
       "id": "14447",
@@ -329193,7 +329763,9 @@
         "Performapal Whim Witch"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12592",
-      "updatedAt": "2026-09-08T20:26:23.310Z"
+      "updatedAt": "2026-09-08T20:26:23.310Z",
+      "pendulumEffectText": "「EMウィム・ウィッチ」のP効果は１ターンに１度しか使用できない。①：エクストラデッキから特殊召喚されたモンスターが相手フィールドにのみ存在する場合に発動できる。Pゾーンのこのカードを特殊召喚する。",
+      "pendulumScale": 4
     },
     {
       "id": "11215",
@@ -334072,7 +334644,9 @@
         "Plunder Patrollship Jord"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/18186",
-      "updatedAt": "2026-09-08T20:26:24.667Z"
+      "updatedAt": "2026-09-08T20:26:24.667Z",
+      "pendulumEffectText": "このカード名のP効果は１ターンに１度しか使用できない。①：属性を１つ宣言して発動できる。このカードを持ち主のEXデッキに戻し、宣言した属性を持つ「海造賊トークン」（悪魔族・星４・攻／守０）をお互いのフィールドに１体ずつ守備表示で特殊召喚する。",
+      "pendulumScale": 1
     },
     {
       "id": "15322",
@@ -334473,7 +335047,9 @@
         "Poissonniere de Nouvelles"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/19161",
-      "updatedAt": "2026-09-08T20:26:24.800Z"
+      "updatedAt": "2026-09-08T20:26:24.800Z",
+      "pendulumEffectText": "此卡名的灵摆效果１回合仅可使用１次。\n①：自己场上存在仪式怪兽的情况下，以场上的１只怪兽为对象可以发动。将此卡特殊召唤。然后，变更该对象怪兽的表示形式。",
+      "pendulumScale": 8
     },
     {
       "id": "9648",
@@ -337214,7 +337790,9 @@
         "Predaplant Bufolicula"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/17130",
-      "updatedAt": "2026-09-08T20:26:25.660Z"
+      "updatedAt": "2026-09-08T20:26:25.660Z",
+      "pendulumEffectText": "此卡名的灵摆效果1回合仅可使用1次。\n①：在自己的主要阶段可以发动。将自己手牌・场上的怪兽作为融合素材，将1只暗属性融合怪兽融合召唤。",
+      "pendulumScale": 0
     },
     {
       "id": "17129",
@@ -337929,7 +338507,9 @@
         "Predaplant Spider Orchid"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/13990",
-      "updatedAt": "2026-09-08T20:26:25.811Z"
+      "updatedAt": "2026-09-08T20:26:25.811Z",
+      "pendulumEffectText": "此卡名的灵摆效果１回合仅可使用１次。①：在发动此卡的回合的自己的主要阶段，以此卡以外的１张魔法与陷阱区域的表侧表示卡为对象可以发动。将该卡破坏。",
+      "pendulumScale": 8
     },
     {
       "id": "12833",
@@ -338056,7 +338636,9 @@
         "Predaplant Triantis"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/17131",
-      "updatedAt": "2026-09-08T20:26:25.849Z"
+      "updatedAt": "2026-09-08T20:26:25.849Z",
+      "pendulumEffectText": "①：只要此卡存在于灵摆区域，自己要融合召唤暗属性融合怪兽的情况下，也可将存在于自己的灵摆区域的融合素材怪兽当作场上的怪兽来作为融合素材使用。",
+      "pendulumScale": 8
     },
     {
       "id": "14601",
@@ -339042,7 +339624,9 @@
         "Prima Materiactor"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/21158",
-      "updatedAt": "2026-09-08T20:26:26.166Z"
+      "updatedAt": "2026-09-08T20:26:26.166Z",
+      "pendulumEffectText": "此卡名的②灵摆效果1回合仅可使用1次。\n①：自己场上的超量怪兽的攻击力上升相当于场上超量素材数量×100的数值。\n②：以自己场上的1只“原物质”超量怪兽为对象可以发动。将此卡作为该怪兽的超量素材。然后，自己抽1张。",
+      "pendulumScale": 1
     },
     {
       "id": "12396",
@@ -343392,7 +343976,9 @@
         "Purple Poison Magician"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12911",
-      "updatedAt": "2026-09-08T20:26:27.422Z"
+      "updatedAt": "2026-09-08T20:26:27.422Z",
+      "pendulumEffectText": "①：１回合１次，自己的魔法师族・暗属性怪兽进行战斗的伤害计算前可以发动。该怪兽的攻击力直至伤害步骤结束时为止上升１２００。然后将此卡破坏。",
+      "pendulumScale": 1
     },
     {
       "id": "18481",
@@ -344168,7 +344754,9 @@
         "Qliphort Carrier"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11354",
-      "updatedAt": "2026-09-08T20:26:27.646Z"
+      "updatedAt": "2026-09-08T20:26:27.646Z",
+      "pendulumEffectText": "①：自分は「クリフォート」モンスターしか特殊召喚できない。この効果は無効化されない。②：自分フィールドの「クリフォート」モンスターの攻撃力は３００アップする。",
+      "pendulumScale": 1
     },
     {
       "id": "11541",
@@ -344211,7 +344799,9 @@
         "Qliphort Cephalopod"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11541",
-      "updatedAt": "2026-09-08T20:26:27.658Z"
+      "updatedAt": "2026-09-08T20:26:27.658Z",
+      "pendulumEffectText": "①：自分は「クリフォート」モンスターしか特殊召喚できない。この効果は無効化されない。②：相手フィールドのモンスターの攻撃力は３００ダウンする。",
+      "pendulumScale": 9
     },
     {
       "id": "11356",
@@ -344254,7 +344844,9 @@
         "Qliphort Disk"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11356",
-      "updatedAt": "2026-09-08T20:26:27.661Z"
+      "updatedAt": "2026-09-08T20:26:27.661Z",
+      "pendulumEffectText": "①：自分は「クリフォート」モンスターしか特殊召喚できない。この効果は無効化されない。②：自分フィールドの「クリフォート」モンスターの攻撃力は３００アップする。",
+      "pendulumScale": 1
     },
     {
       "id": "13502",
@@ -344342,7 +344934,9 @@
         "Qliphort Helix"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11355",
-      "updatedAt": "2026-09-08T20:26:27.662Z"
+      "updatedAt": "2026-09-08T20:26:27.662Z",
+      "pendulumEffectText": "①：自分は「クリフォート」モンスターしか特殊召喚できない。この効果は無効化されない。②：相手フィールドのモンスターの攻撃力は３００ダウンする。",
+      "pendulumScale": 9
     },
     {
       "id": "11540",
@@ -344385,7 +344979,9 @@
         "Qliphort Monolith"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11540",
-      "updatedAt": "2026-09-08T20:26:27.685Z"
+      "updatedAt": "2026-09-08T20:26:27.685Z",
+      "pendulumEffectText": "①：自分は「クリフォート」モンスターしか特殊召喚できない。この効果は無効化されない。②：自分がアドバンス召喚に成功したターンのエンドフェイズに発動できる。このターン自分がアドバンス召喚のためにリリースした「クリフォート」モンスターの数だけ、自分はデッキからドローする。",
+      "pendulumScale": 1
     },
     {
       "id": "11353",
@@ -344428,7 +345024,9 @@
         "Qliphort Scout"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11353",
-      "updatedAt": "2026-09-08T20:26:27.685Z"
+      "updatedAt": "2026-09-08T20:26:27.685Z",
+      "pendulumEffectText": "①：自分は「クリフォート」モンスターしか特殊召喚できない。この効果は無効化されない。②：１ターンに１度、８００LPを払って発動できる。デッキから「クリフォート・ツール」以外の「クリフォート」カード１枚を手札に加える。",
+      "pendulumScale": 9
     },
     {
       "id": "11357",
@@ -344471,7 +345069,9 @@
         "Qliphort Shell"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11357",
-      "updatedAt": "2026-09-08T20:26:27.719Z"
+      "updatedAt": "2026-09-08T20:26:27.719Z",
+      "pendulumEffectText": "①：自分は「クリフォート」モンスターしか特殊召喚できない。この効果は無効化されない。②：相手フィールドのモンスターの攻撃力は３００ダウンする。",
+      "pendulumScale": 9
     },
     {
       "id": "11542",
@@ -344514,7 +345114,9 @@
         "Qliphort Stealth"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11542",
-      "updatedAt": "2026-09-08T20:26:27.719Z"
+      "updatedAt": "2026-09-08T20:26:27.719Z",
+      "pendulumEffectText": "①：自分は「クリフォート」モンスターしか特殊召喚できない。この効果は無効化されない。②：自分フィールドの「クリフォート」モンスターの攻撃力は３００アップする。",
+      "pendulumScale": 1
     },
     {
       "id": "11406",
@@ -349953,7 +350555,9 @@
         "Rain Bozu"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/13884",
-      "updatedAt": "2026-09-08T20:26:29.167Z"
+      "updatedAt": "2026-09-08T20:26:29.167Z",
+      "pendulumEffectText": "①：１ターンに１度、自分フィールドの表側表示モンスター１体を対象として発動できる。そのモンスターの攻撃力はターン終了時まで、お互いのEXデッキの枚数の差×１００アップする。",
+      "pendulumScale": 8
     },
     {
       "id": "7273",
@@ -351629,7 +352233,9 @@
         "Raremetalfoes Bismugear"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12612",
-      "updatedAt": "2026-09-08T20:26:29.768Z"
+      "updatedAt": "2026-09-08T20:26:29.768Z",
+      "pendulumEffectText": "①：１ターンに１度、このカード以外の自分フィールドの表側表示のカード１枚を対象として発動できる。そのカードを破壊し、デッキから「メタルフォーゼ」魔法・罠カード１枚を選んで自分フィールドにセットする。",
+      "pendulumScale": 8
     },
     {
       "id": "10767",
@@ -351962,7 +352568,9 @@
         "Twilight Specter Rayrage"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/22974",
-      "updatedAt": "2026-09-08T20:26:29.841Z"
+      "updatedAt": "2026-09-08T20:26:29.841Z",
+      "pendulumEffectText": "このカード名のP効果は１ターンに１度しか使用できない。\n①：自分フィールドのPモンスターが相手の効果で破壊される場合、その破壊されるPモンスター１体の代わりにこのカードを破壊できる。",
+      "pendulumScale": 1
     },
     {
       "id": "7212",
@@ -352280,7 +352888,9 @@
         "ReSolfachord Dreamia"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/16085",
-      "updatedAt": "2026-09-08T20:26:29.938Z"
+      "updatedAt": "2026-09-08T20:26:29.938Z",
+      "pendulumEffectText": "①：自己的“音服和弦”灵摆怪兽的灵摆召唤不会被无效化。",
+      "pendulumScale": 7
     },
     {
       "id": "10576",
@@ -356090,7 +356700,9 @@
         "Reflection of Endymion"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/14440",
-      "updatedAt": "2026-09-08T20:26:31.033Z"
+      "updatedAt": "2026-09-08T20:26:31.033Z",
+      "pendulumEffectText": "①：每当自己或对手发动魔法卡，就在此卡上放1个魔力计数物。\n②：去除此卡的3个魔力计数物可以发动。将手牌的1只能放魔力计数物的怪兽和此卡特殊召唤，在该2只上各放1个魔力计数物。",
+      "pendulumScale": 2
     },
     {
       "id": "19850",
@@ -356135,7 +356747,9 @@
         "Refrain the Melodious Songstress"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/19850",
-      "updatedAt": "2026-09-08T20:26:31.033Z"
+      "updatedAt": "2026-09-08T20:26:31.033Z",
+      "pendulumEffectText": "此卡名的灵摆效果１回合仅可使用１次。\n①：以自己场上的１只“幻奏”融合怪兽为对象可以发动。从牌组将１只“幻奏”怪兽送至墓地，对象怪兽的攻击力直至回合结束时为止，上升相当于送至墓地的怪兽的等级×２００的数值。",
+      "pendulumScale": 1
     },
     {
       "id": "6041",
@@ -358438,7 +359052,9 @@
         "Rescue Hamster"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11371",
-      "updatedAt": "2026-09-08T20:26:31.756Z"
+      "updatedAt": "2026-09-08T20:26:31.756Z",
+      "pendulumEffectText": "此卡名的灵摆效果在决斗中仅可使用１次。\n①：将自己的灵摆区域的此卡除外可以发动。从自己的额外牌组（表侧）将２只同名灵摆怪兽加入手牌。",
+      "pendulumScale": 5
     },
     {
       "id": "19410",
@@ -361750,7 +362366,9 @@
         "Risebell the Summoner"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11786",
-      "updatedAt": "2026-09-08T20:26:32.803Z"
+      "updatedAt": "2026-09-08T20:26:32.803Z",
+      "pendulumEffectText": "①：1回合1次，以场上1只表侧表示怪兽为对象可以发动。该怪兽的等级上升1。",
+      "pendulumScale": 2
     },
     {
       "id": "4935",
@@ -362110,7 +362728,9 @@
         "Ritual Beast Tamer Zeframpilica"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11703",
-      "updatedAt": "2026-09-08T20:26:32.923Z"
+      "updatedAt": "2026-09-08T20:26:32.923Z",
+      "pendulumEffectText": "①：自己仅可灵摆召唤“灵兽”怪兽及“源质”怪兽。此效果不会被无效化。",
+      "pendulumScale": 1
     },
     {
       "id": "11704",
@@ -362155,7 +362775,9 @@
         "Ritual Beast Tamer Zefrawendi"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11704",
-      "updatedAt": "2026-09-08T20:26:32.950Z"
+      "updatedAt": "2026-09-08T20:26:32.950Z",
+      "pendulumEffectText": "①：自己仅可灵摆召唤“灵兽”怪兽及“源质”怪兽。此效果不会被无效化。",
+      "pendulumScale": 7
     },
     {
       "id": "11498",
@@ -367899,7 +368521,9 @@
         "Saambell the Star Bonder"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/16219",
-      "updatedAt": "2026-09-08T20:26:34.536Z"
+      "updatedAt": "2026-09-08T20:26:34.536Z",
+      "pendulumEffectText": "此卡名的灵摆效果１回合仅可使用１次。①：自己另一方的灵摆区域有等级与此卡相同的灵摆怪兽卡存在的情况下可以发动。将自己另一方的灵摆区域的卡破坏，将此卡特殊召唤。",
+      "pendulumScale": 7
     },
     {
       "id": "9646",
@@ -369310,7 +369934,9 @@
         "Saion the Vaylantz Archer"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/17348",
-      "updatedAt": "2026-09-08T20:26:34.915Z"
+      "updatedAt": "2026-09-08T20:26:34.915Z",
+      "pendulumEffectText": "此卡名的灵摆效果１回合仅可使用１次。①：在自己的主要阶段可以发动。将此卡特殊召唤至正面的自己的主要怪兽区域。此效果发动后，直至回合结束时为止自己仅可特殊召唤“弈勇”怪兽（除了从额外牌组的特殊召唤以外）。",
+      "pendulumScale": 1
     },
     {
       "id": "18490",
@@ -369458,7 +370084,9 @@
         "Sakyo, Swordmaster of the Far East"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12046",
-      "updatedAt": "2026-09-08T20:26:34.956Z"
+      "updatedAt": "2026-09-08T20:26:34.956Z",
+      "pendulumEffectText": "①：１ターンに１度、自分のモンスターゾーンの戦士族Pモンスター３体を除外し、自分のモンスターゾーンのPモンスター１体を対象として発動できる。このターンそのモンスターが直接攻撃で相手のLPを０にした場合、自分はマッチに勝利する。",
+      "pendulumScale": 10
     },
     {
       "id": "4660",
@@ -371457,7 +372085,8 @@
         "Samurai Cavalry of Reptier"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12098",
-      "updatedAt": "2026-09-08T20:26:35.478Z"
+      "updatedAt": "2026-09-08T20:26:35.478Z",
+      "pendulumScale": 3
     },
     {
       "id": "13360",
@@ -373100,7 +373729,9 @@
         "Satellarknight Zefrathuban"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11695",
-      "updatedAt": "2026-09-08T20:26:35.923Z"
+      "updatedAt": "2026-09-08T20:26:35.923Z",
+      "pendulumEffectText": "①：自己仅可灵摆召唤“星骑士”怪兽及“源质”怪兽。此效果不会被无效化。",
+      "pendulumScale": 1
     },
     {
       "id": "4780",
@@ -375989,7 +376620,9 @@
         "Sea Dragoons of Draconia"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11770",
-      "updatedAt": "2026-09-08T20:26:36.707Z"
+      "updatedAt": "2026-09-08T20:26:36.707Z",
+      "pendulumEffectText": "此卡名的灵摆效果１回合仅可使用１次。\n①：自己或对手的怪兽因战斗被破坏时可以发动。从手牌将１只通常怪兽特殊召唤。",
+      "pendulumScale": 7
     },
     {
       "id": "4480",
@@ -378892,7 +379525,9 @@
         "Servant of Endymion"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/14442",
-      "updatedAt": "2026-09-08T20:26:37.545Z"
+      "updatedAt": "2026-09-08T20:26:37.545Z",
+      "pendulumEffectText": "①：每当自己或对手发动魔法卡，就在此卡上放1个魔力计数物。\n②：去除此卡的3个魔力计数物可以发动。将牌组的1只能放魔力计数物的、攻击力1000以上的怪兽和此卡特殊召唤，在该2只上各放1个魔力计数物。",
+      "pendulumScale": 2
     },
     {
       "id": "-28",
@@ -379588,7 +380223,9 @@
         "Shaddoll Zefracore"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11698",
-      "updatedAt": "2026-09-08T20:26:37.757Z"
+      "updatedAt": "2026-09-08T20:26:37.757Z",
+      "pendulumEffectText": "①：自己仅可将“影依”怪兽及“源质”怪兽灵摆召唤。此效果不会被无效。",
+      "pendulumScale": 7
     },
     {
       "id": "11697",
@@ -379633,7 +380270,9 @@
         "Shaddoll Zefranaga"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11697",
-      "updatedAt": "2026-09-08T20:26:37.770Z"
+      "updatedAt": "2026-09-08T20:26:37.770Z",
+      "pendulumEffectText": "①：自己仅可将“影依”怪兽及“源质”怪兽灵摆召唤。此效果不会被无效。",
+      "pendulumScale": 1
     },
     {
       "id": "22925",
@@ -379676,7 +380315,9 @@
         "Shade the Obscure"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/22925",
-      "updatedAt": "2026-09-08T20:26:37.788Z"
+      "updatedAt": "2026-09-08T20:26:37.788Z",
+      "pendulumEffectText": "このカード名の②のP効果は１ターンに１度しか使用できない。\n①：自分はPモンスターしかP召喚できない。この効果は無効化されない。\n②：攻撃力１０００以下のモンスターが特殊召喚された場合に発動できる。このカードを手札に戻す。",
+      "pendulumScale": 11
     },
     {
       "id": "7204",
@@ -380842,7 +381483,9 @@
         "Shelga, the Tri-Warlord"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12733",
-      "updatedAt": "2026-09-08T20:26:38.126Z"
+      "updatedAt": "2026-09-08T20:26:38.126Z",
+      "pendulumEffectText": "①：１ターンに１度、自分フィールドの表側表示のサイキック族Pモンスター３体を除外し、自分フィールドのPモンスター１体を対象として発動できる。このターンそのモンスターが直接攻撃で相手のLPを０にした場合、自分はマッチに勝利する。",
+      "pendulumScale": 10
     },
     {
       "id": "15880",
@@ -382209,7 +382852,9 @@
         "Shinonome the Vaylantz Priestess"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/17347",
-      "updatedAt": "2026-09-08T20:26:38.525Z"
+      "updatedAt": "2026-09-08T20:26:38.525Z",
+      "pendulumEffectText": "此卡名的灵摆效果１回合仅可使用１次。①：在自己的主要阶段可以发动。将此卡特殊召唤至正面的自己的主要怪兽区域。此效果发动后，直至回合结束时为止自己仅可特殊召唤“弈勇”怪兽（除了从额外牌组的特殊召唤以外）。",
+      "pendulumScale": 1
     },
     {
       "id": "8315",
@@ -383903,7 +384548,9 @@
         "TiSolfachord Beautia"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/16090",
-      "updatedAt": "2026-09-08T20:26:38.980Z"
+      "updatedAt": "2026-09-08T20:26:38.980Z",
+      "pendulumEffectText": "①：自己的“音服和弦”灵摆怪兽灵摆召唤成功时，对手不可发动怪兽的效果・魔法・陷阱卡。",
+      "pendulumScale": 2
     },
     {
       "id": "14218",
@@ -387706,7 +388353,9 @@
         "Sky Dragoons of Draconia"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12031",
-      "updatedAt": "2026-09-08T20:26:40.031Z"
+      "updatedAt": "2026-09-08T20:26:40.031Z",
+      "pendulumEffectText": "①：１回合１次，自己的通常怪兽给予对手战斗伤害时，以场上的１张卡为对象可以发动。将该卡破坏。",
+      "pendulumScale": 7
     },
     {
       "id": "11939",
@@ -390758,7 +391407,9 @@
         "SolSolfachord Gracia"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/16088",
-      "updatedAt": "2026-09-08T20:26:40.923Z"
+      "updatedAt": "2026-09-08T20:26:40.923Z",
+      "pendulumEffectText": "①：自己的“音服和弦”灵摆怪兽灵摆召唤成功时，对手不可发动怪兽的效果・魔法・陷阱卡。",
+      "pendulumScale": 4
     },
     {
       "id": "4339",
@@ -391248,7 +391899,9 @@
         "Solfachord Primoa"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/21787",
-      "updatedAt": "2026-09-08T20:26:41.075Z"
+      "updatedAt": "2026-09-08T20:26:41.075Z",
+      "pendulumEffectText": "①：自己将怪兽灵摆召唤时，以自己的灵摆区域的1张“音服和弦”卡为对象可以发动。将该卡放回手牌。",
+      "pendulumScale": 0
     },
     {
       "id": "21786",
@@ -391293,7 +391946,9 @@
         "Solfachord Solfegia"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/21786",
-      "updatedAt": "2026-09-08T20:26:41.081Z"
+      "updatedAt": "2026-09-08T20:26:41.081Z",
+      "pendulumEffectText": "此卡名的灵摆效果1回合仅可使用1次。\n①：对手在场上所发动的怪兽的效果处理时，自己场上存在“天籁音服和弦”怪兽的情况下，可将该发动的效果无效。然后，将此卡破坏。",
+      "pendulumScale": 9
     },
     {
       "id": "18528",
@@ -394163,7 +394818,9 @@
         "Speedroid Colonel Clackers"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/20745",
-      "updatedAt": "2026-09-08T20:26:42.012Z"
+      "updatedAt": "2026-09-08T20:26:42.012Z",
+      "pendulumEffectText": "此卡名的灵摆效果1回合仅可使用1次。\n①：从自己墓地将1张“疾行机人”卡除外可以发动。从牌组将1只“疾行机人”灵摆怪兽放在自己的灵摆区域。此回合，自己仅可特殊召唤风属性怪兽。",
+      "pendulumScale": 8
     },
     {
       "id": "20805",
@@ -394314,7 +394971,9 @@
         "Speedroid Dominobutterfly"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12883",
-      "updatedAt": "2026-09-08T20:26:42.040Z"
+      "updatedAt": "2026-09-08T20:26:42.040Z",
+      "pendulumEffectText": "「SRドミノバタフライ」の②のP効果は１ターンに１度しか使用できない。①：自分は風属性モンスターしかP召喚できない。この効果は無効化されない。②：手札から風属性モンスター１体を捨て、除外されている自分の風属性モンスター１体を対象として発動できる。そのモンスターを手札に加える。",
+      "pendulumScale": 8
     },
     {
       "id": "12049",
@@ -394547,7 +395206,9 @@
         "Speedroid Hexasaucer"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/14340",
-      "updatedAt": "2026-09-08T20:26:42.112Z"
+      "updatedAt": "2026-09-08T20:26:42.112Z",
+      "pendulumEffectText": "このカード名のP効果は１ターンに１度しか使用できない。①：自分の墓地のモンスター及び除外されている自分のモンスターの中から、風属性Sモンスター１体を対象として発動できる。そのモンスターをEXデッキに戻す。",
+      "pendulumScale": 6
     },
     {
       "id": "16377",
@@ -394633,7 +395294,9 @@
         "Speedroid Marble Machine"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/14339",
-      "updatedAt": "2026-09-08T20:26:42.114Z"
+      "updatedAt": "2026-09-08T20:26:42.114Z",
+      "pendulumEffectText": "①：1回合1次，自己的守备表示怪兽被选择为攻击对象时可以发动。将该怪兽改为表侧攻击表示。此回合，该怪兽不会因战斗被破坏。",
+      "pendulumScale": 1
     },
     {
       "id": "12051",
@@ -394793,7 +395456,9 @@
         "Speedroid Passinglider"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12829",
-      "updatedAt": "2026-09-08T20:26:42.165Z"
+      "updatedAt": "2026-09-08T20:26:42.165Z",
+      "pendulumEffectText": "①：１ターンに１度、手札及び自分フィールドの表側表示モンスターの中から、「スピードロイド」チューナー１体を墓地へ送って発動できる。ターン終了時まで、墓地へ送ったそのモンスターの元々のレベル分だけこのカードのPスケールを上げる、または下げる（最小１まで）。",
+      "pendulumScale": 3
     },
     {
       "id": "12050",
@@ -395130,7 +395795,9 @@
         "Speedroid Wing Synchron"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/20746",
-      "updatedAt": "2026-09-08T20:26:42.239Z"
+      "updatedAt": "2026-09-08T20:26:42.239Z",
+      "pendulumEffectText": "①：1回合1次，可以发动。将自己灵摆区域的1张风属性・等级2的灵摆怪兽卡和此卡破坏，从额外牌组将1只“清透翼同步龙”视为同步召唤特殊召唤。此回合，自己灵摆区域的卡不会因效果被破坏，且自己仅可特殊召唤风属性怪兽。",
+      "pendulumScale": 4
     },
     {
       "id": "5630",
@@ -401269,7 +401936,9 @@
         "Stargazer Magician"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11134",
-      "updatedAt": "2026-09-08T20:26:44.188Z"
+      "updatedAt": "2026-09-08T20:26:44.188Z",
+      "pendulumEffectText": "①：自己的灵摆怪兽进行战斗的情况下，对手直至伤害步骤结束时为止，不可发动魔法卡。②：另一方自己的灵摆区域没有“魔术师”卡或“异色眼”卡存在的情况下，此卡的灵摆刻度变为４。",
+      "pendulumScale": 1
     },
     {
       "id": "13618",
@@ -401914,7 +402583,9 @@
         "Starving Venemy Dragon"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/16428",
-      "updatedAt": "2026-09-08T20:26:44.354Z"
+      "updatedAt": "2026-09-08T20:26:44.354Z",
+      "pendulumEffectText": "①：每当场上的卡被送至墓地，每有1张就在此卡上放1个毒敌计数物。\n②：龙族・暗属性怪兽以外的场上怪兽的攻击力下降场上的毒敌计数物数量×200的数值。\n③：1回合1次，可将因战斗对自己造成的战斗伤害改成0。",
+      "pendulumScale": 1
     },
     {
       "id": "14343",
@@ -401963,7 +402634,9 @@
         "Starving Venemy Lethal Dose Dragon"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/14343",
-      "updatedAt": "2026-09-08T20:26:44.360Z"
+      "updatedAt": "2026-09-08T20:26:44.360Z",
+      "pendulumEffectText": "①：1回合1次，在自己的主要阶段可以发动。在对手场上的所有表侧表示怪兽上各放1个毒敌计数物。\n②：龙族・暗属性怪兽以外的场上怪兽的攻击力下降场上的毒敌计数物数量×200的数值。",
+      "pendulumScale": 1
     },
     {
       "id": "22728",
@@ -402100,7 +402773,9 @@
         "Starving Venom Wing Dragon"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/22540",
-      "updatedAt": "2026-09-08T20:26:44.388Z"
+      "updatedAt": "2026-09-08T20:26:44.388Z",
+      "pendulumEffectText": "①：只要此卡存在于灵摆区域，每当有怪兽被特殊召唤至对手场上，就在该怪兽上放1个捕食计数物。放有捕食计数物的等级2以上怪兽的等级变为1。",
+      "pendulumScale": 10
     },
     {
       "id": "11753",
@@ -402560,7 +403235,8 @@
         "Steel Cavalry of Dinon"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12241",
-      "updatedAt": "2026-09-08T20:26:44.509Z"
+      "updatedAt": "2026-09-08T20:26:44.509Z",
+      "pendulumScale": 5
     },
     {
       "id": "4563",
@@ -403705,7 +404381,9 @@
         "Stellarknight Zefraxciton"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11696",
-      "updatedAt": "2026-09-08T20:26:44.789Z"
+      "updatedAt": "2026-09-08T20:26:44.789Z",
+      "pendulumEffectText": "①：自己仅可灵摆召唤“星骑士”怪兽及“源质”怪兽。此效果不会被无效化。",
+      "pendulumScale": 7
     },
     {
       "id": "11280",
@@ -410319,7 +410997,9 @@
         "Superheavy Samurai Commander Shanawo"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/18503",
-      "updatedAt": "2026-09-08T20:26:46.612Z"
+      "updatedAt": "2026-09-08T20:26:46.612Z",
+      "pendulumEffectText": "此卡名的灵摆效果１回合仅可使用１次。①：对手怪兽攻击宣言时可以发动。将此卡特殊召唤。自己墓地不存在魔法・陷阱卡的情况下，进而该对手怪兽的攻击力变为０，效果无效化。",
+      "pendulumScale": 1
     },
     {
       "id": "18657",
@@ -410577,7 +411257,9 @@
         "Superheavy Samurai General Coral"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12119",
-      "updatedAt": "2026-09-08T20:26:46.685Z"
+      "updatedAt": "2026-09-08T20:26:46.685Z",
+      "pendulumEffectText": "①：自己墓地存在魔法・陷阱卡的情况下，此卡的灵摆刻度变为４。②：１回合１次，自己的“超重武者”怪兽战斗破坏对手怪兽时可以发动。该怪兽可继续攻击仅１次。",
+      "pendulumScale": 8
     },
     {
       "id": "12118",
@@ -410622,7 +411304,9 @@
         "Superheavy Samurai General Jade"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12118",
-      "updatedAt": "2026-09-08T20:26:46.688Z"
+      "updatedAt": "2026-09-08T20:26:46.688Z",
+      "pendulumEffectText": "①：自己仅可灵摆召唤“超重武者”怪兽。此效果不会被无效化。②：１回合１次，以自己场上的１只“超重武者”怪兽为对象可以发动。该怪兽的等级上升１。",
+      "pendulumScale": 1
     },
     {
       "id": "11682",
@@ -410827,7 +411511,9 @@
         "Superheavy Samurai Monk Big Benkei"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/18470",
-      "updatedAt": "2026-09-08T20:26:46.737Z"
+      "updatedAt": "2026-09-08T20:26:46.737Z",
+      "pendulumEffectText": "此卡名的灵摆效果１回合仅可使用１次。①：自己场上存在“超重武者”怪兽的情况下可以发动。从牌组将１只“超重武者装魂”怪兽加入手牌。",
+      "pendulumScale": 1
     },
     {
       "id": "12632",
@@ -411050,7 +411736,9 @@
         "Superheavy Samurai Prodigy Wakaushi"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/18469",
-      "updatedAt": "2026-09-08T20:26:46.768Z"
+      "updatedAt": "2026-09-08T20:26:46.768Z",
+      "pendulumEffectText": "此卡名的灵摆效果１回合仅可使用１次。①：自己墓地不存在魔法・陷阱卡的情况下可以发动。从牌组挑选“超重神童 若牛－U４”以外的１只“超重武者”灵摆怪兽，放在自己的灵摆区域。然后将此卡特殊召唤。",
+      "pendulumScale": 8
     },
     {
       "id": "11341",
@@ -412439,7 +413127,9 @@
         "Supreme King Dragon Darkwurm"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12933",
-      "updatedAt": "2026-09-08T20:26:47.131Z"
+      "updatedAt": "2026-09-08T20:26:47.131Z",
+      "pendulumEffectText": "①：１回合１次，自己场上不存在怪兽的情况下可以发动。从牌组将１只“霸王门”灵摆怪兽放在自己的灵摆区域。此效果发动后，直至回合结束时为止自己仅可灵摆召唤暗属性怪兽。",
+      "pendulumScale": 5
     },
     {
       "id": "19144",
@@ -412488,7 +413178,9 @@
         "Supreme King Dragon Lightwurm"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/19144",
-      "updatedAt": "2026-09-08T20:26:47.131Z"
+      "updatedAt": "2026-09-08T20:26:47.131Z",
+      "pendulumEffectText": "此卡名的灵摆效果１回合仅可使用１次。\n①：怪兽被特殊召唤的情况下，如果自己场上存在“霸王龙扎克”、且还另外存在一只灵摆怪兽则可以发动。将此卡特殊召唤。然后，可将自己场上的１只灵摆怪兽和此卡中的１只的等级・属性改成和另１只相同。",
+      "pendulumScale": 8
     },
     {
       "id": "13054",
@@ -412533,7 +413225,9 @@
         "Supreme King Dragon Odd-Eyes"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/13054",
-      "updatedAt": "2026-09-08T20:26:47.132Z"
+      "updatedAt": "2026-09-08T20:26:47.132Z",
+      "pendulumEffectText": "①：解放自己场上的１只“霸王眷龙”怪兽可以发动。将此卡破坏，从牌组将１只攻击力１５００以下的灵摆怪兽加入手牌。",
+      "pendulumScale": 4
     },
     {
       "id": "13077",
@@ -412627,7 +413321,9 @@
         "Supreme King Z-ARC"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12953",
-      "updatedAt": "2026-09-08T20:26:47.143Z"
+      "updatedAt": "2026-09-08T20:26:47.143Z",
+      "pendulumEffectText": "①：只要此卡存在于灵摆区域，对手不可发动场上的融合・同步・超量怪兽的效果。\n②：１回合１次，对手在抽牌阶段以外从牌组将卡加入手牌时可以发动。将该卡破坏。",
+      "pendulumScale": 1
     },
     {
       "id": "12932",
@@ -412672,7 +413368,9 @@
         "Supreme King Gate Infinity"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12932",
-      "updatedAt": "2026-09-08T20:26:47.175Z"
+      "updatedAt": "2026-09-08T20:26:47.175Z",
+      "pendulumEffectText": "①：自己场上存在怪兽的情况下，自己不可灵摆召唤。此效果不会被无效化。\n②：１回合１次，自己场上存在“霸王龙扎克”的情况下，以对手场上的１只表侧表示怪兽为对象可以发动。依该怪兽的攻击力数值恢复自己的LP。",
+      "pendulumScale": 13
     },
     {
       "id": "19143",
@@ -412717,7 +413415,9 @@
         "Supreme King Gate Magician"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/19143",
-      "updatedAt": "2026-09-08T20:26:47.185Z"
+      "updatedAt": "2026-09-08T20:26:47.185Z",
+      "pendulumEffectText": "此卡名的②灵摆效果１回合仅可使用１次。\n①：自己场上的“霸王龙扎克”不可因对手的效果除外。\n②：在自己的主要阶段可以发动。破坏此卡，从手牌・牌组将“霸王门的魔术师”以外的１只“霸王门”灵摆怪兽放在自己的灵摆区域。",
+      "pendulumScale": 1
     },
     {
       "id": "12931",
@@ -412762,7 +413462,9 @@
         "Supreme King Gate Zero"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12931",
-      "updatedAt": "2026-09-08T20:26:47.187Z"
+      "updatedAt": "2026-09-08T20:26:47.187Z",
+      "pendulumEffectText": "①：自己场上存在“霸王龙扎克”的情况下，自己将受到的所有伤害变为０。\n②：１回合１次，另一方自己的灵摆区域存在“霸王门 无限”的情况下可以发动。将自己的灵摆区域的２张卡破坏，从牌组将１张“融合”魔法卡或“结合”魔法卡加入手牌。",
+      "pendulumScale": 0
     },
     {
       "id": "19722",
@@ -412811,7 +413513,9 @@
         "Supreme King Z-ARC - Synchro Universe"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/19722",
-      "updatedAt": "2026-09-08T20:26:47.204Z"
+      "updatedAt": "2026-09-08T20:26:47.204Z",
+      "pendulumEffectText": "此卡名的灵摆效果1回合仅可使用1次。\n①：解放自己场上的1只“霸王眷龙”灵摆怪兽或“霸王门”灵摆怪兽可以发动。将此卡特殊召唤。",
+      "pendulumScale": 1
     },
     {
       "id": "14589",
@@ -415636,7 +416340,9 @@
         "Symphonic Warrior DJJ"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/17133",
-      "updatedAt": "2026-09-08T20:26:48.078Z"
+      "updatedAt": "2026-09-08T20:26:48.078Z",
+      "pendulumEffectText": "此卡名的②灵摆效果１回合仅可使用１次。①：１回合１次，在自己的主要阶段可以发动。挑选自己场上的１只里侧守备表示的“音响战士”怪兽，改成表侧守备表示。②：“音响战士”怪兽的效果发动的情况下可以发动。将灵摆区域的此卡特殊召唤。",
+      "pendulumScale": 8
     },
     {
       "id": "9325",
@@ -415726,7 +416432,9 @@
         "Symphonic Warrior Guitaar"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11608",
-      "updatedAt": "2026-09-08T20:26:48.096Z"
+      "updatedAt": "2026-09-08T20:26:48.096Z",
+      "pendulumEffectText": "此卡名的灵摆效果１回合仅可使用１次。①：舍弃１张手牌可以发动。从牌组将１只“音响战士 吉伊他”以外的“音响战士”怪兽特殊召唤。",
+      "pendulumScale": 7
     },
     {
       "id": "17132",
@@ -415775,7 +416483,9 @@
         "Symphonic Warrior Guitariss"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/17132",
-      "updatedAt": "2026-09-08T20:26:48.095Z"
+      "updatedAt": "2026-09-08T20:26:48.095Z",
+      "pendulumEffectText": "此卡名的灵摆效果１回合仅可使用１次。①：以自己场上此卡以外的１张“音响战士”卡为对象可以发动。将该卡和此卡放回持有者的手牌。",
+      "pendulumScale": 0
     },
     {
       "id": "12029",
@@ -415820,7 +416530,9 @@
         "Symphonic Warrior Miccs"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12029",
-      "updatedAt": "2026-09-08T20:26:48.101Z"
+      "updatedAt": "2026-09-08T20:26:48.101Z",
+      "pendulumEffectText": "①：另一方自己的灵摆区域没有“音响战士”卡存在的情况下，此卡的灵摆刻度变为４。②：在自己的结束阶段，以自己１只被除外的“音响战士”怪兽为对象可以发动。将该怪兽加入手牌。",
+      "pendulumScale": 1
     },
     {
       "id": "9326",
@@ -415914,7 +416626,9 @@
         "Symphonic Warrior Rockks"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/17153",
-      "updatedAt": "2026-09-08T20:26:48.142Z"
+      "updatedAt": "2026-09-08T20:26:48.142Z",
+      "pendulumEffectText": "此卡名的①灵摆效果１回合仅可使用１次。①：在自己・对手的准备阶段可以发动。从自己的额外牌组将１只表侧表示的灵摆怪兽加入手牌。②：对手怪兽攻击宣言时可以发动。将该怪兽和此卡破坏。",
+      "pendulumScale": 10
     },
     {
       "id": "11609",
@@ -420789,7 +421503,9 @@
         "Tempura of Fortune - EBI"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/20767",
-      "updatedAt": "2026-09-08T20:26:49.560Z"
+      "updatedAt": "2026-09-08T20:26:49.560Z",
+      "pendulumEffectText": "此卡名的灵摆效果1回合仅可使用1次。\n①：以自己灵摆区域的1张卡为对象可以发动。掷1次硬币，根据掷出的正反，适用以下效果。\n●正面：将该卡特殊召唤。\n●反面：将该卡破坏，自己失去相当于其灵摆刻度×300的LP。",
+      "pendulumScale": 8
     },
     {
       "id": "10126",
@@ -421304,7 +422020,9 @@
         "Tensei Ryu-Ge Anva"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/21161",
-      "updatedAt": "2026-09-08T20:26:49.683Z"
+      "updatedAt": "2026-09-08T20:26:49.683Z",
+      "pendulumEffectText": "此卡名的②灵摆效果1回合仅可使用1次。\n①：自己仅可灵摆召唤“龙华”怪兽。此效果不会被无效化。\n②：对手连锁自己的“龙华”魔法卡的效果的发动来发动的魔法・陷阱・怪兽的效果处理时，可将该效果无效。然后，将此卡破坏。",
+      "pendulumScale": 11
     },
     {
       "id": "9568",
@@ -429149,7 +429867,9 @@
         "The Twin Kings, Founders of the Empire"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11455",
-      "updatedAt": "2026-09-08T20:26:52.028Z"
+      "updatedAt": "2026-09-08T20:26:52.028Z",
+      "pendulumEffectText": "①：１ターンに１度、自分フィールドの表側表示の獣族Pモンスター３体を除外し、自分フィールドのPモンスター１体を対象として発動できる。このターンそのモンスターが直接攻撃で相手のLPを０にした場合、自分はマッチに勝利する。",
+      "pendulumScale": 1
     },
     {
       "id": "8733",
@@ -434442,7 +435162,9 @@
         "Timebreaker Magician"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12110",
-      "updatedAt": "2026-09-08T20:26:53.525Z"
+      "updatedAt": "2026-09-08T20:26:53.525Z",
+      "pendulumEffectText": "①：このカードがPゾーンに存在する限り、１ターンに１度、自分フィールドのPモンスターは相手の効果では破壊されない。",
+      "pendulumScale": 2
     },
     {
       "id": "11135",
@@ -434487,7 +435209,9 @@
         "Timegazer Magician"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11135",
-      "updatedAt": "2026-09-08T20:26:53.527Z"
+      "updatedAt": "2026-09-08T20:26:53.527Z",
+      "pendulumEffectText": "自己场上不存在怪兽的情况下可以发动此卡。①：自己的灵摆怪兽进行战斗的情况下，对手直至伤害步骤结束时为止，不可发动陷阱卡。②：另一方自己的灵摆区域没有“魔术师”卡或“异色眼”卡存在的情况下，此卡的灵摆刻度变为４。",
+      "pendulumScale": 8
     },
     {
       "id": "14163",
@@ -443656,7 +444380,9 @@
         "Trito Enneacraft - \"exapatisIA\""
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/22529",
-      "updatedAt": "2026-09-08T20:26:56.163Z"
+      "updatedAt": "2026-09-08T20:26:56.163Z",
+      "pendulumEffectText": "此卡名的②灵摆效果1回合仅可使用1次。\n①：每当有怪兽反转，就在此卡上放1个纠罪计数物。\n②：支付900LP可以发动。从牌组将3张“纠罪巧”卡出示给对手，对手从其中随机挑选1张。将该1张加入自己手牌，剩余的放回牌组。",
+      "pendulumScale": 0
     },
     {
       "id": "18219",
@@ -445255,7 +445981,9 @@
         "Twilight Ninja Jogen"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/13141",
-      "updatedAt": "2026-09-08T20:26:56.608Z"
+      "updatedAt": "2026-09-08T20:26:56.608Z",
+      "pendulumEffectText": "①：自分の「忍者」モンスターが守備表示モンスターを攻撃した場合、その守備力を攻撃力が超えた分だけ相手に戦闘ダメージを与える。",
+      "pendulumScale": 1
     },
     {
       "id": "13142",
@@ -445298,7 +446026,9 @@
         "Twilight Ninja Kagen"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/13142",
-      "updatedAt": "2026-09-08T20:26:56.608Z"
+      "updatedAt": "2026-09-08T20:26:56.608Z",
+      "pendulumEffectText": "①：自分は「忍者」モンスターしかP召喚できない。この効果は無効化されない。②：１ターンに１度、自分の「忍者」モンスターの攻撃宣言時に発動できる。そのモンスターの攻撃力はダメージステップ終了時まで１０００アップする。",
+      "pendulumScale": 10
     },
     {
       "id": "21771",
@@ -452762,7 +453492,9 @@
         "Vaylantz Buster Baron"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/17351",
-      "updatedAt": "2026-09-08T20:26:58.753Z"
+      "updatedAt": "2026-09-08T20:26:58.753Z",
+      "pendulumEffectText": "此卡名的灵摆效果１回合仅可使用１次。①：在自己的主要阶段可以发动。将此卡特殊召唤至正面的自己的主要怪兽区域。此效果发动后，直至回合结束时为止自己仅可特殊召唤“弈勇”怪兽（除了从额外牌组的特殊召唤以外）。",
+      "pendulumScale": 1
     },
     {
       "id": "17354",
@@ -452807,7 +453539,9 @@
         "Vaylantz Dominator Duke"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/17354",
-      "updatedAt": "2026-09-08T20:26:58.767Z"
+      "updatedAt": "2026-09-08T20:26:58.767Z",
+      "pendulumEffectText": "此卡名的灵摆效果１回合仅可使用１次。①：场地区域有“弈勇世界－百识公国”存在的情况下，或自己场上有炎属性的“弈勇”怪兽存在的情况下可以发动。将此卡特殊召唤至正面的自己的主要怪兽区域。",
+      "pendulumScale": 1
     },
     {
       "id": "17356",
@@ -452856,7 +453590,9 @@
         "Vaylantz Genesis Grand Duke"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/17356",
-      "updatedAt": "2026-09-08T20:26:58.773Z"
+      "updatedAt": "2026-09-08T20:26:58.773Z",
+      "pendulumEffectText": "此卡名的灵摆效果１回合仅可使用１次。①：可从以下效果中选择１个发动。\n●将此卡特殊召唤至正面的自己主要怪兽区域。\n●挑选１只自己主要怪兽区域的怪兽，将其位置移动至其相邻的怪兽区域。",
+      "pendulumScale": 10
     },
     {
       "id": "17353",
@@ -452901,7 +453637,9 @@
         "Vaylantz Mad Marquess"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/17353",
-      "updatedAt": "2026-09-08T20:26:58.774Z"
+      "updatedAt": "2026-09-08T20:26:58.774Z",
+      "pendulumEffectText": "此卡名的灵摆效果１回合仅可使用１次。①：场地区域有“弈勇世界－百识公国”存在的情况下，或自己场上有炎属性的“弈勇”怪兽存在的情况下可以发动。将此卡特殊召唤至正面的自己的主要怪兽区域。",
+      "pendulumScale": 1
     },
     {
       "id": "17357",
@@ -452964,7 +453702,9 @@
         "Vaylantz Voltage Viscount"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/17352",
-      "updatedAt": "2026-09-08T20:26:58.807Z"
+      "updatedAt": "2026-09-08T20:26:58.807Z",
+      "pendulumEffectText": "此卡名的灵摆效果１回合仅可使用１次。①：在自己的主要阶段可以发动。将此卡特殊召唤至正面的自己的主要怪兽区域。此效果发动后，直至回合结束时为止自己仅可特殊召唤“弈勇”怪兽（除了从额外牌组的特殊召唤以外）。",
+      "pendulumScale": 1
     },
     {
       "id": "10398",
@@ -455478,7 +456218,9 @@
         "Vector Pendulum, the Dracoverlord"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11968",
-      "updatedAt": "2026-09-08T20:26:59.479Z"
+      "updatedAt": "2026-09-08T20:26:59.479Z",
+      "pendulumEffectText": "①：只要此卡存在于灵摆区域，对手的灵摆区域的卡的效果无效化。",
+      "pendulumScale": 3
     },
     {
       "id": "13411",
@@ -455607,7 +456349,9 @@
         "Veda Kalarcanum"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/19147",
-      "updatedAt": "2026-09-08T20:26:59.503Z"
+      "updatedAt": "2026-09-08T20:26:59.503Z",
+      "pendulumEffectText": "①：自己或对手的怪兽被破坏的情况下发动（同一连锁上最多１次）。在此卡上放３个计数物。\n②：此卡的灵摆刻度上升相当于此卡计数物的数值。\n③：去除此卡的１２个计数物可以发动。将此卡特殊召唤。",
+      "pendulumScale": 0
     },
     {
       "id": "6748",
@@ -457677,7 +458421,9 @@
         "Vidolium the Unstable Power Patron of Unity"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/22519",
-      "updatedAt": "2026-09-08T20:27:00.078Z"
+      "updatedAt": "2026-09-08T20:27:00.078Z",
+      "pendulumEffectText": "此卡名的灵摆效果1回合仅可使用1次。\n①：可从以下效果中选择1个发动。\n●将此卡破坏，从自己手牌・墓地将1只“狱神”怪兽特殊召唤。\n●将此卡破坏。此回合中，自己场上的原本等级为12的“狱神”怪兽的攻击力上升5000。",
+      "pendulumScale": 11
     },
     {
       "id": "12515",
@@ -460614,7 +461360,9 @@
         "Vulmina, Statue of the Sacred Dragon"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/20420",
-      "updatedAt": "2026-09-08T20:27:00.924Z"
+      "updatedAt": "2026-09-08T20:27:00.924Z",
+      "pendulumEffectText": "此卡名的灵摆效果1回合仅可使用1次。\n①：有怪兽因自己的陷阱卡的效果被特殊召唤的情况下，以场上的1张卡为对象可以发动。将该卡放回手牌。然后，可将此卡特殊召唤。",
+      "pendulumScale": 1
     },
     {
       "id": "9393",
@@ -466726,7 +467474,9 @@
         "White Wing Magician"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12910",
-      "updatedAt": "2026-09-08T20:27:02.616Z"
+      "updatedAt": "2026-09-08T20:27:02.616Z",
+      "pendulumEffectText": "①：１回合１次，可将以自己场上的魔法师族・暗属性怪兽为对象发动的效果无效。然后将此卡破坏。",
+      "pendulumScale": 1
     },
     {
       "id": "6550",
@@ -466971,7 +467721,9 @@
         "Zany Zebra"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12150",
-      "updatedAt": "2026-09-08T20:27:02.678Z"
+      "updatedAt": "2026-09-08T20:27:02.678Z",
+      "pendulumEffectText": "①：このカードを発動したターンの自分メインフェイズに１度だけ、使用していないモンスターゾーンまたは魔法＆罠ゾーンを１ヵ所指定して発動できる。指定したゾーンはこのカードがPゾーンに存在する間は使用できない。",
+      "pendulumScale": 7
     },
     {
       "id": "5727",
@@ -467537,7 +468289,9 @@
         "Wind Unicorn Parallel, the Dracoslayer"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/22215",
-      "updatedAt": "2026-09-08T20:27:02.839Z"
+      "updatedAt": "2026-09-08T20:27:02.839Z",
+      "pendulumEffectText": "此卡名的灵摆效果1回合仅可使用1次。\n①：自己另一方的灵摆区域有卡存在的情况下，可从以下效果中选择1个发动。\n●将此卡特殊召唤。\n●将此卡破坏，将自己灵摆区域的1张等级5以下的灵摆怪兽卡特殊召唤。",
+      "pendulumScale": 2
     },
     {
       "id": "12775",
@@ -469622,7 +470376,9 @@
         "Wisdom-Eye Magician"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11784",
-      "updatedAt": "2026-09-08T20:27:03.351Z"
+      "updatedAt": "2026-09-08T20:27:03.351Z",
+      "pendulumEffectText": "①：另一方自己的灵摆区域有“魔术师”卡或“娱乐伙伴”卡存在的情况下可以发动。破坏此卡，从牌组挑选“慧眼的魔术师”以外的１只“魔术师”灵摆怪兽，放在自己的灵摆区域。",
+      "pendulumScale": 5
     },
     {
       "id": "8991",
@@ -475599,7 +476355,9 @@
         "Xiangke Magician"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11787",
-      "updatedAt": "2026-09-08T20:27:04.962Z"
+      "updatedAt": "2026-09-08T20:27:04.962Z",
+      "pendulumEffectText": "①：１回合１次，以自己场上的１只超量怪兽为对象可以发动。此回合，可将该超量怪兽当成与其阶级数值相同等级的怪兽，来作为超量召唤的素材。",
+      "pendulumScale": 3
     },
     {
       "id": "11788",
@@ -475644,7 +476402,9 @@
         "Xiangsheng Magician"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11788",
-      "updatedAt": "2026-09-08T20:27:04.992Z"
+      "updatedAt": "2026-09-08T20:27:04.992Z",
+      "pendulumEffectText": "①：１回合１次，以自己场上的１只超量怪兽和１只等级５以上的怪兽为对象可以发动。该超量怪兽的阶级直至回合结束时为止，变为与该等级５以上怪兽的等级相同的数值。②：自己场上的卡多于对手场上的情况下，此卡的灵摆刻度变为４。",
+      "pendulumScale": 8
     },
     {
       "id": "6218",
@@ -478128,7 +478888,9 @@
         "Yoko-Zuna Sumo Spirit"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/13532",
-      "updatedAt": "2026-09-08T20:27:05.761Z"
+      "updatedAt": "2026-09-08T20:27:05.761Z",
+      "pendulumEffectText": "①：フィールドにモンスターがP召喚された場合に発動する。Pゾーンのこのカードを持ち主の手札に戻す。",
+      "pendulumScale": 1
     },
     {
       "id": "12766",
@@ -478777,7 +479539,9 @@
         "Yosenju Shinchu L"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11476",
-      "updatedAt": "2026-09-08T20:27:05.934Z"
+      "updatedAt": "2026-09-08T20:27:05.934Z",
+      "pendulumEffectText": "①：自分フィールドの「妖仙獣」モンスターが戦闘・効果で破壊される場合、代わりにこのカードを破壊できる。",
+      "pendulumScale": 3
     },
     {
       "id": "11477",
@@ -478820,7 +479584,9 @@
         "Yosenju Shinchu R"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11477",
-      "updatedAt": "2026-09-08T20:27:05.932Z"
+      "updatedAt": "2026-09-08T20:27:05.932Z",
+      "pendulumEffectText": "①：１ターンに１度、もう片方の自分のPゾーンに「妖仙獣」カードが存在する場合に発動できる。このカードのPスケールはターン終了時まで１１になる。この効果の発動後、ターン終了時まで自分は「妖仙獣」モンスターしか特殊召喚できない。",
+      "pendulumScale": 5
     },
     {
       "id": "11547",
@@ -480903,7 +481669,9 @@
         "Zefraath"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12944",
-      "updatedAt": "2026-09-08T20:27:06.507Z"
+      "updatedAt": "2026-09-08T20:27:06.507Z",
+      "pendulumEffectText": "「智天の神星龍」のP効果は１ターンに１度しか使用できない。①：自分メインフェイズに発動できる。デッキから「セフィラ」Pモンスター１体を選び、自分のエクストラデッキに表側表示で加え、このカードのPスケールをターン終了時まで、そのPモンスターのPスケールと同じにする。",
+      "pendulumScale": 5
     },
     {
       "id": "11700",
@@ -480948,7 +481716,9 @@
         "Zefraniu, Secret of the Yang Zing"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11700",
-      "updatedAt": "2026-09-08T20:27:06.509Z"
+      "updatedAt": "2026-09-08T20:27:06.509Z",
+      "pendulumEffectText": "①：自己仅可灵摆召唤“龙星”怪兽以及“源质”怪兽。此效果不会被无效化。",
+      "pendulumScale": 7
     },
     {
       "id": "11701",
@@ -480993,7 +481763,9 @@
         "Zefrasaber, Swordmaster of the Nekroz"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11701",
-      "updatedAt": "2026-09-08T20:27:06.531Z"
+      "updatedAt": "2026-09-08T20:27:06.531Z",
+      "pendulumEffectText": "①：自己仅可灵摆召唤“影灵衣”怪兽及“源质”怪兽。此效果不会被无效化。",
+      "pendulumScale": 1
     },
     {
       "id": "11702",
@@ -481038,7 +481810,9 @@
         "Zefraxa, Flame Beast of the Nekroz"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11702",
-      "updatedAt": "2026-09-08T20:27:06.530Z"
+      "updatedAt": "2026-09-08T20:27:06.530Z",
+      "pendulumEffectText": "①：自己仅可灵摆召唤“影灵衣”怪兽及“源质”怪兽。此效果不会被无效化。",
+      "pendulumScale": 7
     },
     {
       "id": "11699",
@@ -481083,7 +481857,9 @@
         "Zefraxi, Treasure of the Yang Zing"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11699",
-      "updatedAt": "2026-09-08T20:27:06.545Z"
+      "updatedAt": "2026-09-08T20:27:06.545Z",
+      "pendulumEffectText": "①：自己仅可灵摆召唤“龙星”怪兽以及“源质”怪兽。此效果不会被无效化。",
+      "pendulumScale": 1
     },
     {
       "id": "10096",

@@ -423,6 +423,31 @@ test("card normalization persists structured monster metadata without a card-spe
   assert.equal(rankRecord.rank, 8);
 });
 
+test("card normalization preserves YGOResources pendulum text and scale with locale fallback", () => {
+  const record = normalizeCard({
+    cardData: {
+      cn: {
+        name: "架空灵摆怪兽",
+        cardType: "monster",
+        effectText: "中文怪兽效果",
+        properties: [4, 16],
+      },
+      ja: {
+        pendulumEffectText: "日文灵摆效果",
+        pendulumScale: 3,
+      },
+      en: {
+        pendulumEffectText: "English pendulum effect",
+        pendulumScale: 4,
+      },
+    },
+  }, {}, "90004", []);
+
+  assert.equal(record.effectText, "中文怪兽效果");
+  assert.equal(record.pendulumEffectText, "日文灵摆效果");
+  assert.equal(record.pendulumScale, 3);
+});
+
 test("tracked aliases that uniquely belong to another canonical card are quarantined", () => {
   const warnings = [];
   const entries = [

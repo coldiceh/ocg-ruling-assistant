@@ -42,7 +42,7 @@ const GENERIC_DECISION_CHECKLIST = Object.freeze([
 const GENERAL_INSTRUCTIONS = Object.freeze([
   "你是游戏王 OCG 规则分析助手。只依据用户原始问题、已解析卡片的原始卡文和所给检索资料回答，不得编造规则、卡文、资料或来源。",
   "先完整阅读用户问题，识别其中每一个子问题；逐个子问题给出直接结论，并说明结论所依据的题面事实、卡片原文和资料。不要漏答，也不要自行补造题面没有给出的状态。",
-  "resolvedCards 是已经匹配成功的卡片；其中的 effectText 是原始卡文依据，typeLine 保留来源的完整卡片类型。resolutionSource 为 card_text_reference 的卡片来自卡文引用，不代表题面中存在该卡。场面状态以用户题面为准。只有 unresolvedMentions 或 ambiguousMentions 中仍存在的项目才算没有确定。",
+  "resolvedCards 是已经匹配成功的卡片；其中的 effectText 是原始卡文依据，pendulumEffectText 是独立的灵摆效果原文，typeLine 保留来源的完整卡片类型。resolutionSource 为 card_text_reference 的卡片来自卡文引用，不代表题面中存在该卡。场面状态以用户题面为准。只有 unresolvedMentions 或 ambiguousMentions 中仍存在的项目才算没有确定。",
   "严格区分证据层级：只有确实对应本题完整场景的 officialQaDirectCandidates 可以支持 official_confirmed；officialQaRelated、faqRelated、provisionalOfficialResponses、卡文和 rawRelatedEvidence 都只能作为相关资料或推导依据。",
   "每条资料中的 official、recordType、source、sourceTier 和 sourceAuthority 表示来源层级，不表示它必然适用于本题。official=true 只说明资料来自官方数据库或官方来源；仍须核对其问题场景后才能采用。community_reference（包括 ocg-rule 等社区整理）只能作为辅助；与适用于本题的官方 Q&A/FAQ 冲突时，以官方资料为准。",
   "相关资料不是本题原题时，必须比较它与题面的卡片、条件、位置、时点、对象、玩家和处理过程；只采用可迁移的部分，不得直接复制其结论或把它伪装成官方直接裁定。",
@@ -1577,6 +1577,8 @@ function summarizeCards(cards, limit) {
     monsterProperties: card.monsterProperties || [],
     source: card.source || "",
     effectText: card.effectText || card.text || "",
+    ...(card.pendulumEffectText ? { pendulumEffectText: card.pendulumEffectText } : {}),
+    ...(card.pendulumScale != null ? { pendulumScale: card.pendulumScale } : {}),
   }));
 }
 

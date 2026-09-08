@@ -721,6 +721,13 @@ export function normalizeCard(payload, tracked = {}, id, monsterPropertyMetadata
   const primaryName = cnName || jaName || enName || tracked.name || String(id);
   const aliases = [...new Set([primaryName, cnName, jaName, enName, tracked.lookupName, ...(tracked.aliases || [])].filter(Boolean))];
   const structuredMetadata = normalizeCardMetadata({ id }, payload, monsterPropertyMetadata);
+  const pendulumEffectText = cardData.cn?.pendulumEffectText
+    || cardData.ja?.pendulumEffectText
+    || cardData.en?.pendulumEffectText
+    || "";
+  const pendulumScale = cardData.cn?.pendulumScale
+    ?? cardData.ja?.pendulumScale
+    ?? cardData.en?.pendulumScale;
 
   return {
     ...structuredMetadata,
@@ -731,6 +738,8 @@ export function normalizeCard(payload, tracked = {}, id, monsterPropertyMetadata
     enName,
     cardType: cardData.cn?.cardType || cardData.ja?.cardType || cardData.en?.cardType || structuredMetadata.cardType || "",
     effectText: cardData.cn?.effectText || cardData.ja?.effectText || cardData.en?.effectText || "",
+    ...(pendulumEffectText ? { pendulumEffectText } : {}),
+    ...(pendulumScale !== undefined && pendulumScale !== null ? { pendulumScale } : {}),
     released: isReleased(cardData),
     aliases,
     sourceUrl: `${baseUrl}/data/card/${id}`,
