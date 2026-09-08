@@ -58,16 +58,18 @@ test("preview staging excludes private inputs and copies only selected current s
     });
     const assetDir = join(temp, "cloud-assets");
     await mkdir(assetDir);
-    const corpusManifest = `${JSON.stringify({ schemaVersion: 1, corpusFile: "corpus.json.gz" })}\n`;
+    const corpusManifest = `${JSON.stringify({ schemaVersion: 1, corpusFile: "corpus.json.gz", lexicalIndex: { file: "lexical-index.bin.gz" } })}\n`;
     await writeFile(join(assetDir, "corpus-manifest.json"), corpusManifest);
     await writeFile(join(assetDir, "evidence-vector-index.json"), JSON.stringify({ shards: [{ file: "evidence-vectors-000.f32" }] }));
     await writeFile(join(assetDir, "corpus.json.gz"), Buffer.from([1, 2, 3]));
     await writeFile(join(assetDir, "evidence-vectors-000.f32"), Buffer.from([4, 5, 6, 7]));
+    await writeFile(join(assetDir, "lexical-index.bin.gz"), Buffer.from([8, 9, 10]));
     await writeFile(join(assetDir, "vector-documents.json"), "unused build input must not ship\n");
     const withAssets = await stageCloudPreview({ root, output: join(temp, "preview-assets"), includeFiles, assetDir });
     assert.deepEqual(withAssets.manifest.files.filter((file) => file.sourceKind === "cloud-asset").map((file) => file.path), [
       "data/cloud-evidence-v1/corpus-manifest.json", "data/cloud-evidence-v1/corpus.json.gz",
       "data/cloud-evidence-v1/evidence-vector-index.json", "data/cloud-evidence-v1/evidence-vectors-000.f32",
+      "data/cloud-evidence-v1/lexical-index.bin.gz",
     ]);
     assert.equal(await readFile(join(withAssets.output, "data", "cloud-evidence-v1", "corpus-manifest.json"), "utf8"), corpusManifest);
     assert.deepEqual(await readFile(join(withAssets.output, "data", "cloud-evidence-v1", "evidence-vectors-000.f32")), Buffer.from([4, 5, 6, 7]));

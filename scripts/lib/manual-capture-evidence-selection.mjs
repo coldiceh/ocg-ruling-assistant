@@ -515,6 +515,7 @@ export function createCheckpointedManualCaptureNeedGenerator({
 
 const bm25CorpusCache = new WeakMap();
 const completeLexicalCorpusCache = new WeakMap();
+const COMPLETE_LEXICAL_INDEX_CONTRACT = "bm25-v1:k1=1.2;b=0.75;NFKC;und-lower;alnum-g2-g3";
 
 function prepareBm25Corpus(documentCount, termsAt) {
   const postings = new Map();
@@ -1192,15 +1193,27 @@ export function buildManualCaptureCompleteLexicalQueryQueue({
   // The cache is only eligible for immutable arrays of immutable primitive
   // binding/text fields. Mutable callers are recomputed, so a body-text update
   // cannot reuse statistics merely because an old binding was retained.
-  const cacheable = Object.isFrozen(candidates) && candidates.every((candidate, index) => (
+  const cacheable = completeLexicalCandidatesAreImmutable(candidates);
+  const cachedCorpus = cacheable && completeLexicalCorpusCache.get(candidates);
+  if (cachedCorpus) return rankCompleteLocalQuerySurface(query, cachedCorpus.stableCandidates,
+    undefined, onScores, cachedCorpus.preparedCorpus);
+  const stableCandidates = stableCompleteLexicalCandidates(candidates);
+  const preparedCorpus = prepareBm25Corpus(stableCandidates.length,
+    index => localSearchTerms(stableCandidates[index].text));
+  if (cacheable) completeLexicalCorpusCache.set(candidates, { stableCandidates, preparedCorpus });
+  return rankCompleteLocalQuerySurface(query, stableCandidates, undefined, onScores, preparedCorpus);
+}
+
+function completeLexicalCandidatesAreImmutable(candidates) {
+  return Object.isFrozen(candidates) && candidates.every((candidate, index) => (
     Object.isFrozen(candidate)
       && Object.getOwnPropertyDescriptor(candidates, index)?.value === candidate
       && typeof Object.getOwnPropertyDescriptor(candidate, "binding")?.value === "string"
       && typeof Object.getOwnPropertyDescriptor(candidate, "text")?.value === "string"
   ));
-  const cachedCorpus = cacheable && completeLexicalCorpusCache.get(candidates);
-  if (cachedCorpus) return rankCompleteLocalQuerySurface(query, cachedCorpus.stableCandidates,
-    undefined, onScores, cachedCorpus.preparedCorpus);
+}
+
+function stableCompleteLexicalCandidates(candidates) {
   const stableCandidates = [...candidates].sort((left, right) => (
     compareStableText(String(left?.binding || ""), String(right?.binding || ""))
   ));
@@ -1209,10 +1222,88 @@ export function buildManualCaptureCompleteLexicalQueryQueue({
       || new Set(bindings).size !== bindings.length) {
     throw new Error("manual_capture_complete_lexical_candidate_binding_invalid");
   }
-  const preparedCorpus = prepareBm25Corpus(stableCandidates.length,
-    index => localSearchTerms(stableCandidates[index].text));
-  if (cacheable) completeLexicalCorpusCache.set(candidates, { stableCandidates, preparedCorpus });
-  return rankCompleteLocalQuerySurface(query, stableCandidates, undefined, onScores, preparedCorpus);
+  return stableCandidates;
+}
+
+function lexicalCandidateFingerprint(stableCandidates) {
+  // Stable candidate bindings do not include the outer lexical text field.
+  return sha256(JSON.stringify(stableCandidates.map(candidate => [candidate.binding, sha256(candidate.text)])));
+}
+
+// Binary storage only: the existing tokenizer, preparation, Float64 values and
+// query scoring remain the single implementation. Bump the contract when those
+// algorithms change. The format is LE on the supported Windows/Linux runtimes.
+export function serializeManualCaptureLexicalIndex({ candidates, dataRevision }) {
+  if (!Array.isArray(candidates) || !candidates.length || !String(dataRevision || "")) {
+    throw new Error("manual_capture_lexical_index_input_invalid");
+  }
+  if (new Uint8Array(new Uint32Array([1]).buffer)[0] !== 1) throw new Error("manual_capture_lexical_index_byte_order_invalid");
+  const stableCandidates = stableCompleteLexicalCandidates(candidates);
+  const prepared = prepareBm25Corpus(stableCandidates.length, index => localSearchTerms(stableCandidates[index].text));
+  const header = Buffer.from(JSON.stringify({
+    schemaVersion: 1, contract: COMPLETE_LEXICAL_INDEX_CONTRACT, byteOrder: "LE", dataRevision,
+    documentCount: stableCandidates.length, candidateFingerprint: lexicalCandidateFingerprint(stableCandidates),
+    terms: [...prepared.postings.keys()], postingLengths: [...prepared.postings.values()].map(entries => entries.length),
+  }));
+  const offset = Math.ceil((12 + header.length) / 8) * 8;
+  const words = [...prepared.postings.values()].reduce((sum, entries) => sum + entries.length, 0);
+  const bytes = Buffer.alloc(offset + prepared.lengthNormalizations.byteLength + words * 4);
+  bytes.write("OCGBM25\0", 0, "ascii"); bytes.writeUInt32LE(header.length, 8); header.copy(bytes, 12);
+  new Float64Array(bytes.buffer, bytes.byteOffset + offset, prepared.documentCount).set(prepared.lengthNormalizations);
+  const postings = new Uint32Array(bytes.buffer, bytes.byteOffset + offset + prepared.lengthNormalizations.byteLength, words);
+  let position = 0;
+  for (const entries of prepared.postings.values()) { postings.set(entries, position); position += entries.length; }
+  return bytes;
+}
+
+export function installManualCaptureLexicalIndex({ candidates, dataRevision, bytes }) {
+  // These checks establish byte layout, numeric ranges and exact text/identity
+  // binding only. A corrupt index must not silently change ranking or authority.
+  if (!Array.isArray(candidates) || !candidates.length || !completeLexicalCandidatesAreImmutable(candidates)) {
+    throw new Error("manual_capture_lexical_index_immutable_candidates_required");
+  }
+  if (!Buffer.isBuffer(bytes) || bytes.length < 12 || bytes.toString("ascii", 0, 8) !== "OCGBM25\0") {
+    throw new Error("manual_capture_lexical_index_header_invalid");
+  }
+  const headerLength = bytes.readUInt32LE(8), offset = Math.ceil((12 + headerLength) / 8) * 8;
+  if (offset > bytes.length) throw new Error("manual_capture_lexical_index_header_invalid");
+  const header = JSON.parse(bytes.toString("utf8", 12, 12 + headerLength));
+  const stableCandidates = stableCompleteLexicalCandidates(candidates);
+  if (header.schemaVersion !== 1 || header.contract !== COMPLETE_LEXICAL_INDEX_CONTRACT || header.byteOrder !== "LE"
+    || new Uint8Array(new Uint32Array([1]).buffer)[0] !== 1
+    || header.dataRevision !== dataRevision || header.documentCount !== stableCandidates.length
+    || header.candidateFingerprint !== lexicalCandidateFingerprint(stableCandidates)) {
+    throw new Error("manual_capture_lexical_index_binding_invalid");
+  }
+  if (!Array.isArray(header.terms) || !Array.isArray(header.postingLengths)
+    || header.terms.length !== header.postingLengths.length
+    || header.terms.some(term => typeof term !== "string") || new Set(header.terms).size !== header.terms.length
+    || header.postingLengths.some(length => !Number.isSafeInteger(length) || length <= 0 || length % 2 !== 0)) {
+    throw new Error("manual_capture_lexical_index_dictionary_invalid");
+  }
+  const words = header.postingLengths.reduce((sum, length) => sum + length, 0);
+  if (offset + header.documentCount * 8 + words * 4 !== bytes.length) throw new Error("manual_capture_lexical_index_length_invalid");
+  // Own the backing bytes so callers cannot mutate the live cached index.
+  const owned = Buffer.from(bytes);
+  const lengthNormalizations = new Float64Array(owned.buffer, owned.byteOffset + offset, header.documentCount);
+  if (lengthNormalizations.some(value => !Number.isFinite(value) || value <= 0)) throw new Error("manual_capture_lexical_index_normalization_invalid");
+  const postings = new Map();
+  let position = offset + header.documentCount * 8;
+  for (let termIndex = 0; termIndex < header.terms.length; termIndex++) {
+    const entries = new Uint32Array(owned.buffer, owned.byteOffset + position, header.postingLengths[termIndex]);
+    let previous = -1;
+    for (let index = 0; index < entries.length; index += 2) {
+      if (entries[index] >= header.documentCount || entries[index] <= previous || entries[index + 1] === 0) {
+        throw new Error("manual_capture_lexical_index_posting_invalid");
+      }
+      previous = entries[index];
+    }
+    postings.set(header.terms[termIndex], entries);
+    position += entries.byteLength;
+  }
+  completeLexicalCorpusCache.set(candidates, { stableCandidates,
+    preparedCorpus: { documentCount: header.documentCount, postings, lengthNormalizations } });
+  return { documentCount: header.documentCount, termCount: postings.size, byteLength: bytes.length };
 }
 
 // Phase-B offline-only seam. It consumes the already ordered observations emitted

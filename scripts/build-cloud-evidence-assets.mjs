@@ -9,6 +9,7 @@ import { getTrustedRagDataRevision } from '../backend/ragDataRevisionManifest.mj
 import {
   buildSafeCandidates,
   buildManualCaptureReferenceParagraphRecords,
+  serializeManualCaptureLexicalIndex,
 } from './lib/manual-capture-evidence-selection.mjs';
 import {
   buildManualCaptureEmbeddingDocumentViews,
@@ -20,6 +21,15 @@ import {
 const hash = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 const zip = promisify(gzip);
 const MAX_ASSET_FILE_BYTES = 100_000_000;
+
+export async function writeCloudEvidenceLexicalIndex({outputDir, dataRevision, candidates}) {
+  const bytes = serializeManualCaptureLexicalIndex({candidates, dataRevision});
+  const compressed = await zip(bytes);
+  if (compressed.length >= MAX_ASSET_FILE_BYTES) throw new Error('cloud_lexical_index_compressed_file_too_large');
+  await fs.writeFile(path.join(outputDir, 'lexical-index.bin.gz'), compressed, {flag:'wx'});
+  return {file:'lexical-index.bin.gz', encoding:'gzip', bytes:bytes.length, sha256:hash(bytes),
+    compressedBytes:compressed.length, compressedSha256:hash(compressed)};
+}
 
 export async function writeCloudEvidenceCorpus({outputDir, dataRevision, candidates}) {
   const documents = candidates.map(buildManualCaptureEmbeddingDocumentViews);
@@ -34,12 +44,14 @@ export async function writeCloudEvidenceCorpus({outputDir, dataRevision, candida
   if (vectorDocumentBytes.length >= MAX_ASSET_FILE_BYTES) throw new Error('cloud_vector_document_file_too_large');
   await fs.writeFile(path.join(outputDir, 'corpus.json.gz'), compressed, {flag:'wx'});
   await fs.writeFile(path.join(outputDir, 'vector-documents.json'), vectorDocumentBytes, {flag:'wx'});
+  const lexicalIndex = candidates.length ? await writeCloudEvidenceLexicalIndex({outputDir, dataRevision, candidates}) : null;
   return {
     corpusFile:'corpus.json.gz', corpusEncoding:'gzip',
     corpusSha256:hash(corpusBytes), corpusBytes:corpusBytes.length,
     corpusCompressedSha256:hash(compressed), corpusCompressedBytes:compressed.length,
     candidateCount:candidates.length,
     uniqueDocumentViews:new Set(documents.flatMap(d=>d.views.map(v=>v.textSha256))).size,
+    ...(lexicalIndex ? {lexicalIndex} : {}),
   };
 }
 
