@@ -291,6 +291,42 @@ test("card FAQ adapter decodes HTML mechanically while retaining links and CID p
   assert.equal(records[1].conclusion, "旧格式\nそのまま");
 });
 
+test("card FAQ adapter keeps normal and pendulum entries distinct when effect keys overlap", () => {
+  const records = buildFaqRecords([
+    {
+      record: { id: "12346", name: "Fixture Pendulum Card", sourceUrl: "https://example.test/card/12346" },
+      payload: {
+        faqData: {
+          entries: { "0.5": [{ ja: "普通 FAQ" }] },
+          pendEntries: { "0.5": [{ ja: "灵摆 FAQ" }] },
+        },
+      },
+    },
+  ]);
+
+  assert.deepEqual(records.map((record) => record.id), [
+    "card-faq-12346-0.5",
+    "card-faq-12346-pendulum-0.5",
+  ]);
+  assert.deepEqual(records.map((record) => record.conclusion), ["普通 FAQ", "灵摆 FAQ"]);
+});
+
+test("card FAQ adapter keeps a pendulum-only entry", () => {
+  const records = buildFaqRecords([
+    {
+      record: { id: "12347", name: "Pendulum Only Card", sourceUrl: "https://example.test/card/12347" },
+      payload: {
+        faqData: {
+          pendEntries: { "1": [{ ja: "仅灵摆 FAQ" }] },
+        },
+      },
+    },
+  ]);
+
+  assert.deepEqual(records.map((record) => record.id), ["card-faq-12347-pendulum-1"]);
+  assert.equal(records[0].conclusion, "仅灵摆 FAQ");
+});
+
 test("FAQ HTML decoder keeps literal angle text and rejects invalid numeric entities mechanically", () => {
   assert.equal(decodeFaqHtml("数值 <3000> &lt; 4000<br>结果"), "数值 <3000> < 4000\n结果");
   assert.equal(decodeFaqHtml("坏实体 &#x110000; 和 &#55296; 和 &#12ab;"), "坏实体 &#x110000; 和 &#55296; 和 &#12ab;");
