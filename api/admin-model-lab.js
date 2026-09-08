@@ -13,6 +13,7 @@ const GET_ACTIONS = new Set([
 ]);
 
 const POST_ACTIONS = new Set([
+  "capture-public-evidence",
   "create",
   "fork",
   "execute",
@@ -163,6 +164,11 @@ function readBooleanFlag(value) {
 
 async function dispatchJsonAction({ service, context }) {
   const { action, body, query, request, authorization } = context;
+  if (action === "capture-public-evidence") {
+    return callService(service, "capturePublicEvidence", {
+      body: withoutAction(body), request, authorization,
+    });
+  }
   if (action === "capabilities") {
     return callService(service, "capabilities", {
       request,

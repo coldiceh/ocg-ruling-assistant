@@ -1,3 +1,4 @@
+import { capturePublicRulingEvidence } from './adminPublicEvidenceCapture.mjs';
 import {
   ADMIN_MODEL_LAB_STAGES,
 } from "./adminModelLabConfig.mjs";
@@ -49,9 +50,11 @@ const HISTORY_FEATURES = Object.freeze([
 export function createAdminModelLabProductionService({
   ...options
 } = {}) {
-  return createAdminModelLabComposedService({
-    ...options,
-    requirePersistentStores: true,
+  return Object.freeze({
+    ...createAdminModelLabComposedService({ ...options, requirePersistentStores: true }),
+    capturePublicEvidence: ({ body }) => capturePublicRulingEvidence({
+      payload: body, env: options.env, fetchImpl: options.fetchImpl,
+    }),
   });
 }
 

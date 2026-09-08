@@ -184,6 +184,27 @@
             </form>
 
             <div id="adminLabWorkspace" hidden>
+              <section class="admin-lab-section" aria-labelledby="adminCaptureTitle">
+                <h3 id="adminCaptureTitle">线上证据检查</h3>
+                <p>沿用玩家当前流程生成完整资料，在最终回答前停止。结果仅显示在本页，可下载保存。</p>
+                <form id="adminEvidenceCaptureForm">
+                  <label for="adminCaptureQuestion">原始问题</label>
+                  <textarea id="adminCaptureQuestion" rows="4" required></textarea>
+                  <label for="adminCaptureRunId">本轮预算编号（同轮保持不变）</label>
+                  <input id="adminCaptureRunId" required pattern="[a-zA-Z0-9_-]{1,70}" />
+                  <label for="adminCaptureCny">本轮实际费用上限（元）</label>
+                  <input id="adminCaptureCny" type="number" min="0.000000001" step="any" required />
+                  <label for="adminCaptureUsd">本轮 GPT 理论费用上限（美元）</label>
+                  <input id="adminCaptureUsd" type="number" min="0.000000001" step="any" required />
+                  <button class="primary-button" id="adminCaptureButton" type="submit">仅生成证据包</button>
+                </form>
+                <p id="adminCaptureStatus" role="status">等待检查</p>
+                <button class="text-button" id="adminCaptureDownload" type="button" hidden>下载本次证据包</button>
+                <details id="adminCaptureDetails" hidden>
+                  <summary>查看本次完整记录</summary>
+                  <textarea id="adminCaptureResult" rows="12" readonly aria-label="完整证据记录"></textarea>
+                </details>
+              </section>
               <section class="admin-lab-section" aria-labelledby="adminBudgetTitle">
                 <div class="admin-section-head">
                   <div>
@@ -385,6 +406,6 @@
       </main>
     </div>
 
-    <script src="src/app.js?v=20260908-player-pipeline-3"></script>
+    <script src="src/app.js?v=20260908-evidence-capture-1"></script>
   </body>
 </html>
