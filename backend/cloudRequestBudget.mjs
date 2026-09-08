@@ -57,10 +57,19 @@ function usagePresent(usage) {
     && (usage.total_tokens === undefined || usage.total_tokens === input + output);
 }
 
-export function createCloudRequestBudget({env, fetchImpl = globalThis.fetch, command} = {}) {
+export function createCloudRequestBudget({env, fetchImpl = globalThis.fetch, command, now = new Date()} = {}) {
   const namespace = String(env.CLOUD_BUDGET_RUN_ID || '');
   if (!/^[a-zA-Z0-9_-]{1,100}$/u.test(namespace)) throw new Error('cloud_budget_run_id_required');
-  const key = `ruling-cloud-budget:v1:${namespace}`;
+  // Production may reuse its daily allowance. Experiment scopes stay cumulative.
+  // The observable invariant is the Redis key's configured calendar day; no
+  // request content is interpreted and existing run balances are not reset.
+  const period = String(env.CLOUD_BUDGET_PERIOD || 'run');
+  if (!['run','daily'].includes(period)) throw new Error('cloud_budget_invalid_period');
+  const day = period === 'daily' ? Object.fromEntries(new Intl.DateTimeFormat('en-US', {
+    timeZone: env.API_BUDGET_TIMEZONE || 'Asia/Shanghai', year:'numeric',month:'2-digit',day:'2-digit',
+  }).formatToParts(now).map(part=>[part.type,part.value])) : null;
+  const dayKey = day ? `${day.year}-${day.month}-${day.day}` : null;
+  const key = `ruling-cloud-budget:v1:${namespace}${dayKey ? `:${dayKey}` : ''}`;
   const limits = {
     actualCny:amount(env.CLOUD_BUDGET_ACTUAL_LIMIT_CNY,'actual_limit'),
     theoreticalUsd:amount(env.CLOUD_BUDGET_THEORETICAL_LIMIT_USD,'theoretical_limit'),
@@ -144,7 +153,7 @@ export function createCloudRequestBudget({env, fetchImpl = globalThis.fetch, com
       actualCny:tokens*(ticket.operation==='embeddings'?0.07:0.28)/1e6,theoreticalUsd:0});
   }
   function snapshot() {
-    return {runId:namespace,limits,actualCostBasis:'provider_usage_and_observed_relay_group',relayMultiplier,siteDollarCny,
+    return {runId:namespace,period,dayKey,limits,actualCostBasis:'provider_usage_and_observed_relay_group',relayMultiplier,siteDollarCny,
       actualCny:records.filter(r=>r.status==='usage_settled').reduce((n,r)=>n+r.estimatedActualCny,0),
       accountedActualUpperCny:records.filter(r=>r.status==='usage_settled').reduce((n,r)=>n+r.actualNano/UNIT,0),
       theoreticalUsd:records.filter(r=>r.status==='usage_settled').reduce((n,r)=>n+r.theoreticalNano/UNIT,0),
