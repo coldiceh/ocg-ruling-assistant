@@ -786,6 +786,65 @@ async function requestBackendAnswer(text, requestedRulingVersion, {
   requestId = null,
 } = {}) {
   const backendMode = "rag";
+  // Capture the model choice once so the first wire payload remains stable
+  // while the preparation stream is active.
+  const firstRequestModelProfile = selectedRulingModelProfile;
+  const prepareResult = await postPublicAnswerProgressRequest({
+    body: {
+      question: text,
+      mode: backendMode,
+      rulingModelProfile: firstRequestModelProfile,
+      rulingVersion: requestedRulingVersion,
+      action: "prepare",
+    },
+    signal,
+    requestedRulingVersion,
+    requestId,
+    phase: "prepare",
+  });
+
+  // Older deployments can still return one complete answer. Keep that path
+  // compatible and apply version validation only to an actual answer.
+  if (prepareResult?.kind !== "prepared") {
+    return validatePublicAnswerRulingVersion(prepareResult, requestedRulingVersion);
+  }
+
+  if (signal?.aborted) {
+    throw createBackendRequestError({
+      code: "answer_request_aborted",
+      cause: signal.reason,
+    });
+  }
+  if (requestId !== null && requestId !== analysisRequestId) {
+    throw createBackendRequestError({ code: "answer_request_stale" });
+  }
+
+  const finalResult = await postPublicAnswerProgressRequest({
+    body: {
+      action: "finalize",
+      preparationId: prepareResult.preparationId,
+    },
+    signal,
+    requestedRulingVersion,
+    requestId,
+    phase: "finalize",
+  });
+  if (finalResult?.kind === "prepared") {
+    throw createRulingVersionError({
+      code: "ruling_progress_prepared_unexpected",
+      requestedVersion: requestedRulingVersion,
+    });
+  }
+  return validatePublicAnswerRulingVersion(finalResult, requestedRulingVersion);
+}
+
+async function postPublicAnswerProgressRequest({
+  body,
+  signal,
+  requestedRulingVersion,
+  requestId = null,
+  phase,
+}) {
   let response;
   try {
     response = await fetch(buildPublicAnswerProgressUrl(appConfig.answerApiUrl), {
@@ -796,12 +855,7 @@ async function requestBackendAnswer(text, requestedRulingVersion, {
         accept: "text/event-stream",
         "content-type": "application/json",
       },
-      body: JSON.stringify({
-        question: text,
-        mode: backendMode,
-        rulingModelProfile: selectedRulingModelProfile,
-        rulingVersion: requestedRulingVersion,
-      }),
+      body: JSON.stringify(body),
     });
   } catch (error) {
     throw createBackendRequestError({
@@ -832,7 +886,13 @@ async function requestBackendAnswer(text, requestedRulingVersion, {
       status: response.status,
     });
   }
-  const answer = await readPublicAnswerProgressStream(response, requestedRulingVersion, { requestId });
+  return readPublicAnswerProgressStream(response, requestedRulingVersion, {
+    requestId,
+    phase,
+  });
+}
+
+function validatePublicAnswerRulingVersion(answer, requestedRulingVersion) {
   const rawEffectiveVersion = String(answer?.effectiveRulingVersion || "").trim();
   const rawRulingVersion = String(answer?.rulingVersion || "").trim();
   const reportedEffectiveVersion = normalizeRulingVersion(answer?.effectiveRulingVersion);
@@ -896,6 +956,7 @@ function buildPublicAnswerProgressUrl(value) {
 
 async function readPublicAnswerProgressStream(response, requestedRulingVersion, {
   requestId = null,
+  phase = "finalize",
 } = {}) {
   if (!response.body || typeof response.body.getReader !== "function") {
     throw createRulingVersionError({
@@ -909,6 +970,8 @@ async function readPublicAnswerProgressStream(response, requestedRulingVersion, 
   const decoder = new TextDecoder();
   let buffer = "";
   let answer = null;
+  let prepared = null;
+  let terminalKind = "";
   let receivedEnd = false;
   let protocolSucceeded = false;
   try {
@@ -939,6 +1002,13 @@ async function readPublicAnswerProgressStream(response, requestedRulingVersion, 
           });
         }
         if (event.type === "answer") {
+          if (phase === "prepare" && prepared) {
+            throw createRulingVersionError({
+              code: "ruling_progress_answer_mixed_with_prepared",
+              requestedVersion: requestedRulingVersion,
+              status: response.status,
+            });
+          }
           if (answer) {
             throw createRulingVersionError({
               code: "ruling_progress_answer_duplicate",
@@ -955,25 +1025,75 @@ async function readPublicAnswerProgressStream(response, requestedRulingVersion, 
             });
           }
           answer = candidate;
+          terminalKind = "answer";
           continue;
+        }
+        if (event.type === "prepared") {
+          if (phase !== "prepare") {
+            throw createRulingVersionError({
+              code: "ruling_progress_prepared_unexpected",
+              requestedVersion: requestedRulingVersion,
+              status: response.status,
+            });
+          }
+          if (prepared || answer) {
+            throw createRulingVersionError({
+              code: answer
+                ? "ruling_progress_prepared_mixed_with_answer"
+                : "ruling_progress_prepared_duplicate",
+              requestedVersion: requestedRulingVersion,
+              status: response.status,
+            });
+          }
+          const candidate = publicPreparationFromSseEvent(event);
+          if (!candidate) {
+            throw createRulingVersionError({
+              code: "ruling_progress_prepared_invalid",
+              requestedVersion: requestedRulingVersion,
+              status: response.status,
+            });
+          }
+          prepared = candidate;
+          terminalKind = "prepared";
+          if (requestId === null || requestId === analysisRequestId) {
+            applyPreparedProgress(candidate.progress);
+          }
+          continue;
+        }
+        if (terminalKind && event.type !== "end") {
+          throw createRulingVersionError({
+            code: "ruling_progress_event_after_terminal",
+            requestedVersion: requestedRulingVersion,
+            status: response.status,
+          });
         }
         if (event.type === "error") {
           const payload = event.data || {};
           const reportedStatusCode = Number(payload.statusCode);
-          const error = createRulingVersionError({
-            code: String(payload.code || payload.error || "ruling_progress_stream_failed"),
-            requestedVersion: requestedRulingVersion,
-            status: Number.isInteger(reportedStatusCode) && reportedStatusCode >= 400
-              ? reportedStatusCode
-              : response.status,
-          });
-          error.message = String(payload.message || payload.error || error.code);
+          const code = String(payload.code || payload.error || "ruling_progress_stream_failed");
+          const status = Number.isInteger(reportedStatusCode) && reportedStatusCode >= 400
+            ? reportedStatusCode
+            : response.status;
+          const message = String(payload.message || payload.error || code);
+          const isProtocolError = code.startsWith("ruling_version_") || code.startsWith("ruling_progress_");
+          const error = isProtocolError
+            ? createRulingVersionError({
+              code,
+              requestedVersion: requestedRulingVersion,
+              status,
+            })
+            : createBackendRequestError({
+              code,
+              status,
+              publicMessage: message,
+            });
+          error.message = message;
           if (requestId === null || requestId === analysisRequestId) {
             applyPendingStageProgressEvent(event);
           }
           throw error;
         }
-        if (event.type === "end" && !answer) {
+        if (event.type === "end" && !terminalKind) {
           throw createRulingVersionError({
             code: "ruling_progress_end_before_answer",
             requestedVersion: requestedRulingVersion,
@@ -994,6 +1114,10 @@ async function readPublicAnswerProgressStream(response, requestedRulingVersion, 
         requestedVersion: requestedRulingVersion,
         status: response.status,
       });
+    }
+    if (phase === "prepare" && prepared) {
+      protocolSucceeded = true;
+      return prepared;
     }
     if (!answer) {
       throw createRulingVersionError({
@@ -1052,6 +1176,32 @@ function publicAnswerFromSseEvent(event) {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) return null;
   if (!payload.answer || typeof payload.answer !== "object" || Array.isArray(payload.answer)) return null;
   return payload.answer;
+}
+
+function publicPreparationFromSseEvent(event) {
+  const payload = event?.data;
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return null;
+  if (Object.hasOwn(payload, "answer")) return null;
+  const preparationId = String(payload.preparationId || "");
+  if (!/^[0-9a-f]{64}$/u.test(preparationId)) return null;
+  const progress = payload.progress;
+  if (!progress || typeof progress !== "object" || Array.isArray(progress)) return null;
+  const totalMs = readFiniteDuration(progress.totalMs);
+  const stageDurationsMs = progress.stageDurationsMs;
+  if (
+    totalMs === null
+    || !stageDurationsMs
+    || typeof stageDurationsMs !== "object"
+    || Array.isArray(stageDurationsMs)
+  ) return null;
+  return {
+    kind: "prepared",
+    preparationId,
+    progress: {
+      totalMs,
+      stageDurationsMs,
+    },
+  };
 }
 
 function normalizeRulingVersion(value) {
@@ -5248,7 +5398,7 @@ function applyPendingStageProgressEvent(event) {
   if (type === "end") {
     const totalMs = readFiniteDuration(payload.totalMs) ?? serverElapsedMs;
     if (totalMs !== null) {
-      pendingPipelineServerElapsedMs = totalMs;
+      pendingPipelineServerElapsedMs = Math.max(pendingPipelineServerElapsedMs || 0, totalMs);
       pendingPipelineUsesServerTiming = true;
     }
     return;
@@ -5296,6 +5446,26 @@ function applyPendingStageProgressEvent(event) {
     return;
   }
   renderPendingStages(stages);
+}
+
+function applyPreparedProgress(progress) {
+  const totalMs = readFiniteDuration(progress?.totalMs);
+  if (totalMs !== null) {
+    pendingPipelineServerElapsedMs = Math.max(pendingPipelineServerElapsedMs || 0, totalMs);
+    pendingPipelineUsesServerTiming = true;
+  }
+  const durations = progress?.stageDurationsMs;
+  if (!durations || typeof durations !== "object" || Array.isArray(durations)) return;
+  for (const [index, stage] of getPendingStages().entries()) {
+    const durationMs = readFiniteDuration(durations[stage.id]);
+    if (durationMs === null || !pendingStageStates[index]) continue;
+    const state = pendingStageStates[index];
+    state.durationMs = durationMs;
+    state.activeElapsedMs = null;
+    if (state.status !== "failed") state.status = "done";
+  }
+  pendingStageIndex = -1;
+  renderPendingStages(getPendingStages());
 }
 
 function renderPendingStages(stages = getPendingStages()) {

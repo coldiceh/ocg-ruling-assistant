@@ -180,7 +180,9 @@ test("ui_has_single_query_button", async () => {
   assert.match(app, /最近 \$\{latency\.sampleCount\} 次成功回答/u);
   assert.doesNotMatch(html, /id="flashModelButton"|id="proModelButton"|>Pro</u);
   assert.match(app, /let selectedRulingModelProfile = DEFAULT_RULING_MODEL_PROFILE/u);
-  assert.match(app, /rulingModelProfile: selectedRulingModelProfile/u);
+  assert.match(app, /const firstRequestModelProfile = selectedRulingModelProfile/u);
+  assert.match(app, /rulingModelProfile: firstRequestModelProfile/u);
+  assert.match(app, /action: "prepare"/u);
   assert.doesNotMatch(app, /modelTier: selectedModelTier/u);
   assert.doesNotMatch(app, /thinkingMode:\s*selected|reasoningEffort:\s*selected/u);
   assert.match(html, /data-ruling-version="latest"[^>]+aria-pressed="true"[^>]*>最新版</u);
@@ -552,6 +554,7 @@ test("versioned backend answers require a matching server confirmation", async (
     mode: "rag",
     rulingModelProfile: "deepseek-v4-flash-high",
     rulingVersion: "latest",
+    action: "prepare",
   });
   assert.equal(confirmed.effectiveRulingVersion, "latest");
   assert.equal(confirmed.shortAnswer, "已确认中文");
@@ -686,7 +689,7 @@ test("backend answers bypass persistent browser cache and bust static assets", a
     readFile(new URL("../config.json", import.meta.url), "utf8"),
   ]);
   const config = JSON.parse(configText.replace(/^\uFEFF/u, ""));
-  assert.match(html, /src\/app\.js\?v=20260908-evidence-capture-1/u);
+  assert.match(html, /src\/app\.js\?v=20260908-prepared-finalize-1/u);
   assert.match(html, /src\/styles\.css\?v=20260908-player-pipeline-3/u);
   assert.equal(config.answerApiUrl, "https://ocg-ruling-assistant.vercel.app/api/answer");
   assert.match(app, /cache: "no-store"/u);

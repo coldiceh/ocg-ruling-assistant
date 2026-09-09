@@ -1,4 +1,7 @@
-import { answerRagRulingQuestion as answerLatestRagRulingQuestion } from "./ragRulingPipeline.mjs";
+import {
+  answerRagRulingQuestion as answerLatestRagRulingQuestion,
+  finalizePreparedRagRulingQuestion as finalizeLatestPreparedRagRulingQuestion,
+} from "./ragRulingPipeline.mjs";
 
 export const DEFAULT_RULING_VERSION = "latest";
 
@@ -43,6 +46,7 @@ export async function resolveRulingVersionPipeline(value) {
     legacyCompatibility: false,
     versionWarnings: [],
     answerRagRulingQuestion: answerLatestRagRulingQuestion,
+    finalizePreparedRagRulingQuestion: finalizeLatestPreparedRagRulingQuestion,
   };
 }
 
@@ -52,6 +56,22 @@ export async function answerRagRulingQuestionForVersion({
 } = {}) {
   const resolved = await resolveRulingVersionPipeline(rulingVersion);
   const answer = await resolved.answerRagRulingQuestion(options);
+  return {
+    ...answer,
+    requestedRulingVersion: resolved.requestedRulingVersion,
+    effectiveRulingVersion: resolved.effectiveRulingVersion,
+    rulingVersion: resolved.effectiveRulingVersion,
+    legacyCompatibility: resolved.legacyCompatibility,
+    versionWarnings: [...resolved.versionWarnings],
+  };
+}
+
+export async function finalizePreparedRagRulingQuestionForVersion({
+  rulingVersion,
+  ...options
+} = {}) {
+  const resolved = await resolveRulingVersionPipeline(rulingVersion);
+  const answer = await resolved.finalizePreparedRagRulingQuestion(options);
   return {
     ...answer,
     requestedRulingVersion: resolved.requestedRulingVersion,
