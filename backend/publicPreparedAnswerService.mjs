@@ -3,6 +3,7 @@ import { createPublicAnswerModelEnv } from "./ragModelClient.mjs";
 import { assertPublicRulingModelProfileAvailable, resolvePublicRulingModelProfile } from "./publicRulingModelConfig.mjs";
 import { finalizePreparedRagRulingQuestionForVersion } from "./rulingVersionRegistry.mjs";
 import { preparationError } from "./publicAnswerPreparationStore.mjs";
+import { PUBLIC_EXHAUSTED_FALLBACK_PROFILE, selectAvailablePublicProfile, withPublicGenerationInfo } from './publicGenerationInfo.mjs';
 
 export async function preparePublicAnswer({
   payload, env, signal, progress, store,
@@ -23,8 +24,10 @@ export async function preparePublicAnswer({
     pipeline: env.RAG_EVIDENCE_PIPELINE || "rag_baseline",
     startedAt, preparedAt: now(), progress: measuredProgress,
     cloudCosts: result.answer.debug?.cloudCosts || null,
+    fallbackFrom: result.fallbackFrom || null,
   });
-  return { preparationId, progress: measuredProgress };
+  return { preparationId, progress: measuredProgress,
+    evidencePackage: { text: result.answer.continuation.promptBundle.prompt, filename: 'ocg-evidence.txt' } };
 }
 
 export function preparedAnswerProgress(preparation, now = Date.now) {
@@ -37,23 +40,37 @@ export function preparedAnswerProgress(preparation, now = Date.now) {
 export async function finalizePublicAnswer({
   preparation, env, signal, progress,
   finalize = finalizePreparedRagRulingQuestionForVersion, now = Date.now,
+  selectProfile = selectAvailablePublicProfile, addGeneration = withPublicGenerationInfo,
 } = {}) {
   signal?.throwIfAborted();
-  const profile = resolvePublicRulingModelProfile(preparation.profileId);
+  const selection = await selectProfile(preparation.profileId, env);
+  let profile = selection.profile;
+  let fallbackFrom = preparation.fallbackFrom || selection.fallbackFrom;
   assertPublicRulingModelProfileAvailable(profile, env);
   if (preparation.pipeline !== (env.RAG_EVIDENCE_PIPELINE || "rag_baseline")) {
     throw preparationError("服务配置已更新，请重新提交问题", "answer_preparation_deployment_changed", 409);
   }
   // The original public profile is server-owned. A finalize payload cannot
   // replace it, the question, the prompt, evidence, or any provider parameter.
-  const publicEnv = createPublicAnswerModelEnv(env, profile.id);
+  let publicEnv = createPublicAnswerModelEnv(env, profile.id);
   let answer;
   try {
-    answer = await finalize({
+    const invokeFinal = () => finalize({
       continuation: preparation.continuation,
       rulingVersion: preparation.rulingVersion,
       env: publicEnv, signal, progress,
     });
+    try { answer = await invokeFinal(); }
+    catch (error) {
+      // Only a rejected reservation proves no official generation was sent.
+      if (profile.provider !== 'openai' || error.code !== 'official_daily_budget_exceeded') throw error;
+      const replacement = resolvePublicRulingModelProfile(PUBLIC_EXHAUSTED_FALLBACK_PROFILE);
+      fallbackFrom = profile.id;
+      profile = assertPublicRulingModelProfileAvailable(replacement, env);
+      publicEnv = createPublicAnswerModelEnv(env, profile.id);
+      signal?.throwIfAborted();
+      answer = await invokeFinal();
+    }
   } catch (error) {
     if (preparation.cloudCosts || error.cloudCosts) {
       error.cloudCosts = combinedCloudCosts(preparation.cloudCosts, error.cloudCosts);
@@ -65,6 +82,7 @@ export async function finalizePublicAnswer({
       cloudCosts: combinedCloudCosts(preparation.cloudCosts, answer.debug?.cloudCosts),
     } };
   }
+  answer = await addGeneration(answer, profile, env, {fallbackFrom});
   return { answer, latency: { profileId: profile.id, durationMs: Math.max(0, now() - preparation.startedAt), exactMatchMs: 0 } };
 }
 

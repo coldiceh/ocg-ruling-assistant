@@ -18,23 +18,20 @@ const OFFICIAL_ENV = Object.freeze({
   RELAY_BASE_URL: "https://relay.example.invalid/v1",
 });
 
-test("public capabilities expose only official Astra low and reject every legacy effort profile", () => {
+test("public capabilities expose the exact allowlisted models and efforts", () => {
   const capabilities = getPublicRulingModelCapabilities(OFFICIAL_ENV);
   assert.equal(capabilities.defaultRulingModelProfile, "official-astra-low");
-  assert.deepEqual(capabilities.rulingModelProfiles.map(({ id, provider, reasoningEffort, available }) => ({
-    id, provider, reasoningEffort, available,
-  })), [{
-    id: "official-astra-low",
-    provider: "openai",
-    reasoningEffort: "low",
-    available: true,
-  }]);
+  assert.equal(capabilities.rulingModelProfiles.length, 18);
+  assert.equal(capabilities.rulingModelProfiles.find(({ id }) => id === "official-astra-low").available, true);
   for (const effort of ["low", "medium", "high", "xhigh", "max"]) {
-    assert.throws(
-      () => resolvePublicRulingModelProfile(`relay-gpt-6-astra-${effort}`),
-      /Unsupported public ruling model profile/u,
-    );
+    for (const model of ["gpt-5.6-sol", "gpt-6-astra"]) {
+      const profile = resolvePublicRulingModelProfile(`relay-${model}-${effort}`);
+      assert.equal(profile.model, model);
+      assert.equal(profile.reasoningEffort, effort);
+      assert.equal(profile.thinkingMode, "enabled");
+    }
   }
+  assert.throws(() => resolvePublicRulingModelProfile("relay-gpt-6-astra-ultra"), /Unsupported public ruling model profile/u);
 });
 
 test("public finalization sends one fixed official Chat Completions request and keeps provider keys isolated", async () => {
@@ -96,7 +93,7 @@ test("public finalization sends one fixed official Chat Completions request and 
     stream_options: { include_usage: true },
   });
   assert.equal(budgetCommands.length, 2);
-  assert.equal(budgetCommands[0][3], "ruling-cloud-budget:v1:public-official-astra");
+  assert.match(budgetCommands[0][3], /^ruling-cloud-budget:v1:public-official-astra:\d{4}-\d{2}-\d{2}$/u);
   assert.equal(result.providerUsed, "openai");
   assert.equal(result.modelUsed, "gpt-6-astra");
   assert.equal(result.estimatedCostUsd, 0.287018);
@@ -114,18 +111,22 @@ test("public body-like profile and effort values cannot change the official fina
   assert.equal(env.RAG_REASONING_EFFORT, "low");
 });
 
-test("the public service rejects legacy profiles and ignores arbitrary provider parameters", async () => {
+test("the public service binds allowlisted profiles and ignores arbitrary provider parameters", async () => {
   let answerCalls = 0;
-  await assert.rejects(
-    answerPublicRulingQuestion({
-      payload: { question: "synthetic", rulingModelProfile: "relay-gpt-6-astra-low" },
-      env: OFFICIAL_ENV,
-      appendAudit: async () => {},
-      answerRuling: async () => { answerCalls += 1; },
-    }),
-    (error) => error?.code === "invalid_ruling_model_profile",
-  );
-  assert.equal(answerCalls, 0);
+  await answerPublicRulingQuestion({
+    payload: { question: "synthetic", rulingModelProfile: "relay-gpt-6-astra-xhigh", reasoningEffort: "low", model: "arbitrary-model" },
+    env: OFFICIAL_ENV,
+    appendAudit: async () => {},
+    prepareForContinuation: true,
+    answerRuling: async ({ env }) => {
+      answerCalls += 1;
+      assert.equal(env.RAG_MODEL_PROVIDER, "relay");
+      assert.equal(env.RAG_MODEL, "gpt-6-astra");
+      assert.equal(env.RAG_REASONING_EFFORT, "xhigh");
+      return { ok: true };
+    },
+  });
+  assert.equal(answerCalls, 1);
 
   await answerPublicRulingQuestion({
     payload: {
@@ -137,6 +138,7 @@ test("the public service rejects legacy profiles and ignores arbitrary provider 
     },
     env: OFFICIAL_ENV,
     appendAudit: async () => {},
+    prepareForContinuation: true,
     answerRuling: async ({ env }) => {
       answerCalls += 1;
       assert.equal(env.RAG_MODEL_PROVIDER, "openai");
@@ -145,5 +147,5 @@ test("the public service rejects legacy profiles and ignores arbitrary provider 
       return { ok: true };
     },
   });
-  assert.equal(answerCalls, 1);
+  assert.equal(answerCalls, 2);
 });

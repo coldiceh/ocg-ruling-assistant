@@ -132,7 +132,7 @@ test("a DeepSeek key alone cannot dispatch public card-name extraction", async (
   assert.ok(result.warnings.includes("relay_configuration_missing_card_name_model_disabled"));
 });
 
-test("legacy explicit DeepSeek auxiliary settings redirect to Relay and never reach DeepSeek", async () => {
+test("explicit DeepSeek card extraction dispatches directly while rule extraction remains on Relay", async () => {
   const calls = [];
   const env = {
     ...RELAY_ENV,
@@ -143,9 +143,24 @@ test("legacy explicit DeepSeek auxiliary settings redirect to Relay and never re
   };
   const fetchImpl = async (url, options) => {
     calls.push({ url: String(url), body: JSON.parse(options.body) });
-    assert.doesNotMatch(String(url), /deepseek/iu);
+    if (String(url) === "https://api.deepseek.com/chat/completions") {
+      return new Response(JSON.stringify({
+        model: "deepseek-v4-flash",
+        choices: [{
+          finish_reason: "stop",
+          message: {
+            content: JSON.stringify({
+              cardNames: [{ name: "测试龙", originalText: "测试龙", confidence: "high" }],
+            }),
+          },
+        }],
+        usage: { prompt_tokens: 30, completion_tokens: 12, total_tokens: 42 },
+      }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
     return relaySseResponse({
-      cardNames: [{ name: "测试龙", originalText: "测试龙", confidence: "high" }],
       queries: ["测试规则"],
     });
   };
@@ -163,24 +178,42 @@ test("legacy explicit DeepSeek auxiliary settings redirect to Relay and never re
   });
 
   assert.equal(calls.length, 2);
-  assert.equal(card.providerUsed, "relay");
+  assert.equal(calls[0].url, "https://api.deepseek.com/chat/completions");
+  assert.deepEqual(calls[0].body.thinking, { type: "disabled" });
+  assert.equal(calls[1].url, "https://relay.example.test/v1/chat/completions");
+  assert.equal(card.providerUsed, "deepseek");
   assert.equal(rule.providerUsed, "relay");
-  assert.ok(card.warnings.includes("deepseek_card_name_model_disabled_redirected_to_relay"));
   assert.ok(rule.warnings.includes("deepseek_rule_query_model_disabled_redirected_to_relay"));
-  assert.ok(calls.every((call) => call.body.model === "gpt-5.6-sol"));
+  assert.equal(calls[0].body.model, "deepseek-v4-flash");
+  assert.equal(calls[1].body.model, "gpt-5.6-sol");
 });
 
-test("legacy explicit DeepSeek auxiliary settings fail closed without Relay", async () => {
-  let calls = 0;
+test("explicit DeepSeek card extraction works without Relay while rule extraction fails closed", async () => {
+  const calls = [];
   const env = {
     DEEPSEEK_API_KEY: "leftover-deepseek-key",
     DEEPSEEK_BASE_URL: "https://api.deepseek.com",
     RAG_CARD_MODEL_PROVIDER: "deepseek",
     RAG_RULE_MODEL_PROVIDER: "deepseek",
   };
-  const fetchImpl = async () => {
-    calls += 1;
-    throw new Error("must not dispatch");
+  const fetchImpl = async (url) => {
+    calls.push(String(url));
+    assert.equal(String(url), "https://api.deepseek.com/chat/completions");
+    return new Response(JSON.stringify({
+      model: "deepseek-v4-flash",
+      choices: [{
+        finish_reason: "stop",
+        message: {
+          content: JSON.stringify({
+            cardNames: [{ name: "测试龙", originalText: "测试龙", confidence: "high" }],
+          }),
+        },
+      }],
+      usage: { prompt_tokens: 20, completion_tokens: 10, total_tokens: 30 },
+    }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
   };
   const card = await callCardNameExtractionModel({
     userQuery: "测试龙",
@@ -195,8 +228,9 @@ test("legacy explicit DeepSeek auxiliary settings fail closed without Relay", as
     fetchImpl,
   });
 
-  assert.equal(calls, 0);
-  assert.equal(card.providerUsed, "mock");
+  assert.deepEqual(calls, ["https://api.deepseek.com/chat/completions"]);
+  assert.equal(card.providerUsed, "deepseek");
+  assert.deepEqual(card.candidates.map((candidate) => candidate.name), ["测试龙"]);
   assert.equal(rule.providerUsed, "mock");
 });
 

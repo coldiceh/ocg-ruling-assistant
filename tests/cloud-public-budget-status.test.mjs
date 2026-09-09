@@ -5,6 +5,7 @@ import { getRagBudgetStatus } from '../backend/ragModelClient.mjs';
 const env = {
   RAG_EVIDENCE_PIPELINE: 'cloud_evidence_v1', CLOUD_BUDGET_PERIOD: 'daily',
   CLOUD_BUDGET_RUN_ID: 'production_test', CLOUD_BUDGET_ACTUAL_LIMIT_CNY: '10',
+  CLOUD_BUDGET_THEORETICAL_LIMIT_USD: '10',
   API_BUDGET_TIMEZONE: 'Asia/Shanghai', API_DAILY_BUDGET_CNY: '10',
   UPSTASH_REDIS_REST_URL: 'https://budget.example.test', UPSTASH_REDIS_REST_TOKEN: 'synthetic',
 };
@@ -26,7 +27,7 @@ test('public daily budget reads actual SiliconFlow tickets and keeps ChatGPT the
     'actualNano', '400000000', 'theoreticalNano', '250000000',
     'sf-settled', JSON.stringify({provider:'siliconflow',status:'usage_settled',actualNano:12000000}),
     'sf-pending', JSON.stringify({provider:'siliconflow',status:'reserved',actualNano:1000000}),
-    'relay', JSON.stringify({provider:'relay',status:'usage_settled',actualNano:300000000}),
+    'relay', JSON.stringify({provider:'relay',status:'usage_settled',actualNano:300000000,theoreticalNano:250000000}),
   ]);
   const status = await getRagBudgetStatus({ env, now:new Date('2026-09-08T16:00:01Z'), fetchImpl:redis.fetchImpl });
   const evidence = status.buckets.find(item => item.id === 'evidence_preparation:siliconflow');
@@ -38,6 +39,7 @@ test('public daily budget reads actual SiliconFlow tickets and keeps ChatGPT the
   assert.equal(status.buckets.some(item => item.id === 'evidence_preparation:deepseek'), false);
   assert.equal(status.buckets.find(item => item.id === 'final_ruling:relay').spentTodayUsd, 0.25);
   assert.equal(status.buckets.find(item => item.id === 'final_ruling:relay').dailyBudgetUsd, 10);
+  assert.match(status.buckets.find(item => item.id === 'final_ruling:relay').label,/共享/);
   assert.equal(status.buckets.find(item => item.id === 'final_ruling:deepseek').dailyBudgetCny, 10);
   assert.deepEqual(redis.commands.filter(command => command[0] === 'HGETALL'),
     [['HGETALL', 'ruling-cloud-budget:v1:production_test:2026-09-09']]);

@@ -3909,7 +3909,7 @@ test("Relay extraction helpers record usage in the shared public USD bucket", as
   assert.equal(relayBucket.spentTodayUsd > 0, true);
 });
 
-test("legacy explicit DeepSeek extractors redirect to Relay Sol low", async () => {
+test("explicit DeepSeek card extraction is direct while rule extraction redirects to Relay Sol low", async () => {
   const env = relayAuxEnv({
     RAG_CARD_MODEL_PROVIDER: "deepseek",
     RAG_RULE_MODEL_PROVIDER: "deepseek",
@@ -3918,6 +3918,16 @@ test("legacy explicit DeepSeek extractors redirect to Relay Sol low", async () =
   const urls = [];
   const fetchImpl = async (url) => {
     urls.push(String(url));
+    if (String(url) === "https://api.deepseek.com/chat/completions") {
+      return jsonResponse({
+        model: "deepseek-v4-flash",
+        choices: [{
+          finish_reason: "stop",
+          message: { content: JSON.stringify({ cardNames: [] }) },
+        }],
+        usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+      });
+    }
     return relaySseResponse({ cardNames: [], queries: [] });
   };
   const card = await callCardNameExtractionModel({
@@ -3933,10 +3943,12 @@ test("legacy explicit DeepSeek extractors redirect to Relay Sol low", async () =
     fetchImpl,
   });
 
-  assert.equal(card.providerUsed, "relay");
+  assert.equal(card.providerUsed, "deepseek");
   assert.equal(rule.providerUsed, "relay");
-  assert.ok(urls.every((url) => url === "https://relay.example.test/v1/chat/completions"));
-  assert.ok(card.warnings.includes("deepseek_card_name_model_disabled_redirected_to_relay"));
+  assert.deepEqual(urls, [
+    "https://api.deepseek.com/chat/completions",
+    "https://relay.example.test/v1/chat/completions",
+  ]);
   assert.ok(rule.warnings.includes("deepseek_rule_query_model_disabled_redirected_to_relay"));
 });
 

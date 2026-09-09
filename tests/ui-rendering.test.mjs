@@ -169,7 +169,7 @@ test("ui_has_single_query_button", async () => {
   assert.match(html, /id="pipelineStageList"/u);
   assert.match(html, /id="pipelineElapsedText"/u);
   assert.match(html, /id="rulingModelSelect"[^>]+disabled/u);
-  assert.match(html, /value="official-astra-low" selected>官方 GPT-6 Astra · 思考 low</u);
+  assert.match(html, /value="official-astra-low" selected>正在读取可用模型…</u);
   assert.doesNotMatch(html, /第三方中转/u);
   assert.doesNotMatch(html, /value="glm-5\.2-high"/u);
   assert.doesNotMatch(html, /value="kimi-[^"]+"/u);
@@ -185,12 +185,10 @@ test("ui_has_single_query_button", async () => {
   assert.match(app, /action: "prepare"/u);
   assert.doesNotMatch(app, /modelTier: selectedModelTier/u);
   assert.doesNotMatch(app, /thinkingMode:\s*selected|reasoningEffort:\s*selected/u);
-  assert.match(html, /data-ruling-version="latest"[^>]+aria-pressed="true"[^>]*>最新版</u);
-  assert.doesNotMatch(html, /data-ruling-version="previous"|上一版（兼容）/u);
+  assert.doesNotMatch(html, /data-ruling-version|回答版本|>最新版</u);
   assert.match(app, /let selectedRulingVersion = "latest"/u);
   assert.match(app, /rulingVersion: requestedRulingVersion/u);
-  assert.match(app, /selectRulingVersion\(button\.dataset\.rulingVersion\)/u);
-  assert.match(html, /id="answerVersionText" hidden/u);
+  assert.doesNotMatch(html, /id="answerVersionText"/u);
   assert.match(app, /effectiveRulingVersion \|\| answer\?\.rulingVersion/u);
   assert.match(app, /本次回答：最新版/u);
   assert.doesNotMatch(app, /上一版（兼容）|data-ruling-version="previous"/u);
@@ -224,7 +222,7 @@ test("ui_has_single_query_button", async () => {
   assert.doesNotMatch(app, /blocker\.id/u);
 });
 
-test("public ruling model selector uses the allowlisted backend profiles without silent fallback", async () => {
+test("public ruling model selector renders the backend capability profiles dynamically", async () => {
   const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
   const definitions = sourceBetween(
     app,
@@ -239,19 +237,18 @@ test("public ruling model selector uses the allowlisted backend profiles without
   const normalizeCapabilities = new Function(
     `${definitions}\n${functions}\nreturn normalizeRulingModelCapabilities;`,
   )();
-  assert.match(definitions, /const DEFAULT_RULING_MODEL_PROFILE = "official-astra-low"/u);
   const capabilities = normalizeCapabilities({
-    defaultRulingModelProfile: "official-astra-low",
+    defaultRulingModelProfile: "deepseek-v4.1-flash-low",
     rulingModelProfiles: [
-      { id: "official-astra-low", available: true, label: "untrusted label" },
-      { id: "relay-gpt-6-astra-low", available: true },
-      { id: "relay-gpt-6-astra-max", available: true },
-      { id: "glm-5.2-high", available: true },
-      { id: "not-allowlisted", available: true },
+      { id: "official-astra-low", available: true, label: "官方 GPT-6 Astra · 思考 low", provider: "openai" },
+      { id: "relay-gpt-5.6-sol-high", available: true, label: "中转 GPT-5.6 Sol · 思考 high", provider: "relay" },
+      { id: "deepseek-v4.1-flash-low", available: true, label: "DeepSeek V4.1 Flash · 思考 low", provider: "deepseek" },
+      { id: "glm-5.3-max", available: false, label: "GLM 5.3 · 思考 max", provider: "glm" },
+      { id: "invalid profile", available: true },
     ],
   });
 
-  assert.equal(capabilities.defaultProfile, "official-astra-low");
+  assert.equal(capabilities.defaultProfile, "deepseek-v4.1-flash-low");
   assert.deepEqual(capabilities.profiles.map((profile) => ({
     id: profile.id,
     label: profile.label,
@@ -259,35 +256,25 @@ test("public ruling model selector uses the allowlisted backend profiles without
     available: profile.available,
   })), [
     { id: "official-astra-low", label: "官方 GPT-6 Astra · 思考 low", provider: "openai", available: true },
+    { id: "relay-gpt-5.6-sol-high", label: "中转 GPT-5.6 Sol · 思考 high", provider: "relay", available: true },
+    { id: "deepseek-v4.1-flash-low", label: "DeepSeek V4.1 Flash · 思考 low", provider: "deepseek", available: true },
+    { id: "glm-5.3-max", label: "GLM 5.3 · 思考 max", provider: "glm", available: false },
   ]);
-  assert.equal(capabilities.profiles[0].benchmarkSummary, undefined);
   for (const profile of capabilities.profiles) {
     assert.equal(profile.answerLatency.profileId, profile.id);
     assert.equal(profile.answerLatency.status, "unavailable");
   }
-  const partialAvailability = normalizeCapabilities({
-    defaultRulingModelProfile: "official-astra-low",
-    rulingModelProfiles: [
-      { id: "glm-5.2-high", available: false },
-      { id: "official-astra-low", available: false },
-    ],
-  });
-  assert.deepEqual(
-    partialAvailability.profiles.map((profile) => [profile.id, profile.available]),
-    [["official-astra-low", false]],
-  );
   assert.throws(
     () => normalizeCapabilities({
-      defaultRulingModelProfile: "not-allowlisted",
-      rulingModelProfiles: ["glm-5.2-high", "deepseek-v4-flash-high"],
+      defaultRulingModelProfile: "missing-profile",
+      rulingModelProfiles: ["glm-5.3-high", "deepseek-v4.1-flash-high"],
     }),
-    /invalid default ruling model profile/u,
+    /default ruling model profile is missing/u,
   );
   assert.match(app, /setRulingModelCapabilitiesUnavailable\("模型能力接口不可用/u);
   assert.doesNotMatch(app, /默认 GPT-5\.6 Luna low|平均 34\.6 秒；推荐/u);
   assert.match(app, /默认 GPT-6 Astra low/u);
-  assert.match(app, /系统不会自动改用其他模型/u);
-  assert.match(app, /selectedRulingModelProfile = DEFAULT_RULING_MODEL_PROFILE/u);
+  assert.match(app, /rulingModelSelectionWasManual/u);
   assert.match(app, /if \(value === "relay"\) return "ChatGPT"/u);
 });
 
@@ -297,9 +284,14 @@ test("official Astra low survives startup and unavailable capability recovery", 
   const load = sourceBetween(app, "async function loadBackendModelInfo", "function normalizeRulingModelCapabilities");
   const functions = sourceBetween(app, "function normalizeRulingModelCapabilities", "function normalizeRulingVersionCapabilities");
   let unavailable = false;
+  let capabilityPayload = {
+    defaultRulingModelProfile: "official-astra-low",
+    rulingModelProfiles: [{ id: "official-astra-low", available: true }],
+  };
   const harness = new Function("fetch", `${definitions}\n${load}\n${functions}\n
     let selectedRulingModelProfile = DEFAULT_RULING_MODEL_PROFILE;
     let rulingModelCapabilitiesAvailable = false;
+    let rulingModelSelectionWasManual = false;
     let appConfig = { answerApiUrl: "https://example.invalid/api/answer", rulingModelProfiles: fallbackRulingModelProfiles() };
     const ui = { rulingModelSelect: { value: "official-astra-low" } };
     function renderRulingModelOptions() { ui.rulingModelSelect.value = selectedRulingModelProfile; }
@@ -316,16 +308,21 @@ test("official Astra low survives startup and unavailable capability recovery", 
     };
   `)(async () => {
     if (unavailable) throw new Error("mock unavailable");
-    return { ok: true, json: async () => ({
-      defaultRulingModelProfile: "official-astra-low",
-      rulingModelProfiles: [{ id: "official-astra-low", available: true }],
-    }) };
+    return { ok: true, json: async () => capabilityPayload };
   });
   assert.equal(harness.state().selected, "official-astra-low");
   await harness.load();
   assert.deepEqual(harness.state(), { selected: "official-astra-low", displayed: "official-astra-low", available: true });
-  harness.disable("official-astra-low");
   harness.select("official-astra-low");
+  capabilityPayload = {
+    defaultRulingModelProfile: "deepseek-v4.1-flash-low",
+    rulingModelProfiles: [
+      { id: "official-astra-low", available: true },
+      { id: "deepseek-v4.1-flash-low", available: true },
+    ],
+  };
+  await harness.load();
+  assert.deepEqual(harness.state(), { selected: "official-astra-low", displayed: "official-astra-low", available: true });
   assert.equal(harness.state().displayed, "official-astra-low");
   unavailable = true;
   await harness.load();
@@ -364,6 +361,68 @@ test("public ruling model selector renders measured latency and explicit fallbac
   render({ answerLatency: { status: "unavailable", storage: "unconfigured" } });
   assert.match(latencyNode.textContent, /未配置统计存储/u);
   assert.doesNotMatch(latencyNode.textContent, /\d+ 秒|\d+ 分/u);
+});
+
+test("answer footer actual generation metadata and shared remaining budget come only from the answer", async () => {
+  const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+  const source = sourceBetween(app, "function renderGenerationDetails", "function renderPending");
+  const document = createTestDocument();
+  const generationDetails = document.createElement("dl");
+  const render = new Function(
+    "ui",
+    "clearElement",
+    "appendText",
+    "modelProviderLabel",
+    "formatUsd",
+    "formatCny",
+    `${source}; return renderGenerationDetails;`,
+  )(
+    { generationPanel: {}, generationDetails },
+    clearTestElement,
+    appendTestText,
+    (provider) => provider === "relay" ? "ChatGPT" : "模型",
+    (value) => Number(value).toFixed(2),
+    (value) => Number(value).toFixed(2),
+  );
+
+  render({
+    generation: {
+      provider: "relay",
+      model: "gpt-5.6-sol",
+      label: "GPT-5.6 Sol",
+      reasoningEffort: "high",
+      thinkingMode: "enabled",
+      budget: {
+        currency: "USD",
+        remainingAmount: 3.25,
+        dailyBudgetAmount: 8,
+        sharedPoolLabel: "中转模型共享额度",
+      },
+    },
+  });
+  const actualText = testNodeText(generationDetails);
+  assert.match(actualText, /GPT-5\.6 Sol/u);
+  assert.match(actualText, /推理强度\nhigh/u);
+  assert.ok(actualText.includes("中转模型共享额度 · 剩余 $3.25 / 每日 $8.00"));
+
+  render({
+    generation: {
+      provider: "deepseek",
+      model: "deepseek-v4.1-flash",
+      reasoningEffort: null,
+      thinkingMode: "disabled",
+      budget: { currency: "CNY", remainingAmount: null, dailyBudgetAmount: null },
+    },
+  });
+  const noThinkingText = testNodeText(generationDetails);
+  assert.match(noThinkingText, /无（已关闭思考）/u);
+  assert.match(noThinkingText, /共享今日额度\n未取得/u);
+  assert.doesNotMatch(noThinkingText, /0\.00 元/u);
+
+  render({ generation: null });
+  assert.match(testNodeText(generationDetails), /最终裁定模型\n未调用/u);
+  render({});
+  assert.match(testNodeText(generationDetails), /最终裁定模型\n未取得/u);
 });
 
 test("public pipeline timing is driven by backend SSE events without fixed stage delays", async () => {
@@ -670,27 +729,24 @@ test("backend answers bypass persistent browser cache and bust static assets", a
   ]);
   const config = JSON.parse(configText.replace(/^\uFEFF/u, ""));
   assert.match(html, /src\/app\.js\?v=20260909-retrieval-reliability-2/u);
-  assert.match(html, /src\/styles\.css\?v=20260908-player-pipeline-3/u);
+  assert.match(html, /src\/styles\.css\?v=20260908-player-models-1/u);
   assert.equal(config.answerApiUrl, "https://ocg-ruling-assistant.vercel.app/api/answer");
   assert.match(app, /cache: "no-store"/u);
   assert.doesNotMatch(app, /backendAnswerCacheTtlMs|buildBackendCacheKey|readCachedBackendAnswer|writeCachedBackendAnswer|ocg-ruling-answer:v/u);
 });
 
-test("localized readmes describe the current cloud route without retired evaluations or removed reference", async () => {
+test("localized readmes describe the player product without internal pipeline labels", async () => {
   const readmes = await Promise.all(["README.md", "README.en.md", "README.ja.md"]
     .map(file => readFile(new URL(`../${file}`, import.meta.url), "utf8")));
   for (const readme of readmes) {
-    assert.match(readme, /```mermaid/u);
-    assert.match(readme, /cloud_evidence_v1/u);
-    assert.match(readme, /GPT[-‑]6 Astra/u);
-    assert.match(readme, /low/u);
-    assert.match(readme, /Qwen\/Qwen3-Embedding-0\.6B/u);
+    assert.match(readme, /Yu-Gi-Oh|游戏王|遊戯王/u);
+    assert.match(readme, /github\.io\/ocg-ruling-assistant/u);
     assert.match(readme, /https:\/\/www\.db\.yugioh-card\.com\/yugiohdb\//u);
-    assert.doesNotMatch(readme, /MODEL_EFFORT_MATRIX|space\.bilibili\.com\/869711/u);
+    assert.doesNotMatch(readme, /cloud_evidence_v1|rag_baseline|MODEL_EFFORT_MATRIX|space\.bilibili\.com\/869711/u);
   }
-  assert.match(readmes[0], /## 工作原理/u);
-  assert.match(readmes[1], /## How it works/u);
-  assert.match(readmes[2], /## 仕組み/u);
+  assert.match(readmes[0], /只下载整理好的证据/u);
+  assert.match(readmes[1], /Download the collected evidence/u);
+  assert.match(readmes[2], /整理された証拠だけをダウンロード/u);
 });
 test("ui_hides_engine_details_by_default", async () => {
   const [html, app] = await Promise.all([
@@ -698,7 +754,7 @@ test("ui_hides_engine_details_by_default", async () => {
     readFile(new URL("../src/app.js", import.meta.url), "utf8"),
   ]);
   assert.match(html, /裁定流程/u);
-  assert.match(html, /今日 API 额度（分币种）/u);
+  assert.match(html, /本站今日 API 限额（分币种）/u);
   assert.match(html, /id="budgetBucketList"/u);
   assert.doesNotMatch(html, /budgetSpentText|budgetLimitText/u);
   assert.doesNotMatch(app, /budgetSpentText|budgetLimitText/u);
@@ -714,7 +770,8 @@ test("ui_hides_engine_details_by_default", async () => {
   assert.match(html, /id="themeToggle"/u);
   assert.match(html, /class="page-background"/u);
   assert.doesNotMatch(html, /ANALYSIS CORE|TOKEN|provider debug/u);
-  assert.match(html, /GPT-6 Astra/u);
+  assert.match(html, /正在读取可用模型/u);
+  assert.doesNotMatch(html, /value="relay-gpt|value="deepseek|value="glm/u);
   assert.doesNotMatch(html, /AI裁定分析|RAG 裁定分析|RAG 分析/u);
   assert.doesNotMatch(html, /后端模式|公开资料检索|卡片文本分析/u);
   assert.doesNotMatch(html, /terminal-theme|OCG RULING TERMINAL/u);
@@ -725,8 +782,8 @@ test("ui_hides_engine_details_by_default", async () => {
   assert.match(app, /JSON\.stringify\(\{ action: "cap_public_chatgpt", password \}\)/u);
   assert.match(app, /不会影响管理员实验额度/u);
   assert.match(app, /storageWarning/u);
-  assert.match(app, /bucket\?\.id !== "final_ruling:glm"/u);
-  assert.match(app, /label: "ChatGPT 最终裁定"/u);
+  assert.doesNotMatch(app, /bucket\?\.id !== "final_ruling:glm"/u);
+  assert.match(html, /不代表供应商账户余额/u);
   assert.match(app, /spentTodayUsd/u);
   assert.match(app, /dailyBudgetUsd/u);
   assert.match(app, /\$\$\{formatUsd\(spent\)\}/u);
@@ -862,6 +919,43 @@ test("admin_model_lab_is_hidden_and_requires_a_real_session", async () => {
   assert.match(adminSession, /timingSafeEqual/u);
   assert.match(adminSession, /HttpOnly/u);
   assert.match(adminSession, /SameSite=None/u);
+});
+
+test("admin evidence capture presents the exact final prompt separately from diagnostics", async () => {
+  const [html, app] = await Promise.all([
+    readFile(new URL("../index.html", import.meta.url), "utf8"),
+    readFile(new URL("../src/app.js", import.meta.url), "utf8"),
+  ]);
+  const extractorSource = sourceBetween(
+    app,
+    "function getAdminCapturedActualPrompt",
+    "async function handleAdminEvidenceCapture",
+  );
+  const extractPrompt = new Function(`${extractorSource}; return getAdminCapturedActualPrompt;`)();
+  const exactPrompt = "SYSTEM\n\n动态证据正文\nEND";
+  assert.equal(extractPrompt({
+    answer: {
+      status: "evidence_captured",
+      capture: { promptBundle: { prompt: exactPrompt } },
+    },
+  }), exactPrompt);
+  assert.equal(extractPrompt({ answer: { status: "evidence_captured", capture: {} } }), null);
+
+  const handlerSource = sourceBetween(
+    app,
+    "async function handleAdminEvidenceCapture",
+    "async function requestAdminLab",
+  );
+  assert.match(html, /id="adminCaptureResult"[^>]+aria-label="最终作答输入"/u);
+  assert.match(html, /id="adminCaptureDiagnosticResult"[^>]+aria-label="完整诊断记录"/u);
+  assert.match(html, /id="adminCaptureDownload"[^>]*>下载最终作答输入/u);
+  assert.match(html, /id="adminCaptureDiagnosticDownload"[^>]*>下载完整诊断记录/u);
+  assert.match(handlerSource, /diagnosticField\.value = JSON\.stringify\(result, null, 2\)/u);
+  assert.match(handlerSource, /resultField\.value = actualPrompt/u);
+  assert.doesNotMatch(handlerSource, /resultField\.value = JSON\.stringify/u);
+  assert.match(handlerSource, /缺少最终作答输入/u);
+  assert.match(app, /final-answer-input-\$\{Date\.now\(\)\}\.private\.txt/u);
+  assert.match(app, /evidence-diagnostic-\$\{Date\.now\(\)\}\.private\.json/u);
 });
 
 test("admin frozen-evidence comparison offers supported configured model combinations", async () => {
@@ -1883,7 +1977,7 @@ test("renderBackendAnswer formats markdown safely and presents titled source lin
     const noop = () => {};
     const completePendingStages = noop, renderAnswerVersion = noop, renderEngineSimulation = noop;
     const renderCards = noop, pendingModelCardNames = noop, renderSubAnswers = noop, renderParserDebug = noop, renderFeedbackPanel = noop;
-    const updateModelStatus = noop, renderBudgetStatus = noop, loadBudgetStatus = noop;
+    const updateModelStatus = noop, renderBudgetStatus = noop, loadBudgetStatus = noop, renderGenerationDetails = noop;
     const modelProviderLabel = noop, modelStatusFromAnswer = noop, basisFromBackendMode = noop;
     ${source}
     return renderBackendAnswer;

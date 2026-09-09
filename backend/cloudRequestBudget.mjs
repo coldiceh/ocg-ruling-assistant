@@ -12,6 +12,24 @@ const UNIT = 1_000_000_000;
 export const CLOUD_BUDGET_RESERVE = `
 local old = redis.call('HGET', KEYS[1], ARGV[1])
 if old then return {'existing', old} end
+if ARGV[9] == 'official_daily_v1' and redis.call('HEXISTS', KEYS[1], 'theoreticalNano') == 0 then
+  local migrated = 0
+  local legacy = redis.call('HGETALL', KEYS[2])
+  for i = 1, #legacy, 2 do
+    if legacy[i] ~= 'actualNano' and legacy[i] ~= 'theoreticalNano' then
+      local ok, ticket = pcall(cjson.decode, legacy[i + 1])
+      if not ok then return {'migration_invalid'} end
+      if ticket.provider == 'openai' and (ticket.status == 'reserved' or ticket.status == 'usage_settled')
+          and type(ticket.startedAtUtc) == 'string' and ticket.startedAtUtc >= ARGV[10]
+          and ticket.startedAtUtc < ARGV[11] and type(ticket.theoreticalNano) == 'number'
+          and ticket.theoreticalNano >= 0 then
+        migrated = migrated + ticket.theoreticalNano
+        redis.call('HSET', KEYS[1], legacy[i], legacy[i + 1])
+      end
+    end
+  end
+  redis.call('HSET', KEYS[1], 'actualNano', '0', 'theoreticalNano', tostring(migrated))
+end
 local cny = tonumber(redis.call('HGET', KEYS[1], 'actualNano') or ARGV[6])
 local usd = tonumber(redis.call('HGET', KEYS[1], 'theoreticalNano') or ARGV[7])
 local nextCny = cny + tonumber(ARGV[2])
@@ -32,7 +50,6 @@ local usd = tonumber(redis.call('HGET', KEYS[1], 'theoreticalNano')) + tonumber(
 redis.call('HSET', KEYS[1], 'actualNano', tostring(cny), 'theoreticalNano', tostring(usd), ARGV[1], ARGV[4])
 return {'settled', tostring(cny), tostring(usd)}
 `;
-
 function amount(value, label, allowZero = false) {
   if(value===null || value===undefined || value==='') throw new Error(`cloud_budget_invalid_${label}`);
   const number = Number(value);
@@ -40,6 +57,35 @@ function amount(value, label, allowZero = false) {
   return number;
 }
 function nano(value) { return Math.ceil(value * UNIT); }
+function dayKeyAt(now, timezone) {
+  const day = Object.fromEntries(new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone || 'Asia/Shanghai', year:'numeric',month:'2-digit',day:'2-digit',
+  }).formatToParts(now).map(part=>[part.type,part.value]));
+  return `${day.year}-${day.month}-${day.day}`;
+}
+function timezoneOffsetMinutes(at,timezone) {
+  const value=new Intl.DateTimeFormat('en-US',{timeZone:timezone||'Asia/Shanghai',timeZoneName:'longOffset'})
+    .formatToParts(at).find(part=>part.type==='timeZoneName')?.value;
+  const match=/^GMT(?:(?<sign>[+-])(?<hours>\d{2}):(?<minutes>\d{2}))?$/u.exec(value||'');
+  if(!match) throw new Error('cloud_budget_invalid_timezone');
+  if(!match.groups?.sign) return 0;
+  const minutes=Number(match.groups.hours)*60+Number(match.groups.minutes);
+  return match.groups.sign==='-'?-minutes:minutes;
+}
+function localMidnightUtc(dayKey,timezone) {
+  const [year,month,day]=dayKey.split('-').map(Number);
+  const localAsUtc=Date.UTC(year,month-1,day);
+  let result=localAsUtc-timezoneOffsetMinutes(new Date(localAsUtc),timezone)*60_000;
+  result=localAsUtc-timezoneOffsetMinutes(new Date(result),timezone)*60_000;
+  return new Date(result);
+}
+function utcDayBounds(dayKey,timezone) {
+  const start=localMidnightUtc(dayKey,timezone);
+  const [year,month,day]=dayKey.split('-').map(Number);
+  const nextLocal=new Date(Date.UTC(year,month-1,day+1));
+  const nextKey=`${nextLocal.getUTCFullYear()}-${String(nextLocal.getUTCMonth()+1).padStart(2,'0')}-${String(nextLocal.getUTCDate()).padStart(2,'0')}`;
+  return {startUtc:start.toISOString(),endUtc:localMidnightUtc(nextKey,timezone).toISOString()};
+}
 function redisConfig(env) {
   for (const [url, token] of [
     ['UPSTASH_BUDGET_KV_REST_API_URL','UPSTASH_BUDGET_KV_REST_API_TOKEN'],
@@ -65,12 +111,98 @@ function cloudBudgetScope(env, now) {
   // request content is interpreted and existing run balances are not reset.
   const period = String(env.CLOUD_BUDGET_PERIOD || 'run');
   if (!['run','daily'].includes(period)) throw new Error('cloud_budget_invalid_period');
-  const day = period === 'daily' ? Object.fromEntries(new Intl.DateTimeFormat('en-US', {
-    timeZone: env.API_BUDGET_TIMEZONE || 'Asia/Shanghai', year:'numeric',month:'2-digit',day:'2-digit',
-  }).formatToParts(now).map(part=>[part.type,part.value])) : null;
-  const dayKey = day ? `${day.year}-${day.month}-${day.day}` : null;
+  const dayKey = period === 'daily' ? dayKeyAt(now, env.API_BUDGET_TIMEZONE) : null;
   const key = `ruling-cloud-budget:v1:${namespace}${dayKey ? `:${dayKey}` : ''}`;
   return {namespace, period, dayKey, key};
+}
+
+async function sendRedisCommand({env,fetchImpl}, args) {
+  const redis=redisConfig(env);
+  const response=await fetchImpl(redis.url,{
+    method:'POST',headers:{authorization:`Bearer ${redis.token}`,'content-type':'application/json'},
+    body:JSON.stringify(args),signal:AbortSignal.timeout(5000),
+  });
+  if(!response.ok) throw new Error(`cloud_budget_store_http_${response.status}`);
+  const payload=await response.json();
+  if(payload.error || !Array.isArray(payload.result)) throw new Error('cloud_budget_store_invalid_response');
+  return payload.result;
+}
+
+function parseHashResult(result) {
+  if(!Array.isArray(result) || result.length%2!==0) throw new Error('cloud_budget_store_invalid_response');
+  const fields=new Map();
+  for(let index=0;index<result.length;index+=2) fields.set(String(result[index]),String(result[index+1]));
+  return fields;
+}
+
+function officialDailyConfig(env,now) {
+  const dailyBudgetAmount=amount(env.PUBLIC_OPENAI_DAILY_LIMIT_USD??5,'official_daily_limit');
+  const namespace=String(env.PUBLIC_OPENAI_BUDGET_RUN_ID||'');
+  if(!/^[a-zA-Z0-9_-]{1,100}$/u.test(namespace)) throw new Error('cloud_budget_run_id_required');
+  const dayKey=dayKeyAt(now,env.API_BUDGET_TIMEZONE);
+  return {dailyBudgetAmount,dayKey,legacyKey:`ruling-cloud-budget:v1:${namespace}`,
+    dailyKey:`ruling-cloud-budget:v1:${namespace}:${dayKey}`};
+}
+
+function ticketsForDay(fields,{dayKey,timezone}) {
+  const tickets=[];
+  for(const [id,value] of fields) {
+    if(['actualNano','theoreticalNano'].includes(id)) continue;
+    let ticket;
+    try { ticket=JSON.parse(value); } catch { throw new Error('cloud_budget_ticket_invalid'); }
+    if(ticket.provider!=='openai') continue;
+    if(!['reserved','usage_settled'].includes(ticket.status)
+        || !Number.isSafeInteger(ticket.theoreticalNano) || ticket.theoreticalNano<0
+        || typeof ticket.startedAtUtc!=='string') throw new Error('cloud_budget_ticket_invalid');
+    const started=new Date(ticket.startedAtUtc);
+    if(Number.isNaN(started.valueOf())) throw new Error('cloud_budget_ticket_invalid');
+    if(dayKeyAt(started,timezone)===dayKey) tickets.push([id,value,ticket]);
+  }
+  return tickets;
+}
+
+function officialStatusFromFields(fields,config) {
+  let spentNano=0,reservedNano=0;
+  for(const [id,value] of fields) {
+    if(['actualNano','theoreticalNano'].includes(id)) continue;
+    let ticket;
+    try { ticket=JSON.parse(value); } catch { throw new Error('cloud_budget_ticket_invalid'); }
+    if(ticket.provider!=='openai') continue;
+    if(!['reserved','usage_settled'].includes(ticket.status)
+        || !Number.isSafeInteger(ticket.theoreticalNano) || ticket.theoreticalNano<0) {
+      throw new Error('cloud_budget_ticket_invalid');
+    }
+    if(ticket.status==='reserved') reservedNano+=ticket.theoreticalNano;
+    else spentNano+=ticket.theoreticalNano;
+  }
+  const spentAmount=spentNano/UNIT;
+  const reservedAmount=reservedNano/UNIT;
+  const remainingAmount=Math.max(0,config.dailyBudgetAmount-spentAmount-reservedAmount);
+  return {currency:'USD',dailyBudgetAmount:config.dailyBudgetAmount,remainingAmount,spentAmount,
+    dayKey:config.dayKey,reservedAmount,blocked:remainingAmount<=0};
+}
+
+export async function getOfficialOpenAIBudgetStatus({env={},fetchImpl=globalThis.fetch,now=new Date()}={}) {
+  let config;
+  try { config=officialDailyConfig(env,now); }
+  catch {
+    const dailyBudgetAmount=Number(env.PUBLIC_OPENAI_DAILY_LIMIT_USD??5);
+    return {currency:'USD',dailyBudgetAmount:Number.isFinite(dailyBudgetAmount)?dailyBudgetAmount:5,
+      remainingAmount:null,spentAmount:null,dayKey:dayKeyAt(now,env.API_BUDGET_TIMEZONE),
+      reservedAmount:null,blocked:true};
+  }
+  if(typeof fetchImpl!=='function') return {currency:'USD',dailyBudgetAmount:config.dailyBudgetAmount,
+    remainingAmount:null,spentAmount:null,dayKey:config.dayKey,reservedAmount:null,blocked:true};
+  try {
+    const daily=parseHashResult(await sendRedisCommand({env,fetchImpl},['HGETALL',config.dailyKey]));
+    if(daily.size>0) return officialStatusFromFields(daily,config);
+    const legacy=parseHashResult(await sendRedisCommand({env,fetchImpl},['HGETALL',config.legacyKey]));
+    const todaysTickets=ticketsForDay(legacy,{dayKey:config.dayKey,timezone:env.API_BUDGET_TIMEZONE});
+    return officialStatusFromFields(new Map(todaysTickets.map(([id,value])=>[id,value])),config);
+  } catch {
+    return {currency:'USD',dailyBudgetAmount:config.dailyBudgetAmount,remainingAmount:null,
+      spentAmount:null,dayKey:config.dayKey,reservedAmount:null,blocked:true};
+  }
 }
 
 // Read the same durable tickets used by the production dispatcher. Only stored
@@ -89,20 +221,37 @@ export async function getCloudEvidenceBudgetStatus({env, fetchImpl = globalThis.
   }
   let spentNano = 0;
   let reservedNano = 0;
+  let relaySpentNano = 0;
+  let relayReservedNano = 0;
+  const fields=parseHashResult(payload.result);
   for (let index = 0; index < payload.result.length; index += 2) {
     if (['actualNano','theoreticalNano'].includes(payload.result[index])) continue;
     const ticket = JSON.parse(payload.result[index + 1]);
-    if (ticket.provider !== 'siliconflow') continue;
-    if (!Number.isSafeInteger(ticket.actualNano) || ticket.actualNano < 0
-        || !['reserved','usage_settled'].includes(ticket.status)) throw new Error('cloud_budget_ticket_invalid');
-    spentNano += ticket.actualNano;
-    if (ticket.status === 'reserved') reservedNano += ticket.actualNano;
+    if (!['reserved','usage_settled'].includes(ticket.status)) throw new Error('cloud_budget_ticket_invalid');
+    if (ticket.provider === 'siliconflow') {
+      if (!Number.isSafeInteger(ticket.actualNano) || ticket.actualNano < 0) throw new Error('cloud_budget_ticket_invalid');
+      spentNano += ticket.actualNano;
+      if (ticket.status === 'reserved') reservedNano += ticket.actualNano;
+    }
+    if (ticket.provider === 'relay') {
+      if (!Number.isSafeInteger(ticket.theoreticalNano) || ticket.theoreticalNano < 0) throw new Error('cloud_budget_ticket_invalid');
+      if (ticket.status === 'reserved') relayReservedNano += ticket.theoreticalNano;
+      else relaySpentNano += ticket.theoreticalNano;
+    }
   }
+  const actualLimit=amount(env.CLOUD_BUDGET_ACTUAL_LIMIT_CNY,'actual_limit');
+  const theoreticalLimit=amount(env.CLOUD_BUDGET_THEORETICAL_LIMIT_USD,'theoretical_limit');
+  const accountedActualNano=Number(fields.get('actualNano')??nano(amount(env.CLOUD_BUDGET_INITIAL_ACTUAL_CNY||0,'initial_actual',true)));
+  const accountedTheoreticalNano=Number(fields.get('theoreticalNano')??nano(amount(env.CLOUD_BUDGET_INITIAL_THEORETICAL_USD||0,'initial_theoretical',true)));
+  if(!Number.isSafeInteger(accountedActualNano)||accountedActualNano<0
+      ||!Number.isSafeInteger(accountedTheoreticalNano)||accountedTheoreticalNano<0) throw new Error('cloud_budget_total_invalid');
   return {spentTodayCny:spentNano / UNIT, reservedTodayCny:reservedNano / UNIT,
-    dailyBudgetCny:amount(env.CLOUD_BUDGET_ACTUAL_LIMIT_CNY,'actual_limit')};
+    dailyBudgetCny:actualLimit,relayPool:{spentUsd:relaySpentNano/UNIT,reservedUsd:relayReservedNano/UNIT,
+      theoreticalLimitUsd:theoreticalLimit,accountedUsd:accountedTheoreticalNano/UNIT,
+      actualRemainingCny:Math.max(0,actualLimit-accountedActualNano/UNIT)}};
 }
 
-export function createCloudRequestBudget({env, fetchImpl = globalThis.fetch, command, now = new Date()} = {}) {
+export function createCloudRequestBudget({env, fetchImpl = globalThis.fetch, command, now = new Date(),officialDailyMigration} = {}) {
   const {namespace, period, dayKey, key} = cloudBudgetScope(env, now);
   const limits = {
     actualCny:amount(env.CLOUD_BUDGET_ACTUAL_LIMIT_CNY,'actual_limit',true),
@@ -133,8 +282,10 @@ export function createCloudRequestBudget({env, fetchImpl = globalThis.fetch, com
     amount(theoreticalUsd,'reservation_theoretical',true);
     const ticket={id:randomUUID(),provider,model,operation,status:'reserved',startedAtUtc:new Date().toISOString(),
       actualNano:nano(actualCny),theoreticalNano:nano(theoreticalUsd),started:performance.now()};
-    const result=await send(['EVAL',CLOUD_BUDGET_RESERVE,'1',key,ticket.id,String(ticket.actualNano),String(ticket.theoreticalNano),
-      String(nano(limits.actualCny)),String(nano(limits.theoreticalUsd)),String(nano(initial.actualCny)),String(nano(initial.theoreticalUsd)),JSON.stringify(ticket)]);
+    const migrationArgs=officialDailyMigration?['official_daily_v1',officialDailyMigration.startUtc,officialDailyMigration.endUtc]:[];
+    const result=await send(['EVAL',CLOUD_BUDGET_RESERVE,officialDailyMigration?'2':'1',key,
+      ...(officialDailyMigration?[officialDailyMigration.legacyKey]:[]),ticket.id,String(ticket.actualNano),String(ticket.theoreticalNano),
+      String(nano(limits.actualCny)),String(nano(limits.theoreticalUsd)),String(nano(initial.actualCny)),String(nano(initial.theoreticalUsd)),JSON.stringify(ticket),...migrationArgs]);
     if(result[0]!=='reserved') throw new Error(result[0]==='blocked'?'cloud_budget_total_exceeded':'cloud_budget_reservation_uncertain');
     records.push(ticket);
     return ticket;
@@ -235,7 +386,7 @@ export function createCloudRequestBudget({env, fetchImpl = globalThis.fetch, com
 }
 
 export async function runCloudBudgetedQuestion({env,fetchImpl,budget},invoke) {
-  if(env.RAG_MODEL_PROVIDER && !['relay','openai'].includes(env.RAG_MODEL_PROVIDER)) {
+  if(env.RAG_MODEL_PROVIDER && !['relay','openai','deepseek','glm'].includes(env.RAG_MODEL_PROVIDER)) {
     throw new Error('cloud_budget_provider_not_supported');
   }
   const controller=budget||createCloudRequestBudget({env,fetchImpl});
@@ -254,17 +405,31 @@ export function runCloudRelayRequest({body,invoke}) {
   const controller=scope.getStore();
   return controller?controller.relay({body,invoke}):invoke();
 }
-export function runOfficialOpenAIRequest({env,body,invoke,fetchImpl=globalThis.fetch,now=new Date()}) {
+export async function runOfficialOpenAIRequest({env,body,invoke,fetchImpl=globalThis.fetch,now=new Date()}) {
+  const daily=officialDailyConfig(env,now);
   const officialEnv={
     ...env,
     CLOUD_BUDGET_RUN_ID:String(env.PUBLIC_OPENAI_BUDGET_RUN_ID||''),
-    CLOUD_BUDGET_PERIOD:'run',
+    CLOUD_BUDGET_PERIOD:'daily',
     CLOUD_BUDGET_ACTUAL_LIMIT_CNY:'0',
-    CLOUD_BUDGET_THEORETICAL_LIMIT_USD:String(env.PUBLIC_OPENAI_BUDGET_LIMIT_USD||''),
+    CLOUD_BUDGET_THEORETICAL_LIMIT_USD:String(env.PUBLIC_OPENAI_DAILY_LIMIT_USD??5),
     CLOUD_BUDGET_INITIAL_ACTUAL_CNY:'0',
-    CLOUD_BUDGET_INITIAL_THEORETICAL_USD:String(env.PUBLIC_OPENAI_BUDGET_INITIAL_USD??''),
+    // The legacy initial amount has no dated provenance. Only dated tickets are
+    // migrated during reservation, preserving history without charging it to today.
+    CLOUD_BUDGET_INITIAL_THEORETICAL_USD:'0',
   };
-  return createCloudRequestBudget({env:officialEnv,fetchImpl,now}).openai({body,invoke});
+  try {
+    return await createCloudRequestBudget({env:officialEnv,fetchImpl,now,
+      officialDailyMigration:{legacyKey:daily.legacyKey,...utcDayBounds(daily.dayKey,env.API_BUDGET_TIMEZONE)}})
+      .openai({body,invoke});
+  } catch(error) {
+    if(error?.message==='cloud_budget_total_exceeded') {
+      const exceeded=new Error('official_daily_budget_exceeded',{cause:error});
+      exceeded.code='official_daily_budget_exceeded';
+      throw exceeded;
+    }
+    throw error;
+  }
 }
 export function cloudSiliconFlowCallbacks() {
   const controller=scope.getStore();

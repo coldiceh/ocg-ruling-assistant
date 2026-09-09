@@ -12,23 +12,16 @@ import {
   publicRulingModelProfileAvailable,
 } from "../backend/publicRulingModelConfig.mjs";
 
-const RELAY_PROFILE_ID = "relay-gpt-5.6-luna-low";
-const DEFAULT_RELAY_PROFILE_ID = "relay-gpt-5.6-sol-low";
+const RELAY_PROFILE_ID = "relay-gpt-5.6-sol-low";
+const DEFAULT_RELAY_PROFILE_ID = "official-astra-low";
 
-test("public Luna relay profile requires both a key and an HTTPS endpoint", () => {
+test("public model profiles expose exact provider models and credential availability", () => {
   const unavailable = getPublicRulingModelCapabilities({
     RELAY_API_KEY: "relay-issued-key",
   });
   assert.deepEqual(
     unavailable.rulingModelProfiles.map((profile) => [profile.id, profile.available]),
-    [
-      [RELAY_PROFILE_ID, false],
-      ["relay-gpt-5.6-sol-low", false],
-      ["deepseek-v4-flash-standard", false],
-      ["deepseek-v4-flash-low", false],
-      ["deepseek-v4-flash-high", false],
-      ["deepseek-v4-flash-max", false],
-    ],
+    unavailable.rulingModelProfiles.map((profile) => [profile.id, false]),
   );
   assert.equal(publicRulingModelProfileAvailable(RELAY_PROFILE_ID, {
     RELAY_API_KEY: "relay-issued-key",
@@ -56,76 +49,34 @@ test("public Luna relay profile requires both a key and an HTTPS endpoint", () =
     RELAY_API_KEY: "relay-issued-key",
     RELAY_BASE_URL: "https://relay.example.test/v1",
     DEEPSEEK_API_KEY: "deepseek-key",
+    GLM_API_KEY: "glm-key",
+    PUBLIC_DEEPSEEK_MODEL: "deepseek-v4.1-flash",
   });
   assert.equal(configured.defaultRulingModelProfile, DEFAULT_RELAY_PROFILE_ID);
-  assert.deepEqual(configured.rulingModelProfiles.map((profile) => ({
-    id: profile.id,
-    available: profile.available,
-    model: profile.model,
-    thinkingMode: profile.thinkingMode,
-    reasoningEffort: profile.reasoningEffort,
-    transport: profile.transport,
-  })), [
-    {
-      id: RELAY_PROFILE_ID,
-      available: true,
-      model: "gpt-5.6-luna",
-      thinkingMode: "enabled",
-      reasoningEffort: "low",
-      transport: "chat_completions_sse",
-    },
-    {
-      id: "relay-gpt-5.6-sol-low",
-      available: true,
-      model: "gpt-5.6-sol",
-      thinkingMode: "enabled",
-      reasoningEffort: "low",
-      transport: "chat_completions_sse",
-    },
-    {
-      id: "deepseek-v4-flash-standard",
-      available: true,
-      model: "deepseek-v4-flash",
-      thinkingMode: "disabled",
-      reasoningEffort: null,
-      transport: "chat_completions",
-    },
-    {
-      id: "deepseek-v4-flash-low",
-      available: true,
-      model: "deepseek-v4-flash",
-      thinkingMode: "enabled",
-      reasoningEffort: "low",
-      transport: "chat_completions",
-    },
-    {
-      id: "deepseek-v4-flash-high",
-      available: true,
-      model: "deepseek-v4-flash",
-      thinkingMode: "enabled",
-      reasoningEffort: "high",
-      transport: "chat_completions",
-    },
-    {
-      id: "deepseek-v4-flash-max",
-      available: true,
-      model: "deepseek-v4-flash",
-      thinkingMode: "enabled",
-      reasoningEffort: "max",
-      transport: "chat_completions",
-    },
-  ]);
+  const byId = Object.fromEntries(configured.rulingModelProfiles.map((profile) => [profile.id, profile]));
+  assert.equal(configured.rulingModelProfiles.length, 18);
+  assert.deepEqual(
+    Object.keys(byId).filter((id) => id.startsWith("relay-gpt-5.6-sol-")),
+    ["relay-gpt-5.6-sol-low", "relay-gpt-5.6-sol-medium", "relay-gpt-5.6-sol-high", "relay-gpt-5.6-sol-xhigh", "relay-gpt-5.6-sol-max"],
+  );
+  assert.equal(byId["relay-gpt-6-astra-max"].model, "gpt-6-astra");
+  assert.equal(byId["deepseek-v4.1-flash-none"].thinkingMode, "disabled");
+  assert.equal(byId["deepseek-v4.1-flash-none"].model, "deepseek-v4.1-flash");
+  assert.equal(byId["deepseek-v4.1-flash-high"].reasoningEffort, "high");
+  assert.equal(byId["glm-5.3-low"].thinkingMode, "enabled");
+  assert.equal(byId["glm-5.3-max"].model, "glm-5.3");
+  assert.equal(byId["glm-5.3-max"].available, true);
   assert.doesNotMatch(JSON.stringify(configured), /relay-issued-key|relay\.example/u);
 });
 
-test("server accepts Luna low as the explicit public default", () => {
+test("server accepts an allowlisted relay effort as the explicit public default", () => {
   const capabilities = getPublicRulingModelCapabilities({
     PUBLIC_RULING_MODEL_PROFILE: RELAY_PROFILE_ID,
     RELAY_API_KEY: "relay-issued-key",
     RELAY_BASE_URL: "https://relay.example.test/v1",
   });
   assert.equal(capabilities.defaultRulingModelProfile, RELAY_PROFILE_ID);
-  assert.equal(capabilities.rulingModelProfiles[0].available, true);
+  assert.equal(capabilities.rulingModelProfiles.find((profile) => profile.id === RELAY_PROFILE_ID).available, true);
 });
 
 test("public answer environment isolates final Relay secrets while retaining internal applicability transport", () => {
@@ -138,7 +89,7 @@ test("public answer environment isolates final Relay secrets while retaining int
   }, RELAY_PROFILE_ID);
   assert.equal(relayEnv.MODEL_PROVIDER, "relay");
   assert.equal(relayEnv.RAG_MODEL_PROVIDER, "relay");
-  assert.equal(relayEnv.RAG_MODEL, "gpt-5.6-luna");
+  assert.equal(relayEnv.RAG_MODEL, "gpt-5.6-sol");
   assert.equal(relayEnv.RAG_REASONING_EFFORT, "low");
   assert.equal(relayEnv.RELAY_API_KEY, "relay-issued-key");
   assert.equal(relayEnv.RELAY_BASE_URL, "https://relay.example.test/v1");
@@ -151,22 +102,33 @@ test("public answer environment isolates final Relay secrets while retaining int
     RELAY_API_KEY: "relay-key",
     RELAY_BASE_URL: "https://relay.example.test/v1",
     DEEPSEEK_API_KEY: "deepseek-key",
-  }, "deepseek-v4-flash-high");
+    OCG_FINAL_OPENAI_API_KEY: "official-final-key",
+  }, "deepseek-v4.1-flash-high");
   assert.equal(nonRelayEnv.RELAY_API_KEY, undefined);
   assert.equal(nonRelayEnv.RELAY_BASE_URL, undefined);
+  assert.equal(nonRelayEnv.GLM_API_KEY, undefined);
+  assert.equal(nonRelayEnv.OCG_FINAL_OPENAI_API_KEY, undefined);
   assert.equal(nonRelayEnv.RAG_EVIDENCE_APPLICABILITY_RELAY_API_KEY, "relay-key");
   assert.equal(
     nonRelayEnv.RAG_EVIDENCE_APPLICABILITY_RELAY_BASE_URL,
     "https://relay.example.test/v1",
   );
 
-  const standardEnv = createPublicAnswerModelEnv({ DEEPSEEK_API_KEY: "deepseek-key" }, "deepseek-v4-flash-standard");
+  const standardEnv = createPublicAnswerModelEnv({ DEEPSEEK_API_KEY: "deepseek-key" }, "deepseek-v4.1-flash-none");
   assert.equal(standardEnv.RAG_THINKING_MODE, "disabled");
   assert.equal(standardEnv.RAG_REASONING_EFFORT, null);
 
-  const lowEnv = createPublicAnswerModelEnv({ DEEPSEEK_API_KEY: "deepseek-key" }, "deepseek-v4-flash-low");
+  const lowEnv = createPublicAnswerModelEnv({ DEEPSEEK_API_KEY: "deepseek-key" }, "deepseek-v4.1-flash-low");
   assert.equal(lowEnv.RAG_THINKING_MODE, "enabled");
   assert.equal(lowEnv.RAG_REASONING_EFFORT, "low");
+
+  const glmEnv = createPublicAnswerModelEnv({ GLM_API_KEY: "glm-key", DEEPSEEK_API_KEY: "card-key" }, "glm-5.3-max");
+  assert.equal(glmEnv.RAG_MODEL_PROVIDER, "glm");
+  assert.equal(glmEnv.RAG_MODEL, "glm-5.3");
+  assert.equal(glmEnv.RAG_THINKING_MODE, "enabled");
+  assert.equal(glmEnv.RAG_REASONING_EFFORT, "max");
+  assert.equal(glmEnv.GLM_API_KEY, "glm-key");
+  assert.equal(glmEnv.DEEPSEEK_API_KEY, "card-key");
 });
 
 test("relay final ruling uses one SSE Chat Completions request with the relay-only contract", async () => {
@@ -231,10 +193,10 @@ test("relay final ruling uses one SSE Chat Completions request with the relay-on
   assert.equal(result.budgetStatus.bucket.id, "final_ruling:relay");
   assert.equal(result.costCurrency, "USD");
   assert.equal(result.estimatedCostCny, 0);
-  assert.equal(result.estimatedCostUsd, 0.002);
+  assert.equal(result.estimatedCostUsd, 0.0014);
   assert.equal(result.budgetStatus.spentTodayCny, 0);
   assert.equal(result.budgetStatus.bucket.currency, "USD");
-  assert.equal(result.budgetStatus.bucket.spentTodayUsd, 0.002);
+  assert.equal(result.budgetStatus.bucket.spentTodayUsd, 0.0014);
   assert.equal(result.budgetStatus.bucket.dailyBudgetUsd, 10);
   assert.ok(result.warnings.includes("third_party_relay_model_identity_unverified"));
 });
@@ -508,7 +470,7 @@ test("relay normalizes Responses-style usage without discounting public all-unca
   assert.equal(result.generationAttempts[0].requestModel, "gpt-5.6-sol");
   assert.equal(result.generationAttempts[0].responseModel, "gpt-5.6-sol");
   assert.equal(result.generationAttempts[0].usage.prompt_tokens, 200);
-  assert.equal(result.estimatedCostUsd, 0.0034);
+  assert.equal(result.estimatedCostUsd, 0.0024);
 });
 
 test("public relay keeps the returned-model mismatch warning with an SSE response", async () => {
@@ -574,12 +536,12 @@ test("relay default estimate allows multiple calls without exhausting the daily 
 
   assert.equal(fetchCount, 2);
   assert.equal(first.estimatedCostCny, 0);
-  assert.equal(first.estimatedCostUsd, 0.00035);
+  assert.equal(first.estimatedCostUsd, 0.00024);
   assert.equal(first.budgetStatus.bucket.id, "final_ruling:relay");
   assert.equal(second.estimatedCostCny, 0);
-  assert.equal(second.estimatedCostUsd, 0.00035);
+  assert.equal(second.estimatedCostUsd, 0.00024);
   assert.equal(second.budgetStatus.spentTodayCny, 0);
-  assert.equal(second.budgetStatus.bucket.spentTodayUsd, 0.0007);
+  assert.equal(second.budgetStatus.bucket.spentTodayUsd, 0.00048);
   assert.notEqual(second.answer.answerLevel, "budget_limited");
 });
 
@@ -606,8 +568,8 @@ test("relay keeps a conservative USD reservation when usage is omitted", async (
   });
 
   assert.equal(result.estimatedCostCny, 0);
-  assert.equal(result.estimatedCostUsd, 0.001925);
-  assert.equal(result.budgetStatus.bucket.spentTodayUsd, 0.001925);
+  assert.equal(result.estimatedCostUsd, 0.001284);
+  assert.equal(result.budgetStatus.bucket.spentTodayUsd, 0.001284);
 });
 
 test("relay retains its full USD reservation when usage has only a total without input/output", async () => {
@@ -634,8 +596,8 @@ test("relay retains its full USD reservation when usage has only a total without
   });
 
   assert.equal(result.estimatedCostCny, 0);
-  assert.equal(result.estimatedCostUsd, 0.001925);
-  assert.equal(result.budgetStatus.bucket.spentTodayUsd, 0.001925);
+  assert.equal(result.estimatedCostUsd, 0.001284);
+  assert.equal(result.budgetStatus.bucket.spentTodayUsd, 0.001284);
   assert.ok(result.warnings.includes("provider_usage_incomplete_reservation_retained"));
 });
 
@@ -646,7 +608,7 @@ test("public ChatGPT USD pool is hard-capped at ten dollars independently of CNY
     RELAY_API_KEY: "relay-issued-key",
     RELAY_BASE_URL: "https://relay.example.test/v1",
     RAG_MODEL: "gpt-5.6-sol",
-    RELAY_MAX_COMPLETION_TOKENS: "400000",
+    RELAY_MAX_COMPLETION_TOKENS: "600000",
     API_CHATGPT_DAILY_BUDGET_USD: "100",
     API_DAILY_BUDGET_CNY: "0.000001",
     API_BUDGET_TIMEZONE: "UTC",

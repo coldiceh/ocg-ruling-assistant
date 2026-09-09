@@ -15,7 +15,7 @@
       property="og:description"
       content="结合卡片文本、公开规则资料与官方 Q&amp;A，分析游戏王 OCG 裁定问题。"
     />
-    <link rel="stylesheet" href="src/styles.css?v=20260908-player-pipeline-3" />
+    <link rel="stylesheet" href="src/styles.css?v=20260908-player-models-1" />
   </head>
   <body class="theme-night">
     <div class="page-background" aria-hidden="true"></div>
@@ -51,20 +51,17 @@
             <label class="model-tier-label" for="rulingModelSelect">
               <span>裁定模型</span>
               <select id="rulingModelSelect" aria-describedby="rulingModelStatus rulingModelLatency" disabled>
-                <option value="official-astra-low" selected>官方 GPT-6 Astra · 思考 low</option>
+                <option value="official-astra-low" selected>正在读取可用模型…</option>
               </select>
               <small id="rulingModelStatus" hidden></small>
               <small id="rulingModelLatency" class="model-latency" aria-live="polite">正在读取平均出答案时间</small>
             </label>
-            <div class="answer-version-selector" role="group" aria-label="回答版本">
-              <span>回答版本</span>
-              <button class="answer-version-button is-active" type="button" data-ruling-version="latest" aria-pressed="true">最新版</button>
-            </div>
             <div class="model-strip" aria-live="polite">
               <span>裁定流程</span>
               <strong id="modelStatusText">准备就绪</strong>
             </div>
             <div class="judge-actions">
+              <button class="text-button prepare-only-button" id="prepareEvidenceButton" type="button">仅准备证据包</button>
               <button class="primary-button" id="analyzeButton" type="button">
                 <svg viewBox="0 0 24 24" aria-hidden="true">
                   <path d="M8 5h8M6 12h12M9 19h6" />
@@ -73,6 +70,14 @@
               </button>
             </div>
           </div>
+
+          <section class="evidence-package-panel" id="evidencePackagePanel" aria-labelledby="evidencePackageTitle" hidden>
+            <div>
+              <strong id="evidencePackageTitle">证据包已准备</strong>
+              <p id="evidencePackageStatus">可下载本题提交给最终裁定模型的实际材料。</p>
+            </div>
+            <button class="text-button" id="evidencePackageDownload" type="button">下载证据包</button>
+          </section>
 
           <details class="pipeline-debug-toggle" id="pipelineDebugToggle" hidden>
             <summary>调试</summary>
@@ -87,7 +92,6 @@
               </div>
               <h3 id="verdictTitle"></h3>
               <p class="basis-text" id="rulingBasisText"></p>
-              <p class="answer-version-note" id="answerVersionText" hidden></p>
               <p id="verdictBody"></p>
               <div class="sub-answers" id="subAnswersPanel" hidden></div>
             </section>
@@ -144,6 +148,11 @@
               <ul id="questionsList"></ul>
             </section>
 
+            <section class="result-block generation-panel" id="generationPanel" aria-labelledby="generationTitle">
+              <div class="block-title"><span id="generationTitle">本次生成信息</span></div>
+              <dl id="generationDetails"></dl>
+            </section>
+
             <details class="result-block parser-debug" id="parserDebugPanel" hidden>
               <summary>DEBUG TRACE</summary>
               <pre id="parserDebugOutput"></pre>
@@ -152,9 +161,9 @@
 
           <section class="budget-panel" id="budgetPanel" aria-labelledby="budgetTitle">
             <div>
-              <p class="budget-label" id="budgetTitle">今日 API 额度（分币种）</p>
+              <p class="budget-label" id="budgetTitle">本站今日 API 限额（分币种）</p>
             </div>
-            <p id="budgetHint">统计后端今日累计模型用量。</p>
+            <p id="budgetHint">本站调用限额，不代表供应商账户余额。</p>
             <div class="budget-buckets" id="budgetBucketList" aria-label="分模型今日用量"></div>
           </section>
 
@@ -186,7 +195,7 @@
             <div id="adminLabWorkspace" hidden>
               <section class="admin-lab-section" aria-labelledby="adminCaptureTitle">
                 <h3 id="adminCaptureTitle">线上证据检查</h3>
-                <p>沿用玩家当前流程生成完整资料，在最终回答前停止。结果仅显示在本页，可下载保存。</p>
+                <p>沿用玩家当前流程生成完整资料，在最终回答前停止。成功后主区域显示并下载实际的最终作答输入；费用与失败信息保留在完整诊断记录中。</p>
                 <form id="adminEvidenceCaptureForm">
                   <label for="adminCaptureQuestion">原始问题</label>
                   <textarea id="adminCaptureQuestion" rows="4" required></textarea>
@@ -199,10 +208,16 @@
                   <button class="primary-button" id="adminCaptureButton" type="submit">仅生成证据包</button>
                 </form>
                 <p id="adminCaptureStatus" role="status">等待检查</p>
-                <button class="text-button" id="adminCaptureDownload" type="button" hidden>下载本次证据包</button>
-                <details id="adminCaptureDetails" hidden>
-                  <summary>查看本次完整记录</summary>
-                  <textarea id="adminCaptureResult" rows="12" readonly aria-label="完整证据记录"></textarea>
+                <div id="adminCaptureDetails" hidden>
+                  <h4>最终作答输入</h4>
+                  <p>这是继续最终裁定时会提交给模型的实际输入，可直接复制或下载。</p>
+                  <button class="text-button" id="adminCaptureDownload" type="button" hidden>下载最终作答输入</button>
+                  <textarea id="adminCaptureResult" rows="12" readonly aria-label="最终作答输入"></textarea>
+                </div>
+                <details id="adminCaptureDiagnosticDetails" hidden>
+                  <summary>完整诊断记录（含费用与失败信息）</summary>
+                  <button class="text-button" id="adminCaptureDiagnosticDownload" type="button">下载完整诊断记录</button>
+                  <textarea id="adminCaptureDiagnosticResult" rows="12" readonly aria-label="完整诊断记录"></textarea>
                 </details>
               </section>
               <section class="admin-lab-section" aria-labelledby="adminBudgetTitle">
