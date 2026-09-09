@@ -804,17 +804,24 @@ async function requestBackendAnswer(text, requestedRulingVersion, {
       }),
     });
   } catch (error) {
-    throw createRulingVersionError({
-      code: "ruling_version_request_failed",
-      requestedVersion: requestedRulingVersion,
+    throw createBackendRequestError({
+      code: "answer_network_error",
       cause: error,
     });
   }
   if (!response.ok) {
-    throw createRulingVersionError({
-      code: "ruling_version_request_failed",
-      requestedVersion: requestedRulingVersion,
+    let payload = null;
+    try {
+      payload = await response.json();
+    } catch {
+      // A proxy or interrupted service can return non-JSON errors.
+    }
+    throw createBackendRequestError({
+      code: typeof payload?.code === "string" ? payload.code : "answer_http_error",
       status: response.status,
+      publicMessage: typeof payload?.error === "string"
+        ? payload.error
+        : typeof payload?.message === "string" ? payload.message : "",
     });
   }
   const contentType = String(response.headers?.get?.("content-type") || "").toLowerCase();
@@ -997,6 +1004,9 @@ async function readPublicAnswerProgressStream(response, requestedRulingVersion, 
     }
     protocolSucceeded = true;
     return answer;
+  } catch (error) {
+    if (error?.code) throw error;
+    throw createBackendRequestError({ code: "answer_network_error", cause: error });
   } finally {
     if (!protocolSucceeded) {
       try {
@@ -1061,6 +1071,15 @@ function createRulingVersionError({
   error.requestedVersion = requestedVersion;
   error.effectiveVersion = effectiveVersion;
   error.status = status;
+  return error;
+}
+
+function createBackendRequestError({ code, status = 0, publicMessage = "", cause }) {
+  const error = new Error(publicMessage || code, cause ? { cause } : undefined);
+  error.code = code;
+  error.status = status;
+  error.publicMessage = publicMessage;
+  error.requestFailure = true;
   return error;
 }
 
@@ -1182,6 +1201,28 @@ function renderBackendVersionError(error, requestedRulingVersion) {
     renderSources([]);
     return;
   }
+  const requestFailure = publicRequestFailurePresentation(error);
+  if (requestFailure) {
+    updateModelStatus(requestFailure.title);
+    ui.verdictBlock.className = "result-block verdict-block is-risky";
+    ui.confidenceText.textContent = requestFailure.status;
+    ui.verdictTitle.textContent = requestFailure.title;
+    ui.rulingBasisText.textContent = requestFailure.basis;
+    ui.answerVersionText.classList.add("is-error");
+    ui.answerVersionText.hidden = false;
+    ui.answerVersionText.textContent = "本次未取得裁定回答";
+    ui.verdictBody.textContent = requestFailure.message;
+    renderSubAnswers([]);
+    ui.stepsTitle.textContent = "处理结果";
+    ui.stepsList.hidden = false;
+    renderList(ui.stepsList, [requestFailure.step]);
+    renderList(ui.questionsList, [
+      ...(error?.publicMessage ? [error.publicMessage] : []),
+      ...(error?.status ? [`后端返回 HTTP ${error.status}。`] : []),
+    ]);
+    renderSources([]);
+    return;
+  }
   updateModelStatus("版本不可用");
   ui.verdictBlock.className = "result-block verdict-block is-risky";
   ui.confidenceText.textContent = "版本不可用";
@@ -1204,6 +1245,35 @@ function renderBackendVersionError(error, requestedRulingVersion) {
     error?.status ? `后端返回 HTTP ${error.status}。` : "未取得可验证的版本化回答。",
   ]);
   renderSources([]);
+}
+
+function publicRequestFailurePresentation(error) {
+  if (error?.requestFailure !== true) return null;
+  if (error.status === 413) {
+    return {
+      title: "输入内容过长",
+      status: "输入有误",
+      basis: "请求超过输入限制",
+      message: "提交内容超过网页允许的大小，请缩短问题后重新提交。",
+      step: "请求在输入校验阶段被拒绝，本次未开始裁定。",
+    };
+  }
+  if (error.status === 400) {
+    return {
+      title: "请求内容无效",
+      status: "输入有误",
+      basis: "请求未通过校验",
+      message: "请检查问题和所选模型，修正后重新提交。",
+      step: "后端拒绝了本次请求，具体原因见下方说明。",
+    };
+  }
+  return {
+    title: error.status ? "裁定服务请求失败" : "连接中断或请求未完成",
+    status: "暂不可用",
+    basis: error.status ? "服务请求失败" : "网络请求失败",
+    message: "未取得完整回答，后台执行状态尚未确认。",
+    step: "请先确认请求状态，避免重复提交。",
+  };
 }
 
 function relayPreparationFailurePresentation(error) {
