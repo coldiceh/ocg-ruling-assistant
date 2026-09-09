@@ -8,37 +8,37 @@
     "algorithm": "brotli",
     "quality": 5
   },
-  "dataRevision": "a796484d77ce7473ee48c6e8d6ac674a4900251f9dd4ba5354985eeb0489b4b5",
-  "sourceSetDigest": "4769f2cf7f01d415cf8067ecf3022f5db69915b2aba7c34f279797124f69fd81",
+  "dataRevision": "a86cdd678833a5cad63a3bb006a9ce84873d74866a516b67982e2e3264e3241c",
+  "sourceSetDigest": "96ef3491f0b54943e51bbf692f7487e946ce2b2034a480b60669020783c40a52",
   "sources": [
     {
       "path": "cards.json",
       "bytes": 16989367,
-      "sha256": "e405d78466864f1dc00045192630e157893fc5031d560d560a3150af5382a99c",
+      "sha256": "c4e9cb38f897d4cdc8aa1d7869105414f7fb1403bda6b3e55fc273305c786638",
       "count": 14379
     },
     {
       "path": "rulings.json",
-      "bytes": 42865062,
-      "sha256": "eede8f844466d2d794aa70069b3c4c53b9f944c0d84930cbabc3fb5aa553277a",
+      "bytes": 42836059,
+      "sha256": "6bbb6b0cf9c4da376bf41ea486727af01043b381d76aa57d1ae82a95e587fe74",
       "count": 31004
     },
     {
       "path": "qa-index.json",
-      "bytes": 49627619,
-      "sha256": "688dad109a691dee43d7fde9dcc8f1bba98da4197a98664fa84f59202b1e7826",
-      "count": 25676
+      "bytes": 51482502,
+      "sha256": "19844c48484b9f161f3fbfce04805d370238c1832576907e6c7f66416818d3d3",
+      "count": 26054
     },
     {
       "path": "evidence-index.json",
-      "bytes": 152148237,
-      "sha256": "d422f2e9876be38952d5362ed2d0c09b8b403ce9891cc3ba094d8b62b6f10e53",
-      "count": 72082
+      "bytes": 153933367,
+      "sha256": "c981ff6d136ce4cda9f0b3cde3c569a2cc2ad19c5b8772abc7fba7851a469315",
+      "count": 72460
     },
     {
       "path": "ocg-rule-corpus.json",
       "bytes": 1376959,
-      "sha256": "289cbb511a562df523404c86ddd65e67f938001cbf01f45d6b2e7e30b11e59c7",
+      "sha256": "b16d2b4c95a7392ffab2ac33ee7ca94df96d448a1d958665b5a6a88791abcbf0",
       "count": 39
     },
     {
@@ -50,39 +50,39 @@
   ],
   "counts": {
     "cards": 14379,
-    "records": 103056,
-    "qaRecords": 25676
+    "records": 103434,
+    "qaRecords": 26054
   },
   "corpora": {
     "cards": {
       "key": "cards",
       "file": "cards.json.br",
       "encoding": "br",
-      "bytes": 1726723,
-      "sha256": "194ffbe31162a95148c950f46661cb4d84897702c70441583290f4c8dd4286dd",
+      "bytes": 1731203,
+      "sha256": "7464dbe1139bf186220ebb343e95e247d3c81f7fb6ad136a07bcafee512023d3",
       "canonicalBytes": 14638074,
-      "canonicalSha256": "ff8d4ff800e3445ba40cedf93db33342669b88f9fb604f4d61fad976416e87be",
+      "canonicalSha256": "a130b8f2a227d86aa7fbc3f7d4941199b639b7c0c97bcfe24c36a274b8f56841",
       "count": 14379
     },
     "records": {
       "key": "records",
       "file": "records.json.br",
       "encoding": "br",
-      "bytes": 15735825,
-      "sha256": "f3610d331d9ae8194e6a578db87172abb4c4035ebc86fc67d11baf23519e65b3",
-      "canonicalBytes": 250839479,
-      "canonicalSha256": "302d8e792595b2631bb9920f210be422e9280b024693875fe9786e999578d01d",
-      "count": 103056
+      "bytes": 15859724,
+      "sha256": "f272a6b4ac580f007c1e9a0ecea9f13f4b1a1d12d3e06622fa9032957e81be57",
+      "canonicalBytes": 252592529,
+      "canonicalSha256": "5f16798330fc134b20ee56db3e74f45f1f769b568767567e9baccc1e348b7ca9",
+      "count": 103434
     },
     "qaRecords": {
       "key": "qaRecords",
       "file": "qa-records.json.br",
       "encoding": "br",
-      "bytes": 4202044,
-      "sha256": "6847e6cf2dac0b9c838b54d6748809dc83aaf3c2ab779df5d3ae6fedf669f954",
-      "canonicalBytes": 53579577,
-      "canonicalSha256": "e2290fdd4c3249027bd09fd5071c34ff38e9dc1a2f91ed008505084c3cabd1c5",
-      "count": 25676
+      "bytes": 4303863,
+      "sha256": "ab13c1361f9665cf84b3d7f0d33100bbfd95fb4d683765d03ee139fe4bdf21e4",
+      "canonicalBytes": 55287140,
+      "canonicalSha256": "ab5d6b6399114f3284c64ce6882b87da29e8fc32ded977d7c3d8146db2f0ed5b",
+      "count": 26054
     }
   },
   "artifacts": {
@@ -99,5 +99,5 @@
       "count": 14379
     }
   },
-  "bundleRevision": "13a1671cd108e9f5bf15ac8f946ae2df5111d80bcb3ac46762640ace7cbef98d"
+  "bundleRevision": "84488aa2dcdfd193b7a8105eaed07656af2edb83cf048b426b6c9f2512882f46"
 }
