@@ -19,6 +19,7 @@ import {
   runCloudRelayRequest,
   runOfficialOpenAIRequest,
   getCloudEvidenceBudgetStatus,
+  cloudRequestBudgetActive,
 } from './cloudRequestBudget.mjs';
 
 const DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com";
@@ -3447,12 +3448,16 @@ function privateEvaluationBudgetExhaustedMessage(bucket) {
   return `本次私有评测额度已达到 ${limit} 美元硬上限，未调用模型。`;
 }
 
-function buildExternallyManagedBudgetPreflight() {
+function buildExternallyManagedBudgetPreflight({
+  provider = "openai",
+  stage = "final_ruling",
+  label = "官方 OpenAI 最终裁定",
+} = {}) {
   const bucket = Object.freeze({
-    id: "final_ruling:openai",
-    stage: "final_ruling",
-    provider: "openai",
-    label: "官方 OpenAI 最终裁定",
+    id: `${stage}:${provider}`,
+    stage,
+    provider,
+    label,
     currency: "USD",
   });
   return {
@@ -3482,6 +3487,15 @@ async function buildBudgetPreflight({ provider, stage, modelName, prompt, maxTok
       env,
       trackSpend,
       privateEvaluationBudget,
+    });
+  }
+  if (provider === "relay"
+      && env.RAG_EVIDENCE_PIPELINE === "cloud_evidence_v1"
+      && cloudRequestBudgetActive()) {
+    return buildExternallyManagedBudgetPreflight({
+      provider: "relay",
+      stage: "evidence_preparation",
+      label: "云证据 Relay 调用",
     });
   }
   const config = budgetConfig(env);

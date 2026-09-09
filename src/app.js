@@ -240,6 +240,7 @@ const cardDetailsCache = new Map();
 let visibleCards = [];
 let selectedCardIndex = 0;
 let lastRenderedBackendAnswer = null;
+let lastSubmittedQuestion = "";
 let debugUiEnabled = false;
 let adminUiEnabled = false;
 let adminSession = {
@@ -742,6 +743,7 @@ function getDetectedCards(text) {
 }
 
 async function analyzeQuestion() {
+  lastSubmittedQuestion = ui.questionInput.value;
   const text = ui.questionInput.value.trim();
   cancelActiveAnalysisRequest();
   const requestId = ++analysisRequestId;
@@ -1493,6 +1495,7 @@ function renderRagAnswer(answer) {
   renderCards(
     answer?.resolvedCards || [],
     pendingModelCardNames(answer?.debug),
+    answer?.debug,
   );
   renderBudgetStatus(answer.debug?.budgetStatus || null);
   void loadBudgetStatus();
@@ -1980,16 +1983,87 @@ function pendingModelCardNames(debug = {}) {
   return names;
 }
 
-function renderCards(cards, pendingNames = []) {
+function collectPendingCardNameChoices(debug = {}, question = "") {
+  const modelSurfaces = new Set((debug?.modelCardNameCandidates || [])
+    .filter((candidate) => candidate?.source === "model_card_name_extractor")
+    .map((candidate) => String(candidate.originalText || candidate.name || ""))
+    .filter(Boolean));
+  const choices = [];
+  const seen = new Set();
+  for (const mention of debug?.ambiguousMentions || []) {
+    const surface = String(mention?.input || "");
+    if (!surface || !modelSurfaces.has(surface)) continue;
+    const positions = [];
+    for (let start = question.indexOf(surface); start !== -1; start = question.indexOf(surface, start + surface.length)) {
+      positions.push(start);
+    }
+    for (const candidate of mention.candidateCards || []) {
+      const id = String(candidate?.id || candidate?.cardId || "").trim();
+      const name = String(candidate?.name || "").trim();
+      if (!id || !name || name === surface) continue;
+      positions.forEach((start, index) => {
+        const key = JSON.stringify([start, surface, id, name]);
+        if (seen.has(key)) return;
+        seen.add(key);
+        choices.push({ surface, id, name, start, occurrence: index + 1, occurrenceCount: positions.length });
+      });
+    }
+  }
+  return choices;
+}
+
+function renderCardNameChoices(host, debug, question) {
+  const choices = collectPendingCardNameChoices(debug, question);
+  host.hidden = choices.length === 0;
+  if (!choices.length) return;
+  const heading = document.createElement("p");
+  heading.textContent = "找到以下候选卡。请核对完整卡名，点击后会填回问题框；再次查询才会使用该卡。";
+  host.appendChild(heading);
+  const buttons = document.createElement("div");
+  buttons.className = "card-tabs";
+  host.appendChild(buttons);
+  const status = document.createElement("p");
+  status.setAttribute("role", "status");
+  for (const choice of choices) {
+    const button = document.createElement("button");
+    button.className = "card-tab";
+    button.type = "button";
+    const location = choice.occurrenceCount > 1
+      ? `（第 ${choice.occurrence} 处：…${question.slice(Math.max(0, choice.start - 8), choice.start + choice.surface.length + 8)}…）`
+      : "";
+    button.textContent = `将「${choice.surface}」改为「${choice.name}」${location}`;
+    button.addEventListener("click", () => {
+      // This is an explicit text edit by the user, not an identity inference.
+      // The snapshot prevents an old result from overwriting a new question.
+      if (ui.questionInput.value !== question) {
+        status.textContent = "问题已修改，请重新查询后再选择候选卡名。";
+        return;
+      }
+      ui.questionInput.value = question.slice(0, choice.start)
+        + choice.name + question.slice(choice.start + choice.surface.length);
+      status.textContent = `已填入「${choice.name}」。请点击「查询」重新准备资料并作答。`;
+      ui.questionInput.focus();
+    });
+    buttons.appendChild(button);
+  }
+  host.appendChild(status);
+}
+
+function renderCards(cards, pendingNames = [], debug = {}) {
   visibleCards = normalizeVisibleCards(cards);
   const pending = [...new Set((Array.isArray(pendingNames) ? pendingNames : [])
     .map((name) => String(name || "").trim())
     .filter(Boolean))];
   selectedCardIndex = 0;
   clearElement(ui.cardTabs);
+  ui.cardPanel.querySelector(".card-name-choices")?.remove();
+  const choicesHost = document.createElement("div");
+  choicesHost.className = "card-name-choices";
+  renderCardNameChoices(choicesHost, debug, lastSubmittedQuestion);
+  ui.cardPanel.appendChild(choicesHost);
 
   if (!visibleCards.length) {
-    ui.cardPanel.hidden = pending.length === 0;
+    ui.cardPanel.hidden = pending.length === 0 && choicesHost.hidden;
     ui.cardPreview.hidden = true;
     ui.cardStatus.textContent = pending.length
       ? `待确认卡名：${pending.join("、")}，请补充完整卡名或卡片原文。`

@@ -9,7 +9,7 @@ import {answerRagRulingQuestion} from '../backend/ragRulingPipeline.mjs';
 import {computeRagDataRevision} from '../backend/ragDataRevisionManifest.mjs';
 import {buildSafeCandidates} from '../scripts/lib/manual-capture-evidence-selection.mjs';
 import {writeCloudEvidenceCorpus} from '../scripts/build-cloud-evidence-assets.mjs';
-import {createCloudRequestBudget,CLOUD_BUDGET_RESERVE} from '../backend/cloudRequestBudget.mjs';
+import {createCloudRequestBudget,CLOUD_BUDGET_RESERVE,CLOUD_BUDGET_SETTLE} from '../backend/cloudRequestBudget.mjs';
 import {createPublicAnswerModelEnv} from '../backend/ragModelClient.mjs';
 
 function relayTextResponse(text, model) {
@@ -86,14 +86,18 @@ test(`cloud production path preserves the complete wire prompt and captures it o
   fs.writeFileSync(path.join(assetDir,'corpus-manifest.json'),JSON.stringify(corpusMetadata));
   const question=`「整合测试龙」发动以后怎样处理？（${deploymentEnv}）`;
   const calls=[];
+  const cloudBudgetCommands=[];
   const wireConfigs=[];
   let planInput,finalPrompt;
   const answer=await answerRagRulingQuestion({question,...data,
     cloudBudget:createCloudRequestBudget({env:{CLOUD_BUDGET_RUN_ID:'integration-test',
       CLOUD_BUDGET_ACTUAL_LIMIT_CNY:'10',CLOUD_BUDGET_THEORETICAL_LIMIT_USD:'5',
       RELAY_PRICING_MULTIPLIER:'0.27',RELAY_SITE_DOLLAR_CNY:'1'},
-      command:async args=>[args[1]===CLOUD_BUDGET_RESERVE?'reserved':'settled']}),
-    env:createPublicAnswerModelEnv({VERCEL_ENV:deploymentEnv,RAG_EVIDENCE_PIPELINE:'cloud_evidence_v1',CLOUD_EVIDENCE_ASSET_DIR:assetDir,
+      command:async args=>{
+        cloudBudgetCommands.push(args);
+        return [args[1]===CLOUD_BUDGET_RESERVE?'reserved':'settled'];
+      }}),
+    env:createPublicAnswerModelEnv({VERCEL:'1',VERCEL_ENV:deploymentEnv,RAG_EVIDENCE_PIPELINE:'cloud_evidence_v1',CLOUD_EVIDENCE_ASSET_DIR:assetDir,
       CLOUD_EVIDENCE_DENSE:'false',CLOUD_EVIDENCE_RERANK:'false',RAG_MAX_PROMPT_CHARS:'8000',
       RAG_LIVE_OFFICIAL_QA:'false',RAG_CARD_MODEL_PROVIDER:'relay',RAG_MODEL_PROVIDER:'relay',
       RAG_MODEL:'gpt-6-astra',RELAY_API_KEY:'synthetic-key',RELAY_BASE_URL:'https://relay.example.test/v1',
@@ -106,7 +110,11 @@ test(`cloud production path preserves the complete wire prompt and captures it o
     fetchImpl:async(url,options)=>{
       if(String(url)==='https://budget.example.test') {
         const command=JSON.parse(options.body);
-        return Response.json({result:[command[1]===CLOUD_BUDGET_RESERVE?'reserved':'settled']});
+        if (command[0] === 'EVAL'
+            && [CLOUD_BUDGET_RESERVE, CLOUD_BUDGET_SETTLE].includes(command[1])) {
+          return Response.json({result:[command[1]===CLOUD_BUDGET_RESERVE?'reserved':'settled']});
+        }
+        throw new Error('cloud pipeline must not use the legacy public Relay budget gate');
       }
       assert.ok([
         'https://relay.example.test/v1/chat/completions',
@@ -128,6 +136,14 @@ test(`cloud production path preserves the complete wire prompt and captures it o
       return relayTextResponse('这是模拟远端返回的完整裁定正文。',request.model);
     }});
   assert.deepEqual(calls,['card','plan','final']);
+  const cloudReservations=cloudBudgetCommands
+    .filter(command=>command[1]===CLOUD_BUDGET_RESERVE)
+    .map(command=>JSON.parse(command[11]));
+  assert.deepEqual(cloudReservations.map(ticket=>[ticket.provider,ticket.model,ticket.status]),[
+    ['relay','gpt-6-astra','reserved'],
+    ['relay','gpt-6-astra','reserved'],
+  ]);
+  assert.equal(cloudBudgetCommands.filter(command=>command[1]===CLOUD_BUDGET_SETTLE).length,2);
   assert.deepEqual(wireConfigs.slice(0,2),[
     {model:'gpt-6-astra',effort:'low',maxTokens:800},
     {model:'gpt-6-astra',effort:'low',maxTokens:4096},
