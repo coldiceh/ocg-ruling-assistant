@@ -3,6 +3,7 @@
   "buildCommand": "pnpm run check:rag-revision && pnpm run check:rag-runtime && node scripts/sync-cloud-evidence-assets.mjs --data-dir data --cloud-dir data/cloud-evidence-v1 --check-only",
   "outputDirectory": "public",
   "env": {
+    "PUBLIC_OPENAI_DAILY_LIMIT_USD": "5",
     "RELAY_STREAM_TIMEOUT_MS": "270000",
     "ADMIN_MODEL_LAB_SYNC_FINAL_TIMEOUT_MS": "290000",
     "ADMIN_MODEL_LAB_BYPASS_DAILY_BUDGET": "true",

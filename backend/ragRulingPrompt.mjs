@@ -39,7 +39,9 @@ const GENERIC_DECISION_CHECKLIST = Object.freeze([
   "effect_source_affected_entity_permissions_limits_and_remaining_attempts",
 ]);
 
-const GENERAL_INSTRUCTIONS = Object.freeze([
+// Keep the existing envelope for whole-entry allocation. Shrinking the final
+// instructions must not silently refill the saved space with more evidence.
+const ALLOCATION_INSTRUCTIONS = Object.freeze([
   "你是游戏王 OCG 规则分析助手。只依据用户原始问题、已解析卡片的原始卡文和所给检索资料回答，不得编造规则、卡文、资料或来源。",
   "先完整阅读用户问题，识别其中每一个子问题；逐个子问题给出直接结论，并说明结论所依据的题面事实、卡片原文和资料。不要漏答，也不要自行补造题面没有给出的状态。",
   "resolvedCards 是已经匹配成功的卡片；其中的 effectText 是原始卡文依据，pendulumEffectText 是独立的灵摆效果原文，typeLine 保留来源的完整卡片类型。resolutionSource 为 card_text_reference 的卡片来自卡文引用，不代表题面中存在该卡。场面状态以用户题面为准。只有 unresolvedMentions 或 ambiguousMentions 中仍存在的项目才算没有确定。",
@@ -61,6 +63,17 @@ const GENERAL_INSTRUCTIONS = Object.freeze([
   "面向玩家输出中文裁定：先用一句话回答，再用短段落或列表解释关键处理与依据。可用 Markdown 标题、粗体和列表，不要输出 JSON 或代码围栏。",
   "引用资料时写【资料标题】，且标题必须对应 allowedEvidenceIds 中的真实资料；不要输出资料 ID 或编造来源。来源适用范围用玩家能理解的话说明，例如‘这是根据卡文和相关规则作出的分析’，不要解释检索系统。relatedOnly、officialQaDirectCandidates、sourceAuthority、decisionChecklist 等字段名、布尔值和程序状态仅供内部阅读，不得写入裁定正文。",
   "存在不确定或资料不足时，在正文中直接说明具体缺口和条件分支，不要用格式化失败信息代替裁定。",
+]);
+
+const GENERAL_INSTRUCTIONS = Object.freeze([
+  "你是游戏王 OCG 规则分析助手。仅依据本次用户问题、原始卡文和所给资料，逐一回答全部子问题；不编造事实、规则或来源，不套用卡名、题号、题型或历史答案。",
+  "resolvedCards 是已确认卡片；effectText、pendulumEffectText、typeLine 分别是原始效果、独立灵摆效果及完整类型。resolutionSource=card_text_reference 仅表示卡文引用，不代表题面存在该卡。未确定项以 unresolvedMentions、ambiguousMentions 为准，场面状态以题面为准。",
+  "来源等级不等于本题适用性。只有完整对应本题的 officialQaDirectCandidates 支持官方直接裁定；卡文、FAQ、相关 Q&A 和其他资料支持规则分析，relatedOnly=true 始终为相关证据。community_reference 仅供辅助，与适用于本题的官方资料冲突时以官方为准。使用相关资料须比较卡片、条件、位置、时点、对象、玩家及处理过程，仅迁移适用部分。没有官方原题但依据足够时仍给出明确分析。",
+  "按事件顺序核对发动、处理和处理后状态：条件、cost、对象、区域、表示形式、卡片类型、属性/等级及当时适用效果。固定连锁编号与效果对应关系，分别说明发动顺序和逆序处理结果，不提前执行未轮到的效果或混用不同节点的资料。",
+  "核对每一步的效果来源、效果类型、受影响实体及权限范围；允许、追加、禁止、免疫、替代约束的是谁和何种动作，不能按结果有利与否改变判断。分别检查发动及处理时所有合法选择方向。连续处理逐步记录执行者、完成情况、后状态和依赖，不凭相同终态认定原效果已完成，不由后状态补足发动条件，不无依据撤销已完成的独立步骤。",
+  "涉及次数时记录初始权限、已使用、新增或替换及剩余次数；依原文区分上限、覆盖、明确追加，不重复计数或默认相加。decisionChecklist、decisionPlan 只是内部核对计划，不是证据或答案；仅检查适用项，不输出过程或添加题外问题。",
+  "必要事实缺失或资料冲突时，说明具体缺口和条件分支，不猜测补全。输出前核对各子问题、结论、理由及步骤一致。",
+  "用中文先直接回答，再简述关键处理与依据；可用 Markdown，不输出 JSON、代码围栏或内部字段/状态。引用用【资料标题】，须对应 allowedEvidenceIds 中真实资料，不输出资料 ID。用自然语言说明是直接裁定还是根据卡文及相关资料的分析，不解释检索系统。",
 ]);
 
 export function buildRagRulingPrompt({
@@ -226,6 +239,9 @@ export function buildRagRulingPromptBundle({
     warnings.push("rag_prompt_compacted_to_max_chars");
     prompt = buildCompactRagPrompt({ payload, maxPromptChars: limits.maxPromptChars });
   }
+  // Selection has finished under the unchanged 36k allocation envelope. Only
+  // the repeated instructions are condensed; the complete payload is retained.
+  prompt = compactRagPromptInstructions(prompt);
   const allowedEvidenceIds = extractPromptAllowedEvidenceIds(prompt);
   appendSerializedEvidenceTruncationWarnings({
     prompt,
@@ -291,6 +307,17 @@ export function buildRagRulingPromptBundle({
     promptTruncated: warnings.some((warning) => warning.includes("truncated")),
     authoritativeOfficialDirectId: null,
   };
+}
+
+export function compactRagPromptInstructions(prompt) {
+  const selectedPayload = parseSerializedPromptPayload(prompt);
+  if (!selectedPayload || !Object.hasOwn(selectedPayload, "evidence")) return prompt;
+  const leanPrompt = [
+    ...GENERAL_INSTRUCTIONS,
+    "本次用户问题、卡片原文与检索资料如下：",
+    JSON.stringify(selectedPayload),
+  ].join("\n");
+  return leanPrompt.length < prompt.length ? leanPrompt : prompt;
 }
 
 export function extractPromptAllowedEvidenceIds(prompt) {
@@ -578,7 +605,7 @@ export function selectAuthoritativeOfficialDirectCandidate({
 
 function renderGeneralPrompt(payload) {
   return [
-    ...GENERAL_INSTRUCTIONS,
+    ...ALLOCATION_INSTRUCTIONS,
     "本次用户问题、卡片原文与检索资料如下：",
     JSON.stringify(modelVisiblePromptPayload(payload)),
   ].join("\n");

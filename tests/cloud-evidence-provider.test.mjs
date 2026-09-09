@@ -20,13 +20,39 @@ function corpusFor(sourceRecords = records()) {
   const candidates = buildSafeCandidates({ officialQaRecords: sourceRecords, cardResolution, dataRevision: revision });
   return { schemaVersion: 1, dataRevision: revision, candidates, documents: candidates.map(buildManualCaptureEmbeddingDocumentViews) };
 }
-function vectorIndex(corpus) {
+function vectorIndex(corpus, dimension = 2) {
   const hashes = [...new Set(corpus.documents.flatMap((document) => document.views.map((view) => view.textSha256)))];
   return {
-    manifest: { dimension: 2 },
+    manifest: { dimension },
     entries: new Map(hashes.map((hash, rowIndex) => [hash, { shardIndex: 0, rowIndex }])),
-    shards: [Float32Array.from(hashes.flatMap(() => [1, 0]))],
+    shards: [Float32Array.from(hashes.flatMap(() => [1, ...Array(dimension - 1).fill(0)]))],
   };
+}
+function deferred() {
+  let resolve;
+  let reject;
+  const promise = new Promise((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+function corpusWithObservableLexicalBindings(onBindingRead) {
+  const source = corpusFor(records(3));
+  const candidates = source.candidates.map((candidate) => {
+    const binding = candidate.binding;
+    const observable = { ...candidate };
+    Object.defineProperty(observable, "binding", {
+      configurable: true,
+      enumerable: true,
+      get() {
+        onBindingRead();
+        return binding;
+      },
+    });
+    return observable;
+  });
+  return { ...source, candidates };
 }
 function input(env = {}, overrides = {}) {
   const userQuery = "synthetic term0 request";
@@ -82,25 +108,219 @@ test("cloud core retains all query surfaces, shares cached assets and uses the a
   assert.equal(ranking, 0);
 });
 
-test("starts corpus and vector asset loads together before binding checks", async () => {
+test("finishes corpus loading before starting vectors to bound peak memory", async () => {
   const corpus = corpusFor(records(1));
-  let active = 0;
-  let maxActive = 0;
-  const delayed = async (value) => {
-    active += 1;
-    maxActive = Math.max(maxActive, active);
-    await new Promise(resolve => setTimeout(resolve, 40));
-    active -= 1;
-    return value;
-  };
+  const events = [];
   const provider = createCloudEvidenceProvider({
-    loadCorpus: async () => delayed(corpus),
-    loadVectorIndex: async () => delayed(vectorIndex(corpus)),
+    loadCorpus: async () => {
+      events.push("corpus-start");
+      await new Promise(resolve => setImmediate(resolve));
+      events.push("corpus-end");
+      return corpus;
+    },
+    loadVectorIndex: async () => {
+      events.push("vectors");
+      return vectorIndex(corpus);
+    },
     generatePlan: async () => ({ informationNeeds: [], queryTexts: [] }),
     embed: async ({ inputs }) => ({ vectors: inputs.map(() => [1, 0]) }),
   });
   await provider.retrieve(input({ CLOUD_EVIDENCE_CANDIDATE_LIMIT: "1" }));
-  assert.equal(maxActive, 2);
+  assert.deepEqual(events, ["corpus-start", "corpus-end", "vectors"]);
+});
+
+test("builds lexical queues while embedding is pending and preserves serial candidate order", async () => {
+  const referenceCorpus = corpusFor(records(3));
+  const plan = { informationNeeds: ["synthetic term1 request"], queryTexts: ["synthetic term2 request"] };
+  const embeddingVectors = ({ inputs }) => ({ vectors: inputs.map(() => [1, 0]) });
+  const reference = await createCloudEvidenceProvider({
+    loadCorpus: async () => referenceCorpus,
+    loadVectorIndex: async () => vectorIndex(referenceCorpus),
+    generatePlan: async () => plan,
+    embed: async (request) => embeddingVectors(request),
+  }).retrieve(input({ CLOUD_EVIDENCE_CANDIDATE_LIMIT: "3" }));
+
+  let bindingReads = 0;
+  const overlapCorpus = corpusWithObservableLexicalBindings(() => { bindingReads += 1; });
+  const embeddingStarted = deferred();
+  const embeddingRelease = deferred();
+  let readsWhenEmbeddingStarted = 0;
+  let embeddingCalls = 0;
+  const pending = createCloudEvidenceProvider({
+    loadCorpus: async () => overlapCorpus,
+    loadVectorIndex: async () => vectorIndex(overlapCorpus),
+    generatePlan: async () => plan,
+    embed: async (request) => {
+      embeddingCalls += 1;
+      readsWhenEmbeddingStarted = bindingReads;
+      embeddingStarted.resolve();
+      await embeddingRelease.promise;
+      return embeddingVectors(request);
+    },
+  }).retrieve(input({ CLOUD_EVIDENCE_CANDIDATE_LIMIT: "3" }));
+
+  await embeddingStarted.promise;
+  await new Promise(resolve => setImmediate(resolve));
+  let overlapAssertion;
+  try {
+    assert.ok(bindingReads > readsWhenEmbeddingStarted,
+      "lexical ranking must read candidate bindings before embedding resolves");
+  } catch (error) {
+    overlapAssertion = error;
+  } finally {
+    embeddingRelease.resolve();
+  }
+  const result = await pending;
+  if (overlapAssertion) throw overlapAssertion;
+  assert.equal(embeddingCalls, 1);
+  assert.deepEqual(result.officialQaRelated.map((record) => record.id),
+    reference.officialQaRelated.map((record) => record.id));
+  assert.equal(result.debug.cloudEvidence.querySurfaceCount, reference.debug.cloudEvidence.querySurfaceCount);
+  assert.equal(result.debug.cloudEvidence.candidateCount, reference.debug.cloudEvidence.candidateCount);
+  assert.equal(result.debug.cloudEvidence.selectedCount, reference.debug.cloudEvidence.selectedCount);
+  assert.equal(result.debug.cloudEvidence.packAttempts, reference.debug.cloudEvidence.packAttempts);
+});
+
+test("starts the real SiliconFlow fetch before lexical work and overlaps lexical work with its response", async () => {
+  let bindingReads = 0;
+  const corpus = corpusWithObservableLexicalBindings(() => { bindingReads += 1; });
+  const reservationStarted = deferred();
+  const reservationRelease = deferred();
+  const fetchStarted = deferred();
+  const responseRelease = deferred();
+  let readsWhenReservationStarted = 0;
+  let readsWhenFetchStarted = 0;
+  let fetchCalls = 0;
+  let responseCalls = 0;
+  const reservation = { reservationId: "synthetic-reservation" };
+  const provider = createCloudEvidenceProvider({
+    loadCorpus: async () => corpus,
+    loadVectorIndex: async () => vectorIndex(corpus, 1024),
+    generatePlan: async () => ({ informationNeeds: [], queryTexts: [] }),
+    beforeSend: async () => {
+      readsWhenReservationStarted = bindingReads;
+      reservationStarted.resolve();
+      await reservationRelease.promise;
+      return reservation;
+    },
+    fetchImpl: async () => {
+      fetchCalls += 1;
+      readsWhenFetchStarted = bindingReads;
+      fetchStarted.resolve();
+      await responseRelease.promise;
+      return {
+        ok: true,
+        json: async () => ({
+          data: [{ index: 0, embedding: [1, ...Array(1023).fill(0)] }],
+          usage: { prompt_tokens: 1, total_tokens: 1 },
+        }),
+      };
+    },
+    onResponse: async (_response, observedReservation) => {
+      responseCalls += 1;
+      assert.equal(observedReservation, reservation);
+    },
+  });
+  const pending = provider.retrieve(input({
+    CLOUD_EVIDENCE_CANDIDATE_LIMIT: "3",
+    CLOUD_EVIDENCE_DENSE: "true",
+    SILICONFLOW_API_KEY: "synthetic-key",
+  }));
+
+  await reservationStarted.promise;
+  await new Promise(resolve => setImmediate(resolve));
+  const assertionFailures = [];
+  try {
+    assert.equal(bindingReads, readsWhenReservationStarted,
+      "lexical work must not block the budget reservation before fetch dispatch");
+  } catch (error) {
+    assertionFailures.push(error);
+  } finally {
+    reservationRelease.resolve();
+  }
+  await fetchStarted.promise;
+  await new Promise(resolve => setImmediate(resolve));
+  try {
+    assert.ok(bindingReads > readsWhenFetchStarted,
+      "lexical work must run after fetch starts and before its response resolves");
+  } catch (error) {
+    assertionFailures.push(error);
+  } finally {
+    responseRelease.resolve();
+  }
+  const result = await pending;
+  if (assertionFailures.length) throw assertionFailures[0];
+  assert.equal(fetchCalls, 1);
+  assert.equal(responseCalls, 1);
+  assert.equal(result.debug.cloudEvidence.embeddingUsage.total_tokens, 1);
+  assert.ok(result.debug.cloudEvidence.timingsMs.embeddingLexicalOverlap >= 0);
+});
+
+test("real SiliconFlow reservation failure, fetch failure and abort each stop after one attempt", async () => {
+  for (const mode of ["reservation-failure", "fetch-failure", "fetch-abort"]) {
+    const corpus = corpusFor(records(2));
+    const controller = new AbortController();
+    const fetchStarted = deferred();
+    const unhandled = [];
+    const onUnhandled = (reason) => unhandled.push(reason);
+    process.on("unhandledRejection", onUnhandled);
+    let reservationCalls = 0;
+    let fetchCalls = 0;
+    let responseCalls = 0;
+    let rankCalls = 0;
+    let packCalls = 0;
+    try {
+      const provider = createCloudEvidenceProvider({
+        loadCorpus: async () => corpus,
+        loadVectorIndex: async () => vectorIndex(corpus, 1024),
+        generatePlan: async () => ({ informationNeeds: [], queryTexts: [] }),
+        beforeSend: async () => {
+          reservationCalls += 1;
+          if (mode === "reservation-failure") throw new Error("synthetic_reservation_failure");
+          return { reservationId: "one-reservation" };
+        },
+        fetchImpl: async (_url, { signal }) => {
+          fetchCalls += 1;
+          fetchStarted.resolve();
+          if (mode === "fetch-failure") throw new Error("synthetic_fetch_failure");
+          await new Promise((resolve, reject) => {
+            if (signal.aborted) reject(signal.reason);
+            else signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+          });
+          throw new Error("unreachable_fetch_completion");
+        },
+        onResponse: async () => { responseCalls += 1; },
+        rank: async () => { rankCalls += 1; return []; },
+      });
+      const pending = provider.retrieve(input({
+        CLOUD_EVIDENCE_CANDIDATE_LIMIT: "2",
+        CLOUD_EVIDENCE_DENSE: "true",
+        SILICONFLOW_API_KEY: "synthetic-key",
+      }, {
+        signal: controller.signal,
+        packEvidence: async (...args) => {
+          packCalls += 1;
+          return input().packEvidence(...args);
+        },
+      }));
+      if (mode === "fetch-abort") {
+        await fetchStarted.promise;
+        controller.abort(new Error("synthetic_fetch_abort"));
+      }
+      await assert.rejects(pending, mode === "reservation-failure"
+        ? /synthetic_reservation_failure/u
+        : /SiliconFlow embeddings request failed/u);
+      await new Promise(resolve => setImmediate(resolve));
+      assert.equal(reservationCalls, 1);
+      assert.equal(fetchCalls, mode === "reservation-failure" ? 0 : 1);
+      assert.equal(responseCalls, 0);
+      assert.equal(rankCalls, 0);
+      assert.equal(packCalls, 0);
+      assert.deepEqual(unhandled, []);
+    } finally {
+      process.off("unhandledRejection", onUnhandled);
+    }
+  }
 });
 
 test("candidate limit is applied before one original-question rerank and there is no dense work when disabled", async () => {
@@ -128,6 +348,8 @@ test("candidate limit is applied before one original-question rerank and there i
   assert.deepEqual(result.officialQaRelated.map((record) => record.id), expected);
   assert.equal(result.debug.cloudEvidence.candidateCount, 2);
   assert.equal(result.debug.cloudEvidence.rerankCount, 2);
+  assert.equal(result.debug.cloudEvidence.timingsMs.embedding, 0);
+  assert.equal(result.debug.cloudEvidence.timingsMs.embeddingLexicalOverlap, 0);
 });
 
 test("asset body and revision failures stop before plan generation", async () => {

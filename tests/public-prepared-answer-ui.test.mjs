@@ -17,6 +17,12 @@ function createClient(fetchImpl, {
     const appConfig = { answerApiUrl: "https://example.invalid/api/answer" };
     let selectedRulingModelProfile = ${JSON.stringify(selectedProfile)};
     let analysisRequestId = ${JSON.stringify(requestId ?? 0)};
+    let preparedEvidencePackage = null;
+    const ui = {
+      evidencePackagePanel: { hidden: true },
+      evidencePackageStatus: { textContent: "" },
+      evidencePackageDownload: { hidden: true },
+    };
     const preparedProgress = [];
     function applyPendingStageProgressEvent() {}
     function applyPreparedProgress(progress) {
@@ -35,6 +41,7 @@ function createClient(fetchImpl, {
       setAnalysisRequestId(value) { analysisRequestId = value; },
       getAnalysisRequestId() { return analysisRequestId; },
       getSelectedProfile() { return selectedRulingModelProfile; },
+      getPreparedEvidencePackage() { return preparedEvidencePackage; },
     };
   `)(fetchImpl, TextDecoder, onPrepared);
 }
@@ -46,11 +53,12 @@ function sse(...events) {
   );
 }
 
-function preparedEvent(id = "a".repeat(64), totalMs = 120) {
+function preparedEvent(id = "a".repeat(64), totalMs = 120, evidencePackage = null) {
   return {
     type: "prepared",
     data: {
       preparationId: id,
+      ...(evidencePackage ? { evidencePackage } : {}),
       progress: {
         totalMs,
         stageDurationsMs: { understand: totalMs },
@@ -103,6 +111,21 @@ test("prepare/finalize sends the exact two body shapes in serial order", async (
     preparationId: "a".repeat(64),
   });
   assert.equal(clientInstance.preparedProgress.length, 1);
+});
+
+test("prepare-only sends one prepare request and retains the downloadable package", async () => {
+  const requests = [];
+  const evidencePackage = { text: "PROMPT_VISIBLE", filename: "question-evidence.txt" };
+  const clientInstance = createClient(async (_url, options) => {
+    requests.push(JSON.parse(options.body));
+    return sse(preparedEvent("f".repeat(64), 80, evidencePackage), endEvent());
+  });
+
+  const result = await clientInstance.request("Synthetic question", "latest", { prepareOnly: true });
+  assert.equal(result.kind, "prepared");
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].action, "prepare");
+  assert.deepEqual(clientInstance.getPreparedEvidencePackage(), evidencePackage);
 });
 
 test("legacy answer still completes with only the prepare request", async () => {
@@ -194,6 +217,21 @@ test("prepared on the final stream is rejected without another request", async (
   });
   await assert.rejects(clientInstance.request("Synthetic question", "latest"));
   assert.equal(calls, 2);
+});
+
+test("a prepared evidence package remains available when finalization fails", async () => {
+  let calls = 0;
+  const evidencePackage = { text: "PROMPT_VISIBLE", filename: "retained-evidence.txt" };
+  const clientInstance = createClient(async () => {
+    calls += 1;
+    return calls === 1
+      ? sse(preparedEvent("e".repeat(64), 120, evidencePackage), endEvent())
+      : sse({ type: "error", data: { code: "model_provider_timeout" } });
+  });
+
+  await assert.rejects(clientInstance.request("Synthetic question", "latest"));
+  assert.equal(calls, 2);
+  assert.deepEqual(clientInstance.getPreparedEvidencePackage(), evidencePackage);
 });
 
 test("preparation HTTP conflicts and stream failures remain request failures", async () => {

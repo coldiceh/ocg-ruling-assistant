@@ -258,21 +258,46 @@ export function createCloudEvidenceProvider({
       const surfaces = querySurfaces(userQuery, plan);
       timingsMs.plan = elapsed(step);
       step = performance.now();
-      let embeddingResult = null;
+      let embeddingPromise = null;
+      let embeddingFetchStarted = null;
       if (dense && corpus.candidates.length > 0) {
-        embeddingResult = await (embed || callSiliconFlowEmbeddings)({
+        let embeddingFetchImpl = fetchImpl;
+        if (typeof embed !== "function") {
+          let markEmbeddingFetchStarted;
+          embeddingFetchStarted = new Promise((resolve) => { markEmbeddingFetchStarted = resolve; });
+          embeddingFetchImpl = (...arguments_) => {
+            markEmbeddingFetchStarted();
+            return fetchImpl(...arguments_);
+          };
+        }
+        embeddingPromise = Promise.resolve((embed || callSiliconFlowEmbeddings)({
           inputs: surfaces.map((query) => `Instruct: ${MANUAL_CAPTURE_EMBEDDING_QUERY_INSTRUCTION}\nQuery:${query}`),
-          env, signal, fetchImpl, beforeSend, onResponse,
-        });
+          env, signal, fetchImpl: embeddingFetchImpl, beforeSend, onResponse,
+        }));
+        // Lexical ranking below is synchronous. Mark the request rejection as
+        // observed immediately in case lexical ranking itself throws first;
+        // awaiting the original promise still propagates the same error.
+        void embeddingPromise.catch(() => {});
+        // The production client awaits its shared budget reservation before
+        // calling fetch. Do not let synchronous lexical work delay that call.
+        if (embeddingFetchStarted) await Promise.race([embeddingFetchStarted, embeddingPromise]);
+      }
+      const lexicalStarted = performance.now();
+      const lexicalQueues = corpus.candidates.length === 0 ? [] : surfaces.map((query) => (
+        buildManualCaptureCompleteLexicalQueryQueue({ query, candidates: corpus.candidates })
+      ));
+      const lexicalElapsed = elapsed(lexicalStarted);
+      let embeddingResult = null;
+      if (embeddingPromise) {
+        embeddingResult = await embeddingPromise;
         abort(signal);
       }
-      timingsMs.embedding = elapsed(step);
+      timingsMs.embedding = embeddingPromise ? elapsed(step) : 0;
       const vectors = Array.isArray(embeddingResult) ? embeddingResult : embeddingResult?.vectors;
       if (dense && corpus.candidates.length > 0) check(Array.isArray(vectors) && vectors.length === surfaces.length,
         "cloud_evidence_embedding_count_invalid");
       step = performance.now();
-      const queues = corpus.candidates.length === 0 ? [] : surfaces.map((query, indexOfSurface) => {
-        const lexical = buildManualCaptureCompleteLexicalQueryQueue({ query, candidates: corpus.candidates });
+      const queues = lexicalQueues.map((lexical, indexOfSurface) => {
         if (!dense) return lexical;
         const scores = scoreEvidenceDocumentViews(index, { queryVector: vectors[indexOfSurface], documents: corpus.documents });
         // A global union of at most limit unique bindings cannot need any
@@ -281,7 +306,10 @@ export function createCloudEvidenceProvider({
         return roundRobinLexicalDense(lexical, completeDenseQueue(corpus.candidates, scores), limit);
       });
       let candidates = interleaveCloudEvidenceQueues(queues, limit);
-      timingsMs.candidates = elapsed(step);
+      timingsMs.candidates = lexicalElapsed + elapsed(step);
+      // `embedding` is wall time and includes this scheduled lexical work;
+      // subtract this overlap before adding timing fields into a critical path.
+      timingsMs.embeddingLexicalOverlap = embeddingPromise ? lexicalElapsed : 0;
       step = performance.now();
       let rerankResult = null;
       if (enabled(env.CLOUD_EVIDENCE_RERANK) && candidates.length > 0) {

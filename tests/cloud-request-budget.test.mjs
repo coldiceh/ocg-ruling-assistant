@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createCloudRequestBudget,CLOUD_BUDGET_RESERVE,CLOUD_BUDGET_SETTLE,runCloudBudgetedQuestion,
-  runCloudRelayRequest,cloudSiliconFlowCallbacks} from '../backend/cloudRequestBudget.mjs';
+  runCloudRelayRequest,cloudSiliconFlowCallbacks,runOfficialOpenAIRequest,
+  getOfficialOpenAIBudgetStatus,getCloudEvidenceBudgetStatus} from '../backend/cloudRequestBudget.mjs';
 import {callSiliconFlowEmbeddings} from '../backend/siliconFlowEvidenceClient.mjs';
 import {createPublicAnswerModelEnv} from '../backend/ragModelClient.mjs';
 
@@ -17,6 +18,50 @@ function recorder({block=false}={}) {
     assert.equal(args[3],'ruling-cloud-budget:v1:test-scope');
     return [args[1]===CLOUD_BUDGET_RESERVE?(block?'blocked':'reserved'):'settled'];
   }};
+}
+
+function redisFetch(initial={}) {
+  const hashes=new Map(Object.entries(initial).map(([key,value])=>[key,new Map(Object.entries(value))]));
+  const calls=[];
+  const fetchImpl=async(_url,options)=>{
+    const args=JSON.parse(options.body);calls.push(args);
+    if(args[0]==='HGETALL') return Response.json({result:[...(hashes.get(args[1])||new Map()).entries()].flat()});
+    assert.equal(args[0],'EVAL');
+    const key=args[3];
+    const hash=hashes.get(key)||new Map();hashes.set(key,hash);
+    if(args[1]===CLOUD_BUDGET_RESERVE) {
+      const shift=args[2]==='2'?1:0;
+      if(shift&& !hash.has('theoreticalNano')) {
+        let migrated=0;
+        for(const [id,value] of hashes.get(args[4])||new Map()) {
+          if(['actualNano','theoreticalNano'].includes(id)) continue;
+          const ticket=JSON.parse(value);
+          if(ticket.provider==='openai'&&['reserved','usage_settled'].includes(ticket.status)
+              && ticket.startedAtUtc>=args[14]&&ticket.startedAtUtc<args[15]) {
+            migrated+=ticket.theoreticalNano;hash.set(id,value);
+          }
+        }
+        hash.set('actualNano','0');hash.set('theoreticalNano',String(migrated));
+      }
+      const ticketIndex=4+shift;
+      if(hash.has(args[ticketIndex])) return Response.json({result:['existing',hash.get(args[ticketIndex])]});
+      const cny=Number(hash.get('actualNano')??args[9+shift]);
+      const usd=Number(hash.get('theoreticalNano')??args[10+shift]);
+      const nextCny=cny+Number(args[5+shift]);const nextUsd=usd+Number(args[6+shift]);
+      if(nextCny>Number(args[7+shift])||nextUsd>Number(args[8+shift])) return Response.json({result:['blocked',String(cny),String(usd)]});
+      hash.set('actualNano',String(nextCny));hash.set('theoreticalNano',String(nextUsd));hash.set(args[ticketIndex],args[11+shift]);
+      return Response.json({result:['reserved',String(nextCny),String(nextUsd)]});
+    }
+    if(args[1]===CLOUD_BUDGET_SETTLE) {
+      const ticket=JSON.parse(hash.get(args[4]));
+      hash.set('actualNano',String(Number(hash.get('actualNano'))+Number(args[5])-ticket.actualNano));
+      hash.set('theoreticalNano',String(Number(hash.get('theoreticalNano'))+Number(args[6])-ticket.theoreticalNano));
+      hash.set(args[4],args[7]);
+      return Response.json({result:['settled',hash.get('actualNano'),hash.get('theoreticalNano')]});
+    }
+    throw new Error('unexpected Redis script');
+  };
+  return {fetchImpl,calls,hashes};
 }
 
 test('cloud calls require persistent accounting and a known price before dispatch',async()=>{
@@ -105,6 +150,79 @@ test('official OpenAI reservations are cumulative, include initial spend, and se
   assert.equal(calls[1][1],CLOUD_BUDGET_SETTLE);
   assert.equal(calls[1][7].includes('"theoreticalNano":287017500'),true);
   assert.equal(budget.snapshot().theoreticalUsd,.2870175);
+});
+
+test('official OpenAI daily migration counts only dated tickets from today and leaves legacy totals untouched',async()=>{
+  const now=new Date('2026-09-08T15:00:00.000Z');
+  const legacyKey='ruling-cloud-budget:v1:official-public';
+  const todaySettled={provider:'openai',status:'usage_settled',startedAtUtc:'2026-09-07T16:00:00.000Z',theoreticalNano:1_000_000_000};
+  const todayUnknown={provider:'openai',status:'reserved',startedAtUtc:'2026-09-08T15:59:59.999Z',theoreticalNano:500_000_000};
+  const yesterday={provider:'openai',status:'usage_settled',startedAtUtc:'2026-09-07T15:59:59.999Z',theoreticalNano:2_000_000_000};
+  const tomorrow={provider:'openai',status:'reserved',startedAtUtc:'2026-09-08T16:00:00.000Z',theoreticalNano:2_000_000_000};
+  const redis=redisFetch({[legacyKey]:{actualNano:'0',theoreticalNano:'4287017500',todaySettled:JSON.stringify(todaySettled),
+    todayUnknown:JSON.stringify(todayUnknown),yesterday:JSON.stringify(yesterday),tomorrow:JSON.stringify(tomorrow)}});
+  let invoked=false;
+  await runOfficialOpenAIRequest({env:{PUBLIC_OPENAI_BUDGET_RUN_ID:'official-public',PUBLIC_OPENAI_DAILY_LIMIT_USD:'5',
+    API_BUDGET_TIMEZONE:'Asia/Shanghai',UPSTASH_REDIS_REST_URL:'https://redis.test',UPSTASH_REDIS_REST_TOKEN:'token'},
+    body:{...body,max_completion_tokens:1},fetchImpl:redis.fetchImpl,now,
+    invoke:async()=>{invoked=true;return {model:body.model,usage:{prompt_tokens:1,completion_tokens:1,total_tokens:2}};}});
+  assert.equal(invoked,true);
+  const daily=redis.hashes.get('ruling-cloud-budget:v1:official-public:2026-09-08');
+  assert.equal(daily.has('todaySettled'),true);assert.equal(daily.has('todayUnknown'),true);
+  assert.equal(daily.has('yesterday'),false);assert.equal(daily.has('tomorrow'),false);
+  assert.equal(redis.hashes.get(legacyKey).get('theoreticalNano'),'4287017500');
+});
+
+test('official daily exhaustion has a pre-dispatch-only code and transport errors retain their own identity',async()=>{
+  const now=new Date('2026-09-08T12:00:00.000Z');
+  const common={PUBLIC_OPENAI_BUDGET_RUN_ID:'official-limit',PUBLIC_OPENAI_DAILY_LIMIT_USD:'0.000001',
+    API_BUDGET_TIMEZONE:'UTC',UPSTASH_REDIS_REST_URL:'https://redis.test',UPSTASH_REDIS_REST_TOKEN:'token'};
+  const redis=redisFetch();let invoked=false;
+  await assert.rejects(runOfficialOpenAIRequest({env:common,body,fetchImpl:redis.fetchImpl,now,
+    invoke:async()=>{invoked=true;}}),error=>error?.code==='official_daily_budget_exceeded');
+  assert.equal(invoked,false);
+  const transportRedis=redisFetch();
+  await assert.rejects(runOfficialOpenAIRequest({env:{...common,PUBLIC_OPENAI_DAILY_LIMIT_USD:'5'},body,
+    fetchImpl:transportRedis.fetchImpl,now,invoke:async()=>{throw Object.assign(new Error('transport failed'),{code:'openai_transport_failed'});}}),
+  error=>error?.code==='openai_transport_failed');
+});
+
+test('official daily status reports settled and unknown reservations without network fallback',async()=>{
+  let called=false;
+  const missing=await getOfficialOpenAIBudgetStatus({env:{},fetchImpl:async()=>{called=true;}});
+  assert.equal(called,false);assert.equal(missing.currency,'USD');assert.equal(missing.dailyBudgetAmount,5);
+  assert.equal(missing.remainingAmount,null);assert.equal(missing.blocked,true);
+  const key='ruling-cloud-budget:v1:official-status:2026-09-08';
+  const redis=redisFetch({[key]:{actualNano:'0',theoreticalNano:'1500000000',spent:JSON.stringify({provider:'openai',
+    status:'usage_settled',startedAtUtc:'2026-09-08T01:00:00.000Z',theoreticalNano:1_000_000_000}),reserved:JSON.stringify({
+    provider:'openai',status:'reserved',startedAtUtc:'2026-09-08T02:00:00.000Z',theoreticalNano:500_000_000})}});
+  const status=await getOfficialOpenAIBudgetStatus({env:{PUBLIC_OPENAI_BUDGET_RUN_ID:'official-status',
+    UPSTASH_REDIS_REST_URL:'https://redis.test',UPSTASH_REDIS_REST_TOKEN:'token',API_BUDGET_TIMEZONE:'UTC'},
+    fetchImpl:redis.fetchImpl,now:new Date('2026-09-08T12:00:00.000Z')});
+  assert.deepEqual(status,{currency:'USD',dailyBudgetAmount:5,remainingAmount:3.5,spentAmount:1,
+    dayKey:'2026-09-08',reservedAmount:.5,blocked:false});
+});
+
+test('cloud evidence status exposes the shared Relay theoretical pool without changing SiliconFlow fields',async()=>{
+  const key='ruling-cloud-budget:v1:shared-status:2026-09-08';
+  const redis=redisFetch({[key]:{actualNano:'2000000000',theoreticalNano:'2750000000',
+    sf:JSON.stringify({provider:'siliconflow',status:'usage_settled',actualNano:100_000_000,theoreticalNano:0}),
+    relaySpent:JSON.stringify({provider:'relay',status:'usage_settled',actualNano:1_000_000_000,theoreticalNano:1_000_000_000}),
+    relayReserved:JSON.stringify({provider:'relay',status:'reserved',actualNano:500_000_000,theoreticalNano:500_000_000})}});
+  const status=await getCloudEvidenceBudgetStatus({env:{...env,CLOUD_BUDGET_RUN_ID:'shared-status',CLOUD_BUDGET_PERIOD:'daily',
+    API_BUDGET_TIMEZONE:'UTC',UPSTASH_REDIS_REST_URL:'https://redis.test',UPSTASH_REDIS_REST_TOKEN:'token'},
+    fetchImpl:redis.fetchImpl,now:new Date('2026-09-08T12:00:00.000Z')});
+  assert.equal(status.spentTodayCny,.1);assert.equal(status.reservedTodayCny,0);assert.equal(status.dailyBudgetCny,10);
+  assert.deepEqual(status.relayPool,{spentUsd:1,reservedUsd:.5,theoreticalLimitUsd:5,
+    accountedUsd:2.75,actualRemainingCny:8});
+});
+
+test('deepseek and glm keep their existing provider preflight inside the cloud request scope',async()=>{
+  for(const provider of ['deepseek','glm']) {
+    const budget={snapshot:()=>({provider}),relay:()=>{},beforeSend:()=>{},onResponse:()=>{}};
+    const result=await runCloudBudgetedQuestion({env:{RAG_MODEL_PROVIDER:provider},budget},async()=>({answer:provider}));
+    assert.equal(result.answer,provider);
+  }
 });
 
 test('concurrent official requests reserve before dispatch and unknown usage retains its reservation',async()=>{

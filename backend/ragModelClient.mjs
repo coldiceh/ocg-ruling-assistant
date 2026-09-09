@@ -3,6 +3,8 @@ import { RAG_ANSWER_LEVELS } from "./ragRulingPrompt.mjs";
 import {
   DEFAULT_PUBLIC_RELAY_BASE_URL,
   DEFAULT_PUBLIC_RELAY_MODEL,
+  DEFAULT_PUBLIC_GLM_MODEL,
+  configuredPublicRulingModelProfile,
   resolvePublicRulingModelProfile,
 } from "./publicRulingModelConfig.mjs";
 import { requestRelayChatCompletionSse } from "./rulingModelProviders.mjs";
@@ -19,6 +21,7 @@ import {
   runCloudRelayRequest,
   runOfficialOpenAIRequest,
   getCloudEvidenceBudgetStatus,
+  getOfficialOpenAIBudgetStatus,
   cloudRequestBudgetActive,
 } from './cloudRequestBudget.mjs';
 
@@ -28,7 +31,7 @@ const DEFAULT_DEEPSEEK_CARD_MODEL = "deepseek-v4-flash";
 const DEFAULT_RELAY_AUXILIARY_MODEL = "gpt-5.6-sol";
 const DEFAULT_RELAY_RULE_MODEL = "gpt-5.6-sol";
 const DEFAULT_GLM_BASE_URL = "https://open.bigmodel.cn/api/paas/v4";
-const DEFAULT_GLM_MODEL = "glm-5.2";
+const DEFAULT_GLM_MODEL = DEFAULT_PUBLIC_GLM_MODEL;
 const PUBLIC_OPENAI_CHAT_COMPLETIONS_URL = "https://api.openai.com/v1/chat/completions";
 const PUBLIC_OPENAI_MODEL = "gpt-6-astra";
 const PUBLIC_OPENAI_REASONING_EFFORT = "low";
@@ -486,6 +489,8 @@ export async function callRagModel({
     });
     return {
       ...parsed,
+      requestedModel: String(response.requestModel || modelName || ""),
+      returnedModel: String(response.responseModel || "") || null,
       tokenUsage,
       ...budgetCostResultFields(budget, actualCost),
       budgetStatus,
@@ -493,6 +498,7 @@ export async function callRagModel({
       generationConfig,
     };
   } catch (error) {
+    if (error?.code === "official_daily_budget_exceeded") throw error;
     if (provider === "relay" && !relayCompleted) {
       emitPrivateEvaluationDiagnostic(privateEvaluationDiagnostics, {
         stage: "relay",
@@ -814,7 +820,21 @@ export async function callCardNameExtractionModel({
         timeoutMs,
         timeoutMessage: "card_name_model_timeout",
       }, (requestSignal) => (
-        provider === "gemini"
+        provider === "deepseek"
+          ? callDeepSeek({
+            prompt,
+            env,
+            modelName,
+            maxTokens,
+            fetchImpl,
+            temperature: readNumber(env.RAG_CARD_MODEL_TEMPERATURE, 0),
+            thinkingMode: "disabled",
+            reasoningEffort: null,
+            requireJson: true,
+            allowResponseFormatFallback: false,
+            signal: requestSignal,
+          })
+          : provider === "gemini"
           ? callGemini({
             prompt,
             env,
@@ -1789,6 +1809,10 @@ export function resolveRagProvider(env = {}) {
 export function createPublicAnswerModelEnv(env = {}, profileValue) {
   const source = env && typeof env === "object" ? env : {};
   const result = { ...source };
+  const profile = configuredPublicRulingModelProfile(
+    resolvePublicRulingModelProfile(profileValue || source.PUBLIC_RULING_MODEL_PROFILE),
+    source,
+  );
   // The optional related-Q&A reviewer is disabled by default and is not a
   // selectable final provider. When an experiment explicitly enables it, copy
   // only its minimum Relay transport settings into a dedicated namespace
@@ -1839,12 +1863,10 @@ export function createPublicAnswerModelEnv(env = {}, profileValue) {
       || "",
   ).trim();
   for (const key of Object.keys(result)) {
-    if (/^(?:OPENAI_|ADMIN_|GLM_|KIMI_)/iu.test(key)) delete result[key];
+    if (/^(?:OPENAI_|ADMIN_|KIMI_)/iu.test(key)) delete result[key];
+    if (profile.provider !== "glm" && /^GLM_/iu.test(key)) delete result[key];
   }
-
-  const profile = resolvePublicRulingModelProfile(
-    profileValue || source.PUBLIC_RULING_MODEL_PROFILE,
-  );
+  if (profile.provider !== "openai") delete result.OCG_FINAL_OPENAI_API_KEY;
   if (profile.provider !== "relay") {
     for (const key of Object.keys(result)) {
       if (/^RELAY_/iu.test(key)) delete result[key];
@@ -1894,6 +1916,9 @@ export function createPublicAnswerModelEnv(env = {}, profileValue) {
   result.RAG_THINKING_MODE = profile.thinkingMode;
   result.RAG_REASONING_EFFORT = profile.reasoningEffort;
   result.PUBLIC_RULING_MODEL_PROFILE = profile.id;
+  if (profile.provider === "relay") result.RELAY_MODEL = profile.model;
+  if (profile.provider === "deepseek") result.DEEPSEEK_FLASH_MODEL = profile.model;
+  if (profile.provider === "glm") result.GLM_MODEL = profile.model;
   // Retain the legacy tier flag for public profile compatibility. Public card
   // extraction no longer reads it or dispatches to DeepSeek.
   result.RAG_MODEL_TIER = "flash";
@@ -1948,18 +1973,8 @@ export function resolveCardExtractionProvider(env = {}) {
     return { provider: configured ? "relay" : "mock", requested, warnings };
   }
   if (requested === "deepseek") {
-    const redirected = resolveCardExtractionProvider({
-      ...env,
-      RAG_CARD_MODEL_PROVIDER: "relay",
-    });
-    return {
-      ...redirected,
-      requested,
-      warnings: [
-        "deepseek_card_name_model_disabled_redirected_to_relay",
-        ...redirected.warnings,
-      ],
-    };
+    if (!env.DEEPSEEK_API_KEY) warnings.push("deepseek_api_key_missing_card_name_model_disabled");
+    return { provider: env.DEEPSEEK_API_KEY ? "deepseek" : "mock", requested, warnings };
   }
   if (requested === "gemini") {
     if (!env.GEMINI_API_KEY) warnings.push("gemini_api_key_missing_card_name_model_disabled");
@@ -2076,7 +2091,8 @@ export async function getRagBudgetStatus({
     };
   }
   const cloudDaily = env.RAG_EVIDENCE_PIPELINE === 'cloud_evidence_v1' && env.CLOUD_BUDGET_PERIOD === 'daily';
-  const [cloudEvidence, spent, manualChatGptClose, ...bucketSpent] = await Promise.all([
+  const [official, cloudEvidence, spent, manualChatGptClose, ...bucketSpent] = await Promise.all([
+    env.PUBLIC_OPENAI_BUDGET_RUN_ID ? getOfficialOpenAIBudgetStatus({env, fetchImpl, now}).catch(() => null) : null,
     cloudDaily ? getCloudEvidenceBudgetStatus({env, fetchImpl, now}) : null,
     readBudgetSpent({ storage, dayKey, env, fetchImpl, ioDeadline }),
     readPublicChatGptClosed({ storage, timezone: config.timezone, now, env, fetchImpl, ioDeadline }),
@@ -2091,7 +2107,13 @@ export async function getRagBudgetStatus({
   return {
     ...budgetStatusPayload({ config, storage, dayKey, spent, estimated: 0, blocked: false }),
     currency: "CNY",
-    buckets: PUBLIC_BUDGET_BUCKETS.map((bucket, index) => cloudEvidence && bucket.id === 'evidence_preparation:deepseek'
+    buckets: [...(env.PUBLIC_OPENAI_BUDGET_RUN_ID ? [{
+      id:'final_ruling:openai', stage:'final_ruling', provider:'openai', label:'官方 GPT（本站每日额度）', currency:'USD',
+      dailyBudget:official?.dailyBudgetAmount ?? 5, dailyBudgetUsd:official?.dailyBudgetAmount ?? 5,
+      spentToday:official?.spentAmount ?? null, spentTodayUsd:official?.spentAmount ?? null,
+      remainingToday:official?.remainingAmount ?? null, remainingTodayUsd:official?.remainingAmount ?? null,
+      reservedTodayUsd:official?.reservedAmount ?? null, limitEnforced:official?.blocked ?? false,
+    }] : []), ...PUBLIC_BUDGET_BUCKETS.map((bucket, index) => cloudEvidence && bucket.id === 'evidence_preparation:deepseek'
       ? {
         ...budgetBucketStatusPayload({
           bucket:{id:'evidence_preparation:siliconflow',stage:'evidence_preparation',provider:'siliconflow',label:'Qwen3 资料检索（硅基流动）',currency:'CNY'},
@@ -2100,13 +2122,20 @@ export async function getRagBudgetStatus({
         }),
         reservedTodayCny:cloudEvidence.reservedTodayCny,
       }
+      : cloudEvidence?.relayPool && bucket.id === 'final_ruling:relay'
+      ? { ...budgetBucketStatusPayload({
+        bucket:{...bucket,label:'中转 GPT 与资料准备共享（理论美元）'},
+        bucketConfig:{currency:'USD',dailyBudgetAmount:cloudEvidence.relayPool.theoreticalLimitUsd},
+        spent:cloudEvidence.relayPool.accountedUsd,
+      }), reservedTodayUsd:cloudEvidence.relayPool.reservedUsd,
+        actualRemainingCny:cloudEvidence.relayPool.actualRemainingCny }
       : budgetBucketStatusPayload({
       bucket,
       bucketConfig: budgetBucketConfig(env, bucket),
       spent: bucketSpent[index],
       blocked: bucket.id === "final_ruling:relay" && manualChatGptClose,
       manuallyClosed: bucket.id === "final_ruling:relay" && manualChatGptClose,
-    })),
+    }))],
   };
 }
 
@@ -2260,6 +2289,7 @@ async function callDeepSeek({
   const reasoningContent = extractChatMessageText(message.reasoning_content);
   if (!rawText) warnings.push(`deepseek_empty_content:${finishReason || "unknown"}`);
   if (finishReason === "length") warnings.push("deepseek_output_truncated_by_token_limit");
+  if (payload?.model && String(payload.model) !== String(body.model)) warnings.push("deepseek_response_model_mismatch");
   return {
     rawText,
     finishReason,
@@ -2283,11 +2313,17 @@ async function callDeepSeek({
 
 export function estimateGlmCostCny(usage = {}, env = {}) {
   const inputPrice = readNumber(env.GLM_INPUT_CNY_PER_MTOK, 8);
+  const cachedInputPrice = readNumber(env.GLM_CACHED_INPUT_CNY_PER_MTOK, 2);
   const outputPrice = readNumber(env.GLM_OUTPUT_CNY_PER_MTOK, 28);
   const promptTokens = Number(usage.prompt_tokens || 0);
+  const cachedPromptTokens = Math.min(
+    promptTokens,
+    Number(usage.prompt_tokens_details?.cached_tokens || usage.cached_input_tokens || 0),
+  );
   const completionTokens = Number(usage.completion_tokens || 0);
   return roundCost(
-    mtok(promptTokens) * inputPrice
+    mtok(promptTokens - cachedPromptTokens) * inputPrice
+    + mtok(cachedPromptTokens) * cachedInputPrice
     + mtok(completionTokens) * outputPrice,
   );
 }
@@ -2329,6 +2365,7 @@ async function callGlm({
   const warnings = [];
   if (!rawText) warnings.push(`glm_empty_content:${finishReason || "unknown"}`);
   if (finishReason === "length") warnings.push("glm_output_truncated_by_token_limit");
+  if (payload?.model && String(payload.model) !== String(body.model)) warnings.push("glm_response_model_mismatch");
   return {
     rawText,
     finishReason,
@@ -5284,7 +5321,7 @@ function resolveRagMaxOutputTokens(env = {}, { provider = "", thinkingMode = "" 
 function modelNameForProvider(provider, env) {
   if (provider === "openai") return PUBLIC_OPENAI_MODEL;
   if (provider === "glm") {
-    return String(env.GLM_MODEL || env.RAG_MODEL || DEFAULT_GLM_MODEL);
+    return String(env.RAG_MODEL || env.GLM_MODEL || DEFAULT_GLM_MODEL);
   }
   if (provider === "deepseek") {
     const tier = resolveConfiguredModelTier(env);

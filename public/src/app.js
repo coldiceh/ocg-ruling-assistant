@@ -6,125 +6,33 @@
 const baseCardIndex = [];
 const PAGE_TITLE = document.title;
 const DEFAULT_RULING_MODEL_PROFILE = "official-astra-low";
-const PUBLIC_RULING_MODEL_PROFILE_ORDER = Object.freeze([
-  "official-astra-low",
-]);
-const PUBLIC_RULING_MODEL_PROFILES = Object.freeze({
-  "official-astra-low": Object.freeze({
-    id: "official-astra-low",
-    label: "官方 GPT-6 Astra · 思考 low",
-    provider: "openai",
-    model: "gpt-6-astra",
-    reasoningEffort: "low",
-    thirdParty: false,
-    modelIdentityVerified: true,
-  }),
-  "relay-gpt-6-astra-low": Object.freeze({
-    id: "relay-gpt-6-astra-low",
-    label: "GPT-6 Astra · 思考 low",
-    provider: "relay",
-    model: "gpt-6-astra",
-    reasoningEffort: "low",
-    thirdParty: true,
-    modelIdentityVerified: false,
-  }),
-  "relay-gpt-6-astra-medium": Object.freeze({
-    id: "relay-gpt-6-astra-medium",
-    label: "GPT-6 Astra · 思考 medium",
-    provider: "relay",
-    model: "gpt-6-astra",
-    reasoningEffort: "medium",
-    thirdParty: true,
-    modelIdentityVerified: false,
-  }),
-  "relay-gpt-6-astra-high": Object.freeze({
-    id: "relay-gpt-6-astra-high",
-    label: "GPT-6 Astra · 思考 high",
-    provider: "relay",
-    model: "gpt-6-astra",
-    reasoningEffort: "high",
-    thirdParty: true,
-    modelIdentityVerified: false,
-  }),
-  "relay-gpt-6-astra-xhigh": Object.freeze({
-    id: "relay-gpt-6-astra-xhigh",
-    label: "GPT-6 Astra · 思考 xhigh",
-    provider: "relay",
-    model: "gpt-6-astra",
-    reasoningEffort: "xhigh",
-    thirdParty: true,
-    modelIdentityVerified: false,
-  }),
-  "relay-gpt-6-astra-max": Object.freeze({
-    id: "relay-gpt-6-astra-max",
-    label: "GPT-6 Astra · 思考 max",
-    provider: "relay",
-    model: "gpt-6-astra",
-    reasoningEffort: "max",
-    thirdParty: true,
-    modelIdentityVerified: false,
-  }),
-  "relay-gpt-5.6-luna-low": Object.freeze({
-    id: "relay-gpt-5.6-luna-low",
-    label: "GPT-5.6 Luna · 思考 low",
-    provider: "relay",
-    model: "gpt-5.6-luna",
-    reasoningEffort: "low",
-    thirdParty: true,
-    modelIdentityVerified: false,
-    benchmarkSummary: "旧匿名 10 题小样本：10/10，平均 34.6 秒；之后出现样本外错误，不再作为推荐依据。",
-  }),
-  "relay-gpt-5.6-sol-low": Object.freeze({
-    id: "relay-gpt-5.6-sol-low",
-    label: "GPT-5.6 Sol · 思考 low",
-    provider: "relay",
-    model: "gpt-5.6-sol",
-    reasoningEffort: "low",
-    thirdParty: true,
-    modelIdentityVerified: false,
-  }),
-  "deepseek-v4-flash-standard": Object.freeze({
-    id: "deepseek-v4-flash-standard",
-    label: "DeepSeek V4 Flash · standard（实验性）",
-    provider: "deepseek",
-    benchmarkSummary: "匿名 10 题评测：5/10，另有 4 题部分正确；平均 12.4 秒，仅供实验。",
-  }),
-  "deepseek-v4-flash-low": Object.freeze({
-    id: "deepseek-v4-flash-low",
-    label: "DeepSeek V4 Flash · 思考 low（实验性）",
-    provider: "deepseek",
-    benchmarkSummary: "尚未完成匿名评测，仅供实验。",
-  }),
-  "deepseek-v4-flash-high": Object.freeze({
-    id: "deepseek-v4-flash-high",
-    label: "DeepSeek V4 Flash · 思考 high（实验性）",
-    provider: "deepseek",
-    benchmarkSummary: "匿名 10 题评测：1/10；9 次上游失败，仅供实验。",
-  }),
-  "deepseek-v4-flash-max": Object.freeze({
-    id: "deepseek-v4-flash-max",
-    label: "DeepSeek V4 Flash · 思考 max（实验性）",
-    provider: "deepseek",
-    benchmarkSummary: "尚未完成匿名评测，仅供实验。",
-  }),
+const FALLBACK_RULING_MODEL_PROFILE = Object.freeze({
+  id: DEFAULT_RULING_MODEL_PROFILE,
+  label: "官方 GPT-6 Astra · 思考 low（可用性未确认）",
+  provider: "openai",
+  model: "gpt-6-astra",
+  reasoningEffort: "low",
+  available: false,
+  answerLatency: null,
 });
-
 const ui = {
   deploymentLabel: document.querySelector("#deploymentLabel"),
   questionInput: document.querySelector("#questionInput"),
   analyzeButton: document.querySelector("#analyzeButton"),
   analyzeButtonText: document.querySelector("#analyzeButtonText"),
+  prepareEvidenceButton: document.querySelector("#prepareEvidenceButton"),
+  evidencePackagePanel: document.querySelector("#evidencePackagePanel"),
+  evidencePackageStatus: document.querySelector("#evidencePackageStatus"),
+  evidencePackageDownload: document.querySelector("#evidencePackageDownload"),
   rulingModelSelect: document.querySelector("#rulingModelSelect"),
   rulingModelStatus: document.querySelector("#rulingModelStatus"),
   rulingModelLatency: document.querySelector("#rulingModelLatency"),
-  rulingVersionButtons: [...document.querySelectorAll("[data-ruling-version]")],
   clearButton: document.querySelector("#clearButton"),
   resultGrid: document.querySelector("#resultGrid"),
   confidenceText: document.querySelector("#confidenceText"),
   verdictBlock: document.querySelector(".verdict-block"),
   verdictTitle: document.querySelector("#verdictTitle"),
   rulingBasisText: document.querySelector("#rulingBasisText"),
-  answerVersionText: document.querySelector("#answerVersionText"),
   verdictBody: document.querySelector("#verdictBody"),
   subAnswersPanel: document.querySelector("#subAnswersPanel"),
   parserDebugPanel: document.querySelector("#parserDebugPanel"),
@@ -139,6 +47,8 @@ const ui = {
   reasonBlock: document.querySelector(".reason-block"),
   questionsList: document.querySelector("#questionsList"),
   riskBlock: document.querySelector(".risk-block"),
+  generationPanel: document.querySelector("#generationPanel"),
+  generationDetails: document.querySelector("#generationDetails"),
   sourcesList: document.querySelector("#sourcesList"),
   sourceTrace: document.querySelector(".source-trace"),
   simulationPanel: document.querySelector("#simulationPanel"),
@@ -265,6 +175,8 @@ const adminCurrentRunStorageKey = "ocg-admin-current-run:v1";
 const themeStorageKey = "ocg-ruling-theme:v1";
 let selectedRulingModelProfile = DEFAULT_RULING_MODEL_PROFILE;
 let rulingModelCapabilitiesAvailable = false;
+let rulingModelSelectionWasManual = false;
+let preparedEvidencePackage = null;
 let selectedRulingVersion = "latest";
 const pendingStages = [
   { id: "understand", label: "理解问题", body: "正在读取问题中的卡片、场面、连锁和时点。" },
@@ -373,7 +285,13 @@ async function loadBackendModelInfo() {
     appConfig.rulingVersionIds = normalizeRulingVersionCapabilities(info?.rulingVersions);
     appConfig.defaultRulingModelProfile = modelCapabilities.defaultProfile;
     appConfig.rulingModelProfiles = modelCapabilities.profiles;
-    selectedRulingModelProfile = modelCapabilities.defaultProfile;
+    const manualProfile = modelCapabilities.profiles.find((profile) => (
+      profile.id === selectedRulingModelProfile && profile.available !== false
+    ));
+    if (!rulingModelSelectionWasManual || !manualProfile) {
+      selectedRulingModelProfile = modelCapabilities.defaultProfile;
+      rulingModelSelectionWasManual = false;
+    }
     rulingModelCapabilitiesAvailable = true;
     renderRulingModelOptions();
     syncRulingVersionButtons();
@@ -396,26 +314,31 @@ function normalizeRulingModelCapabilities(info = {}) {
           descriptor && typeof descriptor === "object" ? { id, ...descriptor } : { id }
         ))
       : [];
-  const profilesById = new Map(rawProfiles.map((item) => {
-    const id = normalizeRulingModelProfileId(typeof item === "string" ? item : item?.id);
-    return [id, item];
-  }).filter(([id]) => id));
-  if (!profilesById.has(defaultProfile)) {
+  const profiles = rawProfiles.map((item) => normalizeRulingModelDescriptor(item)).filter(Boolean);
+  if (!profiles.some((profile) => profile.id === defaultProfile && profile.available !== false)) {
     throw new TypeError("default ruling model profile is missing from capabilities");
   }
   return {
     defaultProfile,
-    profiles: PUBLIC_RULING_MODEL_PROFILE_ORDER.map((id) => {
-      const descriptor = profilesById.get(id);
-      return {
-        ...PUBLIC_RULING_MODEL_PROFILES[id],
-        available: Boolean(descriptor) && (typeof descriptor === "string" || descriptor.available !== false),
-        answerLatency: normalizePublicAnswerLatency(
-          typeof descriptor === "string" ? null : descriptor?.answerLatency,
-          id,
-        ),
-      };
-    }),
+    profiles,
+  };
+}
+
+function normalizeRulingModelDescriptor(item) {
+  const source = typeof item === "string" ? { id: item } : item;
+  if (!source || typeof source !== "object" || Array.isArray(source)) return null;
+  const id = normalizeRulingModelProfileId(source.id);
+  if (!id) return null;
+  const label = String(source.label || id).trim().slice(0, 120) || id;
+  return {
+    id,
+    label,
+    provider: String(source.provider || "").trim().slice(0, 40),
+    model: String(source.model || "").trim().slice(0, 100),
+    reasoningEffort: String(source.reasoningEffort || "").trim().slice(0, 40),
+    thinkingMode: String(source.thinkingMode || "").trim().slice(0, 40),
+    available: source.available !== false,
+    answerLatency: normalizePublicAnswerLatency(source.answerLatency, id),
   };
 }
 
@@ -446,18 +369,17 @@ function normalizePublicAnswerLatency(value, profileId) {
 
 function normalizeRulingModelProfileId(value) {
   const id = String(value || "").trim().toLowerCase();
-  return PUBLIC_RULING_MODEL_PROFILE_ORDER.includes(id) ? id : "";
+  return /^[a-z0-9][a-z0-9._:-]{0,79}$/u.test(id) ? id : "";
 }
 
 function fallbackRulingModelProfiles() {
-  return PUBLIC_RULING_MODEL_PROFILE_ORDER.map((id) => ({
-    ...PUBLIC_RULING_MODEL_PROFILES[id],
-    available: false,
-  }));
+  return [{ ...FALLBACK_RULING_MODEL_PROFILE }];
 }
 
 function setRulingModelCapabilitiesUnavailable(message) {
-  selectedRulingModelProfile = DEFAULT_RULING_MODEL_PROFILE;
+  if (!rulingModelSelectionWasManual) {
+    selectedRulingModelProfile = DEFAULT_RULING_MODEL_PROFILE;
+  }
   rulingModelCapabilitiesAvailable = false;
   appConfig.defaultRulingModelProfile = DEFAULT_RULING_MODEL_PROFILE;
   appConfig.rulingModelProfiles = fallbackRulingModelProfiles();
@@ -545,6 +467,7 @@ function selectRulingModelProfile(value) {
     return;
   }
   selectedRulingModelProfile = nextProfile;
+  rulingModelSelectionWasManual = true;
   ui.rulingModelSelect.value = nextProfile;
   updateRulingModelSelectionStatus();
   setQueryPending(false);
@@ -742,11 +665,12 @@ function getDetectedCards(text) {
     .filter(Boolean);
 }
 
-async function analyzeQuestion() {
+async function analyzeQuestion({ prepareOnly = false } = {}) {
   lastSubmittedQuestion = ui.questionInput.value;
   const text = ui.questionInput.value.trim();
   cancelActiveAnalysisRequest();
   const requestId = ++analysisRequestId;
+  clearPreparedEvidencePackage();
   if (!text) {
     resetAnalysis();
     return;
@@ -762,8 +686,14 @@ async function analyzeQuestion() {
       const answer = await requestBackendAnswer(text, requestedRulingVersion, {
         signal: abortController.signal,
         requestId,
+        prepareOnly,
       });
       if (requestId !== analysisRequestId) return;
+      if (answer?.kind === "prepared") {
+        renderPreparedOnly(answer);
+        downloadPreparedEvidencePackage();
+        return;
+      }
       renderBackendAnswer(answer);
       return;
     } catch (error) {
@@ -785,6 +715,7 @@ async function analyzeQuestion() {
 async function requestBackendAnswer(text, requestedRulingVersion, {
   signal,
   requestId = null,
+  prepareOnly = false,
 } = {}) {
   const backendMode = "rag";
   // Capture the model choice once so the first wire payload remains stable
@@ -809,6 +740,9 @@ async function requestBackendAnswer(text, requestedRulingVersion, {
   if (prepareResult?.kind !== "prepared") {
     return validatePublicAnswerRulingVersion(prepareResult, requestedRulingVersion);
   }
+  setPreparedEvidencePackage(prepareResult.evidencePackage);
+
+  if (prepareOnly) return prepareResult;
 
   if (signal?.aborted) {
     throw createBackendRequestError({
@@ -1198,11 +1132,23 @@ function publicPreparationFromSseEvent(event) {
   return {
     kind: "prepared",
     preparationId,
+    evidencePackage: normalizePreparedEvidencePackage(payload.evidencePackage),
     progress: {
       totalMs,
       stageDurationsMs,
     },
   };
+}
+
+function normalizePreparedEvidencePackage(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const text = typeof value.text === "string" ? value.text : "";
+  if (!text) return null;
+  const rawFilename = String(value.filename || "evidence-package.txt").trim();
+  const filename = (rawFilename.split(/[\\/]/u).pop() || "evidence-package.txt")
+    .replace(/[^\p{L}\p{N}._ -]/gu, "_")
+    .slice(0, 120) || "evidence-package.txt";
+  return { text, filename };
 }
 
 function normalizeRulingVersion(value) {
@@ -1234,6 +1180,126 @@ function createBackendRequestError({ code, status = 0, publicMessage = "", cause
   return error;
 }
 
+function setPreparedEvidencePackage(value) {
+  preparedEvidencePackage = value || null;
+  if (!ui.evidencePackagePanel || !ui.evidencePackageStatus || !ui.evidencePackageDownload) return;
+  ui.evidencePackagePanel.hidden = !preparedEvidencePackage;
+  ui.evidencePackageDownload.hidden = !preparedEvidencePackage;
+  ui.evidencePackageStatus.textContent = preparedEvidencePackage
+    ? "可下载本题提交给最终裁定模型的实际材料。"
+    : "本题未取得可下载的证据包。";
+}
+
+function clearPreparedEvidencePackage() {
+  preparedEvidencePackage = null;
+  if (ui.evidencePackagePanel) ui.evidencePackagePanel.hidden = true;
+  if (ui.evidencePackageDownload) ui.evidencePackageDownload.hidden = true;
+}
+
+function downloadPreparedEvidencePackage() {
+  if (!preparedEvidencePackage) return false;
+  downloadAdminFile(
+    preparedEvidencePackage.filename,
+    preparedEvidencePackage.text,
+    "text/plain;charset=utf-8",
+  );
+  return true;
+}
+
+function renderPreparedOnly(prepared) {
+  clearPendingStages();
+  lastRenderedBackendAnswer = null;
+  ui.resultGrid.hidden = false;
+  renderCards([]);
+  renderEngineSimulation(null, null);
+  renderParserDebug(null);
+  renderFeedbackPanel(null);
+  updateModelStatus("证据包已准备");
+  ui.verdictBlock.className = "result-block verdict-block is-confirmed";
+  ui.confidenceText.textContent = "准备完成";
+  ui.verdictTitle.textContent = "证据包已生成";
+  ui.rulingBasisText.textContent = "尚未请求最终裁定";
+  ui.verdictBody.textContent = prepared?.evidencePackage
+    ? "证据包已下载，也可以使用上方按钮再次下载。"
+    : "证据准备已完成，但后端没有返回可下载的证据包。";
+  renderSubAnswers([]);
+  ui.stepsTitle.textContent = "处理结果";
+  ui.stepsList.hidden = false;
+  renderList(ui.stepsList, ["本次只准备材料，未调用最终裁定模型。"]);
+  renderList(ui.questionsList, []);
+  renderSources([]);
+  renderGenerationDetails({ generation: null });
+}
+
+function renderGenerationDetails(answer) {
+  if (!ui.generationPanel || !ui.generationDetails) return;
+  clearElement(ui.generationDetails);
+  const hasGenerationField = Boolean(answer) && Object.hasOwn(answer, "generation");
+  const generation = answer?.generation;
+  if (hasGenerationField && generation === null) {
+    appendGenerationDetail("最终裁定模型", "未调用");
+    return;
+  }
+  if (!generation || typeof generation !== "object" || Array.isArray(generation)) {
+    appendGenerationDetail("最终裁定模型", "未取得");
+    appendGenerationDetail("推理强度", "未取得");
+    appendGenerationDetail("共享今日额度", "未取得");
+    return;
+  }
+  const provider = String(generation.provider || "").trim();
+  appendGenerationDetail("实际服务", provider ? modelProviderLabel(provider) : "未取得");
+  appendGenerationDetail("实际生成模型", formatGenerationText(generation.label, generation.model));
+  appendGenerationDetail("推理强度", formatGenerationReasoning(generation));
+  if (generation.thinkingMode) {
+    appendGenerationDetail("思考模式", formatGenerationText(generation.thinkingMode));
+  }
+  appendGenerationDetail("共享今日额度", formatGenerationBudget(generation.budget));
+  if (generation.fallbackFrom) {
+    appendGenerationDetail("自动切换自", formatGenerationText(generation.fallbackFrom));
+  }
+}
+
+function appendGenerationDetail(label, value) {
+  appendText(ui.generationDetails, "dt", label);
+  appendText(ui.generationDetails, "dd", value);
+}
+
+function formatGenerationText(...values) {
+  const value = values.map((item) => String(item || "").trim()).find(Boolean);
+  return value || "未取得";
+}
+
+function formatGenerationReasoning(generation) {
+  const thinkingMode = String(generation?.thinkingMode || "").trim().toLowerCase();
+  if (
+    (generation?.reasoningEffort === null || generation?.reasoningEffort === "")
+    && ["disabled", "none", "off"].includes(thinkingMode)
+  ) return "无（已关闭思考）";
+  return formatGenerationText(generation?.reasoningEffort);
+}
+
+function formatGenerationBudget(budget) {
+  if (!budget || typeof budget !== "object" || Array.isArray(budget)) return "未取得";
+  const currency = String(budget.currency || "").trim().toUpperCase();
+  const remaining = formatGenerationAmount(budget.remainingAmount, currency);
+  const daily = formatGenerationAmount(budget.dailyBudgetAmount, currency);
+  const amount = remaining === "未取得" && daily === "未取得"
+    ? "未取得"
+    : `剩余 ${remaining} / 每日 ${daily}`;
+  const pool = String(budget.sharedPoolLabel || "").trim();
+  const currencySuffix = currency ? "" : "（币种未取得）";
+  return `${pool ? `${pool} · ` : ""}${amount}${currencySuffix}`;
+}
+
+function formatGenerationAmount(value, currency) {
+  if (value === null || value === undefined || value === "") return "未取得";
+  const amount = Number(value);
+  if (!Number.isFinite(amount)) return "未取得";
+  if (currency === "USD") return `$${formatUsd(amount)}`;
+  if (currency === "CNY") return `${formatCny(amount)} 元`;
+  return currency ? `${amount} ${currency}` : String(amount);
+}
+
 function renderPending() {
   ui.resultGrid.hidden = false;
   renderAnswerVersion(null);
@@ -1249,6 +1315,7 @@ function renderPending() {
   ui.stepsList.hidden = true;
   renderSubAnswers([]);
   renderParserDebug(null);
+  renderGenerationDetails(null);
   startPendingStages();
   renderList(ui.questionsList, []);
   renderSources([]);
@@ -1259,6 +1326,7 @@ function renderBackendAnswer(answer) {
   ui.stepsTitle.textContent = "理由";
   ui.stepsList.hidden = false;
   lastRenderedBackendAnswer = answer || null;
+  renderGenerationDetails(answer);
   renderAnswerVersion(answer);
   renderEngineSimulation(null, null);
   if (answer?.mode === "rag_baseline" || answer?.mode === "cloud_evidence_v1") {
@@ -1331,8 +1399,10 @@ function renderBackendVersionError(error, requestedRulingVersion) {
   renderEngineSimulation(null, null);
   renderParserDebug(null);
   renderFeedbackPanel(null);
+  renderGenerationDetails(null);
   const relayPreparationFailure = relayPreparationFailurePresentation(error);
   if (relayPreparationFailure) {
+    renderGenerationDetails({ generation: null });
     updateModelStatus("证据准备失败");
     ui.verdictBlock.className = "result-block verdict-block is-risky";
     ui.confidenceText.textContent = "暂不可用";
@@ -1719,18 +1789,14 @@ function renderBudgetStatus(status, message = "") {
   if (!ui.budgetPanel) return;
   ui.budgetHint.textContent = message
     || status?.storageWarning
-    || "每日额度于北京时间 0 点更新；ChatGPT 按理论美元费用统计。";
+    || "本站调用限额于北京时间 0 点更新，不代表供应商账户余额。";
   renderBudgetBuckets(status?.buckets || (status?.bucket ? [status.bucket] : []));
 }
 
 function renderBudgetBuckets(buckets = []) {
   if (!ui.budgetBucketList) return;
   ui.budgetBucketList.replaceChildren();
-  const publicBuckets = (Array.isArray(buckets) ? buckets : [])
-    .filter((bucket) => bucket?.id !== "final_ruling:glm")
-    .map((bucket) => bucket?.id === "final_ruling:relay"
-      ? { ...bucket, label: "ChatGPT 最终裁定" }
-      : bucket);
+  const publicBuckets = Array.isArray(buckets) ? buckets : [];
   for (const bucket of publicBuckets) {
     const row = document.createElement("div");
     row.className = "budget-bucket";
@@ -1874,6 +1940,10 @@ function setQueryPending(isPending) {
   if (!ui.analyzeButton) return;
   ui.analyzeButton.disabled = Boolean(isPending) || !selectedRulingModelIsAvailable();
   ui.analyzeButton.setAttribute("aria-busy", String(Boolean(isPending)));
+  if (ui.prepareEvidenceButton) {
+    ui.prepareEvidenceButton.disabled = Boolean(isPending) || !selectedRulingModelIsAvailable();
+    ui.prepareEvidenceButton.setAttribute("aria-busy", String(Boolean(isPending)));
+  }
   syncRulingModelSelect(Boolean(isPending));
   syncRulingVersionButtons(Boolean(isPending));
   if (ui.analyzeButtonText) {
@@ -1937,6 +2007,7 @@ function renderBackendUnavailable(detectedCards = []) {
   renderEngineSimulation(null, null);
   renderParserDebug(null);
   renderFeedbackPanel(null);
+  renderGenerationDetails({ generation: null });
   updateModelStatus("服务不可用");
   ui.verdictBlock.className = "result-block verdict-block is-risky";
   ui.confidenceText.textContent = "无法裁定";
@@ -4436,6 +4507,12 @@ async function exportAdminRun(format) {
   }
 }
 
+function getAdminCapturedActualPrompt(result) {
+  if (result?.answer?.status !== 'evidence_captured') return null;
+  const actualPrompt = result.answer.capture?.promptBundle?.prompt;
+  return typeof actualPrompt === 'string' && actualPrompt.length > 0 ? actualPrompt : null;
+}
+
 async function handleAdminEvidenceCapture(event) {
   event.preventDefault();
   if (!adminSession.authenticated) return;
@@ -4443,9 +4520,12 @@ async function handleAdminEvidenceCapture(event) {
   const button = field('adminCaptureButton');
   const status = field('adminCaptureStatus');
   const resultField = field('adminCaptureResult');
+  const diagnosticField = field('adminCaptureDiagnosticResult');
   button.disabled = true;
   resultField.value = '';
+  diagnosticField.value = '';
   field('adminCaptureDetails').hidden = true;
+  field('adminCaptureDiagnosticDetails').hidden = true;
   field('adminCaptureDownload').hidden = true;
   status.textContent = '正在生成线上证据，完成后会停在最终回答之前…';
   try {
@@ -4456,14 +4536,21 @@ async function handleAdminEvidenceCapture(event) {
         actualLimitCny:Number(field('adminCaptureCny').value),
         theoreticalLimitUsd:Number(field('adminCaptureUsd').value)},
     }});
-    resultField.value = JSON.stringify(result, null, 2);
-    field('adminCaptureDetails').hidden = false;
-    field('adminCaptureDownload').hidden = false;
-    status.textContent = result.answer?.status === 'evidence_captured'
-      ? '完整证据包已生成；最终回答未调用。请下载保存。'
-      : result.status === 'failed'
-        ? `生成未完成：${result.error?.code || '未知错误'}。已保留本次费用记录。`
-        : '本题命中官方原题直接回答，未调用最终模型。请下载检查记录。';
+    diagnosticField.value = JSON.stringify(result, null, 2);
+    field('adminCaptureDiagnosticDetails').hidden = false;
+    const actualPrompt = getAdminCapturedActualPrompt(result);
+    if (actualPrompt) {
+      resultField.value = actualPrompt;
+      field('adminCaptureDetails').hidden = false;
+      field('adminCaptureDownload').hidden = false;
+      status.textContent = '最终作答输入已生成；最终回答未调用。可直接复制或下载，完整诊断记录已另行保留。';
+    } else if (result.answer?.status === 'evidence_captured') {
+      status.textContent = '捕获返回成功状态，但缺少最终作答输入。请查看完整诊断记录，不要将诊断 JSON 当作最终输入。';
+    } else if (result.status === 'failed') {
+      status.textContent = `生成未完成：${result.error?.code || '未知错误'}。已保留本次费用与失败记录。`;
+    } else {
+      status.textContent = '本题未生成最终模型输入。完整诊断记录已保留。';
+    }
   } catch (error) {
     status.textContent = `检查未完成：${error.message}。不要在费用状态不明时重复提交。`;
   } finally {
@@ -5958,6 +6045,8 @@ async function init() {
   if (adminUiEnabled) await initializeAdminLab();
 
   ui.analyzeButton.addEventListener("click", () => analyzeQuestion());
+  ui.prepareEvidenceButton?.addEventListener("click", () => analyzeQuestion({ prepareOnly: true }));
+  ui.evidencePackageDownload?.addEventListener("click", downloadPreparedEvidencePackage);
   ui.questionInput.addEventListener("input", scheduleAnalysis);
   ui.clearButton.addEventListener("click", () => {
     clearTimeout(analysisTimer);
@@ -5974,9 +6063,6 @@ async function init() {
       // Theme persistence is optional.
     }
   });
-  for (const button of ui.rulingVersionButtons || []) {
-    button.addEventListener("click", () => selectRulingVersion(button.dataset.rulingVersion));
-  }
   ui.rulingModelSelect?.addEventListener("change", () => {
     selectRulingModelProfile(ui.rulingModelSelect.value);
   });
@@ -5986,7 +6072,11 @@ async function init() {
   document.getElementById('adminEvidenceCaptureForm')?.addEventListener('submit', handleAdminEvidenceCapture);
   document.getElementById('adminCaptureDownload')?.addEventListener('click', () => {
     const value = document.getElementById('adminCaptureResult').value;
-    if (value) downloadAdminFile(`evidence-${Date.now()}.private.json`, value, 'application/json');
+    if (value) downloadAdminFile(`final-answer-input-${Date.now()}.private.txt`, value, 'text/plain;charset=utf-8');
+  });
+  document.getElementById('adminCaptureDiagnosticDownload')?.addEventListener('click', () => {
+    const value = document.getElementById('adminCaptureDiagnosticResult').value;
+    if (value) downloadAdminFile(`evidence-diagnostic-${Date.now()}.private.json`, value, 'application/json;charset=utf-8');
   });
   ui.adminLogoutButton?.addEventListener("click", handleAdminLogout);
   ui.adminCopyPublicQuestionButton?.addEventListener("click", () => {
@@ -6028,6 +6118,8 @@ function selectRulingVersion(version) {
 
 function scheduleAnalysis() {
   clearTimeout(analysisTimer);
+  clearPreparedEvidencePackage();
+  clearPreparedEvidencePackage();
   if (!ui.questionInput.value.trim()) {
     analyzeQuestion();
     return;

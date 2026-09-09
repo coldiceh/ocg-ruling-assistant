@@ -37,7 +37,7 @@ return async function handler(request, response) {
   }
 
   if (request.method === "GET") {
-    response.status(200).json(await getPublicAnswerModelInfo({ env: process.env }));
+    response.status(200).json(await getPublicAnswerModelInfo({ env }));
     return;
   }
 
@@ -131,11 +131,11 @@ async function answerInSeparateRequest({ request, response, requestAbort, reques
     if (requestAbort.signal.aborted) return;
     if (result.preparationId) {
       if (streaming) {
-        sendPublicAnswerEvent(response, "prepared", { preparationId: result.preparationId, progress: measured });
+        sendPublicAnswerEvent(response, "prepared", { preparationId: result.preparationId, progress: measured, evidencePackage: result.evidencePackage });
         sendPublicAnswerEvent(response, "end", measured);
         response.end();
       } else {
-        response.status(200).json({ status: "evidence_prepared", preparationId: result.preparationId, progress: measured });
+        response.status(200).json({ status: "evidence_prepared", preparationId: result.preparationId, progress: measured, evidencePackage: result.evidencePackage });
       }
       return;
     }

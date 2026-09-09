@@ -21,6 +21,7 @@ import {
   getRulingVersionCapabilities,
 } from "./rulingVersionRegistry.mjs";
 import { isPublicPreparationId } from "./publicAnswerPreparationStore.mjs";
+import { selectAvailablePublicProfile, withPublicGenerationInfo } from './publicGenerationInfo.mjs';
 
 export const PUBLIC_ANSWER_REQUEST_BODY_LIMIT_BYTES = 64 * 1024;
 export const PUBLIC_ANSWER_QUESTION_LIMIT_CHARACTERS = 12_000;
@@ -126,6 +127,8 @@ export function declaredRequestBodyBytes(request) {
 
 export async function getPublicAnswerModelInfo({ env = process.env } = {}) {
   const modelCapabilities = getPublicRulingModelCapabilities(env);
+  const selection = await selectAvailablePublicProfile(modelCapabilities.defaultRulingModelProfile, env);
+  modelCapabilities.defaultRulingModelProfile = selection.profile.id;
   const availableProfileIds = modelCapabilities.rulingModelProfiles
     .filter((profile) => profile.available)
     .map((profile) => profile.id);
@@ -223,13 +226,12 @@ export async function answerPublicRulingQuestion({
     }
   }
 
-  const profile = resolvePublicRulingModelProfile(
-    normalizedPayload.rulingModelProfile || env.PUBLIC_RULING_MODEL_PROFILE,
-  );
+  const selection = await selectAvailablePublicProfile(normalizedPayload.rulingModelProfile || env.PUBLIC_RULING_MODEL_PROFILE, env);
+  const profile = selection.profile;
   assertPublicRulingModelProfileAvailable(profile, env);
   const publicEnv = createPublicAnswerModelEnv(env, profile.id);
   try {
-    const answer = await answerRuling({
+    let answer = await answerRuling({
       rulingVersion: normalizedPayload.rulingVersion,
       question: normalizedPayload.question,
       env: publicEnv,
@@ -239,8 +241,10 @@ export async function answerPublicRulingQuestion({
       ...(prepareForContinuation === true ? { prepareForContinuation: true } : {}),
     });
     await auditPromise;
+    if (!prepareForContinuation) answer = await withPublicGenerationInfo(answer, profile, env, {fallbackFrom:selection.fallbackFrom});
     return {
       answer,
+      ...(selection.fallbackFrom ? {fallbackFrom:selection.fallbackFrom} : {}),
       latency: {
         profileId: profile.id,
         // durationMs covers the public service from entry through the answer;
