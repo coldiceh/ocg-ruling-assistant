@@ -122,6 +122,20 @@ function assertSnapshotRetained(f, result) {
   assert.equal(git(f.working, "show", `${result.outputs.snapshot_commit}:public/data/cards-lite.json`), '{"revision":"generated"}');
 }
 
+test("publishes changed data on unchanged main without repeating validation", async context => {
+  const f = await fixture(context);
+  const before = git(f.remote, "rev-parse", "refs/heads/main");
+  const result = await run(f);
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.equal(result.outputs.data_changed, "true");
+  assertSnapshotRetained(f, result);
+  const published = git(f.remote, "rev-parse", "refs/heads/main");
+  assert.equal(published, result.outputs.snapshot_commit);
+  assert.equal(git(f.remote, "rev-parse", `${published}^`), before);
+  assert.equal(git(f.remote, "show", `${published}:data/cards.json`), '{"revision":"generated"}');
+  assert.deepEqual(result.events, ["push"]);
+});
+
 test("publishes the generated snapshot on advanced main without losing either change", async context => {
   const f = await fixture(context);
   const upstream = await advance(f);
