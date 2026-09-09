@@ -15,7 +15,11 @@ import {
   privateEvaluationFailureChain,
 } from "./privateEvaluationDiagnostics.mjs";
 import { normalizeRuleSearchQueryText } from "./ruleSearchQueryText.mjs";
-import { runCloudRelayRequest, getCloudEvidenceBudgetStatus } from './cloudRequestBudget.mjs';
+import {
+  runCloudRelayRequest,
+  runOfficialOpenAIRequest,
+  getCloudEvidenceBudgetStatus,
+} from './cloudRequestBudget.mjs';
 
 const DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com";
 const DEFAULT_DEEPSEEK_MODEL = "deepseek-v4-flash";
@@ -24,6 +28,10 @@ const DEFAULT_RELAY_AUXILIARY_MODEL = "gpt-5.6-sol";
 const DEFAULT_RELAY_RULE_MODEL = "gpt-5.6-sol";
 const DEFAULT_GLM_BASE_URL = "https://open.bigmodel.cn/api/paas/v4";
 const DEFAULT_GLM_MODEL = "glm-5.2";
+const PUBLIC_OPENAI_CHAT_COMPLETIONS_URL = "https://api.openai.com/v1/chat/completions";
+const PUBLIC_OPENAI_MODEL = "gpt-6-astra";
+const PUBLIC_OPENAI_REASONING_EFFORT = "low";
+const PUBLIC_OPENAI_MAX_COMPLETION_TOKENS = 4096;
 const DEFAULT_JSON_TASK_MAX_OUTPUT_TOKENS = 4000;
 const DEFAULT_RAG_RECOVERY_MAX_OUTPUT_TOKENS = 4096;
 const DEFAULT_LIGHTWEIGHT_EXTRACTION_TIMEOUT_MS = 12000;
@@ -146,6 +154,14 @@ export async function callRagModel({
   const modelName = modelNameForProvider(provider, env);
   const reasoningGeneration = provider === "deepseek" || provider === "glm"
     ? resolveReasoningGenerationConfig({ provider, modelName, thinkingMode, reasoningEffort, env })
+    : provider === "openai"
+      ? {
+          thinkingMode: "enabled",
+          reasoningEffort: PUBLIC_OPENAI_REASONING_EFFORT,
+          thinkingModeSource: "public_profile",
+          reasoningEffortSource: "public_profile",
+          warnings: [],
+        }
     : provider === "relay"
       ? resolveRelayReasoningGenerationConfig({ reasoningEffort, env })
       : null;
@@ -173,7 +189,7 @@ export async function callRagModel({
   const generationWarnings = reasoningGeneration?.warnings || [];
   const forcedDryRun = dryRun === true || isEnabled(env.RAG_DRY_RUN);
   const willCallRemote = !modelInvoker && !forcedDryRun && provider !== "mock" && hasProviderKey(provider, env) && typeof fetchImpl === "function";
-  const budget = await buildBudgetPreflight({
+  const budget = provider === "openai" ? buildExternallyManagedBudgetPreflight() : await buildBudgetPreflight({
     provider,
     stage: "final_ruling",
     // Compact recovery is a second paid request. Reserve both worst-case
@@ -323,6 +339,14 @@ export async function callRagModel({
             maxTokens,
             fetchImpl,
             reasoningEffort: reasoningGeneration.reasoningEffort,
+            requireJson: !plainTextOutput,
+            signal,
+          })
+        : provider === "openai"
+          ? await callOfficialOpenAI({
+            prompt,
+            env,
+            fetchImpl,
             requireJson: !plainTextOutput,
             signal,
           })
@@ -552,8 +576,13 @@ export async function callRelayJsonTask({
 } = {}) {
   const normalizedPrompt = String(prompt || "").trim();
   if (!normalizedPrompt) throw new TypeError("Relay JSON task prompt must not be empty");
-  if (!String(env.RELAY_API_KEY || "").trim()
-      || !String(env.RELAY_BASE_URL || "").trim()) {
+  const relayEnv = {
+    ...env,
+    RELAY_API_KEY: env.RAG_RULE_MODEL_RELAY_API_KEY || env.RELAY_API_KEY,
+    RELAY_BASE_URL: env.RAG_RULE_MODEL_RELAY_BASE_URL || env.RELAY_BASE_URL,
+  };
+  if (!String(relayEnv.RELAY_API_KEY || "").trim()
+      || !String(relayEnv.RELAY_BASE_URL || "").trim()) {
     const error = new Error("Relay is not configured");
     error.code = "relay_not_configured";
     throw error;
@@ -562,17 +591,17 @@ export async function callRelayJsonTask({
   if (signal?.aborted) throw abortSignalError(signal);
 
   // Validate the endpoint before reserving budget or dispatching a request.
-  relayChatCompletionsUrl(env.RELAY_BASE_URL);
+  relayChatCompletionsUrl(relayEnv.RELAY_BASE_URL);
   const modelConfig = resolveRelayAuxiliaryModelName(
-    modelName || env.RELAY_JSON_TASK_MODEL,
-    env,
+    modelName || relayEnv.RELAY_JSON_TASK_MODEL,
+    relayEnv,
   );
   const resolvedModelName = modelConfig.modelName;
   const resolvedMaxTokens = optionalPositiveInteger(maxTokens)
     || DEFAULT_JSON_TASK_MAX_OUTPUT_TOKENS;
   const effortConfig = resolveRelayAuxiliaryReasoningEffort({
     reasoningEffort,
-    env,
+    env: relayEnv,
   });
 
   const execution = await runBudgetedAuxiliaryModelCall({
@@ -581,13 +610,13 @@ export async function callRelayJsonTask({
     modelName: resolvedModelName,
     prompt: normalizedPrompt,
     maxTokens: resolvedMaxTokens,
-    env,
+    env: relayEnv,
     fetchImpl,
     now,
     signal,
     invoke: () => callRelay({
       prompt: normalizedPrompt,
-      env,
+      env: relayEnv,
       modelName: resolvedModelName,
       maxTokens: resolvedMaxTokens,
       fetchImpl,
@@ -1725,6 +1754,11 @@ export function resolveRagProvider(env = {}) {
     if (!configured) warnings.push("relay_api_key_missing_using_mock");
     return { provider: configured ? "relay" : "mock", requested, warnings };
   }
+  if (requested === "openai") {
+    const configured = Boolean(String(env.OCG_FINAL_OPENAI_API_KEY || "").trim());
+    if (!configured) warnings.push("official_openai_api_key_missing_using_mock");
+    return { provider: configured ? "openai" : "mock", requested, warnings };
+  }
   if (requested === "gemini") {
     if (!env.GEMINI_API_KEY) warnings.push("gemini_api_key_missing_using_mock");
     return { provider: env.GEMINI_API_KEY ? "gemini" : "mock", requested, warnings };
@@ -1813,6 +1847,12 @@ export function createPublicAnswerModelEnv(env = {}, profileValue) {
   if (profile.provider !== "relay") {
     for (const key of Object.keys(result)) {
       if (/^RELAY_/iu.test(key)) delete result[key];
+    }
+    // The cloud preparation budget uses these public, non-credential rates
+    // when reserving Relay auxiliary calls. Keep them separate from Relay
+    // endpoint credentials, which remain only in the dedicated RAG namespaces.
+    for (const key of ["RELAY_PRICING_MULTIPLIER", "RELAY_SITE_DOLLAR_CNY"]) {
+      if (String(source[key] ?? "").trim()) result[key] = source[key];
     }
   }
   if (applicabilityRelayApiKey) {
@@ -2362,6 +2402,84 @@ async function callRelay({
     thinkingMode: "not_applicable",
     reasoningEffort: RELAY_REASONING_EFFORTS.has(reasoningEffort) ? reasoningEffort : null,
     maxOutputTokens: Number.isInteger(maxTokens) && maxTokens > 0 ? maxTokens : null,
+    responseFormat: requireJson ? "json_object" : "text",
+    transport: "chat_completions_sse",
+    streamMetrics: payload?.stream_metrics || null,
+    usage: payload?.usage || {},
+    warnings,
+  };
+}
+
+async function callOfficialOpenAI({
+  prompt,
+  env,
+  fetchImpl,
+  requireJson = true,
+  signal,
+}) {
+  const body = {
+    model: PUBLIC_OPENAI_MODEL,
+    messages: [{ role: "user", content: prompt }],
+    ...(requireJson ? { response_format: { type: "json_object" } } : {}),
+    reasoning_effort: PUBLIC_OPENAI_REASONING_EFFORT,
+    max_completion_tokens: PUBLIC_OPENAI_MAX_COMPLETION_TOKENS,
+  };
+  let payload;
+  try {
+    const officialFetch = (input, init = {}) => fetchImpl(input, {
+      ...init,
+      redirect: "error",
+    });
+    payload = await runOfficialOpenAIRequest({
+      env,
+      body,
+      fetchImpl: officialFetch,
+      invoke: () => requestRelayChatCompletionSse({
+        fetchImpl: officialFetch,
+        endpoint: PUBLIC_OPENAI_CHAT_COMPLETIONS_URL,
+        apiKey: env.OCG_FINAL_OPENAI_API_KEY,
+        body,
+        env,
+        signal,
+      }),
+    });
+  } catch (error) {
+    // The shared parser is transport-only. Rewrite its historical Relay
+    // diagnostic label before it crosses the official-provider boundary.
+    if (error && typeof error === "object") {
+      if (error.provider === "relay") error.provider = "openai";
+      if (typeof error.code === "string" && error.code.startsWith("relay_")) {
+        error.code = `openai_${error.code.slice("relay_".length)}`;
+      }
+      if (typeof error.message === "string") {
+        error.message = error.message.replace(/relay/giu, "OpenAI");
+      }
+    }
+    throw error;
+  }
+  const choice = payload?.choices?.[0] || {};
+  const message = choice.message || {};
+  const rawText = extractChatMessageText(message.content);
+  const finishReason = String(choice.finish_reason || "");
+  const responseModel = String(payload?.model || "");
+  const warnings = [];
+  if (!rawText) warnings.push(`openai_empty_content:${finishReason || "unknown"}`);
+  if (finishReason === "length") warnings.push("openai_output_truncated_by_token_limit");
+  if (responseModel && responseModel !== PUBLIC_OPENAI_MODEL) {
+    warnings.push("openai_response_model_mismatch");
+  }
+  return {
+    rawText,
+    finishReason,
+    contentChars: rawText.length,
+    reasoningContentPresent: false,
+    reasoningContentChars: 0,
+    requestModel: PUBLIC_OPENAI_MODEL,
+    responseModel,
+    systemFingerprint: String(payload?.system_fingerprint || ""),
+    thinkingMode: "enabled",
+    reasoningEffort: PUBLIC_OPENAI_REASONING_EFFORT,
+    maxOutputTokens: PUBLIC_OPENAI_MAX_COMPLETION_TOKENS,
     responseFormat: requireJson ? "json_object" : "text",
     transport: "chat_completions_sse",
     streamMetrics: payload?.stream_metrics || null,
@@ -3329,6 +3447,30 @@ function privateEvaluationBudgetExhaustedMessage(bucket) {
   return `本次私有评测额度已达到 ${limit} 美元硬上限，未调用模型。`;
 }
 
+function buildExternallyManagedBudgetPreflight() {
+  const bucket = Object.freeze({
+    id: "final_ruling:openai",
+    stage: "final_ruling",
+    provider: "openai",
+    label: "官方 OpenAI 最终裁定",
+    currency: "USD",
+  });
+  return {
+    managedExternally: true,
+    blocked: false,
+    reservedAmount: 0,
+    reservedAmountCny: 0,
+    reservedAmountUsd: 0,
+    bucketReservedAmount: 0,
+    bucketReservedAmountCny: 0,
+    bucketReservedAmountUsd: 0,
+    bucket,
+    bucketConfig: { currency: "USD" },
+    warnings: [],
+    status: null,
+  };
+}
+
 async function buildBudgetPreflight({ provider, stage, modelName, prompt, maxTokens, env, fetchImpl, now, trackSpend = true }) {
   const privateEvaluationBudget = resolvePrivateEvaluationBudget({ provider, stage, env });
   if (privateEvaluationBudget) {
@@ -3816,6 +3958,7 @@ async function throwIfAbortedAfterBudgetPreflight({ signal, budget, env, fetchIm
 }
 
 async function recordBudgetSpend({ preflight, actualCostAmount, actualCostCny, env, fetchImpl }) {
+  if (preflight.managedExternally) return preflight.status;
   const amount = roundCost(actualCostAmount ?? actualCostCny ?? 0);
   const appliesToGlobalCnyBudget = preflight.bucketConfig?.currency === "CNY";
   const ioDeadline = createBudgetRedisDeadline(env);
@@ -3881,6 +4024,7 @@ async function recordBudgetSpend({ preflight, actualCostAmount, actualCostCny, e
 }
 
 async function releaseBudgetReservation({ preflight, env, fetchImpl }) {
+  if (preflight.managedExternally) return preflight.status;
   if (!preflight.reservedAmountCny && !preflight.bucketReservedAmount) return preflight.status;
   const ioDeadline = createBudgetRedisDeadline(env);
   const [spent, bucketSpent] = await Promise.all([
@@ -4356,6 +4500,13 @@ function estimateActualCostAmount(provider, usage, env, modelName) {
   if (provider === "glm") return estimateGlmCostCny(usage, env);
   if (provider === "relay") {
     return estimateChatGptUncachedCostUsd({ usage, env, modelName });
+  }
+  if (provider === "openai") {
+    return estimateOpenAIModelCost({
+      model: PUBLIC_OPENAI_MODEL,
+      usage,
+      reasoningMode: "standard",
+    }).totalCostUsd;
   }
   if (provider === "gemini") return roundCost(readTieredProviderNumber(env, "GEMINI", "ESTIMATED_CNY_PER_CALL", 0.01));
   return 0;
@@ -5099,6 +5250,7 @@ function firstConfiguredValue(entries = []) {
 }
 
 function resolveRagMaxOutputTokens(env = {}, { provider = "", thinkingMode = "" } = {}) {
+  if (provider === "openai") return PUBLIC_OPENAI_MAX_COMPLETION_TOKENS;
   const configured = Number(env.RAG_MAX_OUTPUT_TOKENS);
   if (Number.isFinite(configured) && configured > 0) return Math.floor(configured);
   if (provider === "relay") {
@@ -5116,6 +5268,7 @@ function resolveRagMaxOutputTokens(env = {}, { provider = "", thinkingMode = "" 
 }
 
 function modelNameForProvider(provider, env) {
+  if (provider === "openai") return PUBLIC_OPENAI_MODEL;
   if (provider === "glm") {
     return String(env.GLM_MODEL || env.RAG_MODEL || DEFAULT_GLM_MODEL);
   }
@@ -5179,6 +5332,7 @@ function hasProviderKey(provider, env) {
   if (provider === "deepseek") return Boolean(env.DEEPSEEK_API_KEY);
   if (provider === "glm") return Boolean(env.GLM_API_KEY);
   if (provider === "relay") return Boolean(String(env.RELAY_API_KEY || "").trim());
+  if (provider === "openai") return Boolean(String(env.OCG_FINAL_OPENAI_API_KEY || "").trim());
   if (provider === "gemini") return Boolean(env.GEMINI_API_KEY);
   return false;
 }

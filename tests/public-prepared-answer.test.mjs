@@ -8,9 +8,9 @@ import { createPublicAnswerProgress } from "../backend/publicAnswerProgress.mjs"
 import { parsePublicAnswerPayload } from "../backend/publicAnswerService.mjs";
 import { classifyPublicRequestChannel } from "../backend/publicAnswerPresentation.mjs";
 
-const env = { MODEL_PROVIDER: "mock", PUBLIC_RULING_MODEL_PROFILE: "relay-gpt-6-astra-max",
+const env = { MODEL_PROVIDER: "mock", PUBLIC_RULING_MODEL_PROFILE: "official-astra-low",
   UPSTASH_REDIS_REST_URL: "https://redis.invalid", UPSTASH_REDIS_REST_TOKEN: "test-only-secret", VERCEL_GIT_COMMIT_SHA: "test-release" };
-const body = { action: "prepare", question: "Synthetic test question", mode: "rag", rulingVersion: "latest", rulingModelProfile: "relay-gpt-6-astra-max" };
+const body = { action: "prepare", question: "Synthetic test question", mode: "rag", rulingVersion: "latest", rulingModelProfile: "official-astra-low" };
 const continuation = { promptBundle: { prompt: "Synthetic exact prompt\n[]\n汉字", allowedEvidenceIds: [] }, evidence: { records: [], empty: null }, cardResolution: { resolvedCards: [] } };
 
 // Redis REST mock: atomic commands are indivisible, and values are transported
@@ -80,7 +80,7 @@ function fixture({ beforeFinal = async () => {}, earlyAnswer = false } = {}) {
       counts.final++;
       assert.deepEqual(input.continuation, continuation);
       assert.equal(input.rulingVersion, "latest");
-      assert.equal(input.env.RAG_REASONING_EFFORT, "max");
+      assert.equal(input.env.RAG_REASONING_EFFORT, "low");
       await beforeFinal(input);
       return { shortAnswer: "Final synthetic answer", rulingVersion: "latest", effectiveRulingVersion: "latest",
         debug: { cloudCosts: { actualCny: 0.3, theoreticalUsd: 0.4, calls: [{ id: "final" }] } } };

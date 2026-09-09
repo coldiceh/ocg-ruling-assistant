@@ -86,6 +86,47 @@ test("exports only required content rows and preserves raw float32 bytes", async
   assert.equal(fs.existsSync(path.join(root, "mismatched-output")), false);
 });
 
+test("loads vector shards concurrently while retaining manifest order", async (context) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "evidence-vector-parallel-"));
+  context.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const textHashes = ["view-a", "view-b", "view-c"].map(hash);
+  const shardDescriptors = textHashes.map((textSha256, index) => {
+    const bytes = Buffer.from(new Float32Array([index + 1]).buffer);
+    const file = `evidence-vectors-00${index}.f32`;
+    fs.writeFileSync(path.join(root, file), bytes);
+    return { index, file, rowCount: 1, byteLength: bytes.length, sha256: hash(bytes), textSha256 };
+  });
+  const manifest = {
+    schemaVersion: 1, kind: "evidence-vector-index", encoding: "raw-little-endian-float32",
+    model: { id: "model", revision: "revision" }, inputContractSha256: CONTRACT_HASH,
+    dataRevision: REVISION, dimension: 1, uniqueContentCount: textHashes.length,
+    orderedContentHashes: textHashes, orderedContentHashesSha256: hash(JSON.stringify(textHashes)),
+    entries: textHashes.map((textSha256, index) => ({ textSha256, shardIndex: index, rowIndex: 0 })),
+    shards: shardDescriptors.map(({ textSha256, ...descriptor }) => descriptor),
+    vectorByteLength: shardDescriptors.reduce((sum, item) => sum + item.byteLength, 0),
+    shardSetSha256: hash(JSON.stringify(shardDescriptors.map(descriptor => ({
+      index: descriptor.index, byteLength: descriptor.byteLength, sha256: descriptor.sha256,
+    })))),
+  };
+  writeJson(path.join(root, "evidence-vector-index.json"), manifest);
+  let active = 0;
+  let maxActive = 0;
+  const readFileImpl = async (file, options) => {
+    if (path.basename(file) === "evidence-vector-index.json") return fs.promises.readFile(file, options);
+    active += 1;
+    maxActive = Math.max(maxActive, active);
+    await new Promise(resolve => setTimeout(resolve, 20));
+    try {
+      return await fs.promises.readFile(file, options);
+    } finally {
+      active -= 1;
+    }
+  };
+  const index = await loadEvidenceVectorIndex({ dataDir: root, dataRevision: REVISION, readFileImpl });
+  assert.equal(maxActive, 3);
+  assert.deepEqual(index.shards.map(shard => shard[0]), [1, 2, 3]);
+});
+
 test("uses max of two exact-cosine views and existing deterministic fusion order", async (context) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "evidence-vector-score-"));
   context.after(() => fs.rmSync(root, { recursive: true, force: true }));

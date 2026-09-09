@@ -98,7 +98,7 @@ test("public answer payload cannot select an admin-only provider or depend on Op
   }
 });
 
-test("public model environment isolates Relay Sol low card extraction, planning and final generation", () => {
+test("public model environment isolates official final generation from Relay preparation", () => {
   const publicEnv = createPublicAnswerModelEnv({
     MODEL_PROVIDER: "openai",
     RAG_MODEL_PROVIDER: "gemini",
@@ -114,13 +114,14 @@ test("public model environment isolates Relay Sol low card extraction, planning 
     KIMI_API_KEY: "admin-kimi-key",
     KIMI_BASE_URL: "https://kimi.example.test",
     DEEPSEEK_API_KEY: "public-deepseek-key",
+    OCG_FINAL_OPENAI_API_KEY: "public-official-key",
     RELAY_API_KEY: "public-relay-key",
     RELAY_BASE_URL: "https://relay.example.test/v1",
   });
 
-  assert.equal(publicEnv.MODEL_PROVIDER, "relay");
-  assert.equal(publicEnv.RAG_MODEL_PROVIDER, "relay");
-  assert.equal(publicEnv.RAG_MODEL, "gpt-5.6-sol");
+  assert.equal(publicEnv.MODEL_PROVIDER, "openai");
+  assert.equal(publicEnv.RAG_MODEL_PROVIDER, "openai");
+  assert.equal(publicEnv.RAG_MODEL, "gpt-6-astra");
   assert.equal(publicEnv.RAG_THINKING_MODE, "enabled");
   assert.equal(publicEnv.RAG_REASONING_EFFORT, "low");
   assert.equal(publicEnv.RAG_CARD_MODEL_PROVIDER, "relay");
@@ -135,26 +136,15 @@ test("public model environment isolates Relay Sol low card extraction, planning 
   assert.equal(publicEnv.RAG_RULE_MODEL_REASONING_EFFORT, "low");
   assert.equal(publicEnv.RAG_RULEBOOK_MODEL_PROVIDER, undefined);
   assert.equal(Object.keys(publicEnv).some((key) => /^(?:OPENAI_|ADMIN_|KIMI_)/iu.test(key)), false);
+  assert.equal(publicEnv.OCG_FINAL_OPENAI_API_KEY, "public-official-key");
   assert.equal(publicEnv.ADMIN_MODEL_LAB_BYPASS_DAILY_BUDGET, undefined);
   assert.equal(publicEnv.GLM_API_KEY, undefined);
   assert.equal(publicEnv.GLM_BASE_URL, undefined);
   assert.equal(publicEnv.DEEPSEEK_API_KEY, "public-deepseek-key");
-  assert.equal(publicEnv.RELAY_API_KEY, "public-relay-key");
-  assert.equal(publicEnv.RELAY_BASE_URL, "https://relay.example.test/v1");
-
-  const deepSeekEnv = createPublicAnswerModelEnv({
-    GLM_API_KEY: "glm-key",
-    DEEPSEEK_API_KEY: "deepseek-key",
-    RELAY_API_KEY: "auxiliary-relay-key",
-    RELAY_BASE_URL: "https://relay.example.test/v1",
-  }, "deepseek-v4-flash-high");
-  assert.equal(deepSeekEnv.RAG_MODEL_PROVIDER, "deepseek");
-  assert.equal(deepSeekEnv.RAG_MODEL, "deepseek-v4-flash");
-  assert.equal(deepSeekEnv.RAG_MODEL_TIER, "flash");
-  assert.equal(deepSeekEnv.RELAY_API_KEY, undefined);
-  assert.equal(deepSeekEnv.RELAY_BASE_URL, undefined);
-  assert.equal(deepSeekEnv.RAG_FORMAL_SCENARIO_DRAFT_RELAY_API_KEY, "auxiliary-relay-key");
-  assert.equal(deepSeekEnv.RAG_FORMAL_SCENARIO_DRAFT_RELAY_BASE_URL, "https://relay.example.test/v1");
+  assert.equal(publicEnv.RELAY_API_KEY, undefined);
+  assert.equal(publicEnv.RELAY_BASE_URL, undefined);
+  assert.equal(publicEnv.RAG_FORMAL_SCENARIO_DRAFT_RELAY_API_KEY, "public-relay-key");
+  assert.equal(publicEnv.RAG_FORMAL_SCENARIO_DRAFT_RELAY_BASE_URL, "https://relay.example.test/v1");
 
   const mockEnv = createPublicAnswerModelEnv({
     MODEL_PROVIDER: "mock",

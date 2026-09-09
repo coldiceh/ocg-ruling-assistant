@@ -464,6 +464,20 @@ test("Astra estimates use the checked official rates and full-request long-conte
   assert.equal(longCost.longContextApplied, true);
 });
 
+test("Astra H01 cache-write usage prices to the measured official amount", () => {
+  const cost = estimateOpenAIModelCost({
+    model: "gpt-6-astra",
+    usage: {
+      input_tokens: 21_666,
+      output_tokens: 324,
+      input_tokens_details: { cache_write_tokens: 21_663 },
+    },
+  });
+  assert.equal(cost.usage.uncachedInputTokens, 3);
+  assert.equal(cost.usage.cacheWriteTokens, 21_663);
+  assert.equal(cost.totalCostUsd, 0.2870175);
+});
+
 test("unknown models and invalid rates fail closed", () => {
   assert.throws(() => estimateOpenAIModelCost({
     model: "arbitrary-model",

@@ -169,7 +169,7 @@ test("ui_has_single_query_button", async () => {
   assert.match(html, /id="pipelineStageList"/u);
   assert.match(html, /id="pipelineElapsedText"/u);
   assert.match(html, /id="rulingModelSelect"[^>]+disabled/u);
-  assert.match(html, /value="relay-gpt-6-astra-low" selected>GPT-6 Astra · 思考 low</u);
+  assert.match(html, /value="official-astra-low" selected>官方 GPT-6 Astra · 思考 low</u);
   assert.doesNotMatch(html, /第三方中转/u);
   assert.doesNotMatch(html, /value="glm-5\.2-high"/u);
   assert.doesNotMatch(html, /value="kimi-[^"]+"/u);
@@ -239,81 +239,42 @@ test("public ruling model selector uses the allowlisted backend profiles without
   const normalizeCapabilities = new Function(
     `${definitions}\n${functions}\nreturn normalizeRulingModelCapabilities;`,
   )();
-  assert.match(definitions, /const DEFAULT_RULING_MODEL_PROFILE = "relay-gpt-6-astra-low"/u);
+  assert.match(definitions, /const DEFAULT_RULING_MODEL_PROFILE = "official-astra-low"/u);
   const capabilities = normalizeCapabilities({
-    defaultRulingModelProfile: "relay-gpt-6-astra-max",
+    defaultRulingModelProfile: "official-astra-low",
     rulingModelProfiles: [
-      { id: "relay-gpt-6-astra-low", available: true, label: "OpenAI official" },
-      { id: "relay-gpt-6-astra-medium", available: true },
-      { id: "relay-gpt-6-astra-high", available: true },
-      { id: "relay-gpt-6-astra-xhigh", available: true },
+      { id: "official-astra-low", available: true, label: "untrusted label" },
+      { id: "relay-gpt-6-astra-low", available: true },
       { id: "relay-gpt-6-astra-max", available: true },
-      { id: "relay-gpt-6-astra-ultra", available: true },
-      { id: "relay-gpt-5.6-luna-low", available: true, label: "OpenAI official" },
-      { id: "relay-gpt-5.6-sol-low", available: true, label: "OpenAI official" },
-      { id: "deepseek-v4-flash-standard", available: true },
-      { id: "deepseek-v4-flash-low", available: true },
-      { id: "deepseek-v4-flash-high", available: true, label: "untrusted label" },
-      { id: "deepseek-v4-flash-max", available: true },
       { id: "glm-5.2-high", available: true },
-      { id: "relay-gpt-5.6-sol-high", available: true, label: "OpenAI official" },
       { id: "not-allowlisted", available: true },
     ],
   });
 
-  assert.equal(capabilities.defaultProfile, "relay-gpt-6-astra-max");
+  assert.equal(capabilities.defaultProfile, "official-astra-low");
   assert.deepEqual(capabilities.profiles.map((profile) => ({
     id: profile.id,
     label: profile.label,
     provider: profile.provider,
     available: profile.available,
   })), [
-    { id: "relay-gpt-6-astra-low", label: "GPT-6 Astra · 思考 low", provider: "relay", available: true },
-    { id: "relay-gpt-6-astra-medium", label: "GPT-6 Astra · 思考 medium", provider: "relay", available: true },
-    { id: "relay-gpt-6-astra-high", label: "GPT-6 Astra · 思考 high", provider: "relay", available: true },
-    { id: "relay-gpt-6-astra-xhigh", label: "GPT-6 Astra · 思考 xhigh", provider: "relay", available: true },
-    { id: "relay-gpt-6-astra-max", label: "GPT-6 Astra · 思考 max", provider: "relay", available: true },
-    { id: "relay-gpt-5.6-luna-low", label: "GPT-5.6 Luna · 思考 low", provider: "relay", available: true },
-    { id: "relay-gpt-5.6-sol-low", label: "GPT-5.6 Sol · 思考 low", provider: "relay", available: true },
-    { id: "deepseek-v4-flash-standard", label: "DeepSeek V4 Flash · standard（实验性）", provider: "deepseek", available: true },
-    { id: "deepseek-v4-flash-low", label: "DeepSeek V4 Flash · 思考 low（实验性）", provider: "deepseek", available: true },
-    { id: "deepseek-v4-flash-high", label: "DeepSeek V4 Flash · 思考 high（实验性）", provider: "deepseek", available: true },
-    { id: "deepseek-v4-flash-max", label: "DeepSeek V4 Flash · 思考 max（实验性）", provider: "deepseek", available: true },
+    { id: "official-astra-low", label: "官方 GPT-6 Astra · 思考 low", provider: "openai", available: true },
   ]);
   assert.equal(capabilities.profiles[0].benchmarkSummary, undefined);
-  assert.equal(capabilities.profiles[5].benchmarkSummary, "旧匿名 10 题小样本：10/10，平均 34.6 秒；之后出现样本外错误，不再作为推荐依据。");
-  assert.equal(capabilities.profiles[6].benchmarkSummary, undefined);
-  assert.equal(capabilities.profiles[7].benchmarkSummary, "匿名 10 题评测：5/10，另有 4 题部分正确；平均 12.4 秒，仅供实验。");
   for (const profile of capabilities.profiles) {
     assert.equal(profile.answerLatency.profileId, profile.id);
     assert.equal(profile.answerLatency.status, "unavailable");
   }
   const partialAvailability = normalizeCapabilities({
-    defaultRulingModelProfile: "relay-gpt-6-astra-max",
+    defaultRulingModelProfile: "official-astra-low",
     rulingModelProfiles: [
       { id: "glm-5.2-high", available: false },
-      { id: "deepseek-v4-flash-high", available: true },
-      { id: "relay-gpt-6-astra-low", available: false },
-      { id: "relay-gpt-6-astra-max", available: false },
-      { id: "relay-gpt-5.6-luna-low", available: false },
-      { id: "relay-gpt-5.6-sol-low", available: false },
+      { id: "official-astra-low", available: false },
     ],
   });
   assert.deepEqual(
     partialAvailability.profiles.map((profile) => [profile.id, profile.available]),
-    [
-      ["relay-gpt-6-astra-low", false],
-      ["relay-gpt-6-astra-medium", false],
-      ["relay-gpt-6-astra-high", false],
-      ["relay-gpt-6-astra-xhigh", false],
-      ["relay-gpt-6-astra-max", false],
-      ["relay-gpt-5.6-luna-low", false],
-      ["relay-gpt-5.6-sol-low", false],
-      ["deepseek-v4-flash-standard", false],
-      ["deepseek-v4-flash-low", false],
-      ["deepseek-v4-flash-high", true],
-      ["deepseek-v4-flash-max", false],
-    ],
+    [["official-astra-low", false]],
   );
   assert.throws(
     () => normalizeCapabilities({
@@ -330,18 +291,17 @@ test("public ruling model selector uses the allowlisted backend profiles without
   assert.match(app, /if \(value === "relay"\) return "ChatGPT"/u);
 });
 
-test("astra low default survives startup and unavailable capability recovery while explicit choices remain usable", async () => {
+test("official Astra low survives startup and unavailable capability recovery", async () => {
   const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
   const definitions = sourceBetween(app, "const DEFAULT_RULING_MODEL_PROFILE", "const ui =");
   const load = sourceBetween(app, "async function loadBackendModelInfo", "function normalizeRulingModelCapabilities");
   const functions = sourceBetween(app, "function normalizeRulingModelCapabilities", "function normalizeRulingVersionCapabilities");
   let unavailable = false;
-  const modelIds = ["low", "medium", "high", "xhigh", "max"].map((effort) => `relay-gpt-6-astra-${effort}`);
   const harness = new Function("fetch", `${definitions}\n${load}\n${functions}\n
     let selectedRulingModelProfile = DEFAULT_RULING_MODEL_PROFILE;
     let rulingModelCapabilitiesAvailable = false;
     let appConfig = { answerApiUrl: "https://example.invalid/api/answer", rulingModelProfiles: fallbackRulingModelProfiles() };
-    const ui = { rulingModelSelect: { value: "relay-gpt-6-astra-low" } };
+    const ui = { rulingModelSelect: { value: "official-astra-low" } };
     function renderRulingModelOptions() { ui.rulingModelSelect.value = selectedRulingModelProfile; }
     function updateRulingModelSelectionStatus() {}
     function syncRulingVersionButtons() {}
@@ -357,23 +317,19 @@ test("astra low default survives startup and unavailable capability recovery whi
   `)(async () => {
     if (unavailable) throw new Error("mock unavailable");
     return { ok: true, json: async () => ({
-      defaultRulingModelProfile: "relay-gpt-6-astra-low",
-      rulingModelProfiles: [...modelIds, "relay-gpt-5.6-luna-low"].map((id) => ({ id, available: true })),
+      defaultRulingModelProfile: "official-astra-low",
+      rulingModelProfiles: [{ id: "official-astra-low", available: true }],
     }) };
   });
-  assert.equal(harness.state().selected, "relay-gpt-6-astra-low");
+  assert.equal(harness.state().selected, "official-astra-low");
   await harness.load();
-  assert.deepEqual(harness.state(), { selected: "relay-gpt-6-astra-low", displayed: "relay-gpt-6-astra-low", available: true });
-  for (const id of [...modelIds, "relay-gpt-5.6-luna-low"]) {
-    harness.select(id);
-    assert.deepEqual(harness.state(), { selected: id, displayed: id, available: true });
-  }
-  harness.disable("relay-gpt-6-astra-low");
-  harness.select("relay-gpt-6-astra-low");
-  assert.equal(harness.state().displayed, "relay-gpt-5.6-luna-low");
+  assert.deepEqual(harness.state(), { selected: "official-astra-low", displayed: "official-astra-low", available: true });
+  harness.disable("official-astra-low");
+  harness.select("official-astra-low");
+  assert.equal(harness.state().displayed, "official-astra-low");
   unavailable = true;
   await harness.load();
-  assert.deepEqual(harness.state(), { selected: "relay-gpt-6-astra-low", displayed: "relay-gpt-6-astra-low", available: false });
+  assert.deepEqual(harness.state(), { selected: "official-astra-low", displayed: "official-astra-low", available: false });
 });
 
 test("public ruling model selector renders measured latency and explicit fallback states", async () => {
@@ -456,6 +412,30 @@ test("missing answer API fails closed instead of answering from local ruling not
   assert.doesNotMatch(app, /normalizeRulingRecords|scoreNote|findMatches|filterRelevantMatches|confidenceFor/u);
   assert.doesNotMatch(app, /readJson\("data\/rulings\.json"\)|note\.conclusion/u);
   assert.doesNotMatch(app, /status:\s*record\.status\s*\|\|\s*"confirmed"/u);
+});
+
+test("unconfirmed model card names are shown only when they exactly join an unresolved or ambiguous mention", async () => {
+  const app = await readFile(new URL("../public/src/app.js", import.meta.url), "utf8");
+  const source = sourceBetween(app, "function pendingModelCardNames", "function renderCards");
+  const pendingModelCardNames = new Function(`${source}; return pendingModelCardNames;`)();
+  const names = pendingModelCardNames({
+    modelCardNameCandidates: [
+      { name: "未确认卡", originalText: "未确认卡", source: "model_card_name_extractor" },
+      { name: "候选卡", originalText: "候选简称", source: "model_card_name_extractor" },
+      { name: "自己抽一张", originalText: "自己抽一张", source: "model_card_name_extractor" },
+      { name: "重复卡", originalText: "重复卡", source: "model_card_name_extractor" },
+      { name: "重复卡", originalText: "重复卡", source: "model_card_name_extractor" },
+    ],
+    unresolvedMentions: [
+      { input: "未确认卡", source: "model_card_name_extractor" },
+      { input: "自己抽一张", source: "quoted_mention" },
+      { input: "重复卡", source: "model_card_name_extractor" },
+    ],
+    ambiguousMentions: [{ input: "候选简称", candidateCards: [{ name: "候选卡" }] }],
+  });
+  assert.deepEqual(names, ["未确认卡", "候选卡", "重复卡"]);
+  assert.match(app, /待确认卡名：/u);
+  assert.match(app, /请补充完整卡名或卡片原文/u);
 });
 
 test("versioned backend answers require a matching server confirmation", async () => {
@@ -689,7 +669,7 @@ test("backend answers bypass persistent browser cache and bust static assets", a
     readFile(new URL("../config.json", import.meta.url), "utf8"),
   ]);
   const config = JSON.parse(configText.replace(/^\uFEFF/u, ""));
-  assert.match(html, /src\/app\.js\?v=20260908-prepared-finalize-1/u);
+  assert.match(html, /src\/app\.js\?v=20260909-official-astra-low-1/u);
   assert.match(html, /src\/styles\.css\?v=20260908-player-pipeline-3/u);
   assert.equal(config.answerApiUrl, "https://ocg-ruling-assistant.vercel.app/api/answer");
   assert.match(app, /cache: "no-store"/u);
@@ -1902,7 +1882,7 @@ test("renderBackendAnswer formats markdown safely and presents titled source lin
     const debugUiEnabled = false;
     const noop = () => {};
     const completePendingStages = noop, renderAnswerVersion = noop, renderEngineSimulation = noop;
-    const renderCards = noop, renderSubAnswers = noop, renderParserDebug = noop, renderFeedbackPanel = noop;
+    const renderCards = noop, pendingModelCardNames = noop, renderSubAnswers = noop, renderParserDebug = noop, renderFeedbackPanel = noop;
     const updateModelStatus = noop, renderBudgetStatus = noop, loadBudgetStatus = noop;
     const modelProviderLabel = noop, modelStatusFromAnswer = noop, basisFromBackendMode = noop;
     ${source}

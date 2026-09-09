@@ -9,7 +9,7 @@ const client = app.slice(
 );
 
 function createClient(fetchImpl, {
-  selectedProfile = "relay-gpt-6-astra-max",
+  selectedProfile = "official-astra-low",
   requestId = null,
   onPrepared = null,
 } = {}) {
@@ -94,7 +94,7 @@ test("prepare/finalize sends the exact two body shapes in serial order", async (
   assert.deepEqual(requests[0].body, {
     question: "Synthetic question",
     mode: "rag",
-    rulingModelProfile: "relay-gpt-6-astra-max",
+    rulingModelProfile: "official-astra-low",
     rulingVersion: "latest",
     action: "prepare",
   });

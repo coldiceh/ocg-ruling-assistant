@@ -82,6 +82,27 @@ test("cloud core retains all query surfaces, shares cached assets and uses the a
   assert.equal(ranking, 0);
 });
 
+test("starts corpus and vector asset loads together before binding checks", async () => {
+  const corpus = corpusFor(records(1));
+  let active = 0;
+  let maxActive = 0;
+  const delayed = async (value) => {
+    active += 1;
+    maxActive = Math.max(maxActive, active);
+    await new Promise(resolve => setTimeout(resolve, 40));
+    active -= 1;
+    return value;
+  };
+  const provider = createCloudEvidenceProvider({
+    loadCorpus: async () => delayed(corpus),
+    loadVectorIndex: async () => delayed(vectorIndex(corpus)),
+    generatePlan: async () => ({ informationNeeds: [], queryTexts: [] }),
+    embed: async ({ inputs }) => ({ vectors: inputs.map(() => [1, 0]) }),
+  });
+  await provider.retrieve(input({ CLOUD_EVIDENCE_CANDIDATE_LIMIT: "1" }));
+  assert.equal(maxActive, 2);
+});
+
 test("candidate limit is applied before one original-question rerank and there is no dense work when disabled", async () => {
   const corpus = corpusFor(records(7));
   let rerankCalls = 0;
@@ -150,6 +171,25 @@ test("separate request factories share immutable assets and a failed load does n
   assert.ok(Object.isFrozen(corpus.candidates[0].body));
   await createCloudEvidenceProvider(options).retrieve(input({CLOUD_EVIDENCE_ASSET_DIR:"other-synthetic-assets"}));
   assert.equal(corpusLoads, 2, "a different actual asset path has a different cache entry");
+});
+
+test("cross-asset binding failure evicts the vector cache before retry", async () => {
+  const corpus = corpusFor();
+  let vectorLoads = 0;
+  const options = {
+    loadCorpus: async () => corpus,
+    loadVectorIndex: async () => {
+      vectorLoads += 1;
+      const index = vectorIndex(corpus);
+      if (vectorLoads === 1) index.entries.delete(corpus.documents[0].views[0].textSha256);
+      return index;
+    },
+    generatePlan: async () => ({ informationNeeds: [], queryTexts: [] }),
+    embed: async ({ inputs }) => ({ vectors: inputs.map(() => [1, 0]) }),
+  };
+  await assert.rejects(createCloudEvidenceProvider(options).retrieve(input()), /cloud_evidence_vector_missing/u);
+  await createCloudEvidenceProvider(options).retrieve(input());
+  assert.equal(vectorLoads, 2);
 });
 
 test("round robin uses each surface in order and only stable bindings deduplicate", () => {

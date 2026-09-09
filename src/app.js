@@ -5,21 +5,20 @@
 // treating a handful of historical examples as authoritative card knowledge.
 const baseCardIndex = [];
 const PAGE_TITLE = document.title;
-const DEFAULT_RULING_MODEL_PROFILE = "relay-gpt-6-astra-low";
+const DEFAULT_RULING_MODEL_PROFILE = "official-astra-low";
 const PUBLIC_RULING_MODEL_PROFILE_ORDER = Object.freeze([
-  "relay-gpt-6-astra-low",
-  "relay-gpt-6-astra-medium",
-  "relay-gpt-6-astra-high",
-  "relay-gpt-6-astra-xhigh",
-  "relay-gpt-6-astra-max",
-  "relay-gpt-5.6-luna-low",
-  "relay-gpt-5.6-sol-low",
-  "deepseek-v4-flash-standard",
-  "deepseek-v4-flash-low",
-  "deepseek-v4-flash-high",
-  "deepseek-v4-flash-max",
+  "official-astra-low",
 ]);
 const PUBLIC_RULING_MODEL_PROFILES = Object.freeze({
+  "official-astra-low": Object.freeze({
+    id: "official-astra-low",
+    label: "官方 GPT-6 Astra · 思考 low",
+    provider: "openai",
+    model: "gpt-6-astra",
+    reasoningEffort: "low",
+    thirdParty: false,
+    modelIdentityVerified: true,
+  }),
   "relay-gpt-6-astra-low": Object.freeze({
     id: "relay-gpt-6-astra-low",
     label: "GPT-6 Astra · 思考 low",
@@ -446,7 +445,7 @@ function normalizePublicAnswerLatency(value, profileId) {
 
 function normalizeRulingModelProfileId(value) {
   const id = String(value || "").trim().toLowerCase();
-  return Object.hasOwn(PUBLIC_RULING_MODEL_PROFILES, id) ? id : "";
+  return PUBLIC_RULING_MODEL_PROFILE_ORDER.includes(id) ? id : "";
 }
 
 function fallbackRulingModelProfiles() {
@@ -1491,7 +1490,10 @@ function publicSystemFailurePresentation(flags = []) {
 
 function renderRagAnswer(answer) {
   ui.resultGrid.hidden = false;
-  renderCards(answer?.resolvedCards || []);
+  renderCards(
+    answer?.resolvedCards || [],
+    pendingModelCardNames(answer?.debug),
+  );
   renderBudgetStatus(answer.debug?.budgetStatus || null);
   void loadBudgetStatus();
   renderEngineSimulation(answer?.engine || null, answer?.engineSimulation || null);
@@ -1947,20 +1949,58 @@ function renderBackendUnavailable(detectedCards = []) {
   renderSources([]);
 }
 
-function renderCards(cards) {
+function pendingModelCardNames(debug = {}) {
+  const unresolvedModelInputs = new Set(
+    (Array.isArray(debug?.unresolvedMentions) ? debug.unresolvedMentions : [])
+      .filter((mention) => mention?.source === "model_card_name_extractor")
+      .map((mention) => String(mention?.input ?? mention?.originalText ?? ""))
+      .filter(Boolean),
+  );
+  const ambiguousInputs = new Set(
+    (Array.isArray(debug?.ambiguousMentions) ? debug.ambiguousMentions : [])
+      .map((mention) => String(mention?.input ?? mention?.originalText ?? ""))
+      .filter(Boolean),
+  );
+  const names = [];
+  const seen = new Set();
+  for (const candidate of Array.isArray(debug?.modelCardNameCandidates)
+    ? debug.modelCardNameCandidates
+    : []) {
+    if (candidate?.source !== "model_card_name_extractor") continue;
+    const name = String(candidate?.name ?? candidate?.cardName ?? "");
+    const originalText = String(candidate?.originalText ?? candidate?.surface ?? candidate?.mention ?? "");
+    const pending = unresolvedModelInputs.has(originalText)
+      || unresolvedModelInputs.has(name)
+      || ambiguousInputs.has(originalText)
+      || ambiguousInputs.has(name);
+    if (!pending || !name || seen.has(name)) continue;
+    seen.add(name);
+    names.push(name);
+  }
+  return names;
+}
+
+function renderCards(cards, pendingNames = []) {
   visibleCards = normalizeVisibleCards(cards);
+  const pending = [...new Set((Array.isArray(pendingNames) ? pendingNames : [])
+    .map((name) => String(name || "").trim())
+    .filter(Boolean))];
   selectedCardIndex = 0;
   clearElement(ui.cardTabs);
 
   if (!visibleCards.length) {
-    ui.cardPanel.hidden = true;
+    ui.cardPanel.hidden = pending.length === 0;
     ui.cardPreview.hidden = true;
-    ui.cardStatus.textContent = "";
+    ui.cardStatus.textContent = pending.length
+      ? `待确认卡名：${pending.join("、")}，请补充完整卡名或卡片原文。`
+      : "";
     return;
   }
 
   ui.cardPanel.hidden = false;
-  ui.cardStatus.textContent = `${visibleCards.length} 张`;
+  ui.cardStatus.textContent = pending.length
+    ? `${visibleCards.length} 张 · 待确认卡名：${pending.join("、")}，请补充完整卡名或卡片原文。`
+    : `${visibleCards.length} 张`;
 
   visibleCards.forEach((card, index) => {
     const button = document.createElement("button");

@@ -236,17 +236,19 @@ export function createCloudEvidenceProvider({
       const limit = positiveInteger(candidateLimit ?? env.CLOUD_EVIDENCE_CANDIDATE_LIMIT, 128);
       const dense = env.CLOUD_EVIDENCE_DENSE === undefined
         ? typeof embed === "function" : enabled(env.CLOUD_EVIDENCE_DENSE);
-      const corpus = await cached(corpusLoads, key, async () => {
+      const corpusLoad = cached(corpusLoads, key, async () => {
         const loaded = await loadCorpus({ dataDir, dataRevision });
         return loadCorpus === readCorpus ? loaded : validateCorpus(loaded, dataRevision);
       });
-      const index = dense ? await cached(vectorLoads, key, async () => {
+      const indexLoad = dense ? cached(vectorLoads, key, async () => {
         const result = await loadVectorIndex({ dataDir, dataRevision });
-        for (const document of corpus.documents) {
+        const loadedCorpus = await corpusLoad;
+        for (const document of loadedCorpus.documents) {
           for (const view of document.views) check(result.entries.has(view.textSha256), "cloud_evidence_vector_missing");
         }
         return result;
-      }) : null;
+      }) : Promise.resolve(null);
+      const [corpus, index] = await Promise.all([corpusLoad, indexLoad]);
       abort(signal);
       timingsMs.assets = elapsed(started);
       let step = performance.now();

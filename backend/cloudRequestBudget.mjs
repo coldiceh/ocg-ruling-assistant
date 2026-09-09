@@ -105,7 +105,7 @@ export async function getCloudEvidenceBudgetStatus({env, fetchImpl = globalThis.
 export function createCloudRequestBudget({env, fetchImpl = globalThis.fetch, command, now = new Date()} = {}) {
   const {namespace, period, dayKey, key} = cloudBudgetScope(env, now);
   const limits = {
-    actualCny:amount(env.CLOUD_BUDGET_ACTUAL_LIMIT_CNY,'actual_limit'),
+    actualCny:amount(env.CLOUD_BUDGET_ACTUAL_LIMIT_CNY,'actual_limit',true),
     theoreticalUsd:amount(env.CLOUD_BUDGET_THEORETICAL_LIMIT_USD,'theoretical_limit'),
   };
   const initial = {
@@ -114,8 +114,8 @@ export function createCloudRequestBudget({env, fetchImpl = globalThis.fetch, com
   };
   // Reserve against the undiscounted vendor rate; settle against the latest
   // observed token group. The user confirmed one CNY buys one site dollar.
-  const relayMultiplier = amount(env.RELAY_PRICING_MULTIPLIER,'relay_multiplier');
-  const siteDollarCny = amount(env.RELAY_SITE_DOLLAR_CNY,'site_dollar_cny');
+  const relayMultiplierValue = env.RELAY_PRICING_MULTIPLIER;
+  const siteDollarCnyValue = env.RELAY_SITE_DOLLAR_CNY;
   const records=[];
   const redis = command ? null : redisConfig(env);
   const send = command || (async (args) => {
@@ -150,6 +150,8 @@ export function createCloudRequestBudget({env, fetchImpl = globalThis.fetch, com
     Object.assign(ticket,settled);
   }
   async function relay({body,invoke}) {
+    const relayMultiplier = amount(relayMultiplierValue,'relay_multiplier');
+    const siteDollarCny = amount(siteDollarCnyValue,'site_dollar_cny');
     const model=body.model;
     const output=body.max_completion_tokens;
     if(!Number.isSafeInteger(output)||output<=0) throw new Error('cloud_budget_explicit_output_limit_required');
@@ -174,6 +176,37 @@ export function createCloudRequestBudget({env, fetchImpl = globalThis.fetch, com
       return result;
     } catch(error) { ticket.uncertainty='request_or_settlement_failed_reservation_retained'; throw error; }
   }
+  async function openai({body,invoke}) {
+    const model=body.model;
+    const output=body.max_completion_tokens;
+    if(!Number.isSafeInteger(output)||output<=0) throw new Error('cloud_budget_explicit_output_limit_required');
+    const input=Buffer.byteLength(JSON.stringify(body),'utf8');
+    const reserveUsage={input_tokens:input,output_tokens:output};
+    const officialRates=getModelPricingConfig().models[model];
+    if(!officialRates) throw new Error('cloud_budget_model_price_missing');
+    // Reserve the most expensive possible input tier because cache-write usage
+    // is known only after the provider response.
+    const theoreticalUsd=estimateOpenAIModelCost({
+      model,usage:reserveUsage,inputBillingBasis:'all_uncached',
+    }).totalCostUsd + input*Math.max(
+      0,officialRates.cacheWriteUsdPerMillion-officialRates.inputUsdPerMillion,
+    )/1e6;
+    const ticket=await reserve({
+      provider:'openai',model,operation:'chat_completions',actualCny:0,theoreticalUsd,
+    });
+    try {
+      const result=await invoke();
+      if(usagePresent(result.usage)) await settle(ticket,{
+        usage:result.usage,returnedModel:result.model,actualCny:0,actualUpperCny:0,
+        theoreticalUsd:estimateOpenAIModelCost({model,usage:result.usage}).totalCostUsd,
+      });
+      else ticket.uncertainty='provider_usage_missing_reservation_retained';
+      return result;
+    } catch(error) {
+      ticket.uncertainty='request_or_settlement_failed_reservation_retained';
+      throw error;
+    }
+  }
   async function beforeSend({operation,model,count}) {
     const rate=operation==='embeddings'?0.07:operation==='rerank'?0.28:null;
     if(rate===null || !Number.isSafeInteger(count) || count<1) throw new Error('cloud_budget_unsupported_sf_request');
@@ -187,7 +220,10 @@ export function createCloudRequestBudget({env, fetchImpl = globalThis.fetch, com
       actualCny:tokens*(ticket.operation==='embeddings'?0.07:0.28)/1e6,theoreticalUsd:0});
   }
   function snapshot() {
-    return {runId:namespace,period,dayKey,limits,actualCostBasis:'provider_usage_and_observed_relay_group',relayMultiplier,siteDollarCny,
+    const hasRelay=records.some(record=>record.provider==='relay');
+    const relayMultiplier=hasRelay?amount(relayMultiplierValue,'relay_multiplier'):null;
+    const siteDollarCny=hasRelay?amount(siteDollarCnyValue,'site_dollar_cny'):null;
+    return {runId:namespace,period,dayKey,limits,actualCostBasis:'provider_usage',relayMultiplier,siteDollarCny,
       actualCny:records.filter(r=>r.status==='usage_settled').reduce((n,r)=>n+r.estimatedActualCny,0),
       accountedActualUpperCny:records.filter(r=>r.status==='usage_settled').reduce((n,r)=>n+r.actualNano/UNIT,0),
       theoreticalUsd:records.filter(r=>r.status==='usage_settled').reduce((n,r)=>n+r.theoreticalNano/UNIT,0),
@@ -195,11 +231,13 @@ export function createCloudRequestBudget({env, fetchImpl = globalThis.fetch, com
       reservedTheoreticalUsd:records.filter(r=>r.status==='reserved').reduce((n,r)=>n+r.theoreticalNano/UNIT,0),
       calls:records.map(({started,...r})=>({...r,actualCny:r.estimatedActualCny??null,accountedActualUpperCny:r.actualNano/UNIT,theoreticalUsd:r.theoreticalNano/UNIT}))};
   }
-  return {relay,beforeSend,onResponse,snapshot};
+  return {relay,openai,beforeSend,onResponse,snapshot};
 }
 
 export async function runCloudBudgetedQuestion({env,fetchImpl,budget},invoke) {
-  if(env.RAG_MODEL_PROVIDER && env.RAG_MODEL_PROVIDER!=='relay') throw new Error('cloud_budget_provider_not_supported');
+  if(env.RAG_MODEL_PROVIDER && !['relay','openai'].includes(env.RAG_MODEL_PROVIDER)) {
+    throw new Error('cloud_budget_provider_not_supported');
+  }
   const controller=budget||createCloudRequestBudget({env,fetchImpl});
   return scope.run(controller,async()=>{
     try {
@@ -212,6 +250,18 @@ export async function runCloudBudgetedQuestion({env,fetchImpl,budget},invoke) {
 export function runCloudRelayRequest({body,invoke}) {
   const controller=scope.getStore();
   return controller?controller.relay({body,invoke}):invoke();
+}
+export function runOfficialOpenAIRequest({env,body,invoke,fetchImpl=globalThis.fetch,now=new Date()}) {
+  const officialEnv={
+    ...env,
+    CLOUD_BUDGET_RUN_ID:String(env.PUBLIC_OPENAI_BUDGET_RUN_ID||''),
+    CLOUD_BUDGET_PERIOD:'run',
+    CLOUD_BUDGET_ACTUAL_LIMIT_CNY:'0',
+    CLOUD_BUDGET_THEORETICAL_LIMIT_USD:String(env.PUBLIC_OPENAI_BUDGET_LIMIT_USD||''),
+    CLOUD_BUDGET_INITIAL_ACTUAL_CNY:'0',
+    CLOUD_BUDGET_INITIAL_THEORETICAL_USD:String(env.PUBLIC_OPENAI_BUDGET_INITIAL_USD??''),
+  };
+  return createCloudRequestBudget({env:officialEnv,fetchImpl,now}).openai({body,invoke});
 }
 export function cloudSiliconFlowCallbacks() {
   const controller=scope.getStore();

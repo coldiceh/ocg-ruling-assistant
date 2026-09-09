@@ -43,8 +43,8 @@ test('planning receives only raw question and confirmed card texts and preserves
 
 test('cloud public auxiliary configuration uses Astra low and 60 seconds without changing other routes',()=>{
   const source={RAG_CARD_MODEL_TIMEOUT_MS:'12000',RAG_CARD_MODEL_MAX_OUTPUT_TOKENS:'800',RAG_MAX_PROMPT_CHARS:'36000'};
-  const baseline=createPublicAnswerModelEnv(source,'relay-gpt-6-astra-low');
-  const cloud=createPublicAnswerModelEnv({...source,RAG_EVIDENCE_PIPELINE:'cloud_evidence_v1'},'relay-gpt-6-astra-low');
+  const baseline=createPublicAnswerModelEnv(source,'official-astra-low');
+  const cloud=createPublicAnswerModelEnv({...source,RAG_EVIDENCE_PIPELINE:'cloud_evidence_v1'},'official-astra-low');
   assert.equal(baseline.RELAY_CARD_MODEL,'gpt-5.6-sol');
   assert.equal(baseline.RAG_CARD_MODEL_TIMEOUT_MS,'12000');
   assert.equal(cloud.RELAY_CARD_MODEL,'gpt-6-astra');
@@ -97,9 +97,21 @@ test(`cloud production path preserves the complete wire prompt and captures it o
       CLOUD_EVIDENCE_DENSE:'false',CLOUD_EVIDENCE_RERANK:'false',RAG_MAX_PROMPT_CHARS:'8000',
       RAG_LIVE_OFFICIAL_QA:'false',RAG_CARD_MODEL_PROVIDER:'relay',RAG_MODEL_PROVIDER:'relay',
       RAG_MODEL:'gpt-6-astra',RELAY_API_KEY:'synthetic-key',RELAY_BASE_URL:'https://relay.example.test/v1',
-      API_CHATGPT_DAILY_BUDGET_USD:'10',API_BUDGET_TIMEZONE:'UTC'},'relay-gpt-6-astra-low'),
+      OCG_FINAL_OPENAI_API_KEY:'synthetic-official-key',
+      PUBLIC_OPENAI_BUDGET_RUN_ID:'integration-official',PUBLIC_OPENAI_BUDGET_LIMIT_USD:'5',
+      PUBLIC_OPENAI_BUDGET_INITIAL_USD:'0.6054225',
+      UPSTASH_BUDGET_KV_REST_API_URL:'https://budget.example.test',
+      UPSTASH_BUDGET_KV_REST_API_TOKEN:'synthetic-budget-token',
+      API_CHATGPT_DAILY_BUDGET_USD:'10',API_BUDGET_TIMEZONE:'UTC'},'official-astra-low'),
     fetchImpl:async(url,options)=>{
-      assert.equal(String(url),'https://relay.example.test/v1/chat/completions');
+      if(String(url)==='https://budget.example.test') {
+        const command=JSON.parse(options.body);
+        return Response.json({result:[command[1]===CLOUD_BUDGET_RESERVE?'reserved':'settled']});
+      }
+      assert.ok([
+        'https://relay.example.test/v1/chat/completions',
+        'https://api.openai.com/v1/chat/completions',
+      ].includes(String(url)));
       const request=JSON.parse(options.body);
       wireConfigs.push({model:request.model,effort:request.reasoning_effort,maxTokens:request.max_completion_tokens});
       const prompt=request.messages.map(message=>message.content).join('\n');
@@ -111,6 +123,7 @@ test(`cloud production path preserves the complete wire prompt and captures it o
         return relayTextResponse(JSON.stringify({informationNeeds:[{need:'整合测试龙的发动处理',query:'統合テストドラゴンの処理'}]}),request.model);
       }
       calls.push('final');finalPrompt=prompt;
+      assert.equal(String(url),'https://api.openai.com/v1/chat/completions');
       assert.equal(request.model,'gpt-6-astra');
       return relayTextResponse('这是模拟远端返回的完整裁定正文。',request.model);
     }});
