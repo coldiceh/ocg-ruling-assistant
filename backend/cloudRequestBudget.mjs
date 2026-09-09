@@ -247,6 +247,9 @@ export async function runCloudBudgetedQuestion({env,fetchImpl,budget},invoke) {
     } catch(error) { error.cloudCosts=controller.snapshot(); throw error; }
   });
 }
+export function cloudRequestBudgetActive() {
+  return Boolean(scope.getStore());
+}
 export function runCloudRelayRequest({body,invoke}) {
   const controller=scope.getStore();
   return controller?controller.relay({body,invoke}):invoke();
