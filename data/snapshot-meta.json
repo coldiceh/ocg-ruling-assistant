@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
   "status": "synced-with-warnings",
-  "generatedAt": "2026-09-08T20:28:01.460Z",
+  "generatedAt": "2026-09-09T12:14:13.894Z",
   "freshnessDays": 7,
   "sourceFreshness": "fresh",
   "previousSourceRevision": "32370",
-  "sourceRevision": "32370",
-  "lastSuccessfulSyncAt": "2026-09-08T20:28:01.460Z",
+  "sourceRevision": "32372",
+  "lastSuccessfulSyncAt": "2026-09-09T12:14:13.894Z",
   "lastFailedSyncAt": null,
   "syncFailureCount": 0,
   "aliasWarnings": [],
@@ -17,8 +17,8 @@
   "parseFailedCount": 0,
   "contentQualityWarningCount": 0,
   "dataQualityWarningCount": 0,
-  "newItems": 403,
-  "changedItems": 0,
+  "newItems": 378,
+  "changedItems": 4,
   "removedItems": 0,
   "qaDetailCursor": 0,
   "qaDiscoveryCardCount": 14295,
@@ -48,5 +48,9 @@
     "Q&A 13922 was removed upstream (404)"
   ],
   "sourceRetirementWarningCount": 2,
-  "changedPaths": []
+  "changedPaths": [
+    "/data/card/21205",
+    "/data/card/23148",
+    "/data/card/23432"
+  ]
 }

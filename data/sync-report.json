@@ -1,10 +1,10 @@
 {
-  "generatedAt": "2026-09-08T20:28:01.460Z",
+  "generatedAt": "2026-09-09T12:14:13.894Z",
   "cardCount": 14379,
   "rulingCount": 31004,
   "cardAliasCount": 35966,
-  "qaIndexCount": 25298,
-  "qaIndexBytes": 47720481,
+  "qaIndexCount": 25676,
+  "qaIndexBytes": 49627619,
   "maxQaIndexBytes": 94371840,
   "syncAllReleasedCards": true,
   "syncOnlyReleasedCards": true,
@@ -36,5 +36,9 @@
     "Q&A 13922 was removed upstream (404)"
   ],
   "dataQualityWarnings": [],
-  "changedPaths": []
+  "changedPaths": [
+    "/data/card/21205",
+    "/data/card/23148",
+    "/data/card/23432"
+  ]
 }
