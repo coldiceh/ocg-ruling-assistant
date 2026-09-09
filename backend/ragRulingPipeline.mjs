@@ -92,6 +92,384 @@ export async function answerRagRulingQuestion(options = {}) {
   return answerRagRulingQuestionWithDiagnostics(options);
 }
 
+/**
+ * Complete a previously prepared public RAG request. The continuation owns
+ * the exact prompt and evidence envelope, so this operation only performs the
+ * final model call and shapes the existing public answer.
+ */
+export async function finalizePreparedRagRulingQuestion(options = {}) {
+  const activeEnv = options.env || globalThis.process?.env || {};
+  const cloudEvidence = activeEnv.RAG_EVIDENCE_PIPELINE === "cloud_evidence_v1";
+  if (cloudEvidence && (options.dryRun === true
+      || /^(1|true|yes|on)$/iu.test(String(activeEnv.RAG_DRY_RUN || "")))) {
+    const error = new Error("cloud_evidence_dry_run_not_supported");
+    error.code = "cloud_evidence_dry_run_not_supported";
+    throw error;
+  }
+  if (cloudEvidence && options.cloudBudgetScopeActive !== true) {
+    return runCloudBudgetedQuestion(
+      { env: activeEnv, fetchImpl: options.fetchImpl, budget: options.cloudBudget },
+      () => finalizePreparedRagRulingQuestion({
+        ...options,
+        cloudBudgetScopeActive: true,
+      }),
+    );
+  }
+
+  let diagnostics = options.privateEvaluationDiagnostics;
+  let ownsDiagnostics = false;
+  if (!diagnostics) {
+    diagnostics = createPrivateEvaluationDiagnostics({
+      env: activeEnv,
+      traceId: options.privateEvaluationTraceId,
+      write: options.privateEvaluationDiagnosticWrite,
+    });
+    ownsDiagnostics = true;
+  }
+  const totalStage = ownsDiagnostics
+    ? beginPrivateEvaluationStage(diagnostics, "total")
+    : null;
+  try {
+    const answer = await finalizePreparedRagRulingQuestionCore({
+      ...options,
+      env: activeEnv,
+      privateEvaluationDiagnostics: diagnostics,
+    });
+    totalStage?.end();
+    return answer;
+  } catch (error) {
+    totalStage?.fail(error);
+    throw error;
+  }
+}
+
+async function finalizePreparedRagRulingQuestionCore({
+  continuation,
+  env = globalThis.process?.env || {},
+  signal,
+  progress,
+  modelInvoker,
+  dryRun,
+  fetchImpl,
+  now,
+  thinkingMode,
+  reasoningEffort,
+  privateEvaluationDiagnostics,
+  pipelineStartedAt,
+  skipProgressTransition = false,
+} = {}) {
+  if (!continuation || typeof continuation !== "object" || Array.isArray(continuation)
+      || continuation.schemaVersion !== 1
+      || !continuation.promptBundle
+      || typeof continuation.promptBundle.prompt !== "string"
+      || !continuation.evidence
+      || !continuation.cardResolution) {
+    throw new Error("prepared_rag_continuation_invalid");
+  }
+  if (!skipProgressTransition) progress?.transition?.("generate_ruling");
+
+  const promptBundle = continuation.promptBundle;
+  const evidence = continuation.evidence;
+  const effectiveCardResolution = continuation.cardResolution;
+  const cardNameModel = continuation.cardNameModel || DISABLED_AUXILIARY_STAGE;
+  const ruleQueryModel = continuation.ruleQueryModel || DISABLED_AUXILIARY_STAGE;
+  const cloudEvidence = continuation.mode === "cloud_evidence_v1";
+  const preparedTimingsMs = continuation.timingsMs && typeof continuation.timingsMs === "object"
+    ? { ...continuation.timingsMs }
+    : {};
+  const timingsMs = { ...preparedTimingsMs };
+
+  const finalModelStartedAt = Date.now();
+  const modelResult = await callRagModel({
+    // This is intentionally the saved string. Do not rebuild the prompt from
+    // evidence on the continuation path.
+    prompt: promptBundle.prompt,
+    recoveryPrompt: "",
+    evidence,
+    cardResolution: effectiveCardResolution,
+    env,
+    modelInvoker,
+    dryRun,
+    fetchImpl,
+    now,
+    thinkingMode,
+    reasoningEffort,
+    outputMode: "plain_text",
+    signal,
+    privateEvaluationDiagnostics,
+  });
+  timingsMs.finalModel = elapsedMs(finalModelStartedAt);
+  timingsMs.total = Number.isFinite(Number(pipelineStartedAt))
+    ? elapsedMs(pipelineStartedAt)
+    : (Number(preparedTimingsMs.total) || 0) + timingsMs.finalModel;
+
+  const publicProviderFailure = sanitizePublicProviderFailure(modelResult.providerFailure);
+  const publicGenerationAttempts = sanitizePublicGenerationAttempts(modelResult.generationAttempts);
+  // The model's complete plain-text ruling is transported in shortAnswer for
+  // the existing web/API response shape. No JSON schema or ruling validator is
+  // applied to the model-authored text.
+  const normalized = modelResult.answer;
+  // This is the evidence envelope actually supplied to the final model. Do
+  // not rebuild display sources from the broader retriever result because it
+  // can contain items the prompt deliberately downgraded or omitted.
+  const displayedEvidence = selectedPromptEvidenceRefs(
+    promptBundle.modelEvidence,
+    promptBundle.allowedEvidenceIds,
+  );
+  const authoritativeOfficialDirectId = String(
+    promptBundle.authoritativeOfficialDirectId || "",
+  ).trim();
+  const authoritativeOfficialDirectCompleted = Boolean(
+    authoritativeOfficialDirectId
+      && normalized.answerLevel === "rule_analysis"
+      && String(normalized.shortAnswer || "").trim()
+      && !publicProviderFailure
+      && !normalized.riskFlags?.includes("model_output_not_displayable")
+      && promptBundle.allowedEvidenceIds?.includes(authoritativeOfficialDirectId)
+      && promptBundle.modelEvidence?.officialQaDirectCandidates?.some((item) => (
+        String(item?.id || "") === authoritativeOfficialDirectId
+          && String(item?.type || "") === "official_qa"
+      ))
+      && displayedEvidence.some((item) => (
+        item.id === authoritativeOfficialDirectId && item.type === "official_qa"
+      )),
+  );
+  const answerLevel = authoritativeOfficialDirectCompleted
+    ? "official_confirmed"
+    : normalized.answerLevel === "official_confirmed"
+      ? "rule_analysis"
+      : normalized.answerLevel;
+  const auxiliaryTokenUsage = sumUsageTelemetry([
+    cardNameModel.tokenUsage,
+    ruleQueryModel.tokenUsage,
+  ]);
+  const auxiliaryEstimatedCostCny =
+    (cardNameModel.estimatedCostCny || 0)
+    + (ruleQueryModel.estimatedCostCny || 0);
+  const auxiliaryEstimatedCostUsd =
+    (cardNameModel.estimatedCostUsd || 0)
+    + (ruleQueryModel.estimatedCostUsd || 0);
+  const displayCards = Array.isArray(continuation.displayCards)
+    ? continuation.displayCards
+    : dedupeCards([
+      ...(effectiveCardResolution.resolvedCards || []),
+      ...userProvidedCards(evidence.userProvidedCardTexts || []),
+    ]);
+  const frozenCardResolutionRejections = Array.isArray(continuation.frozenCardResolutionRejections)
+    ? continuation.frozenCardResolutionRejections
+    : [];
+  const dataRevision = continuation.dataRevision;
+  const evidenceFingerprint = continuation.evidenceFingerprint;
+  const finalPromptSha256 = continuation.finalPromptSha256;
+
+  return {
+    mode: continuation.mode || (cloudEvidence ? "cloud_evidence_v1" : "rag_baseline"),
+    // Authority is server-owned. A model cannot promote ordinary evidence to
+    // an official ruling, while a completed answer from the already-certified
+    // unique direct-Q&A route must not be downgraded by the plain-text adapter.
+    answerLevel,
+    shortAnswer: normalized.shortAnswer,
+    reasoning: normalized.reasoning,
+    usedEvidence: displayedEvidence,
+    resolvedCards: displayCards,
+    missingInfo: normalized.missingInfo,
+    riskFlags: normalized.riskFlags,
+    confidenceSelfEstimate: authoritativeOfficialDirectCompleted
+      ? "high"
+      : normalized.confidenceSelfEstimate,
+    formalQueryResults: [],
+    engine: { ...DISABLED_ENGINE },
+    engineSimulation: null,
+    formalEngine: { ...DISABLED_FORMAL_ENGINE },
+    legacyLua: { ...DISABLED_LEGACY_LUA },
+    debug: {
+      cloudEvidence: evidence.debug?.cloudEvidence || null,
+      ...(cloudEvidence && env.VERCEL_ENV === "preview" ? {
+        cloudEvidenceCapture: {
+          actualPrompt: promptBundle.prompt,
+          informationNeeds: ruleQueryModel.informationNeeds || [],
+          queryTexts: ruleQueryModel.queryTexts || [],
+        },
+      } : {}),
+      mode: "rag_baseline",
+      engineStatus: "disabled",
+      engineTraceSha256: null,
+      retrievalCounts: {
+        cardTexts: evidence.cardTexts?.length || 0,
+        userProvidedCardTexts: evidence.userProvidedCardTexts?.length || 0,
+        officialQaDirectCandidates: evidence.officialQaDirectCandidates?.length || 0,
+        officialQaRelated: evidence.officialQaRelated?.length || 0,
+        provisionalOfficialResponses: evidence.provisionalOfficialResponses?.length || 0,
+        faqRelated: evidence.faqRelated?.length || 0,
+        rawRelatedEvidence: evidence.rawRelatedEvidence?.length || 0,
+        rulebookCandidates: evidence.rulebookCandidates?.length || 0,
+        operationLegalityChecks: 0,
+        unresolvedOperationConstraints: 0,
+        legacyLuaEffectCandidates: 0,
+        legacyLuaUnknownReasons: 0,
+      },
+      unresolvedMentions: effectiveCardResolution.unresolvedMentions,
+      frozenCardResolutionRejections,
+      ambiguousMentions: [
+        ...(effectiveCardResolution.ambiguousMentions || []),
+        ...(evidence.baigeAmbiguousMentions || []),
+      ],
+      modelCardNameCandidates: effectiveCardResolution.modelCardNameCandidates || [],
+      cardNameModelUsed: cardNameModel.modelUsed,
+      cardNameProviderUsed: cardNameModel.providerUsed,
+      cardNameModelDryRun: cardNameModel.dryRun,
+      cardNameModelTokenUsage: cardNameModel.tokenUsage || {},
+      cardNameModelCostCny: cardNameModel.estimatedCostCny || 0,
+      cardNameWarnings: cardNameModel.warnings || [],
+      modelRuleSearchQueries: ruleQueryModel.queries || [],
+      modelRuleCandidateAssessments: ruleQueryModel.candidateAssessments || [],
+      ruleQueryModelUsed: ruleQueryModel.modelUsed,
+      ruleQueryProviderUsed: ruleQueryModel.providerUsed,
+      ruleQueryModelDryRun: ruleQueryModel.dryRun,
+      ruleQueryModelTokenUsage: ruleQueryModel.tokenUsage || {},
+      ruleQueryModelCostCny: ruleQueryModel.estimatedCostCny || 0,
+      ruleQueryWarnings: ruleQueryModel.warnings || [],
+      rulebookGroundingModelUsed: DISABLED_AUXILIARY_STAGE.modelUsed,
+      rulebookGroundingProviderUsed: DISABLED_AUXILIARY_STAGE.providerUsed,
+      rulebookGroundingDryRun: true,
+      rulebookGroundingWarnings: DISABLED_AUXILIARY_STAGE.warnings,
+      rulebookGroundingTokenUsage: {},
+      rulebookGroundingCostCny: 0,
+      officialQaApplicabilityStatus: DISABLED_AUXILIARY_STAGE.status,
+      officialQaApplicabilityModelUsed: DISABLED_AUXILIARY_STAGE.modelUsed,
+      officialQaApplicabilityProviderUsed: DISABLED_AUXILIARY_STAGE.providerUsed,
+      officialQaApplicabilityRequestedModel: null,
+      officialQaApplicabilityReturnedModel: null,
+      officialQaApplicabilityWarnings: DISABLED_AUXILIARY_STAGE.warnings,
+      officialQaApplicabilityTokenUsage: {},
+      officialQaApplicabilityCostCny: 0,
+      officialQaApplicabilityCostUsd: 0,
+      officialQaApplicabilityBudgetStatus: null,
+      officialQaApplicabilityRejectedCount: 0,
+      extractionCacheHits: {
+        cardNameModel: cardNameModel.cacheHit === true,
+        ruleQueryModel: ruleQueryModel.cacheHit === true,
+        rulebookGroundingModel: false,
+        officialQaApplicabilityModel: false,
+      },
+      extractionSingleflightHits: {
+        cardNameModel: cardNameModel.singleflightHit === true,
+        ruleQueryModel: ruleQueryModel.singleflightHit === true,
+        rulebookGroundingModel: false,
+        officialQaApplicabilityModel: false,
+      },
+      auxiliaryCacheHit: cardNameModel.cacheHit === true || ruleQueryModel.cacheHit === true,
+      auxiliaryTokenUsage,
+      auxiliaryEstimatedCostCny,
+      auxiliaryEstimatedCostUsd,
+      retrievalWarnings: [...new Set([
+        ...(evidence.retrievalWarnings || []),
+        ...(promptBundle.warnings || []),
+      ])],
+      baigeSearchCount: evidence.debug?.baigeSearchCount || 0,
+      baigeCacheHitCount: evidence.debug?.baigeCacheHitCount || 0,
+      baigeWarnings: evidence.debug?.baigeWarnings || [],
+      retrievalStageTimingsMs: evidence.debug?.timingsMs || {},
+      providerUsed: modelResult.providerUsed || modelResult.provider,
+      modelUsed: modelResult.modelUsed,
+      modelName: modelResult.modelName,
+      requestedModel: String(
+        modelResult.generationConfig?.requestModel || modelResult.modelName || "",
+      ) || null,
+      returnedModel: firstReturnedModel(publicGenerationAttempts),
+      dryRun: modelResult.dryRun,
+      tokenUsage: modelResult.tokenUsage || {},
+      estimatedCostCny: auxiliaryEstimatedCostCny + (modelResult.estimatedCostCny || 0),
+      estimatedCostUsd: auxiliaryEstimatedCostUsd + (modelResult.estimatedCostUsd || 0),
+      budgetStatus: modelResult.budgetStatus || null,
+      generationConfig: modelResult.generationConfig || null,
+      generationAttempts: publicGenerationAttempts,
+      providerFailure: publicProviderFailure,
+      publicFinalValidation: modelResult.publicFinalValidation || null,
+      promptChars: promptBundle.promptChars,
+      dataRevision,
+      evidenceFingerprint,
+      finalPromptSha256,
+      promptTruncated: promptBundle.promptTruncated,
+      selectedEvidenceDiagnostics: promptBundle.evidenceSelectionDiagnostics || [],
+      ruleQueryPlanDiagnostics: promptBundle.ruleQueryPlanDiagnostics || [],
+      ...(privateEvaluationDiagnostics?.enabled === true
+        && isServerOwnedPrivateEvaluationEnv(env) ? {
+        retrievalCandidateStages: evidence.debug?.candidateStages || {},
+      } : {}),
+      semanticStateTransition: null,
+      semanticStateTransitionDiagnostic: null,
+      deterministicDecision: null,
+      timingsMs,
+    },
+  };
+}
+
+function buildPreparedContinuation({
+  mode,
+  dataRevision,
+  evidenceFingerprint,
+  finalPromptSha256,
+  promptBundle,
+  evidence,
+  cardResolution,
+  displayCards,
+  frozenCardResolutionRejections,
+  cardNameModel,
+  ruleQueryModel,
+  timingsMs,
+  jsonSafe = false,
+} = {}) {
+  const continuation = {
+    schemaVersion: 1,
+    mode,
+    dataRevision,
+    evidenceFingerprint,
+    finalPromptSha256,
+    promptBundle,
+    evidence,
+    cardResolution,
+    displayCards,
+    frozenCardResolutionRejections,
+    cardNameModel: continuationModelTelemetry(cardNameModel),
+    ruleQueryModel: continuationModelTelemetry(ruleQueryModel, [
+      "informationNeeds",
+      "queryTexts",
+      "queries",
+      "candidateAssessments",
+    ]),
+    timingsMs: { ...(timingsMs || {}) },
+  };
+  if (!jsonSafe) return continuation;
+  try {
+    return JSON.parse(JSON.stringify(continuation));
+  } catch (error) {
+    throw Object.assign(new Error("prepared_rag_continuation_not_serializable"), {
+      code: "prepared_rag_continuation_not_serializable",
+      cause: error,
+    });
+  }
+}
+
+function continuationModelTelemetry(value = {}, extraKeys = []) {
+  const keys = [
+    "modelUsed",
+    "providerUsed",
+    "dryRun",
+    "warnings",
+    "tokenUsage",
+    "estimatedCostCny",
+    "estimatedCostUsd",
+    "budgetStatus",
+    "cacheHit",
+    "singleflightHit",
+    ...extraKeys,
+  ];
+  return Object.fromEntries(keys
+    .filter((key) => value && Object.prototype.hasOwnProperty.call(value, key))
+    .map((key) => [key, value[key]]));
+}
+
 async function answerRagRulingQuestionWithDiagnostics(options) {
   const diagnostics = createPrivateEvaluationDiagnostics({
     env: options.env || globalThis.process?.env || {},
@@ -137,6 +515,7 @@ async function answerRagRulingQuestionInternal({
   evidenceSelectionProvider,
   frozenCardResolution,
   captureEvidenceOnly = false,
+  prepareForContinuation = false,
   progress,
 } = {}) {
   const pipelineStartedAt = Date.now();
@@ -349,7 +728,11 @@ async function answerRagRulingQuestionInternal({
       }),
     });
   }
-  progress?.transition?.("generate_ruling");
+  if (prepareForContinuation !== true) {
+    // Preserve the legacy single request and server capture stage sequence;
+    // the continuation request transitions in the finalizer.
+    progress?.transition?.("generate_ruling");
+  }
   const promptStage = beginPrivateEvaluationStage(privateEvaluationDiagnostics, "prompt_build");
   let promptBundle;
   let evidenceFingerprint;
@@ -390,215 +773,46 @@ async function answerRagRulingQuestionInternal({
       debug: { timingsMs },
     };
   }
-
-  const finalModelStartedAt = Date.now();
-  const modelResult = await callRagModel({
-    prompt: promptBundle.prompt,
-    recoveryPrompt: "",
+  if (prepareForContinuation === true) {
+    timingsMs.finalModel = 0;
+    timingsMs.total = elapsedMs(pipelineStartedAt);
+  }
+  const continuation = buildPreparedContinuation({
+    mode: cloudEvidence ? "cloud_evidence_v1" : "rag_baseline",
+    dataRevision,
+    evidenceFingerprint,
+    finalPromptSha256,
+    promptBundle,
     evidence,
     cardResolution: effectiveCardResolution,
+    displayCards,
+    frozenCardResolutionRejections,
+    cardNameModel,
+    ruleQueryModel,
+    timingsMs,
+    jsonSafe: prepareForContinuation === true,
+  });
+  if (prepareForContinuation === true) {
+    // Keep the progress stream in retrieve_rulings. The caller's second
+    // request invokes the finalizer, which owns generate_ruling.
+    return { status: "evidence_prepared", continuation };
+  }
+  return finalizePreparedRagRulingQuestion({
+    continuation,
     env,
+    signal,
+    progress,
     modelInvoker,
     dryRun,
     fetchImpl,
     now,
     thinkingMode,
     reasoningEffort,
-    outputMode: "plain_text",
-    signal,
     privateEvaluationDiagnostics,
+    cloudBudgetScopeActive: true,
+    pipelineStartedAt,
+    skipProgressTransition: true,
   });
-  timingsMs.finalModel = elapsedMs(finalModelStartedAt);
-  timingsMs.total = elapsedMs(pipelineStartedAt);
-
-  const publicProviderFailure = sanitizePublicProviderFailure(modelResult.providerFailure);
-  const publicGenerationAttempts = sanitizePublicGenerationAttempts(modelResult.generationAttempts);
-  // The model's complete plain-text ruling is transported in shortAnswer for
-  // the existing web/API response shape. No JSON schema or ruling validator is
-  // applied to the model-authored text.
-  const normalized = modelResult.answer;
-  // This is the evidence envelope actually supplied to the final model. Do
-  // not rebuild display sources from the broader retriever result because it
-  // can contain items the prompt deliberately downgraded or omitted.
-  const displayedEvidence = selectedPromptEvidenceRefs(
-    promptBundle.modelEvidence,
-    promptBundle.allowedEvidenceIds,
-  );
-  const authoritativeOfficialDirectId = String(
-    promptBundle.authoritativeOfficialDirectId || "",
-  ).trim();
-  const authoritativeOfficialDirectCompleted = Boolean(
-    authoritativeOfficialDirectId
-      && normalized.answerLevel === "rule_analysis"
-      && String(normalized.shortAnswer || "").trim()
-      && !publicProviderFailure
-      && !normalized.riskFlags?.includes("model_output_not_displayable")
-      && promptBundle.allowedEvidenceIds?.includes(authoritativeOfficialDirectId)
-      && promptBundle.modelEvidence?.officialQaDirectCandidates?.some((item) => (
-        String(item?.id || "") === authoritativeOfficialDirectId
-          && String(item?.type || "") === "official_qa"
-      ))
-      && displayedEvidence.some((item) => (
-        item.id === authoritativeOfficialDirectId && item.type === "official_qa"
-      )),
-  );
-  const answerLevel = authoritativeOfficialDirectCompleted
-    ? "official_confirmed"
-    : normalized.answerLevel === "official_confirmed"
-      ? "rule_analysis"
-      : normalized.answerLevel;
-  const auxiliaryTokenUsage = sumUsageTelemetry([
-    cardNameModel.tokenUsage,
-    ruleQueryModel.tokenUsage,
-  ]);
-  const auxiliaryEstimatedCostCny =
-    (cardNameModel.estimatedCostCny || 0)
-    + (ruleQueryModel.estimatedCostCny || 0);
-  const auxiliaryEstimatedCostUsd =
-    (cardNameModel.estimatedCostUsd || 0)
-    + (ruleQueryModel.estimatedCostUsd || 0);
-
-  return {
-    mode: env.RAG_EVIDENCE_PIPELINE === 'cloud_evidence_v1' ? 'cloud_evidence_v1' : 'rag_baseline',
-    // Authority is server-owned. A model cannot promote ordinary evidence to
-    // an official ruling, while a completed answer from the already-certified
-    // unique direct-Q&A route must not be downgraded by the plain-text adapter.
-    answerLevel,
-    shortAnswer: normalized.shortAnswer,
-    reasoning: normalized.reasoning,
-    usedEvidence: displayedEvidence,
-    resolvedCards: displayCards,
-    missingInfo: normalized.missingInfo,
-    riskFlags: normalized.riskFlags,
-    confidenceSelfEstimate: authoritativeOfficialDirectCompleted
-      ? "high"
-      : normalized.confidenceSelfEstimate,
-    formalQueryResults: [],
-    engine: { ...DISABLED_ENGINE },
-    engineSimulation: null,
-    formalEngine: { ...DISABLED_FORMAL_ENGINE },
-    legacyLua: { ...DISABLED_LEGACY_LUA },
-    debug: {
-      cloudEvidence: evidence.debug?.cloudEvidence || null,
-      ...(cloudEvidence && env.VERCEL_ENV === 'preview' ? {
-        cloudEvidenceCapture: {
-          actualPrompt: promptBundle.prompt,
-          informationNeeds: ruleQueryModel.informationNeeds || [],
-          queryTexts: ruleQueryModel.queryTexts || [],
-        },
-      } : {}),
-      mode: "rag_baseline",
-      engineStatus: "disabled",
-      engineTraceSha256: null,
-      retrievalCounts: {
-        cardTexts: evidence.cardTexts?.length || 0,
-        userProvidedCardTexts: evidence.userProvidedCardTexts?.length || 0,
-        officialQaDirectCandidates: evidence.officialQaDirectCandidates?.length || 0,
-        officialQaRelated: evidence.officialQaRelated?.length || 0,
-        provisionalOfficialResponses: evidence.provisionalOfficialResponses?.length || 0,
-        faqRelated: evidence.faqRelated?.length || 0,
-        rawRelatedEvidence: evidence.rawRelatedEvidence?.length || 0,
-        rulebookCandidates: evidence.rulebookCandidates?.length || 0,
-        operationLegalityChecks: 0,
-        unresolvedOperationConstraints: 0,
-        legacyLuaEffectCandidates: 0,
-        legacyLuaUnknownReasons: 0,
-      },
-      unresolvedMentions: effectiveCardResolution.unresolvedMentions,
-      frozenCardResolutionRejections,
-      ambiguousMentions: [
-        ...(effectiveCardResolution.ambiguousMentions || []),
-        ...(evidence.baigeAmbiguousMentions || []),
-      ],
-      modelCardNameCandidates: effectiveCardResolution.modelCardNameCandidates || [],
-      cardNameModelUsed: cardNameModel.modelUsed,
-      cardNameProviderUsed: cardNameModel.providerUsed,
-      cardNameModelDryRun: cardNameModel.dryRun,
-      cardNameModelTokenUsage: cardNameModel.tokenUsage || {},
-      cardNameModelCostCny: cardNameModel.estimatedCostCny || 0,
-      cardNameWarnings: cardNameModel.warnings || [],
-      modelRuleSearchQueries: ruleQueryModel.queries || [],
-      modelRuleCandidateAssessments: ruleQueryModel.candidateAssessments || [],
-      ruleQueryModelUsed: ruleQueryModel.modelUsed,
-      ruleQueryProviderUsed: ruleQueryModel.providerUsed,
-      ruleQueryModelDryRun: ruleQueryModel.dryRun,
-      ruleQueryModelTokenUsage: ruleQueryModel.tokenUsage || {},
-      ruleQueryModelCostCny: ruleQueryModel.estimatedCostCny || 0,
-      ruleQueryWarnings: ruleQueryModel.warnings || [],
-      rulebookGroundingModelUsed: DISABLED_AUXILIARY_STAGE.modelUsed,
-      rulebookGroundingProviderUsed: DISABLED_AUXILIARY_STAGE.providerUsed,
-      rulebookGroundingDryRun: true,
-      rulebookGroundingWarnings: DISABLED_AUXILIARY_STAGE.warnings,
-      rulebookGroundingTokenUsage: {},
-      rulebookGroundingCostCny: 0,
-      officialQaApplicabilityStatus: DISABLED_AUXILIARY_STAGE.status,
-      officialQaApplicabilityModelUsed: DISABLED_AUXILIARY_STAGE.modelUsed,
-      officialQaApplicabilityProviderUsed: DISABLED_AUXILIARY_STAGE.providerUsed,
-      officialQaApplicabilityRequestedModel: null,
-      officialQaApplicabilityReturnedModel: null,
-      officialQaApplicabilityWarnings: DISABLED_AUXILIARY_STAGE.warnings,
-      officialQaApplicabilityTokenUsage: {},
-      officialQaApplicabilityCostCny: 0,
-      officialQaApplicabilityCostUsd: 0,
-      officialQaApplicabilityBudgetStatus: null,
-      officialQaApplicabilityRejectedCount: 0,
-      extractionCacheHits: {
-        cardNameModel: cardNameModel.cacheHit === true,
-        ruleQueryModel: ruleQueryModel.cacheHit === true,
-        rulebookGroundingModel: false,
-        officialQaApplicabilityModel: false,
-      },
-      extractionSingleflightHits: {
-        cardNameModel: cardNameModel.singleflightHit === true,
-        ruleQueryModel: ruleQueryModel.singleflightHit === true,
-        rulebookGroundingModel: false,
-        officialQaApplicabilityModel: false,
-      },
-      auxiliaryCacheHit: cardNameModel.cacheHit === true || ruleQueryModel.cacheHit === true,
-      auxiliaryTokenUsage,
-      auxiliaryEstimatedCostCny,
-      auxiliaryEstimatedCostUsd,
-      retrievalWarnings: [...new Set([
-        ...(evidence.retrievalWarnings || []),
-        ...(promptBundle.warnings || []),
-      ])],
-      baigeSearchCount: evidence.debug?.baigeSearchCount || 0,
-      baigeCacheHitCount: evidence.debug?.baigeCacheHitCount || 0,
-      baigeWarnings: evidence.debug?.baigeWarnings || [],
-      retrievalStageTimingsMs: evidence.debug?.timingsMs || {},
-      providerUsed: modelResult.providerUsed || modelResult.provider,
-      modelUsed: modelResult.modelUsed,
-      modelName: modelResult.modelName,
-      requestedModel: String(
-        modelResult.generationConfig?.requestModel || modelResult.modelName || "",
-      ) || null,
-      returnedModel: firstReturnedModel(publicGenerationAttempts),
-      dryRun: modelResult.dryRun,
-      tokenUsage: modelResult.tokenUsage || {},
-      estimatedCostCny: auxiliaryEstimatedCostCny + (modelResult.estimatedCostCny || 0),
-      estimatedCostUsd: auxiliaryEstimatedCostUsd + (modelResult.estimatedCostUsd || 0),
-      budgetStatus: modelResult.budgetStatus || null,
-      generationConfig: modelResult.generationConfig || null,
-      generationAttempts: publicGenerationAttempts,
-      providerFailure: publicProviderFailure,
-      publicFinalValidation: modelResult.publicFinalValidation || null,
-      promptChars: promptBundle.promptChars,
-      dataRevision,
-      evidenceFingerprint,
-      finalPromptSha256,
-      promptTruncated: promptBundle.promptTruncated,
-      selectedEvidenceDiagnostics: promptBundle.evidenceSelectionDiagnostics || [],
-      ruleQueryPlanDiagnostics: promptBundle.ruleQueryPlanDiagnostics || [],
-      ...(privateEvaluationDiagnostics?.enabled === true
-        && isServerOwnedPrivateEvaluationEnv(env) ? {
-        retrievalCandidateStages: evidence.debug?.candidateStages || {},
-      } : {}),
-      semanticStateTransition: null,
-      semanticStateTransitionDiagnostic: null,
-      deterministicDecision: null,
-      timingsMs,
-    },
-  };
 }
 
 function reconcileCardResolution(cardResolution = {}, evidence = {}) {

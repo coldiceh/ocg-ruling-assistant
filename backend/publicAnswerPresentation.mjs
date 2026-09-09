@@ -15,6 +15,11 @@ const WEB_REQUEST_KEYS = Object.freeze([
 
 export function classifyPublicRequestChannel(rawBody) {
   const body = parseRequestBodyForPresentation(rawBody);
+  if (isPlainObject(body) && body.action === "finalize"
+    && sameStringList(Object.keys(body).sort(), ["action", "preparationId"])
+    && typeof body.preparationId === "string" && /^[0-9a-f]{64}$/u.test(body.preparationId)) {
+    return PUBLIC_REQUEST_CHANNELS.WEB;
+  }
   if (!isPlainObject(body) || !nonEmptyString(body.question)) {
     return PUBLIC_REQUEST_CHANNELS.UNKNOWN;
   }
@@ -24,7 +29,8 @@ export function classifyPublicRequestChannel(rawBody) {
     return PUBLIC_REQUEST_CHANNELS.EXTERNAL_API;
   }
   if (
-    sameStringList(keys, WEB_REQUEST_KEYS)
+    (sameStringList(keys, WEB_REQUEST_KEYS)
+      || (body.action === "prepare" && sameStringList(keys, ["action", ...WEB_REQUEST_KEYS])))
     && body.mode === "rag"
     && nonEmptyString(body.rulingModelProfile)
     && nonEmptyString(body.rulingVersion)

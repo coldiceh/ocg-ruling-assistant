@@ -11,9 +11,12 @@ const STAGE_INDEX = new Map(PUBLIC_ANSWER_PROGRESS_STAGES.map((stage, index) => 
 export function createPublicAnswerProgress({
   emit = () => {},
   now = defaultMonotonicNow,
+  initialProgress = null,
+  initialStageId = PUBLIC_ANSWER_PROGRESS_STAGES[0].id,
 } = {}) {
   const startedAt = now();
-  const stageDurationsMs = {};
+  const offsetMs = Math.max(0, Number(initialProgress?.totalMs) || 0);
+  const stageDurationsMs = { ...initialProgress?.stageDurationsMs };
   let activeStageId = "";
   let activeStageStartedAtMs = 0;
   let lastStageIndex = -1;
@@ -21,7 +24,7 @@ export function createPublicAnswerProgress({
   let started = false;
 
   function elapsedMs() {
-    return Math.max(0, Math.floor(now() - startedAt));
+    return offsetMs + Math.max(0, Math.floor(now() - startedAt));
   }
 
   function safeEmit(type, payload) {
@@ -90,7 +93,7 @@ export function createPublicAnswerProgress({
     start: () => {
       if (started || finished) return false;
       started = true;
-      return transition(PUBLIC_ANSWER_PROGRESS_STAGES[0].id);
+      return transition(initialStageId);
     },
     transition,
     tick,

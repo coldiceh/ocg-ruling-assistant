@@ -20,6 +20,7 @@ import {
   answerRagRulingQuestionForVersion,
   getRulingVersionCapabilities,
 } from "./rulingVersionRegistry.mjs";
+import { isPublicPreparationId } from "./publicAnswerPreparationStore.mjs";
 
 export const PUBLIC_ANSWER_REQUEST_BODY_LIMIT_BYTES = 64 * 1024;
 export const PUBLIC_ANSWER_QUESTION_LIMIT_CHARACTERS = 12_000;
@@ -77,6 +78,17 @@ export function parsePublicAnswerPayload(body, {
       "Request body must be a JSON object",
       "invalid_request_body",
     );
+  }
+
+  if (payload.action === "finalize") {
+    if (!isPublicPreparationId(payload.preparationId)
+      || Object.keys(payload).some((key) => !["action", "preparationId"].includes(key))) {
+      throw publicAnswerRequestError("finalize requires only a valid preparationId", "invalid_preparation_id");
+    }
+    return { action: "finalize", preparationId: payload.preparationId };
+  }
+  if (payload.action !== undefined && payload.action !== "prepare") {
+    throw publicAnswerRequestError("Unsupported answer action", "invalid_answer_action");
   }
 
   if (typeof payload.question !== "string" || !payload.question.trim()) {
@@ -156,6 +168,7 @@ export async function getPublicAnswerModelInfo({ env = process.env } = {}) {
     enabled: rulingModelProfiles.some((profile) => profile.available),
     pipeline: env.RAG_EVIDENCE_PIPELINE === 'cloud_evidence_v1' ? 'cloud_evidence_v1' : 'rag_baseline',
     legacyModes: [],
+    answerExecution: "prepared_v1",
   };
 }
 
@@ -167,10 +180,14 @@ export async function answerPublicRulingQuestion({
   appendAudit = appendQueryAudit,
   answerOfficialExact = answerExactOfficialQaQuestionForVersion,
   answerRuling = answerRagRulingQuestionForVersion,
+  prepareForContinuation = false,
 } = {}) {
   const publicRequestStartedAt = Date.now();
   progress?.start?.();
   const normalizedPayload = parsePublicAnswerPayload(payload);
+  if (normalizedPayload.action === "finalize") {
+    throw publicAnswerRequestError("finalize must use a saved preparation", "invalid_answer_action");
+  }
   const mode = String(normalizedPayload.mode || "rag").toLowerCase();
   if (mode !== "rag") {
     throw publicAnswerRequestError(
@@ -219,6 +236,7 @@ export async function answerPublicRulingQuestion({
       signal,
       officialQaExactAlreadyChecked: true,
       progress,
+      ...(prepareForContinuation === true ? { prepareForContinuation: true } : {}),
     });
     await auditPromise;
     return {
@@ -248,7 +266,7 @@ export async function persistPublicAnswerLatency({ latency, env = process.env } 
 
 export function publicAnswerHttpError(error) {
   const inferredStatus = error?.code === "request_body_too_large" ? 413 : error?.statusCode;
-  const statusCode = [400, 413, 503].includes(inferredStatus) ? inferredStatus : 500;
+  const statusCode = [400, 409, 410, 413, 503].includes(inferredStatus) ? inferredStatus : 500;
   const publicMessage = error?.code === "rag_data_unavailable"
     && error?.expose === true
     && String(error?.publicMessage || "").trim()
