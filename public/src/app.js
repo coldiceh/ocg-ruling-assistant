@@ -5,9 +5,13 @@
 // treating a handful of historical examples as authoritative card knowledge.
 const baseCardIndex = [];
 const PAGE_TITLE = document.title;
-const DEFAULT_RULING_MODEL_PROFILE = "relay-gpt-6-astra-low";
+const DEFAULT_RULING_MODEL_PROFILE = "relay-gpt-6-astra-max";
 const PUBLIC_RULING_MODEL_PROFILE_ORDER = Object.freeze([
   "relay-gpt-6-astra-low",
+  "relay-gpt-6-astra-medium",
+  "relay-gpt-6-astra-high",
+  "relay-gpt-6-astra-xhigh",
+  "relay-gpt-6-astra-max",
   "relay-gpt-5.6-luna-low",
   "relay-gpt-5.6-sol-low",
   "deepseek-v4-flash-standard",
@@ -22,6 +26,42 @@ const PUBLIC_RULING_MODEL_PROFILES = Object.freeze({
     provider: "relay",
     model: "gpt-6-astra",
     reasoningEffort: "low",
+    thirdParty: true,
+    modelIdentityVerified: false,
+  }),
+  "relay-gpt-6-astra-medium": Object.freeze({
+    id: "relay-gpt-6-astra-medium",
+    label: "GPT-6 Astra · 思考 medium",
+    provider: "relay",
+    model: "gpt-6-astra",
+    reasoningEffort: "medium",
+    thirdParty: true,
+    modelIdentityVerified: false,
+  }),
+  "relay-gpt-6-astra-high": Object.freeze({
+    id: "relay-gpt-6-astra-high",
+    label: "GPT-6 Astra · 思考 high",
+    provider: "relay",
+    model: "gpt-6-astra",
+    reasoningEffort: "high",
+    thirdParty: true,
+    modelIdentityVerified: false,
+  }),
+  "relay-gpt-6-astra-xhigh": Object.freeze({
+    id: "relay-gpt-6-astra-xhigh",
+    label: "GPT-6 Astra · 思考 xhigh",
+    provider: "relay",
+    model: "gpt-6-astra",
+    reasoningEffort: "xhigh",
+    thirdParty: true,
+    modelIdentityVerified: false,
+  }),
+  "relay-gpt-6-astra-max": Object.freeze({
+    id: "relay-gpt-6-astra-max",
+    label: "GPT-6 Astra · 思考 max",
+    provider: "relay",
+    model: "gpt-6-astra",
+    reasoningEffort: "max",
     thirdParty: true,
     modelIdentityVerified: false,
   }),
@@ -320,7 +360,7 @@ async function loadAppConfig() {
 
 async function loadBackendModelInfo() {
   if (!appConfig.answerApiUrl) {
-    setRulingModelCapabilitiesUnavailable("未配置模型能力接口；默认 GPT-6 Astra low 尚未确认可用。");
+    setRulingModelCapabilitiesUnavailable("未配置模型能力接口；默认 GPT-6 Astra max 尚未确认可用。");
     return;
   }
   try {
@@ -341,7 +381,7 @@ async function loadBackendModelInfo() {
     appConfig.modelLabel = "后端自动选择";
     appConfig.engineEnabled = false;
     appConfig.rulingVersionIds = ["latest"];
-    setRulingModelCapabilitiesUnavailable("模型能力接口不可用；默认 GPT-6 Astra low 尚未确认可用。");
+    setRulingModelCapabilitiesUnavailable("模型能力接口不可用；默认 GPT-6 Astra max 尚未确认可用。");
     syncRulingVersionButtons();
   }
 }
