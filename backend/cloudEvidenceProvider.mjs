@@ -86,7 +86,7 @@ function validateCorpus(corpus, dataRevision) {
 }
 
 async function readCorpus({ dataDir, dataRevision }) {
-  const [manifestBytes, compressed] = await Promise.all([
+  let [manifestBytes, compressed] = await Promise.all([
     readFile(path.join(dataDir, "corpus-manifest.json")),
     readFile(path.join(dataDir, "corpus.json.gz")),
   ]);
@@ -95,8 +95,17 @@ async function readCorpus({ dataDir, dataRevision }) {
     && compressed.length === manifest.corpusCompressedBytes
     && sha256(compressed) === manifest.corpusCompressedSha256,
   "cloud_evidence_compressed_corpus_binding_invalid");
+  let bytes = await unzip(compressed);
+  check(bytes.length === manifest.corpusBytes && sha256(bytes) === manifest.corpusSha256,
+    "cloud_evidence_corpus_bytes_binding_invalid");
+  const corpus = validateCorpus(JSON.parse(bytes.toString("utf8").replace(/^\uFEFF/u, "")), dataRevision);
+  // Parsing creates independent JS values. Release the input buffers before
+  // allocating the lexical index, then load vectors only after this returns.
+  manifestBytes = null;
+  compressed = null;
+  bytes = null;
   const lexical = manifest.lexicalIndex;
-  const lexicalBytesPromise = lexical ? (async () => {
+  const lexicalBytes = lexical ? await (async () => {
     check(lexical.file === "lexical-index.bin.gz" && lexical.encoding === "gzip", "cloud_evidence_lexical_index_manifest_invalid");
     const compressedIndex = await readFile(path.join(dataDir, lexical.file));
     check(compressedIndex.length === lexical.compressedBytes && sha256(compressedIndex) === lexical.compressedSha256,
@@ -105,19 +114,13 @@ async function readCorpus({ dataDir, dataRevision }) {
     check(indexBytes.length === lexical.bytes && sha256(indexBytes) === lexical.sha256, "cloud_evidence_lexical_index_bytes_binding_invalid");
     return indexBytes;
   })() : null;
-  const [bytes, lexicalBytes] = await Promise.all([unzip(compressed), lexicalBytesPromise]);
-  check(bytes.length === manifest.corpusBytes && sha256(bytes) === manifest.corpusSha256,
-    "cloud_evidence_corpus_bytes_binding_invalid");
-  const corpus = validateCorpus(JSON.parse(bytes.toString("utf8").replace(/^\uFEFF/u, "")), dataRevision);
   if (lexicalBytes) installManualCaptureLexicalIndex({ candidates: corpus.candidates, dataRevision, bytes: lexicalBytes });
   return corpus;
 }
 
 export async function loadCloudEvidenceAssetSnapshot({ dataDir, dataRevision } = {}) {
-  const [corpus, vectorIndex] = await Promise.all([
-    readCorpus({ dataDir, dataRevision }),
-    loadEvidenceVectorIndex({ dataDir, dataRevision }),
-  ]);
+  const corpus = await readCorpus({ dataDir, dataRevision });
+  const vectorIndex = await loadEvidenceVectorIndex({ dataDir, dataRevision });
   const orderedContentHashes = [...new Set(corpus.documents.flatMap((document) => (
     document.views.map((view) => view.textSha256)
   )))];
@@ -236,19 +239,17 @@ export function createCloudEvidenceProvider({
       const limit = positiveInteger(candidateLimit ?? env.CLOUD_EVIDENCE_CANDIDATE_LIMIT, 128);
       const dense = env.CLOUD_EVIDENCE_DENSE === undefined
         ? typeof embed === "function" : enabled(env.CLOUD_EVIDENCE_DENSE);
-      const corpusLoad = cached(corpusLoads, key, async () => {
+      const corpus = await cached(corpusLoads, key, async () => {
         const loaded = await loadCorpus({ dataDir, dataRevision });
         return loadCorpus === readCorpus ? loaded : validateCorpus(loaded, dataRevision);
       });
-      const indexLoad = dense ? cached(vectorLoads, key, async () => {
+      const index = dense ? await cached(vectorLoads, key, async () => {
         const result = await loadVectorIndex({ dataDir, dataRevision });
-        const loadedCorpus = await corpusLoad;
-        for (const document of loadedCorpus.documents) {
+        for (const document of corpus.documents) {
           for (const view of document.views) check(result.entries.has(view.textSha256), "cloud_evidence_vector_missing");
         }
         return result;
-      }) : Promise.resolve(null);
-      const [corpus, index] = await Promise.all([corpusLoad, indexLoad]);
+      }) : null;
       abort(signal);
       timingsMs.assets = elapsed(started);
       let step = performance.now();
