@@ -1248,6 +1248,15 @@ function renderBackendVersionError(error, requestedRulingVersion) {
 }
 
 function publicRequestFailurePresentation(error) {
+  if (error?.code === "ruling_progress_end_missing") {
+    return {
+      title: "回答传输未完成",
+      status: "暂不可用",
+      basis: "回答流未完整结束",
+      message: `${error.status === 200 ? "HTTP 200 只表示连接已建立。" : ""}未收到完整的回答结束标记，后台执行状态尚未确认。`,
+      step: "请先确认请求状态，避免重复提交。",
+    };
+  }
   if (error?.requestFailure !== true) return null;
   if (error.status === 413) {
     return {

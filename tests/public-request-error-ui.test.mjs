@@ -101,3 +101,31 @@ test("network interruption while reading a successful HTTP stream is not a versi
   await assert.rejects(request("Synthetic input only", "latest"), (error) => error.requestFailure === true && error.code === "answer_network_error");
   assert.equal(calls, 1);
 });
+
+test("normal EOF without an SSE end marker displays incomplete delivery and preserves HTTP 200 context", async () => {
+  let calls = 0;
+  const bytes = new TextEncoder().encode('event: tick\ndata: {"stageId":"generate_ruling","serverElapsedMs":299000}\n\n');
+  const request = requestWith(async () => {
+    calls++;
+    let read = false;
+    return { ok: true, status: 200, headers: { get: () => "text/event-stream" }, body: { getReader: () => ({
+      read: async () => {
+        if (read) return { done: true, value: undefined };
+        read = true;
+        return { done: false, value: bytes };
+      },
+      cancel: async () => {}, releaseLock() {},
+    }) } };
+  });
+  let captured;
+  await assert.rejects(request("Synthetic input only", "latest"), (error) => {
+    captured = error;
+    return error.code === "ruling_progress_end_missing" && error.status === 200;
+  });
+  const { ui, render } = renderer(); render(captured, "latest");
+  assert.equal(ui.verdictTitle.textContent, "回答传输未完成");
+  assert.match(ui.verdictBody.textContent, /HTTP 200.*连接已建立/);
+  assert.match(ui.verdictBody.textContent, /后台执行状态尚未确认/);
+  assert.doesNotMatch(JSON.stringify(ui), /版本协议校验失败|无法确认回答版本|未调用|未计费|未开始裁定/);
+  assert.equal(calls, 1);
+});
