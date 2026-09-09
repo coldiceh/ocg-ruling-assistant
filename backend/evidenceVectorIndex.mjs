@@ -79,26 +79,26 @@ export async function loadEvidenceVectorIndex({
   dataDir,
   manifestFile = DEFAULT_MANIFEST,
   dataRevision,
+  readFileImpl = readFile,
 } = {}) {
   check(typeof dataDir === "string" && dataDir.length > 0, "evidence_vector_data_dir_required");
   check(endianness() === "LE", "evidence_vector_runtime_endianness_unsupported");
   check(path.basename(manifestFile) === manifestFile, "evidence_vector_manifest_name_invalid");
+  check(typeof readFileImpl === "function", "evidence_vector_read_file_invalid");
   const manifestPath = path.resolve(dataDir, manifestFile);
   const manifest = validateManifest(
-    JSON.parse(await readFile(manifestPath, "utf8")),
+    JSON.parse(await readFileImpl(manifestPath, "utf8")),
     dataRevision,
   );
   const rowBytes = manifest.dimension * Float32Array.BYTES_PER_ELEMENT;
-  const shards = [];
-  for (let index = 0; index < manifest.shards.length; index += 1) {
-    const descriptor = manifest.shards[index];
+  const shards = await Promise.all(manifest.shards.map(async (descriptor, index) => {
     check(descriptor?.index === index
       && Number.isSafeInteger(descriptor.rowCount) && descriptor.rowCount > 0
       && Number.isSafeInteger(descriptor.byteLength)
       && descriptor.byteLength === descriptor.rowCount * rowBytes
       && HEX_64.test(String(descriptor.sha256 || "")),
     "evidence_vector_shard_descriptor_invalid");
-    const bytes = await readFile(safeShardPath(dataDir, descriptor.file));
+    const bytes = await readFileImpl(safeShardPath(dataDir, descriptor.file));
     check(bytes.byteLength === descriptor.byteLength, "evidence_vector_shard_size_changed");
     check(sha256(bytes) === descriptor.sha256, "evidence_vector_shard_hash_changed");
     // A view shares the existing allocation, so the index keeps one vector copy.
@@ -110,8 +110,8 @@ export async function loadEvidenceVectorIndex({
     for (let component = 0; component < values.length; component += 1) {
       check(Number.isFinite(values[component]), "evidence_document_vector_nonfinite");
     }
-    shards.push(values);
-  }
+    return values;
+  }));
   for (const entry of manifest.entries) {
     const descriptor = manifest.shards[entry.shardIndex];
     check(descriptor && entry.rowIndex < descriptor.rowCount,

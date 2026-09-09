@@ -78,7 +78,7 @@ test("public card-name extraction uses Relay Sol low even when a DeepSeek key re
     ...RELAY_ENV,
     DEEPSEEK_API_KEY: "leftover-deepseek-key",
     DEEPSEEK_BASE_URL: "https://api.deepseek.com",
-  }, "relay-gpt-5.6-sol-low");
+  }, "official-astra-low");
   const calls = [];
   const result = await callCardNameExtractionModel({
     userQuery: "测试龙的效果可以发动吗？",
@@ -114,7 +114,7 @@ test("a DeepSeek key alone cannot dispatch public card-name extraction", async (
   const publicEnv = createPublicAnswerModelEnv({
     DEEPSEEK_API_KEY: "leftover-deepseek-key",
     DEEPSEEK_BASE_URL: "https://api.deepseek.com",
-  }, "relay-gpt-5.6-sol-low");
+  }, "official-astra-low");
   let calls = 0;
   const result = await callCardNameExtractionModel({
     userQuery: "测试龙的效果可以发动吗？",
@@ -218,17 +218,17 @@ test("auto auxiliary provider selection ignores a leftover DeepSeek key", () => 
   assert.equal(resolveRuleQueryExtractionProvider(withRelay).provider, "relay");
 });
 
-test("a DeepSeek final profile retains dedicated Relay credentials for formal drafts", () => {
+test("the official final profile retains dedicated Relay credentials for preparation only", () => {
   const publicEnv = createPublicAnswerModelEnv({
     RELAY_API_KEY: "relay-test-key",
     RELAY_BASE_URL: "https://relay.example.test/v1",
-    DEEPSEEK_API_KEY: "deepseek-final-key",
-  }, "deepseek-v4-flash-low");
+    OCG_FINAL_OPENAI_API_KEY: "official-final-key",
+  }, "official-astra-low");
 
   assert.equal(publicEnv.RELAY_API_KEY, undefined);
-  assert.equal(publicEnv.DEEPSEEK_API_KEY, "deepseek-final-key");
-  assert.equal(publicEnv.RAG_MODEL_PROVIDER, "deepseek");
-  assert.equal(resolveRagProvider(publicEnv).provider, "deepseek");
+  assert.equal(publicEnv.OCG_FINAL_OPENAI_API_KEY, "official-final-key");
+  assert.equal(publicEnv.RAG_MODEL_PROVIDER, "openai");
+  assert.equal(resolveRagProvider(publicEnv).provider, "openai");
   assert.equal(resolveCardExtractionProvider(publicEnv).provider, "relay");
   assert.equal(resolveRuleQueryExtractionProvider(publicEnv).provider, "relay");
   assert.equal(publicEnv.RAG_FORMAL_SCENARIO_DRAFT_RELAY_API_KEY, "relay-test-key");
