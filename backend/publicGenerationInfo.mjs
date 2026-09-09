@@ -24,14 +24,19 @@ export async function withPublicGenerationInfo(answer, profile, env, {fallbackFr
   const model = generated ? (debug.returnedModel || debug.modelUsed || debug.requestedModel || null) : null;
   const status = await readBudget({env}).catch(() => null);
   const pool = status?.buckets?.find(item => item.id === `final_ruling:${provider || profile.provider}`);
+  const sharesCny = pool?.currency === 'CNY' && Number(status?.dailyBudgetCny) > 0;
+  const dailyLimit = sharesCny ? Math.min(pool.dailyBudget > 0 ? pool.dailyBudget : Infinity, status.dailyBudgetCny) : pool?.dailyBudget ?? null;
+  const remaining = sharesCny && status.remainingTodayCny !== null
+    ? (pool.dailyBudget > 0 && pool.remainingToday === null ? null : Math.min(pool.remainingToday ?? Infinity,status.remainingTodayCny))
+    : pool?.remainingToday ?? null;
   return {...answer, generation:{
     generated, provider, model,
     label: generated ? (model && model !== profile.model ? `${profile.label}（返回 ${model}）` : profile.label) : '未生成模型答案',
     reasoningEffort: generated ? (debug.generationConfig?.reasoningEffort ?? null) : null,
     thinkingMode: generated ? (debug.generationConfig?.thinkingMode ?? null) : null,
     budget:{currency:pool?.currency || (profile.provider === 'openai' || profile.provider === 'relay' ? 'USD' : 'CNY'),
-      remainingAmount:pool?.remainingToday ?? null, dailyBudgetAmount:pool?.dailyBudget ?? null,
-      sharedPoolLabel:pool?.label || '本站每日额度',
+      remainingAmount:remaining, dailyBudgetAmount:dailyLimit,
+      sharedPoolLabel:sharesCny ? `${pool.label}（受本站人民币共享总额约束）` : pool?.label || '本站每日额度',
       asOf:new Date().toISOString(), timezone:status?.timezone || env.API_BUDGET_TIMEZONE || 'Asia/Shanghai'},
     ...(fallbackFrom ? {fallbackFrom} : {}),
   }};

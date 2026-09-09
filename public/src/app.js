@@ -1408,9 +1408,6 @@ function renderBackendVersionError(error, requestedRulingVersion) {
     ui.confidenceText.textContent = "暂不可用";
     ui.verdictTitle.textContent = relayPreparationFailure.title;
     ui.rulingBasisText.textContent = "Relay 证据准备未完成";
-    ui.answerVersionText.classList.add("is-error");
-    ui.answerVersionText.hidden = false;
-    ui.answerVersionText.textContent = "本次未生成裁定";
     ui.verdictBody.textContent = relayPreparationFailure.message;
     renderSubAnswers([]);
     ui.stepsTitle.textContent = "处理结果";
@@ -1429,9 +1426,6 @@ function renderBackendVersionError(error, requestedRulingVersion) {
     ui.confidenceText.textContent = requestFailure.status;
     ui.verdictTitle.textContent = requestFailure.title;
     ui.rulingBasisText.textContent = requestFailure.basis;
-    ui.answerVersionText.classList.add("is-error");
-    ui.answerVersionText.hidden = false;
-    ui.answerVersionText.textContent = "本次未取得裁定回答";
     ui.verdictBody.textContent = requestFailure.message;
     renderSubAnswers([]);
     ui.stepsTitle.textContent = "处理结果";
@@ -1450,11 +1444,6 @@ function renderBackendVersionError(error, requestedRulingVersion) {
   ui.verdictTitle.textContent = "无法确认回答版本";
   ui.rulingBasisText.textContent = "版本协议校验失败";
   const effectiveVersion = normalizeRulingVersion(error?.effectiveVersion);
-  ui.answerVersionText.classList.add("is-error");
-  ui.answerVersionText.hidden = false;
-  ui.answerVersionText.textContent = effectiveVersion
-    ? "版本不可用：后端没有返回当前最新版"
-    : "版本未确认 / 不可用";
   ui.verdictBody.textContent = effectiveVersion
     ? "后端返回的实际版本与本次请求不一致，已拒绝展示该回答。"
     : "后端没有确认本次实际使用的回答版本，已拒绝展示回答，也不会降级到本地模板。";

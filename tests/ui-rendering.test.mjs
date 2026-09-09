@@ -710,6 +710,53 @@ test("versioned backend answers require a matching server confirmation", async (
   assert.match(app, /rule_query_model_empty[\s\S]*rule_query_model_timeout[\s\S]*rule_query_model_unavailable/u);
 });
 
+test("backend errors render without the removed answer-version element", async () => {
+  const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+  const source = sourceBetween(
+    app,
+    "function renderBackendVersionError",
+    "function providerFailurePresentation",
+  );
+  assert.doesNotMatch(source, /answerVersionText/u);
+
+  const node = () => ({ textContent: "", hidden: true, className: "" });
+  const ui = {
+    resultGrid: node(),
+    verdictBlock: node(),
+    confidenceText: node(),
+    verdictTitle: node(),
+    rulingBasisText: node(),
+    verdictBody: node(),
+    stepsTitle: node(),
+    stepsList: node(),
+    questionsList: node(),
+  };
+  const noop = () => {};
+  const render = new Function(
+    "ui",
+    "normalizeRulingVersion",
+    "renderList",
+    `
+      const failPendingStages = () => {};
+      const renderCards = () => {}, renderEngineSimulation = () => {}, renderParserDebug = () => {};
+      const renderFeedbackPanel = () => {}, renderGenerationDetails = () => {}, updateModelStatus = () => {};
+      const renderSubAnswers = () => {}, renderSources = () => {};
+      let lastRenderedBackendAnswer = null;
+      ${source}
+      return renderBackendVersionError;
+    `,
+  )(ui, (value) => String(value || "").toLowerCase() === "latest" ? "latest" : "", (target, values) => {
+    target.textContent = values.join("\n");
+  });
+
+  assert.doesNotThrow(() => render({ code: "rule_query_model_timeout", status: 504 }, "latest"));
+  assert.equal(ui.verdictTitle.textContent, "证据准备模型超时");
+  assert.doesNotThrow(() => render({ requestFailure: true, status: 503, publicMessage: "暂时失败" }, "latest"));
+  assert.equal(ui.verdictTitle.textContent, "裁定服务请求失败");
+  assert.doesNotThrow(() => render({ code: "ruling_version_mismatch", effectiveVersion: "latest" }, "latest"));
+  assert.equal(ui.verdictTitle.textContent, "无法确认回答版本");
+});
+
 test("feedback_opens_a_prefilled_github_issue", async () => {
   const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
   assert.match(app, /https:\/\/github\.com\/coldiceh\/ocg-ruling-assistant\/issues\/new/u);
@@ -728,7 +775,7 @@ test("backend answers bypass persistent browser cache and bust static assets", a
     readFile(new URL("../config.json", import.meta.url), "utf8"),
   ]);
   const config = JSON.parse(configText.replace(/^\uFEFF/u, ""));
-  assert.match(html, /src\/app\.js\?v=20260909-retrieval-reliability-2/u);
+  assert.match(html, /src\/app\.js\?v=20260909-public-models-1/u);
   assert.match(html, /src\/styles\.css\?v=20260908-player-models-1/u);
   assert.equal(config.answerApiUrl, "https://ocg-ruling-assistant.vercel.app/api/answer");
   assert.match(app, /cache: "no-store"/u);

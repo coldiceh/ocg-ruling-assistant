@@ -32,6 +32,14 @@ test('prepare exports exactly the saved prompt and does not generate an answer',
   assert.equal(result.answer,undefined);
 });
 
+test('CNY models without an individual cap report the existing shared allowance',async()=>{
+  const answer={debug:{dryRun:false,providerUsed:'glm',returnedModel:'glm-5.3',generationConfig:{reasoningEffort:'low',thinkingMode:'enabled'}}};
+  const result=await withPublicGenerationInfo(answer,{provider:'glm',model:'glm-5.3',label:'GLM'},{},{readBudget:async()=>({dailyBudgetCny:10,remainingTodayCny:9.2,buckets:[{id:'final_ruling:glm',currency:'CNY',dailyBudget:null,remainingToday:null,label:'GLM'}]})});
+  assert.equal(result.generation.budget.dailyBudgetAmount,10);
+  assert.equal(result.generation.budget.remainingAmount,9.2);
+  assert.match(result.generation.budget.sharedPoolLabel,/共享总额/);
+});
+
 test('only a rejected official reservation switches once, reusing the same saved prompt',async()=>{
   const preparation={profileId:'official-astra-low',pipeline:'rag_baseline',continuation:{promptBundle:{prompt:'Frozen input'}},rulingVersion:'latest',startedAt:0};
   const env={DEEPSEEK_API_KEY:'synthetic',OCG_FINAL_OPENAI_API_KEY:'synthetic',PUBLIC_OPENAI_BUDGET_RUN_ID:'test',PUBLIC_OPENAI_BUDGET_LIMIT_USD:'5',PUBLIC_OPENAI_BUDGET_INITIAL_USD:'0',UPSTASH_REDIS_REST_URL:'https://unused.invalid',UPSTASH_REDIS_REST_TOKEN:'synthetic'};
