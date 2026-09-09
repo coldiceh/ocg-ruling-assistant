@@ -14,7 +14,9 @@ concurrency:
 jobs:
   sync:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # Recent CPU syncs use almost 44 minutes; allow the existing checks to run
+    # again after a concurrent main update without repeating synchronization.
+    timeout-minutes: 60
     permissions:
       contents: write
     outputs:
@@ -124,7 +126,7 @@ jobs:
 
       - name: Test updated snapshot
         id: snapshot_tests
-        run: node --test --test-concurrency=1 tests/sync-ygoresources-selection.test.mjs tests/sync-ocg-rule.test.mjs tests/source-freshness.test.mjs tests/rag-data-source-file.test.mjs tests/rag-data-revision-manifest.test.mjs tests/rag-runtime-bundle.test.mjs tests/rag-runtime-deployment-safety.test.mjs tests/cloud-evidence-assets.test.mjs tests/cloud-evidence-incremental-sync.test.mjs tests/evidence-vector-index.test.mjs tests/deployment-workflows.test.mjs
+        run: node --test --test-concurrency=1 tests/sync-ygoresources-selection.test.mjs tests/sync-ocg-rule.test.mjs tests/source-freshness.test.mjs tests/rag-data-source-file.test.mjs tests/rag-data-revision-manifest.test.mjs tests/rag-runtime-bundle.test.mjs tests/rag-runtime-deployment-safety.test.mjs tests/cloud-evidence-assets.test.mjs tests/cloud-evidence-incremental-sync.test.mjs tests/evidence-vector-index.test.mjs tests/deployment-workflows.test.mjs tests/sync-snapshot-publication.test.mjs
 
       - name: Preserve a failed validated snapshot for diagnosis
         if: >-
@@ -151,32 +153,25 @@ jobs:
 
       - name: Commit snapshot changes
         id: commit
+        run: bash scripts/publish-synced-snapshot.sh
+
+      - name: Export an unpublished snapshot after publication failure
+        if: ${{ failure() && steps.commit.outputs.snapshot_commit != '' }}
+        env:
+          SNAPSHOT_COMMIT: ${{ steps.commit.outputs.snapshot_commit }}
         run: |
-          git fetch --no-tags origin refs/heads/main
-          remote_main="$(git rev-parse FETCH_HEAD)"
-          checked_out_main="$(git rev-parse HEAD)"
-          if [ "$checked_out_main" != "$remote_main" ]; then
-            echo "main advanced while synchronization was running; refusing a stale or non-main push" >&2
-            exit 1
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -u -- data
-          git add data/*.json data/*.json.gz data/rag-runtime-v1/** data/cloud-evidence-v1/** public/data/cards-lite.json public/data/snapshot-meta.json
-          if git diff --cached --quiet; then
-            echo "No data changes."
-            echo "data_changed=false" >> "$GITHUB_OUTPUT"
-          else
-            git commit -m "chore(data): sync ruling snapshot"
-            if ! git merge-base --is-ancestor "$remote_main" HEAD; then
-              echo "Generated snapshot escaped the fetched main history" >&2
-              exit 1
-            fi
-            git push origin HEAD:refs/heads/main
-            # Set the output only after the push succeeds. A failed push must not
-            # publish a snapshot that is absent from main.
-            echo "data_changed=true" >> "$GITHUB_OUTPUT"
-          fi
+          git archive --format=tar --output "$RUNNER_TEMP/unpublished-synced-rag-data.tar" \
+            "$SNAPSHOT_COMMIT" -- data public/data/cards-lite.json public/data/snapshot-meta.json
+
+      - name: Preserve the unpublished generated snapshot
+        if: ${{ failure() && steps.commit.outputs.snapshot_commit != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: unpublished-synced-rag-data-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/unpublished-synced-rag-data.tar
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
 
   deploy-pages:
     name: Deploy synchronized snapshot to GitHub Pages

@@ -10,3 +10,4 @@
 /data/rag-data-revision-manifest.json text eol=lf
 /data/rag-runtime-v1/manifest.json text eol=lf
 /.github/private-evaluation-recipient.pem text eol=lf
+/scripts/publish-synced-snapshot.sh text eol=lf

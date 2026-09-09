@@ -4,6 +4,8 @@ import test from "node:test";
 
 const readWorkflow = (name) =>
   readFile(new URL(`../.github/workflows/${name}`, import.meta.url), "utf8");
+const readPublication = () =>
+  readFile(new URL("../scripts/publish-synced-snapshot.sh", import.meta.url), "utf8");
 
 test("pages workflow is reusable and can publish an explicit ref", async () => {
   const workflow = await readWorkflow("deploy-pages.yml");
@@ -18,6 +20,7 @@ test("pages workflow is reusable and can publish an explicit ref", async () => {
 
 test("successful data pushes explicitly call the Pages workflow", async () => {
   const workflow = await readWorkflow("sync-data.yml");
+  const publication = await readPublication();
 
   assert.match(workflow, /^permissions: \{\}\s*$/mu);
   assert.match(workflow, /^      contents: write\s*$/mu);
@@ -26,13 +29,15 @@ test("successful data pushes explicitly call the Pages workflow", async () => {
     /- name: Checkout[\s\S]*?(?=\n\s+- name:)/u,
   )?.[0] || "";
   assert.match(checkoutStep, /ref: refs\/heads\/main/u);
-  assert.match(workflow, /git fetch --no-tags origin refs\/heads\/main/u);
-  assert.match(workflow, /checked_out_main="\$\(git rev-parse HEAD\)"/u);
-  assert.match(workflow, /if \[ "\$checked_out_main" != "\$remote_main" \]; then/u);
-  assert.match(workflow, /git merge-base --is-ancestor "\$remote_main" HEAD/u);
-  assert.match(workflow, /git push origin HEAD:refs\/heads\/main[\s\S]*echo "data_changed=true" >> "\$GITHUB_OUTPUT"/u);
-  assert.doesNotMatch(workflow, /git push origin HEAD:main(?:\s|$)/u);
-  assert.match(workflow, /echo "data_changed=false" >> "\$GITHUB_OUTPUT"/u);
+  assert.match(workflow, /run: bash scripts\/publish-synced-snapshot\.sh/u);
+  assert.match(publication, /git fetch --no-tags origin refs\/heads\/main/u);
+  assert.match(publication, /checked_out_main="\$\(git rev-parse HEAD\)"/u);
+  assert.match(publication, /git merge-base --is-ancestor "\$checked_out_main" "\$remote_main"/u);
+  assert.match(publication, /rebase --onto "\$remote_main" "\$checked_out_main"/u);
+  assert.match(publication, /git merge-base --is-ancestor "\$remote_main" HEAD/u);
+  assert.match(publication, /git push origin HEAD:refs\/heads\/main[\s\S]*echo "data_changed=true" >> "\$GITHUB_OUTPUT"/u);
+  assert.doesNotMatch(publication, /git push[^\n]*(?:--force|\s-f\b)/u);
+  assert.match(publication, /echo "data_changed=false" >> "\$GITHUB_OUTPUT"/u);
   assert.match(workflow, /^    if: needs\.sync\.outputs\.data_changed == 'true'\s*$/mu);
   assert.match(workflow, /^    uses: \.\/\.github\/workflows\/deploy-pages\.yml\s*$/mu);
   assert.match(workflow, /^      checkout_ref: main\s*$/mu);
@@ -42,6 +47,7 @@ test("successful data pushes explicitly call the Pages workflow", async () => {
 
 test("data sync rebuilds and commits the versioned RAG runtime before synchronization checks", async () => {
   const workflow = await readWorkflow("sync-data.yml");
+  const publication = await readPublication();
   const evidence = workflow.indexOf("pnpm build:evidence");
   const revision = workflow.indexOf("pnpm build:rag-revision");
   const runtime = workflow.indexOf("pnpm build:rag-runtime");
@@ -52,8 +58,8 @@ test("data sync rebuilds and commits the versioned RAG runtime before synchroniz
   assert.ok(evidence >= 0 && evidence < revision);
   assert.ok(revision < runtime && runtime < verifyRuntime);
   assert.ok(verifyRuntime < parity && parity < snapshotTests);
-  assert.match(workflow, /git add -u -- data/u);
-  assert.match(workflow, /git add data\/\*\.json data\/\*\.json\.gz data\/rag-runtime-v1\/\*\* data\/cloud-evidence-v1\/\*\*/u);
+  assert.match(publication, /git add -u -- data/u);
+  assert.match(publication, /git add data\/\*\.json data\/\*\.json\.gz data\/rag-runtime-v1\/\*\* data\/cloud-evidence-v1\/\*\*/u);
   assert.match(workflow, /cp data\/cards-lite\.json data\/snapshot-meta\.json public\/data\//u);
   const snapshotDiff = workflow.indexOf("pnpm diff:rulings");
   const publicCopy = workflow.indexOf("cp data/cards-lite.json data/snapshot-meta.json public/data/");
@@ -79,6 +85,7 @@ test("data sync runs the bounded synchronization checks and keeps the complete s
     "tests/cloud-evidence-incremental-sync.test.mjs",
     "tests/evidence-vector-index.test.mjs",
     "tests/deployment-workflows.test.mjs",
+    "tests/sync-snapshot-publication.test.mjs",
   ];
   const targetedCommand = [
     "node --test --test-concurrency=1",
@@ -93,6 +100,27 @@ test("data sync runs the bounded synchronization checks and keeps the complete s
   assert.match(previewWorkflow, /node --test --test-force-exit --test-concurrency=1/u);
   assert.match(previewWorkflow, /--test-isolation=none/u);
   assert.match(previewWorkflow, /--test-reporter=spec/u);
+});
+
+test("concurrent publication rechecks the combined snapshot and retains the original tree on failure", async () => {
+  const workflow = await readWorkflow("sync-data.yml");
+  const publication = await readPublication();
+  const rebase = publication.indexOf('rebase --onto "$remote_main" "$checked_out_main"');
+  const push = publication.indexOf("git push origin HEAD:refs/heads/main");
+  for (const check of [
+    "pnpm install --frozen-lockfile", "pnpm check:data", "pnpm check:freshness", "pnpm check\n",
+    "--check-only", "tests/rag-runtime-parity.test.mjs", "tests/sync-snapshot-publication.test.mjs",
+    "git diff --exit-code", "git diff --cached --exit-code",
+  ]) {
+    const index = publication.indexOf(check);
+    assert.ok(rebase >= 0 && index > rebase && index < push, `${check} must run after rebase and before push`);
+  }
+  assert.match(publication, /echo "snapshot_commit=\$snapshot_commit" >> "\$GITHUB_OUTPUT"/u);
+  assert.ok(publication.indexOf('echo "snapshot_commit=') < publication.indexOf("git fetch"));
+  assert.match(workflow, /failure\(\) && steps\.commit\.outputs\.snapshot_commit != ''/u);
+  assert.match(workflow, /SNAPSHOT_COMMIT: \$\{\{ steps\.commit\.outputs\.snapshot_commit \}\}/u);
+  assert.match(workflow, /git archive[^\n]*unpublished-synced-rag-data\.tar[\s\S]*"\$SNAPSHOT_COMMIT" -- data public\/data\/cards-lite\.json public\/data\/snapshot-meta\.json/u);
+  assert.ok(workflow.indexOf("name: Preserve the unpublished generated snapshot") > workflow.indexOf("id: commit"));
 });
 
 test("a failed but validated synchronized snapshot is retained briefly for diagnosis", async () => {
