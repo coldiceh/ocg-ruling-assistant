@@ -169,7 +169,7 @@ test("ui_has_single_query_button", async () => {
   assert.match(html, /id="pipelineStageList"/u);
   assert.match(html, /id="pipelineElapsedText"/u);
   assert.match(html, /id="rulingModelSelect"[^>]+disabled/u);
-  assert.match(html, /value="relay-gpt-6-astra-low" selected>GPT-6 Astra · 思考 low</u);
+  assert.match(html, /value="relay-gpt-6-astra-max" selected>GPT-6 Astra · 思考 max</u);
   assert.doesNotMatch(html, /第三方中转/u);
   assert.doesNotMatch(html, /value="glm-5\.2-high"/u);
   assert.doesNotMatch(html, /value="kimi-[^"]+"/u);
@@ -237,11 +237,16 @@ test("public ruling model selector uses the allowlisted backend profiles without
   const normalizeCapabilities = new Function(
     `${definitions}\n${functions}\nreturn normalizeRulingModelCapabilities;`,
   )();
-  assert.match(definitions, /const DEFAULT_RULING_MODEL_PROFILE = "relay-gpt-6-astra-low"/u);
+  assert.match(definitions, /const DEFAULT_RULING_MODEL_PROFILE = "relay-gpt-6-astra-max"/u);
   const capabilities = normalizeCapabilities({
-    defaultRulingModelProfile: "relay-gpt-6-astra-low",
+    defaultRulingModelProfile: "relay-gpt-6-astra-max",
     rulingModelProfiles: [
       { id: "relay-gpt-6-astra-low", available: true, label: "OpenAI official" },
+      { id: "relay-gpt-6-astra-medium", available: true },
+      { id: "relay-gpt-6-astra-high", available: true },
+      { id: "relay-gpt-6-astra-xhigh", available: true },
+      { id: "relay-gpt-6-astra-max", available: true },
+      { id: "relay-gpt-6-astra-ultra", available: true },
       { id: "relay-gpt-5.6-luna-low", available: true, label: "OpenAI official" },
       { id: "relay-gpt-5.6-sol-low", available: true, label: "OpenAI official" },
       { id: "deepseek-v4-flash-standard", available: true },
@@ -254,7 +259,7 @@ test("public ruling model selector uses the allowlisted backend profiles without
     ],
   });
 
-  assert.equal(capabilities.defaultProfile, "relay-gpt-6-astra-low");
+  assert.equal(capabilities.defaultProfile, "relay-gpt-6-astra-max");
   assert.deepEqual(capabilities.profiles.map((profile) => ({
     id: profile.id,
     label: profile.label,
@@ -262,6 +267,10 @@ test("public ruling model selector uses the allowlisted backend profiles without
     available: profile.available,
   })), [
     { id: "relay-gpt-6-astra-low", label: "GPT-6 Astra · 思考 low", provider: "relay", available: true },
+    { id: "relay-gpt-6-astra-medium", label: "GPT-6 Astra · 思考 medium", provider: "relay", available: true },
+    { id: "relay-gpt-6-astra-high", label: "GPT-6 Astra · 思考 high", provider: "relay", available: true },
+    { id: "relay-gpt-6-astra-xhigh", label: "GPT-6 Astra · 思考 xhigh", provider: "relay", available: true },
+    { id: "relay-gpt-6-astra-max", label: "GPT-6 Astra · 思考 max", provider: "relay", available: true },
     { id: "relay-gpt-5.6-luna-low", label: "GPT-5.6 Luna · 思考 low", provider: "relay", available: true },
     { id: "relay-gpt-5.6-sol-low", label: "GPT-5.6 Sol · 思考 low", provider: "relay", available: true },
     { id: "deepseek-v4-flash-standard", label: "DeepSeek V4 Flash · standard（实验性）", provider: "deepseek", available: true },
@@ -270,19 +279,20 @@ test("public ruling model selector uses the allowlisted backend profiles without
     { id: "deepseek-v4-flash-max", label: "DeepSeek V4 Flash · 思考 max（实验性）", provider: "deepseek", available: true },
   ]);
   assert.equal(capabilities.profiles[0].benchmarkSummary, undefined);
-  assert.equal(capabilities.profiles[1].benchmarkSummary, "旧匿名 10 题小样本：10/10，平均 34.6 秒；之后出现样本外错误，不再作为推荐依据。");
-  assert.equal(capabilities.profiles[2].benchmarkSummary, undefined);
-  assert.equal(capabilities.profiles[3].benchmarkSummary, "匿名 10 题评测：5/10，另有 4 题部分正确；平均 12.4 秒，仅供实验。");
+  assert.equal(capabilities.profiles[5].benchmarkSummary, "旧匿名 10 题小样本：10/10，平均 34.6 秒；之后出现样本外错误，不再作为推荐依据。");
+  assert.equal(capabilities.profiles[6].benchmarkSummary, undefined);
+  assert.equal(capabilities.profiles[7].benchmarkSummary, "匿名 10 题评测：5/10，另有 4 题部分正确；平均 12.4 秒，仅供实验。");
   for (const profile of capabilities.profiles) {
     assert.equal(profile.answerLatency.profileId, profile.id);
     assert.equal(profile.answerLatency.status, "unavailable");
   }
   const partialAvailability = normalizeCapabilities({
-    defaultRulingModelProfile: "relay-gpt-6-astra-low",
+    defaultRulingModelProfile: "relay-gpt-6-astra-max",
     rulingModelProfiles: [
       { id: "glm-5.2-high", available: false },
       { id: "deepseek-v4-flash-high", available: true },
       { id: "relay-gpt-6-astra-low", available: false },
+      { id: "relay-gpt-6-astra-max", available: false },
       { id: "relay-gpt-5.6-luna-low", available: false },
       { id: "relay-gpt-5.6-sol-low", available: false },
     ],
@@ -291,6 +301,10 @@ test("public ruling model selector uses the allowlisted backend profiles without
     partialAvailability.profiles.map((profile) => [profile.id, profile.available]),
     [
       ["relay-gpt-6-astra-low", false],
+      ["relay-gpt-6-astra-medium", false],
+      ["relay-gpt-6-astra-high", false],
+      ["relay-gpt-6-astra-xhigh", false],
+      ["relay-gpt-6-astra-max", false],
       ["relay-gpt-5.6-luna-low", false],
       ["relay-gpt-5.6-sol-low", false],
       ["deepseek-v4-flash-standard", false],
@@ -308,10 +322,56 @@ test("public ruling model selector uses the allowlisted backend profiles without
   );
   assert.match(app, /setRulingModelCapabilitiesUnavailable\("模型能力接口不可用/u);
   assert.doesNotMatch(app, /默认 GPT-5\.6 Luna low|平均 34\.6 秒；推荐/u);
-  assert.match(app, /默认 GPT-6 Astra low/u);
+  assert.match(app, /默认 GPT-6 Astra max/u);
   assert.match(app, /系统不会自动改用其他模型/u);
   assert.match(app, /selectedRulingModelProfile = DEFAULT_RULING_MODEL_PROFILE/u);
   assert.match(app, /if \(value === "relay"\) return "ChatGPT"/u);
+});
+
+test("astra max default survives startup and unavailable capability recovery while explicit choices remain usable", async () => {
+  const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+  const definitions = sourceBetween(app, "const DEFAULT_RULING_MODEL_PROFILE", "const ui =");
+  const load = sourceBetween(app, "async function loadBackendModelInfo", "function normalizeRulingModelCapabilities");
+  const functions = sourceBetween(app, "function normalizeRulingModelCapabilities", "function normalizeRulingVersionCapabilities");
+  let unavailable = false;
+  const modelIds = ["low", "medium", "high", "xhigh", "max"].map((effort) => `relay-gpt-6-astra-${effort}`);
+  const harness = new Function("fetch", `${definitions}\n${load}\n${functions}\n
+    let selectedRulingModelProfile = DEFAULT_RULING_MODEL_PROFILE;
+    let rulingModelCapabilitiesAvailable = false;
+    let appConfig = { answerApiUrl: "https://example.invalid/api/answer", rulingModelProfiles: fallbackRulingModelProfiles() };
+    const ui = { rulingModelSelect: { value: "relay-gpt-6-astra-low" } };
+    function renderRulingModelOptions() { ui.rulingModelSelect.value = selectedRulingModelProfile; }
+    function updateRulingModelSelectionStatus() {}
+    function syncRulingVersionButtons() {}
+    function setQueryPending() {}
+    function formatModelInfo() { return "test"; }
+    function normalizeRulingVersionCapabilities() { return ["latest"]; }
+    return {
+      load: loadBackendModelInfo,
+      select: selectRulingModelProfile,
+      disable(id) { appConfig.rulingModelProfiles.find((profile) => profile.id === id).available = false; ui.rulingModelSelect.value = id; },
+      state() { return { selected: selectedRulingModelProfile, displayed: ui.rulingModelSelect.value, available: selectedRulingModelIsAvailable() }; }
+    };
+  `)(async () => {
+    if (unavailable) throw new Error("mock unavailable");
+    return { ok: true, json: async () => ({
+      defaultRulingModelProfile: "relay-gpt-6-astra-max",
+      rulingModelProfiles: [...modelIds, "relay-gpt-5.6-luna-low"].map((id) => ({ id, available: true })),
+    }) };
+  });
+  assert.equal(harness.state().selected, "relay-gpt-6-astra-max");
+  await harness.load();
+  assert.deepEqual(harness.state(), { selected: "relay-gpt-6-astra-max", displayed: "relay-gpt-6-astra-max", available: true });
+  for (const id of [...modelIds, "relay-gpt-5.6-luna-low"]) {
+    harness.select(id);
+    assert.deepEqual(harness.state(), { selected: id, displayed: id, available: true });
+  }
+  harness.disable("relay-gpt-6-astra-low");
+  harness.select("relay-gpt-6-astra-low");
+  assert.equal(harness.state().displayed, "relay-gpt-5.6-luna-low");
+  unavailable = true;
+  await harness.load();
+  assert.deepEqual(harness.state(), { selected: "relay-gpt-6-astra-max", displayed: "relay-gpt-6-astra-max", available: false });
 });
 
 test("public ruling model selector renders measured latency and explicit fallback states", async () => {

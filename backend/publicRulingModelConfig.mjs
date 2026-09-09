@@ -1,4 +1,4 @@
-export const DEFAULT_PUBLIC_RULING_MODEL_PROFILE = "relay-gpt-6-astra-low";
+export const DEFAULT_PUBLIC_RULING_MODEL_PROFILE = "relay-gpt-6-astra-max";
 // The third-party relay endpoint is deployment-specific and intentionally has
 // no repository default. Keep the historical export name for internal imports.
 export const DEFAULT_PUBLIC_RELAY_BASE_URL = "";
@@ -12,6 +12,50 @@ export const PUBLIC_RULING_MODEL_PROFILES = Object.freeze({
     model: "gpt-6-astra",
     thinkingMode: "enabled",
     reasoningEffort: "low",
+    transport: "chat_completions_sse",
+    thirdParty: true,
+    modelIdentityVerified: false,
+  }),
+  "relay-gpt-6-astra-medium": Object.freeze({
+    id: "relay-gpt-6-astra-medium",
+    label: "GPT-6 Astra · 思考 medium",
+    provider: "relay",
+    model: "gpt-6-astra",
+    thinkingMode: "enabled",
+    reasoningEffort: "medium",
+    transport: "chat_completions_sse",
+    thirdParty: true,
+    modelIdentityVerified: false,
+  }),
+  "relay-gpt-6-astra-high": Object.freeze({
+    id: "relay-gpt-6-astra-high",
+    label: "GPT-6 Astra · 思考 high",
+    provider: "relay",
+    model: "gpt-6-astra",
+    thinkingMode: "enabled",
+    reasoningEffort: "high",
+    transport: "chat_completions_sse",
+    thirdParty: true,
+    modelIdentityVerified: false,
+  }),
+  "relay-gpt-6-astra-xhigh": Object.freeze({
+    id: "relay-gpt-6-astra-xhigh",
+    label: "GPT-6 Astra · 思考 xhigh",
+    provider: "relay",
+    model: "gpt-6-astra",
+    thinkingMode: "enabled",
+    reasoningEffort: "xhigh",
+    transport: "chat_completions_sse",
+    thirdParty: true,
+    modelIdentityVerified: false,
+  }),
+  "relay-gpt-6-astra-max": Object.freeze({
+    id: "relay-gpt-6-astra-max",
+    label: "GPT-6 Astra · 思考 max",
+    provider: "relay",
+    model: "gpt-6-astra",
+    thinkingMode: "enabled",
+    reasoningEffort: "max",
     transport: "chat_completions_sse",
     thirdParty: true,
     modelIdentityVerified: false,
