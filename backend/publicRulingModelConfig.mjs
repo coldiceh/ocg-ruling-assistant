@@ -1,4 +1,4 @@
-export const DEFAULT_PUBLIC_RULING_MODEL_PROFILE = "relay-gpt-6-astra-max";
+export const DEFAULT_PUBLIC_RULING_MODEL_PROFILE = "relay-gpt-6-astra-low";
 // The third-party relay endpoint is deployment-specific and intentionally has
 // no repository default. Keep the historical export name for internal imports.
 export const DEFAULT_PUBLIC_RELAY_BASE_URL = "";
