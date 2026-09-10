@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-10T11:25:42.208Z",
+  "generatedAt": "2026-09-10T16:28:29.221Z",
   "records": [
     {
       "id": "21385",
@@ -72947,6 +72947,41 @@
       "monsterProperties": [
         "Rock",
         "Effect"
+      ]
+    },
+    {
+      "id": "23432",
+      "name": "Crocodile",
+      "jaName": "Crocodile",
+      "enName": "Crocodile",
+      "aliases": [
+        "Crocodile"
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Reptile",
+      "attribute": "light",
+      "attack": 1300,
+      "defense": 1300,
+      "atk": 1300,
+      "def": 1300,
+      "level": 3,
+      "propertyIds": [
+        "29",
+        "6"
+      ],
+      "properties": [
+        "Reptile",
+        "Normal"
+      ],
+      "monsterPropertyIds": [
+        "29",
+        "6"
+      ],
+      "monsterProperties": [
+        "Reptile",
+        "Normal"
       ]
     },
     {
@@ -437668,40 +437703,6 @@
       "monsterProperties": [
         "Dinosaur",
         "Effect"
-      ]
-    },
-    {
-      "id": "23432",
-      "name": "Crocodile",
-      "jaName": "Crocodile",
-      "aliases": [
-        "Crocodile"
-      ],
-      "released": true,
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Reptile",
-      "attribute": "light",
-      "attack": 1300,
-      "defense": 1300,
-      "atk": 1300,
-      "def": 1300,
-      "level": 3,
-      "propertyIds": [
-        "29",
-        "6"
-      ],
-      "properties": [
-        "Reptile",
-        "Normal"
-      ],
-      "monsterPropertyIds": [
-        "29",
-        "6"
-      ],
-      "monsterProperties": [
-        "Reptile",
-        "Normal"
       ]
     },
     {
