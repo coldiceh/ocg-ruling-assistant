@@ -228,8 +228,8 @@ test("public budget status separates settled b.ai use from the shared allowance"
     const command = JSON.parse(options.body);
     if (command[0] === "HGETALL") {
       return Response.json({ result: [
-        "actualNano", "0",
-        "theoreticalNano", "500000000",
+        "actualNano", "300000000",
+        "theoreticalNano", "700000000",
         "bai-settled", JSON.stringify({
           provider: "bai",
           status: "usage_settled",
@@ -240,16 +240,28 @@ test("public budget status separates settled b.ai use from the shared allowance"
           status: "reserved",
           theoreticalNano: 100000000,
         }),
+        "deepseek-settled", JSON.stringify({
+          provider: "deepseek",
+          status: "usage_settled",
+          actualNano: 300000000,
+        }),
+        "relay-settled", JSON.stringify({
+          provider: "relay",
+          status: "usage_settled",
+          theoreticalNano: 400000000,
+        }),
       ] });
     }
     return Response.json({ result: command[0] === "GET" ? null : "0" });
   };
   const status = await getRagBudgetStatus({ env, fetchImpl });
+  const preparation = status.buckets.find((item) => item.id === "evidence_preparation:deepseek");
   const bai = status.buckets.find((item) => item.id === "final_ruling:bai");
+  assert.equal(preparation.spentTodayCny, 0.3);
   assert.equal(bai.spentTodayUsd, 0.2);
   assert.equal(bai.reservedTodayUsd, 0.1);
-  assert.equal(bai.sharedAccountedUsd, 0.5);
-  assert.equal(bai.remainingTodayUsd, 4.5);
+  assert.equal(bai.sharedAccountedUsd, 0.7);
+  assert.equal(bai.remainingTodayUsd, 4.3);
   assert.equal(bai.costBasis, "official_theoretical");
   assert.equal(bai.sharedPoolLabel, "与既有调用共享理论美元限额");
 });

@@ -1802,8 +1802,9 @@ function renderBudgetBuckets(buckets = []) {
     const row = document.createElement("div");
     row.className = "budget-bucket";
     const label = document.createElement("span");
-    label.textContent = String(bucket?.label || [bucket?.provider, bucket?.stage].filter(Boolean).join(" · ") || "模型用量");
-    if (bucket?.sharedPoolLabel) label.textContent += "（共享额度）";
+    label.textContent = bucket?.provider === "bai" ? "GPT"
+      : String(bucket?.label || [bucket?.provider, bucket?.stage].filter(Boolean).join(" · ") || "模型用量");
+    if (bucket?.sharedPoolLabel && bucket?.provider !== "bai") label.textContent += "（共享额度）";
     const value = document.createElement("strong");
     const currency = bucket?.currency === "USD" ? "USD" : "CNY";
     const rawSpent = currency === "USD"

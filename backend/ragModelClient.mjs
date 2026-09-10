@@ -129,7 +129,7 @@ const PUBLIC_BUDGET_BUCKETS = Object.freeze([
   Object.freeze({ id: "final_ruling:glm", stage: "final_ruling", provider: "glm", label: "GLM 最终裁定", currency: "CNY" }),
   Object.freeze({ id: "final_ruling:deepseek", stage: "final_ruling", provider: "deepseek", label: "DeepSeek 最终裁定", currency: "CNY" }),
   Object.freeze({ id: "final_ruling:relay", stage: "final_ruling", provider: "relay", label: "ChatGPT 最终裁定", currency: "USD" }),
-  Object.freeze({ id: "final_ruling:bai", stage: "final_ruling", provider: "bai", label: "GPT（官方理论消耗）", currency: "USD" }),
+  Object.freeze({ id: "final_ruling:bai", stage: "final_ruling", provider: "bai", label: "GPT", currency: "USD" }),
 ]);
 const memoryBudget = new Map();
 const privateEvaluationBudgetLedger = new Map();
