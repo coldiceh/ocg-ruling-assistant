@@ -29,6 +29,7 @@ import {
 } from "./ragDataRevisionManifest.mjs";
 import { loadRagRuntimeBundle } from "./ragRuntimeBundle.mjs";
 import { readRagDataSourceBytes } from "./ragDataSourceFile.mjs";
+import { isExcludedSourceRole } from "../scripts/lib/ocg-rule-source-policy.mjs";
 import {
   getRegisteredCanonicalNormalizedRagData,
   isCanonicalNormalizedRagArray,
@@ -1549,7 +1550,9 @@ export async function loadRawRagData(dataDir = defaultDataDir) {
     const evidencePayload = evidenceSource.payload;
     const rulebookPayload = rulebookSource.payload;
     const officialResponsesPayload = officialResponsesSource.payload;
-    const bundledRulebookRecords = rulebookPayload.records || [];
+    const bundledRulebookRecords = (rulebookPayload.records || []).filter((record) => (
+      !isExcludedSourceRole(String(record?.sourceRole || "").trim())
+    ));
     const hasBundledRulebook = bundledRulebookRecords.length > 0;
     const evidenceRecords = (evidencePayload.records || []).filter((record) => (
       !hasBundledRulebook
