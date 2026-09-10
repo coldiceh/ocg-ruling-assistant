@@ -6,6 +6,7 @@ import {
   buildUserFacingSubAnswerSummary,
   statusLabelForSubAnswer,
 } from "../src/uiPresentation.mjs";
+import { buildPublicOfftopicRiskControlAnswer } from "../backend/publicOfftopicRiskControl.mjs";
 
 test("confirmed answer displays 官方直接裁定", () => {
   const summary = buildUserFacingSubAnswerSummary({
@@ -796,8 +797,8 @@ test("backend answers bypass persistent browser cache and bust static assets", a
     readFile(new URL("../config.json", import.meta.url), "utf8"),
   ]);
   const config = JSON.parse(configText.replace(/^\uFEFF/u, ""));
-  assert.match(html, /src\/app\.js\?v=20260910-bai-deepseek-risk-1/u);
-  assert.match(html, /src\/styles\.css\?v=20260910-bai-deepseek-risk-1/u);
+  assert.match(html, /src\/app\.js\?v=20260910-bai-deepseek-risk-2/u);
+  assert.match(html, /src\/styles\.css\?v=20260910-bai-deepseek-risk-2/u);
   assert.equal(config.answerApiUrl, "https://ocg-ruling-assistant.vercel.app/api/answer");
   assert.match(app, /cache: "no-store"/u);
   assert.doesNotMatch(app, /backendAnswerCacheTtlMs|buildBackendCacheKey|readCachedBackendAnswer|writeCachedBackendAnswer|ocg-ruling-answer:v/u);
@@ -2045,7 +2046,8 @@ test("renderBackendAnswer formats markdown safely and presents titled source lin
     const noop = () => {};
     const completePendingStages = noop, renderAnswerVersion = noop, renderEngineSimulation = noop;
     const renderCards = noop, pendingModelCardNames = noop, renderSubAnswers = noop, renderParserDebug = noop, renderFeedbackPanel = noop;
-    const updateModelStatus = noop, renderBudgetStatus = noop, loadBudgetStatus = noop, renderGenerationDetails = noop;
+    const updateModelStatus = noop, renderBudgetStatus = noop, loadBudgetStatus = noop;
+    const renderGenerationDetails = (answer) => { renderBackendAnswer.lastGenerationAnswer = answer; };
     const modelProviderLabel = noop, modelStatusFromAnswer = noop, basisFromBackendMode = noop;
     ${source}
     return renderBackendAnswer;
@@ -2088,6 +2090,23 @@ test("renderBackendAnswer formats markdown safely and presents titled source lin
     assert.equal(renderedLongText.split(paragraph).length - 1, 300);
     assert.ok(renderedLongText.endsWith("最后部分：完整结论。"));
   }
+
+  const riskAnswer = buildPublicOfftopicRiskControlAnswer({
+    status: { active: true, remainingMinutes: 31 },
+  });
+  assert.equal(Object.hasOwn(riskAnswer, "mode"), false);
+  render(riskAnswer);
+  assert.equal(ui.verdictTitle.textContent, "公开问答暂时受限");
+  assert.equal(ui.confidenceText.textContent, "风控提醒");
+  assert.match(testNodeText(ui.verdictBody), /预计还需 31 分钟/u);
+  assert.equal(render.lastGenerationAnswer?.generation, null);
+});
+
+test("model provider label presents bai as b.ai", async () => {
+  const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+  const source = sourceBetween(app, "function modelProviderLabel", "function basisFromBackendMode");
+  const label = new Function(`${source}; return modelProviderLabel;`)();
+  assert.equal(label("bai"), "b.ai");
 });
 
 test("an empty reason list keeps the timing panel titled as ruling flow", async () => {
