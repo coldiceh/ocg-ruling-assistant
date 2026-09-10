@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { applyManualOcgRuleSourcePolicy } from "./lib/ocg-rule-source-policy.mjs";
 
 const rootDir = join(dirname(fileURLToPath(import.meta.url)), "..");
 const dataDir = join(rootDir, "data");
@@ -95,7 +96,9 @@ async function loadRulePage(doc) {
   try {
     const html = await fetchText(doc.sourceUrl);
     const title = extractTitle(html) || doc.title;
-    const text = cleanText(stripHtml(extractMainHtml(html)));
+    const rawText = cleanText(stripHtml(extractMainHtml(html)));
+    const sourcePolicy = applyManualOcgRuleSourcePolicy({ docname: doc.docname, text: rawText });
+    const text = sourcePolicy.text;
     if (text.length < 120) return { doc, error: "page_text_too_short" };
     return { doc, record: {
       id: `ocg-rule:${doc.docname}`,
@@ -104,6 +107,16 @@ async function loadRulePage(doc) {
       docname: doc.docname,
       sourceName: "OCG Rule",
       sourceUrl: doc.sourceUrl,
+      sourceRole: sourcePolicy.sourceRole,
+      ...(sourcePolicy.sourceEditId ? {
+        sourceEditId: sourcePolicy.sourceEditId,
+        sourceEditBeforeTextSha256: sourcePolicy.sourceEditBeforeTextSha256,
+        sourceEditObservedTextSha256: sourcePolicy.sourceEditObservedTextSha256,
+        sourceEditStatus: sourcePolicy.sourceEditStatus,
+        ...(sourcePolicy.sourceEditNotAppliedReason ? {
+          sourceEditNotAppliedReason: sourcePolicy.sourceEditNotAppliedReason,
+        } : {}),
+      } : {}),
       keywords: extractKeywords(`${doc.docname} ${title} ${text}`),
       text,
       updatedAt: new Date().toISOString(),
@@ -210,6 +223,7 @@ export function hashOcgRuleRecords(records = []) {
     title: String(record.title || ""),
     docname: String(record.docname || ""),
     sourceUrl: String(record.sourceUrl || ""),
+    sourceRole: String(record.sourceRole || "active-rule"),
     keywords: [...(record.keywords || [])].map(String).sort(),
     text: String(record.text || ""),
   })).sort((left, right) => compareCodeUnits(left.id, right.id));

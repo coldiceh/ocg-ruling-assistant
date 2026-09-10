@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { normalizeCardKey } from "../../backend/ragCardExtractor.mjs";
+import { isExcludedSourceRole } from "./ocg-rule-source-policy.mjs";
 
 const DEFAULT_MAX_RANKED_CANDIDATES = 256;
 const MAX_ALLOWED_RANKED_CANDIDATES = 512;
@@ -803,6 +804,7 @@ export function buildManualCaptureReferenceParagraphRecords(
   const result = [];
   for (const record of records) {
     if (String(record?.recordType || "").trim() !== "rule-doc") continue;
+    if (isExcludedSourceRole(String(record?.sourceRole || "").trim())) continue;
     const sourceRecordId = itemId(record);
     if (!sourceRecordId || typeof record?.text !== "string") {
       throw new Error("manual_capture_reference_paragraph_record_invalid");
