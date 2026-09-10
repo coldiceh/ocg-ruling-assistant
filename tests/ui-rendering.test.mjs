@@ -797,7 +797,7 @@ test("backend answers bypass persistent browser cache and bust static assets", a
     readFile(new URL("../config.json", import.meta.url), "utf8"),
   ]);
   const config = JSON.parse(configText.replace(/^\uFEFF/u, ""));
-  assert.match(html, /src\/app\.js\?v=20260910-scope-deepseek-ui-1/u);
+  assert.match(html, /src\/app\.js\?v=20260910-gpt-final-budget-1/u);
   assert.match(html, /src\/styles\.css\?v=20260910-scope-deepseek-ui-1/u);
   assert.equal(config.answerApiUrl, "https://ocg-ruling-assistant.vercel.app/api/answer");
   assert.match(app, /cache: "no-store"/u);
