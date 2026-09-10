@@ -52,6 +52,15 @@ export function presentPublicAnswer(answer, {
   if (!notice || !shortAnswer.trim() || shortAnswer.includes(notice)) {
     return { ...answer };
   }
+  const answerTextFooter = answer.generation?.embeddedInAnswerText === true
+    ? String(answer.generation.answerTextFooter || "")
+    : "";
+  if (answerTextFooter && shortAnswer.endsWith(answerTextFooter)) {
+    return {
+      ...answer,
+      shortAnswer: `${shortAnswer.slice(0, -answerTextFooter.length)}\n\n${notice}${answerTextFooter}`,
+    };
+  }
   return {
     ...answer,
     shortAnswer: `${shortAnswer}\n\n${notice}`,

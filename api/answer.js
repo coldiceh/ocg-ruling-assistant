@@ -6,6 +6,7 @@ import {
   parsePublicAnswerPayload,
   persistPublicAnswerLatency,
   publicAnswerHttpError,
+  shouldApplyPublicOfftopicRiskControl,
 } from "../backend/publicAnswerService.mjs";
 import {
   classifyPublicRequestChannel,
@@ -19,6 +20,11 @@ import {
 } from "../backend/publicAnswerProgress.mjs";
 import { createPublicAnswerPreparationStore } from "../backend/publicAnswerPreparationStore.mjs";
 import { preparePublicAnswer, finalizePublicAnswer, preparedAnswerProgress } from "../backend/publicPreparedAnswerService.mjs";
+import {
+  buildPublicOfftopicRiskControlAnswer,
+  publicOfftopicRiskControlStorageStatus,
+  readPublicOfftopicRiskControl,
+} from "../backend/publicOfftopicRiskControl.mjs";
 
 const allowedOrigin = process.env.ALLOWED_ORIGIN || "*";
 
@@ -27,6 +33,7 @@ export function createPublicAnswerHandler({
   createStore = createPublicAnswerPreparationStore,
   prepare = preparePublicAnswer,
   finalize = finalizePublicAnswer,
+  readRiskControl = readPublicOfftopicRiskControl,
 } = {}) {
 return async function handler(request, response) {
   setCors(response);
@@ -54,7 +61,7 @@ return async function handler(request, response) {
     });
     if (payload.action === "prepare" || payload.action === "finalize") {
       await answerInSeparateRequest({ request, response, requestAbort, requestChannel,
-        payload, env, store: createStore({ env }), prepare, finalize });
+        payload, env, store: createStore({ env }), prepare, finalize, readRiskControl });
       return;
     }
     if (wantsPublicAnswerProgress(request, requestChannel)) {
@@ -95,11 +102,33 @@ return async function handler(request, response) {
 export default createPublicAnswerHandler();
 
 async function answerInSeparateRequest({ request, response, requestAbort, requestChannel,
-  payload, env, store, prepare, finalize }) {
+  payload, env, store, prepare, finalize, readRiskControl }) {
+  const streaming = wantsPublicAnswerProgress(request, requestChannel);
+  if (payload.action === "finalize"
+      && shouldApplyPublicOfftopicRiskControl(env)
+      && publicOfftopicRiskControlStorageStatus(env).enabled) {
+    const activeControl = await readRiskControl({ env }).catch(() => null);
+    if (activeControl?.active === true) {
+      const answer = presentPublicAnswer(
+        buildPublicOfftopicRiskControlAnswer({ status: activeControl, env }),
+        { channel: requestChannel, env },
+      );
+      if (streaming) {
+        beginPublicAnswerEventStream(response);
+        const measured = createPublicAnswerProgress().complete();
+        sendPublicAnswerEvent(response, "answer", { answer, progress: measured });
+        sendPublicAnswerEvent(response, "end", measured);
+        response.end();
+      } else {
+        response.status(200).json(answer);
+      }
+      return;
+    }
+  }
+
   // Claim is an atomic one-way state transition before any final generation.
   // Unknown claim outcomes are never retried or treated as authorization.
   const claim = payload.action === "finalize" ? await store.claim(payload.preparationId) : null;
-  const streaming = wantsPublicAnswerProgress(request, requestChannel);
   if (streaming) beginPublicAnswerEventStream(response);
   const progress = createPublicAnswerProgress({
     emit: streaming ? (type, data) => sendPublicAnswerEvent(response, type, data) : () => {},

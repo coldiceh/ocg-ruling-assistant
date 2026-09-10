@@ -7,7 +7,7 @@ import {
   buildRagRulingPromptBundle,
   extractPromptAllowedEvidenceIds,
 } from "../backend/ragRulingPrompt.mjs";
-import { callCardNameExtractionModel, callDeepSeekJsonTask, callOfficialQaApplicabilityModel, callRagModel, callRuleQueryExtractionModel, capPublicChatGptBudget, createPublicAnswerModelEnv, estimateDeepSeekCostCny, estimateGlmCostCny, getRagBudgetStatus, resetRagBudget, resolveRagProvider } from "../backend/ragModelClient.mjs";
+import { callCardNameExtractionModel, callDeepSeekJsonTask, callOfficialQaApplicabilityModel, callRagModel, callRuleQueryExtractionModel, capPublicChatGptBudget, createPublicAnswerModelEnv, estimateDeepSeekCostCny, estimateGlmCostCny, getRagBudgetStatus, parseCardNameExtractionOutput, resetRagBudget, resolveRagProvider } from "../backend/ragModelClient.mjs";
 import {
   answerRagRulingQuestion,
 } from "../backend/ragRulingPipeline.mjs";
@@ -3950,6 +3950,74 @@ test("explicit DeepSeek card extraction is direct while rule extraction redirect
     "https://relay.example.test/v1/chat/completions",
   ]);
   assert.ok(rule.warnings.includes("deepseek_rule_query_model_disabled_redirected_to_relay"));
+});
+
+test("typed card extraction owns the mention set, including a successful empty set", async () => {
+  const typed = parseCardNameExtractionOutput(JSON.stringify({
+    cardNames: [
+      { name: "测试龙", originalText: "测试龙", confidence: "high" },
+      { name: "X", originalText: "X", confidence: "low" },
+    ],
+    groupMentions: ["未收录测试卡"],
+  }));
+  assert.equal(typed.typedMentionSetProvided, true);
+
+  const owned = extractRagCards("「测试龙」、X与「未收录测试卡」如何处理？", {
+    cards: [cards[0], secondCard, { id: "x", name: "X", aliases: ["X"] }],
+    modelCardNameCandidates: typed.candidates,
+    mentionSetSource: "typed_model",
+  });
+  assert.deepEqual(owned.resolvedCards.map((card) => card.id), ["100", "x"]);
+
+  const invalidTyped = parseCardNameExtractionOutput(JSON.stringify({
+    cardNames: [],
+    groupMentions: "not-an-array",
+  }));
+  assert.equal(invalidTyped.typedMentionSetProvided, false);
+
+  const emptyTyped = parseCardNameExtractionOutput(JSON.stringify({
+    cardNames: [],
+    groupMentions: [],
+  }));
+  assert.equal(emptyTyped.typedMentionSetProvided, true);
+  const emptyOwned = extractRagCards("「测试龙」如何处理？", {
+    cards,
+    modelCardNameCandidates: emptyTyped.candidates,
+    mentionSetSource: "typed_model",
+  });
+  assert.deepEqual(emptyOwned.resolvedCards, []);
+
+  const legacy = extractRagCards("「测试龙」如何处理？", { cards });
+  assert.deepEqual(legacy.resolvedCards.map((card) => card.id), ["100"]);
+});
+
+test("typed mention ownership preserves explicit user card text and stable identity deduplication", () => {
+  const resolution = extractRagCards([
+    "「测试龙」与测试龙如何处理？",
+    "未收录测试卡：①：可以发动。进行一项处理。",
+  ].join("\n"), {
+    cards: [cards[0], secondCard],
+    modelCardNameCandidates: [
+      { name: "测试龙", originalText: "「测试龙」", confidence: "high" },
+      { name: "测试龙", originalText: "测试龙", confidence: "medium" },
+    ],
+    mentionSetSource: "typed_model",
+  });
+  assert.deepEqual(resolution.resolvedCards.map((card) => card.id), ["100", "200"]);
+  assert.equal(resolution.resolvedCards.filter((card) => card.id === "100").length, 1);
+  assert.equal(resolution.userProvidedCardTexts[0]?.name, "未收录测试卡");
+});
+
+test("rag pipeline passes successful typed mention ownership even when cardNames is empty", async () => {
+  const answer = await answerRagRulingQuestion({
+    question: "「测试龙」如何处理？",
+    cards,
+    records: [],
+    qaRecords: [],
+    cardModelInvoker: async () => JSON.stringify({ cardNames: [], groupMentions: [] }),
+    modelInvoker: async () => JSON.stringify(modelJson("没有模型声明的单卡提及。")),
+  });
+  assert.deepEqual(answer.resolvedCards, []);
 });
 
 

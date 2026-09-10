@@ -12,7 +12,7 @@ const PUBLIC_ENV = {
   UPSTASH_REDIS_REST_TOKEN: "test-token",
 };
 
-test("an existing off-topic lock is returned before classification or ruling generation", async () => {
+test("an existing off-topic lock returns before exact matching, classification, card work, or ruling generation", async () => {
   const calls = [];
   const result = await answerPublicRulingQuestion({
     payload: { question: "这张卡的效果能发动吗？" },
@@ -24,8 +24,8 @@ test("an existing off-topic lock is returned before classification or ruling gen
       remainingMinutes: 9,
     }),
     classifyScope: async () => assert.fail("an active lock must skip classification"),
-    answerOfficialExact: async () => null,
-    answerRuling: async () => assert.fail("an active lock must skip the ruling model"),
+    answerOfficialExact: async () => assert.fail("an active lock must skip exact matching"),
+    answerRuling: async () => assert.fail("an active lock must skip card extraction, retrieval, and the ruling model"),
   });
 
   assert.deepEqual(calls, [["audit", "这张卡的效果能发动吗？"]]);
@@ -90,27 +90,6 @@ test("uncertain classification and storage failure both fail open to the normal 
     assert.equal(classifications, scenario === "uncertain" ? 1 : 0);
     assert.ok(Number.isFinite(result.latency.durationMs));
   }
-});
-
-test("an exact official Q&A bypasses risk classification and ruling generation", async () => {
-  const exact = {
-    mode: "rag_baseline",
-    answerLevel: "official_confirmed",
-    shortAnswer: "公式回答",
-    debug: { route: "official_qa_exact_direct", providerUsed: "none", modelUsed: "none" },
-  };
-  const result = await answerPublicRulingQuestion({
-    payload: { question: "公式データベースの質問原文" },
-    env: PUBLIC_ENV,
-    appendAudit: async () => null,
-    answerOfficialExact: async () => exact,
-    readRiskControl: async () => assert.fail("exact official Q&A must bypass the risk lock"),
-    classifyScope: async () => assert.fail("exact official Q&A must bypass classification"),
-    answerRuling: async () => assert.fail("exact official Q&A must bypass ruling generation"),
-  });
-
-  assert.equal(result.answer, exact);
-  assert.equal(result.latency, null);
 });
 
 test("dry-run and server-owned private evaluation paths bypass public risk control", () => {

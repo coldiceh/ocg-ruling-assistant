@@ -1,6 +1,8 @@
 import {
   createPublicAnswerModelEnv,
   getRagBudgetStatus,
+  isServerOwnedPrivateEvaluationEnv,
+  modelNameForCardExtractionProvider,
   resolveCardExtractionProvider,
   resolveRagProvider,
 } from "./ragModelClient.mjs";
@@ -22,6 +24,16 @@ import {
 } from "./rulingVersionRegistry.mjs";
 import { isPublicPreparationId } from "./publicAnswerPreparationStore.mjs";
 import { selectAvailablePublicProfile, withPublicGenerationInfo } from './publicGenerationInfo.mjs';
+import {
+  activatePublicOfftopicRiskControl,
+  buildPublicOfftopicRiskControlAnswer,
+  publicOfftopicRiskControlStorageStatus,
+  readPublicOfftopicRiskControl,
+} from "./publicOfftopicRiskControl.mjs";
+import {
+  classifyPublicQueryScope,
+  shouldTriggerPublicQueryRisk,
+} from "./publicQueryScopeClassifier.mjs";
 
 export const PUBLIC_ANSWER_REQUEST_BODY_LIMIT_BYTES = 64 * 1024;
 export const PUBLIC_ANSWER_QUESTION_LIMIT_CHARACTERS = 12_000;
@@ -164,7 +176,7 @@ export async function getPublicAnswerModelInfo({ env = process.env } = {}) {
     requestedProvider: ragProvider.requested,
     models: rulingModelProfiles.map((profile) => profile.model),
     cardNameProvider: cardProvider.provider,
-    cardNameModels: [publicEnv.RELAY_CARD_MODEL || "gpt-5.6-sol"],
+    cardNameModels: [modelNameForCardExtractionProvider(cardProvider.provider, publicEnv)],
     modelTiers: [],
     budget,
     engineEnabled: false,
@@ -181,6 +193,9 @@ export async function answerPublicRulingQuestion({
   signal,
   progress,
   appendAudit = appendQueryAudit,
+  readRiskControl = readPublicOfftopicRiskControl,
+  classifyScope = classifyPublicQueryScope,
+  activateRiskControl = activatePublicOfftopicRiskControl,
   answerOfficialExact = answerExactOfficialQaQuestionForVersion,
   answerRuling = answerRagRulingQuestionForVersion,
   prepareForContinuation = false,
@@ -206,6 +221,46 @@ export async function answerPublicRulingQuestion({
     mode,
     env,
   }).catch(() => null);
+
+  // Risk control runs at the shared public entry before exact matching, model
+  // profile selection, card extraction, retrieval, or final ruling generation.
+  if (shouldApplyPublicOfftopicRiskControl(env)) {
+    const storage = publicOfftopicRiskControlStorageStatus(env);
+    if (storage.enabled) {
+      const activeControl = await readRiskControl({ env }).catch(() => null);
+      if (activeControl?.active === true) {
+        await auditPromise;
+        return {
+          answer: buildPublicOfftopicRiskControlAnswer({ status: activeControl, env }),
+          latency: null,
+        };
+      }
+
+      // Storage and classifier failures retain the old fail-open behavior.
+      // If the current lock cannot be read, skip the classifier and lock write.
+      if (activeControl?.ok === true) {
+        const scopeDecision = await classifyScope({
+          question: normalizedPayload.question,
+          env,
+          signal,
+        }).catch(() => null);
+        if (shouldTriggerPublicQueryRisk(scopeDecision)) {
+          const activated = await activateRiskControl({ env }).catch(() => null);
+          if (activated?.active === true) {
+            await auditPromise;
+            return {
+              answer: buildPublicOfftopicRiskControlAnswer({
+                status: activated,
+                triggered: activated.triggered === true,
+                env,
+              }),
+              latency: null,
+            };
+          }
+        }
+      }
+    }
+  }
 
   // Do not invoke the exact-question route from public requests. The RAG
   // pipeline still searches ordinary official Q&A and FAQ evidence.
@@ -257,6 +312,14 @@ export async function answerPublicRulingQuestion({
     await auditPromise;
     throw error;
   }
+}
+
+export function shouldApplyPublicOfftopicRiskControl(env = process.env) {
+  if (isServerOwnedPrivateEvaluationEnv(env)) return false;
+  if (/^(?:1|true|yes|on)$/iu.test(String(env.RAG_DRY_RUN || "").trim())) return false;
+  return !/^(?:0|false|off|no)$/iu.test(
+    String(env.PUBLIC_OFFTOPIC_RISK_CONTROL_ENABLED || "").trim(),
+  );
 }
 
 export async function persistPublicAnswerLatency({ latency, env = process.env } = {}) {

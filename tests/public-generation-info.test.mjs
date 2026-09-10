@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {selectAvailablePublicProfile, withPublicGenerationInfo} from '../backend/publicGenerationInfo.mjs';
+import {presentPublicAnswer, PUBLIC_REQUEST_CHANNELS} from '../backend/publicAnswerPresentation.mjs';
 import {finalizePublicAnswer, preparePublicAnswer} from '../backend/publicPreparedAnswerService.mjs';
 
 test('known exhausted official allowance chooses DeepSeek; unknown allowance does not', async () => {
@@ -11,17 +12,50 @@ test('known exhausted official allowance chooses DeepSeek; unknown allowance doe
   }
 });
 
-test('answer receipt uses returned identity and actual thinking settings, and preserves raw answer',async()=>{
+test('answer receipt appends returned identity and actual thinking settings to the answer text',async()=>{
   const answer={shortAnswer:'Original answer\nunchanged',debug:{dryRun:false,providerUsed:'relay',returnedModel:'reported-model',generationConfig:{reasoningEffort:'high',thinkingMode:'enabled'}}};
   const result=await withPublicGenerationInfo(answer,{id:'profile',model:'requested',provider:'relay',label:'Selected label'},{},{readBudget:async()=>({buckets:[{id:'final_ruling:relay',currency:'USD',remainingToday:3,dailyBudget:10,label:'Shared relay allowance'}]})});
-  assert.equal(result.shortAnswer,answer.shortAnswer);
+  assert.equal(result.shortAnswer,'Original answer\nunchanged\n\n实际最终模型：reported-model；实际推理强度：high');
   assert.equal(result.generation.model,'reported-model');
   assert.equal(result.generation.reasoningEffort,'high');
+  assert.equal(result.generation.embeddedInAnswerText,true);
   assert.equal(result.generation.budget.remainingAmount,3);
   const failed=await withPublicGenerationInfo({...answer,debug:{...answer.debug,providerFailure:{code:'timeout'}}},{provider:'relay'},{},{readBudget:async()=>null});
+  assert.equal(failed.shortAnswer,answer.shortAnswer);
   assert.equal(failed.generation.generated,false);
   assert.equal(failed.generation.model,null);
+  assert.equal(failed.generation.embeddedInAnswerText,false);
   assert.equal(failed.generation.budget.remainingAmount,null);
+});
+
+test('answer receipt falls back to the profile that actually generated the answer',async()=>{
+  const result=await withPublicGenerationInfo({shortAnswer:'Fallback answer',debug:{dryRun:false,providerUsed:'deepseek'}},
+    {id:'actual-fallback-profile',model:'actual-fallback-model',provider:'deepseek',label:'Actual fallback',reasoningEffort:'none',thinkingMode:'disabled'},
+    {},{readBudget:async()=>null,fallbackFrom:'official-astra-low'});
+  assert.equal(result.generation.model,'actual-fallback-model');
+  assert.equal(result.generation.reasoningEffort,'none');
+  assert.equal(result.generation.fallbackFrom,'official-astra-low');
+  assert.match(result.shortAnswer,/实际最终模型：actual-fallback-model；实际推理强度：none$/u);
+});
+
+test('answer receipt labels a disabled null-effort profile as no thinking',async()=>{
+  const result=await withPublicGenerationInfo({shortAnswer:'No-thinking answer',debug:{dryRun:false,providerUsed:'deepseek',
+    returnedModel:'deepseek-v4.1-flash',generationConfig:{reasoningEffort:null,thinkingMode:'disabled'}}},
+  {model:'deepseek-v4.1-flash',provider:'deepseek',label:'DeepSeek',reasoningEffort:null,thinkingMode:'disabled'},
+  {},{readBudget:async()=>null});
+  assert.equal(result.generation.reasoningEffort,null);
+  assert.equal(result.generation.thinkingMode,'disabled');
+  assert.match(result.shortAnswer,/实际最终模型：deepseek-v4\.1-flash；实际推理强度：none（未开启思考）$/u);
+});
+
+test('external API notice remains before the exact generated footer',async()=>{
+  const generated=await withPublicGenerationInfo({shortAnswer:'API answer',debug:{dryRun:false,providerUsed:'relay',
+    returnedModel:'reported-model',generationConfig:{reasoningEffort:'high',thinkingMode:'enabled'}}},
+  {model:'requested-model',provider:'relay',label:'Relay',reasoningEffort:'low',thinkingMode:'enabled'},
+  {},{readBudget:async()=>null});
+  const shown=presentPublicAnswer(generated,{channel:PUBLIC_REQUEST_CHANNELS.EXTERNAL_API,
+    env:{EXTERNAL_API_TEST_NOTICE:'External test notice'}});
+  assert.equal(shown.shortAnswer,'API answer\n\nExternal test notice\n\n实际最终模型：reported-model；实际推理强度：high');
 });
 
 test('prepare exports exactly the saved prompt and does not generate an answer',async()=>{

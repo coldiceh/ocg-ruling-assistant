@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createCloudRequestBudget,CLOUD_BUDGET_RESERVE,CLOUD_BUDGET_SETTLE,runCloudBudgetedQuestion,
-  runCloudRelayRequest,cloudSiliconFlowCallbacks,runOfficialOpenAIRequest,
+  runCloudRelayRequest,runCloudBaiRequest,cloudSiliconFlowCallbacks,runOfficialOpenAIRequest,
   getOfficialOpenAIBudgetStatus,getCloudEvidenceBudgetStatus} from '../backend/cloudRequestBudget.mjs';
 import {callSiliconFlowEmbeddings} from '../backend/siliconFlowEvidenceClient.mjs';
 import {createPublicAnswerModelEnv} from '../backend/ragModelClient.mjs';
@@ -10,6 +10,27 @@ const env={CLOUD_BUDGET_RUN_ID:'test-scope',CLOUD_BUDGET_ACTUAL_LIMIT_CNY:'10',
   CLOUD_BUDGET_THEORETICAL_LIMIT_USD:'5',CLOUD_BUDGET_INITIAL_ACTUAL_CNY:'0.00062622',
   RELAY_PRICING_MULTIPLIER:'0.27',RELAY_SITE_DOLLAR_CNY:'1'};
 const body={model:'gpt-6-astra',messages:[{role:'user',content:'synthetic request'}],max_completion_tokens:4096};
+
+test('b.ai records official token cost separately and keeps missing usage reserved',async()=>{
+  const redis=recorder();const budget=createCloudRequestBudget({env,command:redis.command});
+  const result=await runCloudBudgetedQuestion({env:{...env,RAG_MODEL_PROVIDER:'bai'},budget},async()=>{
+    await runCloudBaiRequest({body,invoke:async()=>({model:'gpt-6-astra',usage:{
+      prompt_tokens:1000,completion_tokens:100,total_tokens:1100,
+      prompt_tokens_details:{cached_tokens:200,cache_write_tokens:100},
+      completion_tokens_details:{reasoning_tokens:80},
+    }})});
+    await runCloudBaiRequest({body,invoke:async()=>({model:'gpt-6-astra'})});
+    return {};
+  });
+  assert.equal(redis.calls.filter(call=>call[1]===CLOUD_BUDGET_RESERVE).length,2);
+  assert.equal(redis.calls.filter(call=>call[1]===CLOUD_BUDGET_SETTLE).length,1);
+  assert.equal(result.debug.cloudCosts.theoreticalUsd,0.01345);
+  assert.equal(result.debug.cloudCosts.actualCostKnown,false);
+  assert.deepEqual(result.debug.cloudCosts.calls.map(call=>call.provider),['bai','bai']);
+  assert.equal(result.debug.cloudCosts.calls[0].actualCny,null);
+  assert.equal(result.debug.cloudCosts.calls[1].status,'reserved');
+  assert.ok(result.debug.cloudCosts.reservedTheoreticalUsd>0);
+});
 function recorder({block=false}={}) {
   const calls=[];
   return {calls,command:async args=>{
@@ -152,6 +173,26 @@ test('official OpenAI reservations are cumulative, include initial spend, and se
   assert.equal(budget.snapshot().theoreticalUsd,.2870175);
 });
 
+test('DeepSeek cloud budget uses busy flash rates once and retains an unknown reservation',async()=>{
+  const deepSeekBody={model:'deepseek-v4-flash',messages:[{role:'user',content:'auxiliary'}],max_tokens:4096};
+  const settledRedis=recorder();
+  const settled=createCloudRequestBudget({env,command:settledRedis.command});
+  await settled.deepseek({body:deepSeekBody,invoke:async()=>({model:deepSeekBody.model,
+    usage:{prompt_tokens:1000,prompt_cache_hit_tokens:250,prompt_cache_miss_tokens:750,
+      completion_tokens:100,total_tokens:1100}})});
+  assert.equal(settledRedis.calls.length,2);
+  assert.equal(settled.snapshot().actualCny,0.003175);
+  assert.equal(settled.snapshot().calls[0].pricingBasis,'busy_rate_estimate');
+
+  const unknownRedis=recorder();
+  const unknown=createCloudRequestBudget({env,command:unknownRedis.command});
+  await assert.rejects(unknown.deepseek({body:deepSeekBody,invoke:async()=>{throw new Error('transport unknown');}}),
+    /transport unknown/);
+  assert.equal(unknownRedis.calls.length,1);
+  assert.equal(unknown.snapshot().calls[0].status,'reserved');
+  assert.equal(unknown.snapshot().calls[0].uncertainty,'request_or_settlement_failed_reservation_retained');
+});
+
 test('official OpenAI daily migration counts only dated tickets from today and leaves legacy totals untouched',async()=>{
   const now=new Date('2026-09-08T15:00:00.000Z');
   const legacyKey='ruling-cloud-budget:v1:official-public';
@@ -207,12 +248,14 @@ test('cloud evidence status exposes the shared Relay theoretical pool without ch
   const key='ruling-cloud-budget:v1:shared-status:2026-09-08';
   const redis=redisFetch({[key]:{actualNano:'2000000000',theoreticalNano:'2750000000',
     sf:JSON.stringify({provider:'siliconflow',status:'usage_settled',actualNano:100_000_000,theoreticalNano:0}),
+    deepseek:JSON.stringify({provider:'deepseek',status:'usage_settled',actualNano:200_000_000,theoreticalNano:0,
+      pricingBasis:'busy_rate_estimate'}),
     relaySpent:JSON.stringify({provider:'relay',status:'usage_settled',actualNano:1_000_000_000,theoreticalNano:1_000_000_000}),
     relayReserved:JSON.stringify({provider:'relay',status:'reserved',actualNano:500_000_000,theoreticalNano:500_000_000})}});
   const status=await getCloudEvidenceBudgetStatus({env:{...env,CLOUD_BUDGET_RUN_ID:'shared-status',CLOUD_BUDGET_PERIOD:'daily',
     API_BUDGET_TIMEZONE:'UTC',UPSTASH_REDIS_REST_URL:'https://redis.test',UPSTASH_REDIS_REST_TOKEN:'token'},
     fetchImpl:redis.fetchImpl,now:new Date('2026-09-08T12:00:00.000Z')});
-  assert.equal(status.spentTodayCny,.1);assert.equal(status.reservedTodayCny,0);assert.equal(status.dailyBudgetCny,10);
+  assert.equal(status.spentTodayCny,.3);assert.equal(status.reservedTodayCny,0);assert.equal(status.dailyBudgetCny,10);
   assert.deepEqual(status.relayPool,{spentUsd:1,reservedUsd:.5,theoreticalLimitUsd:5,
     accountedUsd:2.75,actualRemainingCny:8});
 });

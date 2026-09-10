@@ -261,6 +261,7 @@ async function finalizePreparedRagRulingQuestionCore({
   const dataRevision = continuation.dataRevision;
   const evidenceFingerprint = continuation.evidenceFingerprint;
   const finalPromptSha256 = continuation.finalPromptSha256;
+  const identityClarifications = pendingCardIdentityLines(effectiveCardResolution);
 
   return {
     mode: continuation.mode || (cloudEvidence ? "cloud_evidence_v1" : "rag_baseline"),
@@ -268,11 +269,15 @@ async function finalizePreparedRagRulingQuestionCore({
     // an official ruling, while a completed answer from the already-certified
     // unique direct-Q&A route must not be downgraded by the plain-text adapter.
     answerLevel,
-    shortAnswer: normalized.shortAnswer,
+    shortAnswer: identityClarifications.length
+      ? `${normalized.shortAnswer}\n\n卡片身份待确认：\n${identityClarifications.map(line => `- ${line}`).join("\n")}`
+      : normalized.shortAnswer,
     reasoning: normalized.reasoning,
     usedEvidence: displayedEvidence,
     resolvedCards: displayCards,
-    missingInfo: normalized.missingInfo,
+    missingInfo: identityClarifications.length
+      ? [...new Set([...(normalized.missingInfo || []), ...identityClarifications])]
+      : normalized.missingInfo,
     riskFlags: normalized.riskFlags,
     confidenceSelfEstimate: authoritativeOfficialDirectCompleted
       ? "high"
@@ -403,6 +408,31 @@ async function finalizePreparedRagRulingQuestionCore({
       timingsMs,
     },
   };
+}
+
+function pendingCardIdentityLines(cardResolution) {
+  // Render the final identity owner's pending records. Exact duplicates are
+  // combined for display only; candidates never become confirmed identities.
+  const pending = new Map();
+  for (const mention of [
+    ...(cardResolution.unresolvedMentions || []),
+    ...(cardResolution.ambiguousMentions || []),
+  ]) {
+    const input = String(mention?.input || mention?.originalText || "").trim();
+    if (!input) continue;
+    const candidates = pending.get(input) || new Set();
+    for (const candidate of mention.candidateCards || []) {
+      const name = String(candidate?.name || "").trim();
+      if (name) candidates.add(name);
+    }
+    pending.set(input, candidates);
+  }
+  return [...pending].map(([input, candidates]) => {
+    const choices = candidates.size
+      ? `现有候选（未确认）：${[...candidates].join("、")}。`
+      : "";
+    return `「${input}」尚未确认。${choices}请补充完整卡名、卡号或卡片原文。`;
+  });
 }
 
 function buildPreparedContinuation({
@@ -599,7 +629,14 @@ async function answerRagRulingQuestionInternal({
       now,
       signal,
     });
-    const extractedCardResolution = (cardNameModel.candidates || []).length
+    const extractedCardResolution = cardNameModel.typedMentionSetProvided === true
+      ? extractRagCards(query, {
+        cards: data.cards || [],
+        maxCards,
+        modelCardNameCandidates: cardNameModel.candidates || [],
+        mentionSetSource: "typed_model",
+      })
+      : (cardNameModel.candidates || []).length
       ? extractRagCards(query, {
         cards: data.cards || [],
         maxCards,

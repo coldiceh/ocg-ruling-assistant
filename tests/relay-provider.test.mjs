@@ -13,7 +13,7 @@ import {
 } from "../backend/publicRulingModelConfig.mjs";
 
 const RELAY_PROFILE_ID = "relay-gpt-5.6-sol-low";
-const DEFAULT_RELAY_PROFILE_ID = "official-astra-low";
+const DEFAULT_RELAY_PROFILE_ID = "bai-astra-low";
 
 test("public model profiles expose exact provider models and credential availability", () => {
   const unavailable = getPublicRulingModelCapabilities({
@@ -54,7 +54,7 @@ test("public model profiles expose exact provider models and credential availabi
   });
   assert.equal(configured.defaultRulingModelProfile, DEFAULT_RELAY_PROFILE_ID);
   const byId = Object.fromEntries(configured.rulingModelProfiles.map((profile) => [profile.id, profile]));
-  assert.equal(configured.rulingModelProfiles.length, 18);
+  assert.equal(configured.rulingModelProfiles.length, 19);
   assert.deepEqual(
     Object.keys(byId).filter((id) => id.startsWith("relay-gpt-5.6-sol-")),
     ["relay-gpt-5.6-sol-low", "relay-gpt-5.6-sol-medium", "relay-gpt-5.6-sol-high", "relay-gpt-5.6-sol-xhigh", "relay-gpt-5.6-sol-max"],
