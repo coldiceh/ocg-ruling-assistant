@@ -1334,10 +1334,14 @@ function renderBackendAnswer(answer) {
   ui.stepsTitle.textContent = "理由";
   ui.stepsList.hidden = false;
   lastRenderedBackendAnswer = answer || null;
-  renderGenerationDetails(answer);
+  renderGenerationDetails(answer?.answerLevel === "risk_control"
+    ? { generation: null }
+    : answer);
   renderAnswerVersion(answer);
   renderEngineSimulation(null, null);
-  if (answer?.mode === "rag_baseline" || answer?.mode === "cloud_evidence_v1") {
+  if (answer?.mode === "rag_baseline"
+      || answer?.mode === "cloud_evidence_v1"
+      || answer?.answerLevel === "risk_control") {
     renderRagAnswer(answer);
     return;
   }
@@ -5072,6 +5076,7 @@ function modelProviderLabel(provider) {
   if (value === "gemini") return "Gemini";
   if (value === "openai") return "OpenAI";
   if (value === "relay") return "ChatGPT";
+  if (value === "bai") return "b.ai";
   if (value === "ollama") return "Ollama";
   if (value === "mock") return "RAG Mock";
   if (value === "auto") return "自动";
