@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-10T11:25:42.208Z",
+  "generatedAt": "2026-09-10T16:28:29.221Z",
   "records": [
     {
       "alias": "“K9刑侦案件”",
@@ -41783,6 +41783,13 @@
       "normalizedAlias": "criosphinx",
       "cardId": "6322",
       "cardName": "クリオスフィンクス",
+      "language": "en"
+    },
+    {
+      "alias": "Crocodile",
+      "normalizedAlias": "crocodile",
+      "cardId": "23432",
+      "cardName": "Crocodile",
       "language": "en"
     },
     {
@@ -251496,13 +251503,6 @@
       "normalizedAlias": "zuttomozaurus",
       "cardId": "19079",
       "cardName": "ズットモザウルス",
-      "language": "en"
-    },
-    {
-      "alias": "Crocodile",
-      "normalizedAlias": "crocodile",
-      "cardId": "23432",
-      "cardName": "Crocodile",
       "language": "en"
     },
     {
