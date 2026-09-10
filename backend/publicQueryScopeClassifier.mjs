@@ -1,10 +1,12 @@
 import {
-  callBaiJsonTask,
+  callDeepSeekJsonTask,
   isServerOwnedPrivateEvaluationEnv,
 } from "./ragModelClient.mjs";
+import { DEFAULT_PUBLIC_DEEPSEEK_MODEL } from "./publicRulingModelConfig.mjs";
 
-const CLASSIFIER_MODEL = "gpt-6-astra";
-const CLASSIFIER_REASONING_EFFORT = "low";
+const CLASSIFIER_MODEL = DEFAULT_PUBLIC_DEEPSEEK_MODEL;
+const CLASSIFIER_THINKING_MODE = "disabled";
+const CLASSIFIER_REASONING_EFFORT = null;
 const DEFAULT_TIMEOUT_MS = 12_000;
 const DEFAULT_MAX_OUTPUT_TOKENS = 256;
 
@@ -15,13 +17,15 @@ export function publicQueryScopeClassifierStatus(env = globalThis.process?.env |
   if (isEnabled(env.RAG_DRY_RUN) || isServerOwnedPrivateEvaluationEnv(env)) {
     return { enabled: false, reason: "private_or_dry_run" };
   }
-  if (!String(env.BAI_API_KEY || "").trim()) {
-    return { enabled: false, reason: "bai_not_configured" };
+  if (!String(env.DEEPSEEK_API_KEY || "").trim()) {
+    return { enabled: false, reason: "deepseek_not_configured" };
   }
   return {
     enabled: true,
     reason: "configured",
+    provider: "deepseek",
     model: CLASSIFIER_MODEL,
+    thinkingMode: CLASSIFIER_THINKING_MODE,
     reasoningEffort: CLASSIFIER_REASONING_EFFORT,
   };
 }
@@ -31,7 +35,7 @@ export async function classifyPublicQueryScope({
   env = globalThis.process?.env || {},
   fetchImpl = globalThis.fetch,
   signal,
-  invoke = callBaiJsonTask,
+  invoke = callDeepSeekJsonTask,
 } = {}) {
   const status = publicQueryScopeClassifierStatus(env);
   const normalizedQuestion = String(question || "").trim();
@@ -49,9 +53,8 @@ export async function classifyPublicQueryScope({
   try {
     const payload = await invoke({
       prompt: buildPublicQueryScopePrompt(normalizedQuestion),
-      model: CLASSIFIER_MODEL,
-      reasoningEffort: CLASSIFIER_REASONING_EFFORT,
-      maxOutputTokens: boundedInteger(
+      modelName: CLASSIFIER_MODEL,
+      maxTokens: boundedInteger(
         env.PUBLIC_QUERY_SCOPE_MAX_OUTPUT_TOKENS,
         DEFAULT_MAX_OUTPUT_TOKENS,
         32,
@@ -62,7 +65,9 @@ export async function classifyPublicQueryScope({
       signal: timeout.signal,
     });
     return normalizeScopeDecision(payload, {
+      provider: "deepseek",
       model: CLASSIFIER_MODEL,
+      thinkingMode: CLASSIFIER_THINKING_MODE,
       reasoningEffort: CLASSIFIER_REASONING_EFFORT,
       usage: payload?.usage || {},
       estimatedCostCny: Number(payload?.estimatedCostCny || 0),
@@ -129,6 +134,8 @@ function uncertainDecision(reasonCode) {
     reasonCode: String(reasonCode || "classifier_unavailable").slice(0, 80),
     classified: false,
     model: null,
+    provider: null,
+    thinkingMode: null,
     reasoningEffort: null,
     usage: {},
     estimatedCostCny: 0,

@@ -9,8 +9,8 @@ import {
 } from "../backend/publicQueryScopeClassifier.mjs";
 
 const CONFIGURED_ENV = Object.freeze({
-  BAI_API_KEY: "test-bai-key",
-  BAI_BASE_URL: "https://api.example.test/v1",
+  DEEPSEEK_API_KEY: "test-deepseek-key",
+  DEEPSEEK_BASE_URL: "https://api.deepseek.example.test/v1",
 });
 
 test("query scope prompt treats the complete user input as quoted data", () => {
@@ -37,7 +37,7 @@ test("only a high-confidence out-of-scope model decision qualifies as a risk con
     question: "一个明确的非裁定请求",
     env: {
       ...CONFIGURED_ENV,
-      PUBLIC_QUERY_SCOPE_MODEL: "deepseek-v4-flash",
+      PUBLIC_QUERY_SCOPE_MODEL: "gpt-5.6-sol",
     },
     invoke,
   });
@@ -45,11 +45,11 @@ test("only a high-confidence out-of-scope model decision qualifies as a risk con
   assert.equal(result.confidence, "high");
   assert.equal(shouldTriggerPublicQueryRisk(result), true);
   assert.equal(seen.length, 1);
-  assert.equal(seen[0].model, "gpt-6-astra");
-  assert.equal(seen[0].reasoningEffort, "low");
-  assert.equal(seen[0].maxOutputTokens, 256);
-  assert.equal(Object.hasOwn(seen[0], "modelName"), false);
-  assert.equal(Object.hasOwn(seen[0], "maxTokens"), false);
+  assert.equal(seen[0].modelName, "deepseek-v4.1-flash-expires-on-0910");
+  assert.equal(seen[0].maxTokens, 256);
+  assert.equal(Object.hasOwn(seen[0], "model"), false);
+  assert.equal(Object.hasOwn(seen[0], "maxOutputTokens"), false);
+  assert.equal(Object.hasOwn(seen[0], "reasoningEffort"), false);
   assert.equal(Object.hasOwn(seen[0], "thinkingMode"), false);
   assert.equal(Object.hasOwn(seen[0], "allowResponseFormatFallback"), false);
   assert.equal(result.estimatedCostCny, 0);
@@ -63,6 +63,59 @@ test("only a high-confidence out-of-scope model decision qualifies as a risk con
     scope: "in_scope",
     confidence: "high",
   }), false);
+});
+
+test("classifier dispatches the official DeepSeek 4.1 Flash non-thinking JSON wire", async () => {
+  const requests = [];
+  const result = await classifyPublicQueryScope({
+    question: "明确的非裁定请求",
+    env: {
+      ...CONFIGURED_ENV,
+      API_DAILY_BUDGET_CNY: "10",
+    },
+    fetchImpl: async (url, options) => {
+      requests.push({
+        url: String(url),
+        headers: options.headers,
+        body: JSON.parse(options.body),
+      });
+      return Response.json({
+        id: "scope-classifier-1",
+        model: "deepseek-v4.1-flash-expires-on-0910",
+        choices: [{
+          finish_reason: "stop",
+          message: {
+            content: JSON.stringify({
+              scope: "out_of_scope",
+              confidence: "high",
+              reasonCode: "not_ruling_question",
+            }),
+          },
+        }],
+        usage: { prompt_tokens: 12, completion_tokens: 8, total_tokens: 20 },
+      });
+    },
+  });
+
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].url, "https://api.deepseek.example.test/v1/chat/completions");
+  assert.equal(requests[0].headers.authorization, "Bearer test-deepseek-key");
+  assert.deepEqual(requests[0].body, {
+    model: "deepseek-v4.1-flash-expires-on-0910",
+    messages: [{ role: "user", content: buildPublicQueryScopePrompt("明确的非裁定请求") }],
+    stream: false,
+    response_format: { type: "json_object" },
+    thinking: { type: "disabled" },
+    temperature: 0,
+    max_tokens: 256,
+  });
+  assert.equal(result.provider, "deepseek");
+  assert.equal(result.model, "deepseek-v4.1-flash-expires-on-0910");
+  assert.equal(result.thinkingMode, "disabled");
+  assert.equal(result.reasoningEffort, null);
+  assert.equal(result.scope, "out_of_scope");
+  assert.equal(result.confidence, "high");
+  assert.equal(shouldTriggerPublicQueryRisk(result), true);
 });
 
 test("classifier failures and malformed decisions fail open as uncertain", async () => {
@@ -121,16 +174,16 @@ test("disabled, dry-run and server-owned private evaluation paths bypass classif
   assert.equal(result.scope, "uncertain");
 });
 
-test("leftover DeepSeek and relay keys cannot enable or dispatch the public classifier", async () => {
+test("leftover b.ai and relay keys cannot enable or dispatch the public classifier", async () => {
   const legacyProviderOnlyEnv = {
-    DEEPSEEK_API_KEY: "leftover-key-must-not-be-used",
-    DEEPSEEK_BASE_URL: "https://api.deepseek.com",
+    BAI_API_KEY: "leftover-bai-key-must-not-be-used",
+    BAI_BASE_URL: "https://api.b.ai/v1",
     RELAY_API_KEY: "leftover-relay-key-must-not-be-used",
     RELAY_BASE_URL: "https://relay.example.test/v1",
   };
   assert.deepEqual(publicQueryScopeClassifierStatus(legacyProviderOnlyEnv), {
     enabled: false,
-    reason: "bai_not_configured",
+    reason: "deepseek_not_configured",
   });
 
   let calls = 0;
@@ -144,7 +197,7 @@ test("leftover DeepSeek and relay keys cannot enable or dispatch the public clas
   });
   assert.equal(calls, 0);
   assert.equal(result.scope, "uncertain");
-  assert.equal(result.reasonCode, "bai_not_configured");
+  assert.equal(result.reasonCode, "deepseek_not_configured");
 });
 
 test("a caller abort remains an abort instead of becoming a fail-open decision", async () => {
