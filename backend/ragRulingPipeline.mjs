@@ -599,7 +599,14 @@ async function answerRagRulingQuestionInternal({
       now,
       signal,
     });
-    const extractedCardResolution = (cardNameModel.candidates || []).length
+    const extractedCardResolution = cardNameModel.typedMentionSetProvided === true
+      ? extractRagCards(query, {
+        cards: data.cards || [],
+        maxCards,
+        modelCardNameCandidates: cardNameModel.candidates || [],
+        mentionSetSource: "typed_model",
+      })
+      : (cardNameModel.candidates || []).length
       ? extractRagCards(query, {
         cards: data.cards || [],
         maxCards,

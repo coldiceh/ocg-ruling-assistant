@@ -1,4 +1,4 @@
-import { callRelayJsonTask } from './ragModelClient.mjs';
+import { callDeepSeekJsonTask, callRelayJsonTask } from './ragModelClient.mjs';
 
 export function buildCloudEvidencePlanPrompt({question, cardTexts}) {
   return [
@@ -27,16 +27,26 @@ export function normalizeCloudEvidencePlan(value) {
   return {informationNeeds:[...new Set(informationNeeds)],queryTexts:[...new Set(queryTexts)]};
 }
 
-export async function generateCloudEvidencePlan({question,cardTexts,signal,env={},fetchImpl,invokeTask=callRelayJsonTask}={}) {
+export async function generateCloudEvidencePlan({question,cardTexts,signal,env={},fetchImpl,invokeTask}={}) {
   const started=performance.now();
-  const result=await invokeTask({
+  const requestedProvider=String(env.CLOUD_EVIDENCE_PLAN_PROVIDER||'deepseek').trim().toLowerCase();
+  const provider=requestedProvider==='relay'?'relay':'deepseek';
+  const task=invokeTask||(provider==='relay'?callRelayJsonTask:callDeepSeekJsonTask);
+  const modelName=provider==='relay'?'gpt-6-astra':String(
+    env.DEEPSEEK_RULE_MODEL||env.RAG_RULE_MODEL||env.DEEPSEEK_CARD_MODEL||env.RAG_CARD_MODEL||'',
+  ).trim()||undefined;
+  const result=await task({
     prompt:buildCloudEvidencePlanPrompt({question,cardTexts}),
-    modelName:'gpt-6-astra',reasoningEffort:'low',maxTokens:4096,
+    modelName,
+    ...(provider==='relay'?{reasoningEffort:'low'}:{thinkingMode:'disabled'}),
+    maxTokens:4096,
     env,fetchImpl,signal,
   });
   return {...normalizeCloudEvidencePlan(result),telemetry:{
-    modelUsed:result.requestedModel||'gpt-6-astra',returnedModel:result.returnedModel,
-    providerUsed:'relay',reasoningEffort:'low',tokenUsage:result.usage||{},
+    modelUsed:result.requestedModel||modelName,returnedModel:result.returnedModel,
+    providerUsed:result.providerUsed||provider,
+    ...(provider==='relay'?{reasoningEffort:'low'}:{thinkingMode:'disabled'}),
+    tokenUsage:result.usage||{},
     estimatedCostCny:result.estimatedCostCny||0,estimatedCostUsd:result.estimatedCostUsd||0,
     budgetStatus:result.budgetStatus,warnings:result.warnings||[],dryRun:false,
     elapsedMs:performance.now()-started,

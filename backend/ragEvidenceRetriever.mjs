@@ -130,6 +130,7 @@ export async function retrieveRagEvidence({
   signal,
   onProgressStage,
   lineageTraceSink,
+  identityOnly = false,
 } = {}) {
   throwIfAborted(signal);
   const traceLineage = typeof lineageTraceSink === "function";
@@ -315,6 +316,20 @@ export async function retrieveRagEvidence({
   const hasPendingCardIdentity = remainingUnresolvedMentions.length > 0
     || (preEvidenceCardResolution.ambiguousMentions || []).length > 0
     || (retrievalCards.length > 0 && effectiveQaIdentityCards.length === 0);
+  if (identityOnly === true) {
+    timingsMs.cardResolution = Date.now() - stageStartedAt;
+    timingsMs.total = Date.now() - retrievalStartedAt;
+    return {
+      identityOnly: true,
+      cardResolution: {
+        ...preEvidenceCardResolution,
+        unresolvedMentions: remainingUnresolvedMentions,
+      },
+      retrievalWarnings,
+      baige: baigeDebug,
+      timingsMs,
+    };
+  }
   if (parentheticalAliasKeys.size) retrievalWarnings.push(`parenthetical_alias_mentions_collapsed:${parentheticalAliasKeys.size}`);
   if (fuzzyCards.length) retrievalWarnings.push(`unresolved_mentions_fuzzy_matched:${fuzzyCards.map((card) => card.name).join(",")}`);
   if (baigeResolvedCards.length) retrievalWarnings.push(`unresolved_mentions_baige_matched:${baigeResolvedCards.map((card) => card.name).join(",")}`);
