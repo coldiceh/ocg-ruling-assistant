@@ -797,8 +797,8 @@ test("backend answers bypass persistent browser cache and bust static assets", a
     readFile(new URL("../config.json", import.meta.url), "utf8"),
   ]);
   const config = JSON.parse(configText.replace(/^\uFEFF/u, ""));
-  assert.match(html, /src\/app\.js\?v=20260910-bai-deepseek-risk-2/u);
-  assert.match(html, /src\/styles\.css\?v=20260910-bai-deepseek-risk-2/u);
+  assert.match(html, /src\/app\.js\?v=20260910-scope-deepseek-ui-1/u);
+  assert.match(html, /src\/styles\.css\?v=20260910-scope-deepseek-ui-1/u);
   assert.equal(config.answerApiUrl, "https://ocg-ruling-assistant.vercel.app/api/answer");
   assert.match(app, /cache: "no-store"/u);
   assert.doesNotMatch(app, /backendAnswerCacheTtlMs|buildBackendCacheKey|readCachedBackendAnswer|writeCachedBackendAnswer|ocg-ruling-answer:v/u);
@@ -2102,11 +2102,11 @@ test("renderBackendAnswer formats markdown safely and presents titled source lin
   assert.equal(render.lastGenerationAnswer?.generation, null);
 });
 
-test("model provider label presents bai as b.ai", async () => {
+test("model provider label presents bai as GPT", async () => {
   const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
   const source = sourceBetween(app, "function modelProviderLabel", "function basisFromBackendMode");
   const label = new Function(`${source}; return modelProviderLabel;`)();
-  assert.equal(label("bai"), "b.ai");
+  assert.equal(label("bai"), "GPT");
 });
 
 test("an empty reason list keeps the timing panel titled as ruling flow", async () => {

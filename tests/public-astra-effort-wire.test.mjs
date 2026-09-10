@@ -22,9 +22,10 @@ const OFFICIAL_ENV = Object.freeze({
 test("public capabilities expose the exact allowlisted models and efforts", () => {
   const capabilities = getPublicRulingModelCapabilities(OFFICIAL_ENV);
   assert.equal(capabilities.defaultRulingModelProfile, "bai-astra-low");
-  assert.equal(capabilities.rulingModelProfiles.length, 19);
+  assert.equal(capabilities.rulingModelProfiles.length, 18);
   assert.equal(capabilities.rulingModelProfiles.find(({ id }) => id === "bai-astra-low").available, true);
-  assert.equal(capabilities.rulingModelProfiles.find(({ id }) => id === "official-astra-low").available, true);
+  assert.equal(capabilities.rulingModelProfiles.some(({ provider }) => provider === "openai"), false);
+  assert.equal(capabilities.rulingModelProfiles.find(({ id }) => id === "bai-astra-low").label, "GPT-6 Astra · 思考 low");
   for (const effort of ["low", "medium", "high", "xhigh", "max"]) {
     for (const model of ["gpt-5.6-sol", "gpt-6-astra"]) {
       const profile = resolvePublicRulingModelProfile(`relay-${model}-${effort}`);

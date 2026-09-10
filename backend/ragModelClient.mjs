@@ -129,7 +129,7 @@ const PUBLIC_BUDGET_BUCKETS = Object.freeze([
   Object.freeze({ id: "final_ruling:glm", stage: "final_ruling", provider: "glm", label: "GLM 最终裁定", currency: "CNY" }),
   Object.freeze({ id: "final_ruling:deepseek", stage: "final_ruling", provider: "deepseek", label: "DeepSeek 最终裁定", currency: "CNY" }),
   Object.freeze({ id: "final_ruling:relay", stage: "final_ruling", provider: "relay", label: "ChatGPT 最终裁定", currency: "USD" }),
-  Object.freeze({ id: "final_ruling:bai", stage: "final_ruling", provider: "bai", label: "b.ai GPT（官方理论消耗）", currency: "USD" }),
+  Object.freeze({ id: "final_ruling:bai", stage: "final_ruling", provider: "bai", label: "GPT（官方理论消耗）", currency: "USD" }),
 ]);
 const memoryBudget = new Map();
 const privateEvaluationBudgetLedger = new Map();
@@ -209,7 +209,7 @@ export async function callRagModel({
       ? {
           ...buildExternallyManagedBudgetPreflight({
             provider: "bai",
-            label: "b.ai GPT 最终裁定（官方理论计价）",
+            label: "GPT 最终裁定（官方理论计价）",
           }),
         }
       : await buildBudgetPreflight({
@@ -2394,7 +2394,7 @@ export async function getRagBudgetStatus({
       }
       : cloudEvidence?.relayPool && bucket.id === 'final_ruling:relay'
       ? { ...budgetBucketStatusPayload({
-        bucket:{...bucket,label:'中转 GPT 与资料准备共享（理论美元）'},
+        bucket:{...bucket,label:'中转 GPT 最终裁定'},
         bucketConfig:{currency:'USD',dailyBudgetAmount:cloudEvidence.relayPool.theoreticalLimitUsd},
         spent:cloudEvidence.relayPool.accountedUsd,
       }), reservedTodayUsd:cloudEvidence.relayPool.reservedUsd,

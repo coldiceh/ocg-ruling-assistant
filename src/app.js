@@ -8,7 +8,7 @@ const PAGE_TITLE = document.title;
 const DEFAULT_RULING_MODEL_PROFILE = "bai-astra-low";
 const FALLBACK_RULING_MODEL_PROFILE = Object.freeze({
   id: DEFAULT_RULING_MODEL_PROFILE,
-  label: "b.ai GPT-6 Astra · 思考 low（可用性未确认）",
+  label: "GPT-6 Astra · 思考 low（可用性未确认）",
   provider: "bai",
   model: "gpt-6-astra",
   reasoningEffort: "low",
@@ -185,10 +185,10 @@ let rulingModelSelectionWasManual = false;
 let preparedEvidencePackage = null;
 let selectedRulingVersion = "latest";
 const pendingStages = [
-  { id: "understand", label: "理解问题", body: "正在读取问题中的卡片、场面、连锁和时点。" },
+  { id: "understand", label: "理解问题", body: "正在判断是否为裁定相关问题，并检查当前服务状态。" },
   { id: "extract_card_names", label: "提取卡名", body: "正在识别卡名候选，并准备查询卡片资料。" },
   { id: "retrieve_card_texts", label: "检索卡片文本", body: "正在匹配本地资料、百鸽卡片资料和用户提供文本。" },
-  { id: "retrieve_rulings", label: "检索规则资料", body: "正在查找相关 Q&A、FAQ 和规则资料。" },
+  { id: "retrieve_rulings", label: "检索规则资料", body: "正在补充检索线索、查找相关 Q&A、FAQ 和规则资料，并整理证据。" },
   { id: "generate_ruling", label: "核对资料并生成裁定", body: "正在核对资料是否适用于当前场面，并生成未确认裁定分析。" },
 ];
 let pendingStageIndex = -1;
@@ -1797,7 +1797,7 @@ function renderBudgetStatus(status, message = "") {
 function renderBudgetBuckets(buckets = []) {
   if (!ui.budgetBucketList) return;
   ui.budgetBucketList.replaceChildren();
-  const publicBuckets = Array.isArray(buckets) ? buckets.filter(bucket => bucket?.stage === "final_ruling") : [];
+  const publicBuckets = Array.isArray(buckets) ? buckets.filter(bucket => bucket?.stage === "final_ruling" && bucket?.provider !== "openai") : [];
   for (const bucket of publicBuckets) {
     const row = document.createElement("div");
     row.className = "budget-bucket";
@@ -5076,7 +5076,7 @@ function modelProviderLabel(provider) {
   if (value === "gemini") return "Gemini";
   if (value === "openai") return "OpenAI";
   if (value === "relay") return "ChatGPT";
-  if (value === "bai") return "b.ai";
+  if (value === "bai") return "GPT";
   if (value === "ollama") return "Ollama";
   if (value === "mock") return "RAG Mock";
   if (value === "auto") return "自动";
