@@ -658,15 +658,15 @@ test("legacy DeepSeek evidence bridge is disabled while final-ruling support rem
   assert.equal(transportCalls, 0);
 });
 
-test("legacy DeepSeek auxiliary JSON task is disabled before transport", async () => {
+test("DeepSeek auxiliary JSON task rejects missing configuration before transport", async () => {
   let transportCalls = 0;
   await assert.rejects(
     callDeepSeekJsonTask({
       prompt: "不得发送",
-      env: { DEEPSEEK_API_KEY: "legacy-key" },
+      env: {},
       fetchImpl: async () => { transportCalls += 1; },
     }),
-    (error) => error?.code === "deepseek_auxiliary_disabled",
+    (error) => error?.code === "deepseek_not_configured",
   );
   assert.equal(transportCalls, 0);
 });

@@ -1,6 +1,7 @@
 import {
   createPublicAnswerModelEnv,
   getRagBudgetStatus,
+  modelNameForCardExtractionProvider,
   resolveCardExtractionProvider,
   resolveRagProvider,
 } from "./ragModelClient.mjs";
@@ -164,7 +165,7 @@ export async function getPublicAnswerModelInfo({ env = process.env } = {}) {
     requestedProvider: ragProvider.requested,
     models: rulingModelProfiles.map((profile) => profile.model),
     cardNameProvider: cardProvider.provider,
-    cardNameModels: [publicEnv.RELAY_CARD_MODEL || "gpt-5.6-sol"],
+    cardNameModels: [modelNameForCardExtractionProvider(cardProvider.provider, publicEnv)],
     modelTiers: [],
     budget,
     engineEnabled: false,
