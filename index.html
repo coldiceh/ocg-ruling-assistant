@@ -15,7 +15,7 @@
       property="og:description"
       content="结合卡片文本、公开规则资料与官方 Q&amp;A，分析游戏王 OCG 裁定问题。"
     />
-    <link rel="stylesheet" href="src/styles.css?v=20260909-public-models-1" />
+    <link rel="stylesheet" href="src/styles.css?v=20260910-bai-deepseek-risk-1" />
   </head>
   <body class="theme-night">
     <div class="page-background" aria-hidden="true"></div>
@@ -51,7 +51,7 @@
             <label class="model-tier-label" for="rulingModelSelect">
               <span>裁定模型</span>
               <select id="rulingModelSelect" aria-describedby="rulingModelStatus rulingModelLatency" disabled>
-                <option value="official-astra-low" selected>正在读取可用模型…</option>
+                <option value="bai-astra-low" selected>正在读取可用模型…</option>
               </select>
               <small id="rulingModelStatus" hidden></small>
               <small id="rulingModelLatency" class="model-latency" aria-live="polite">正在读取平均出答案时间</small>
@@ -161,9 +161,9 @@
 
           <section class="budget-panel" id="budgetPanel" aria-labelledby="budgetTitle">
             <div>
-              <p class="budget-label" id="budgetTitle">本站今日 API 限额（分币种）</p>
+              <p class="budget-label" id="budgetTitle">最终裁定今日额度（官方理论消耗）</p>
             </div>
-            <p id="budgetHint">本站调用限额，不代表供应商账户余额。</p>
+            <p id="budgetHint">按官方单价与实际 token 折算，不代表中转实际扣费或账户余额。</p>
             <div class="budget-buckets" id="budgetBucketList" aria-label="分模型今日用量"></div>
           </section>
 
@@ -193,6 +193,33 @@
             </form>
 
             <div id="adminLabWorkspace" hidden>
+              <section class="admin-lab-section" aria-labelledby="adminRiskControlTitle">
+                <div class="admin-section-head">
+                  <div>
+                    <h3 id="adminRiskControlTitle">公开问答风控</h3>
+                    <p>查看非规则问题风控是否生效。管理员登录只提供状态管理，不会绕过公开问答风控。</p>
+                  </div>
+                  <button
+                    class="danger-outline-button"
+                    id="adminRiskControlUnlockButton"
+                    type="button"
+                    aria-describedby="adminRiskControlDetails adminRiskControlActionStatus"
+                    disabled
+                  >立即解除风控</button>
+                </div>
+                <div
+                  class="admin-risk-control-status"
+                  id="adminRiskControlStatus"
+                  role="status"
+                  aria-live="polite"
+                  aria-atomic="true"
+                >
+                  <strong id="adminRiskControlState">尚未读取</strong>
+                  <p id="adminRiskControlDetails">登录后读取公开问答风控状态。</p>
+                </div>
+                <p class="admin-status" id="adminRiskControlActionStatus" role="status" aria-live="polite"></p>
+              </section>
+
               <section class="admin-lab-section" aria-labelledby="adminCaptureTitle">
                 <h3 id="adminCaptureTitle">线上证据检查</h3>
                 <p>沿用玩家当前流程生成完整资料，在最终回答前停止。成功后主区域显示并下载实际的最终作答输入；费用与失败信息保留在完整诊断记录中。</p>
@@ -421,6 +448,6 @@
       </main>
     </div>
 
-    <script src="src/app.js?v=20260909-public-models-1"></script>
+    <script src="src/app.js?v=20260910-bai-deepseek-risk-1"></script>
   </body>
 </html>

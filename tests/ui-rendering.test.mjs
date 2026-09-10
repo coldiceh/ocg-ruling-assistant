@@ -169,7 +169,7 @@ test("ui_has_single_query_button", async () => {
   assert.match(html, /id="pipelineStageList"/u);
   assert.match(html, /id="pipelineElapsedText"/u);
   assert.match(html, /id="rulingModelSelect"[^>]+disabled/u);
-  assert.match(html, /value="official-astra-low" selected>正在读取可用模型…</u);
+  assert.match(html, /value="bai-astra-low" selected>正在读取可用模型…</u);
   assert.doesNotMatch(html, /第三方中转/u);
   assert.doesNotMatch(html, /value="glm-5\.2-high"/u);
   assert.doesNotMatch(html, /value="kimi-[^"]+"/u);
@@ -278,22 +278,22 @@ test("public ruling model selector renders the backend capability profiles dynam
   assert.match(app, /if \(value === "relay"\) return "ChatGPT"/u);
 });
 
-test("official Astra low survives startup and unavailable capability recovery", async () => {
+test("b.ai Astra low survives startup and unavailable capability recovery", async () => {
   const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
   const definitions = sourceBetween(app, "const DEFAULT_RULING_MODEL_PROFILE", "const ui =");
   const load = sourceBetween(app, "async function loadBackendModelInfo", "function normalizeRulingModelCapabilities");
   const functions = sourceBetween(app, "function normalizeRulingModelCapabilities", "function normalizeRulingVersionCapabilities");
   let unavailable = false;
   let capabilityPayload = {
-    defaultRulingModelProfile: "official-astra-low",
-    rulingModelProfiles: [{ id: "official-astra-low", available: true }],
+    defaultRulingModelProfile: "bai-astra-low",
+    rulingModelProfiles: [{ id: "bai-astra-low", available: true }],
   };
   const harness = new Function("fetch", `${definitions}\n${load}\n${functions}\n
     let selectedRulingModelProfile = DEFAULT_RULING_MODEL_PROFILE;
     let rulingModelCapabilitiesAvailable = false;
     let rulingModelSelectionWasManual = false;
     let appConfig = { answerApiUrl: "https://example.invalid/api/answer", rulingModelProfiles: fallbackRulingModelProfiles() };
-    const ui = { rulingModelSelect: { value: "official-astra-low" } };
+    const ui = { rulingModelSelect: { value: "bai-astra-low" } };
     function renderRulingModelOptions() { ui.rulingModelSelect.value = selectedRulingModelProfile; }
     function updateRulingModelSelectionStatus() {}
     function syncRulingVersionButtons() {}
@@ -310,23 +310,23 @@ test("official Astra low survives startup and unavailable capability recovery", 
     if (unavailable) throw new Error("mock unavailable");
     return { ok: true, json: async () => capabilityPayload };
   });
-  assert.equal(harness.state().selected, "official-astra-low");
+  assert.equal(harness.state().selected, "bai-astra-low");
   await harness.load();
-  assert.deepEqual(harness.state(), { selected: "official-astra-low", displayed: "official-astra-low", available: true });
-  harness.select("official-astra-low");
+  assert.deepEqual(harness.state(), { selected: "bai-astra-low", displayed: "bai-astra-low", available: true });
+  harness.select("bai-astra-low");
   capabilityPayload = {
     defaultRulingModelProfile: "deepseek-v4.1-flash-low",
     rulingModelProfiles: [
-      { id: "official-astra-low", available: true },
+      { id: "bai-astra-low", available: true },
       { id: "deepseek-v4.1-flash-low", available: true },
     ],
   };
   await harness.load();
-  assert.deepEqual(harness.state(), { selected: "official-astra-low", displayed: "official-astra-low", available: true });
-  assert.equal(harness.state().displayed, "official-astra-low");
+  assert.deepEqual(harness.state(), { selected: "bai-astra-low", displayed: "bai-astra-low", available: true });
+  assert.equal(harness.state().displayed, "bai-astra-low");
   unavailable = true;
   await harness.load();
-  assert.deepEqual(harness.state(), { selected: "official-astra-low", displayed: "official-astra-low", available: false });
+  assert.deepEqual(harness.state(), { selected: "bai-astra-low", displayed: "bai-astra-low", available: false });
 });
 
 test("public ruling model selector renders measured latency and explicit fallback states", async () => {
@@ -404,6 +404,27 @@ test("answer footer actual generation metadata and shared remaining budget come 
   assert.match(actualText, /GPT-5\.6 Sol/u);
   assert.match(actualText, /推理强度\nhigh/u);
   assert.ok(actualText.includes("中转模型共享额度 · 剩余 $3.25 / 每日 $8.00"));
+
+  render({
+    generation: {
+      provider: "relay",
+      model: "gpt-5.6-sol",
+      label: "GPT-5.6 Sol",
+      reasoningEffort: "high",
+      thinkingMode: "enabled",
+      embeddedInAnswerText: true,
+      budget: {
+        currency: "USD",
+        remainingAmount: 3.25,
+        dailyBudgetAmount: 8,
+        sharedPoolLabel: "中转模型共享额度",
+      },
+    },
+  });
+  const embeddedText = testNodeText(generationDetails);
+  assert.doesNotMatch(embeddedText, /实际生成模型|推理强度|思考模式/u);
+  assert.match(embeddedText, /实际服务\nChatGPT/u);
+  assert.match(embeddedText, /共享今日额度/u);
 
   render({
     generation: {
@@ -775,8 +796,8 @@ test("backend answers bypass persistent browser cache and bust static assets", a
     readFile(new URL("../config.json", import.meta.url), "utf8"),
   ]);
   const config = JSON.parse(configText.replace(/^\uFEFF/u, ""));
-  assert.match(html, /src\/app\.js\?v=20260909-public-models-1/u);
-  assert.match(html, /src\/styles\.css\?v=20260909-public-models-1/u);
+  assert.match(html, /src\/app\.js\?v=20260910-bai-deepseek-risk-1/u);
+  assert.match(html, /src\/styles\.css\?v=20260910-bai-deepseek-risk-1/u);
   assert.equal(config.answerApiUrl, "https://ocg-ruling-assistant.vercel.app/api/answer");
   assert.match(app, /cache: "no-store"/u);
   assert.doesNotMatch(app, /backendAnswerCacheTtlMs|buildBackendCacheKey|readCachedBackendAnswer|writeCachedBackendAnswer|ocg-ruling-answer:v/u);
@@ -801,7 +822,7 @@ test("ui_hides_engine_details_by_default", async () => {
     readFile(new URL("../src/app.js", import.meta.url), "utf8"),
   ]);
   assert.match(html, /裁定流程/u);
-  assert.match(html, /本站今日 API 限额（分币种）/u);
+  assert.match(html, /最终裁定今日额度（官方理论消耗）/u);
   assert.match(html, /id="budgetBucketList"/u);
   assert.doesNotMatch(html, /budgetSpentText|budgetLimitText/u);
   assert.doesNotMatch(app, /budgetSpentText|budgetLimitText/u);
@@ -830,7 +851,7 @@ test("ui_hides_engine_details_by_default", async () => {
   assert.match(app, /不会影响管理员实验额度/u);
   assert.match(app, /storageWarning/u);
   assert.doesNotMatch(app, /bucket\?\.id !== "final_ruling:glm"/u);
-  assert.match(html, /不代表供应商账户余额/u);
+  assert.match(html, /按官方单价与实际 token 折算，不代表中转实际扣费或账户余额/u);
   assert.match(app, /spentTodayUsd/u);
   assert.match(app, /dailyBudgetUsd/u);
   assert.match(app, /\$\$\{formatUsd\(spent\)\}/u);

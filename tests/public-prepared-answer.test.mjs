@@ -62,10 +62,15 @@ function response() {
 }
 const request = (payload) => ({ method: "POST", url: "/api/answer?progress=1", headers: { accept: "text/event-stream" }, body: payload });
 const events = (res) => res.chunks.join("").split("\n\n").filter(Boolean).map(block => ({ type: block.split("\n")[0].slice(7), data: JSON.parse(block.split("\n")[1].slice(6)) }));
-function fixture({ beforeFinal = async () => {}, earlyAnswer = false } = {}) {
+function fixture({
+  beforeFinal = async () => {},
+  earlyAnswer = false,
+  readRiskControl = async () => ({ ok: true, active: false }),
+} = {}) {
   const redis = redisFixture();
   const counts = { prepare: 0, final: 0 };
   const handler = createPublicAnswerHandler({ env, createStore: () => redis.store,
+    readRiskControl,
     prepare: (options) => preparePublicAnswer({ ...options, answerPublic: async (input) => {
       counts.prepare++;
       assert.equal(input.prepareForContinuation, true);
@@ -94,6 +99,32 @@ async function prepare(f) {
   assert.equal(output.at(-1).type, "end");
   return { res, output, id: output.find(x => x.type === "prepared")?.data.preparationId };
 }
+
+test("an active global lock blocks finalize before claiming the preparation or calling the final model", async () => {
+  const f = fixture({
+    readRiskControl: async () => ({
+      ok: true,
+      active: true,
+      remainingMinutes: 11,
+    }),
+  });
+  const first = await prepare(f);
+  const commandCountBeforeFinalize = f.commands.length;
+  const storedBeforeFinalize = [...f.values.values()][0];
+
+  const res = response();
+  await f.handler(request({ action: "finalize", preparationId: first.id }), res);
+  const output = events(res);
+  const answer = output.find((item) => item.type === "answer")?.data.answer;
+
+  assert.equal(answer?.answerLevel, "risk_control");
+  assert.match(answer?.shortAnswer || "", /预计还需 11 分钟/u);
+  assert.equal(output.at(-1)?.type, "end");
+  assert.equal(f.counts.final, 0);
+  assert.equal(f.commands.length, commandCountBeforeFinalize);
+  assert.equal([...f.values.values()][0], storedBeforeFinalize);
+  assert.equal(JSON.parse(storedBeforeFinalize).state, "ready");
+});
 
 test("two real handler invocations preserve server-only input, finalize once and replay completed answer", async () => {
   const f = fixture(); const first = await prepare(f);

@@ -1,4 +1,6 @@
-export const DEFAULT_PUBLIC_RULING_MODEL_PROFILE = "official-astra-low";
+export const DEFAULT_PUBLIC_RULING_MODEL_PROFILE = "bai-astra-low";
+export const DEFAULT_PUBLIC_BAI_BASE_URL = "https://api.b.ai/v1";
+export const DEFAULT_PUBLIC_BAI_MODEL = "gpt-6-astra";
 export const DEFAULT_PUBLIC_RELAY_BASE_URL = "";
 export const DEFAULT_PUBLIC_RELAY_MODEL = "gpt-6-astra";
 export const DEFAULT_PUBLIC_DEEPSEEK_MODEL = "deepseek-v4.1-flash-expires-on-0910";
@@ -9,6 +11,7 @@ function profile({ id, label, provider, model, thinkingMode, reasoningEffort, tr
 }
 
 const profiles = [
+  profile({ id: "bai-astra-low", label: "b.ai GPT-6 Astra · 思考 low", provider: "bai", model: DEFAULT_PUBLIC_BAI_MODEL, thinkingMode: "enabled", reasoningEffort: "low", transport: "chat_completions_sse", thirdParty: true, modelIdentityVerified: false }),
   profile({ id: "official-astra-low", label: "官方 GPT-6 Astra · 思考 low", provider: "openai", model: "gpt-6-astra", thinkingMode: "enabled", reasoningEffort: "low", transport: "chat_completions_sse", thirdParty: false, modelIdentityVerified: true }),
   ...["low", "medium", "high", "xhigh", "max"].flatMap((reasoningEffort) => [
     profile({ id: `relay-gpt-5.6-sol-${reasoningEffort}`, label: `中转 GPT-5.6 Sol · 思考 ${reasoningEffort}`, provider: "relay", model: "gpt-5.6-sol", thinkingMode: "enabled", reasoningEffort, transport: "chat_completions_sse", thirdParty: true, modelIdentityVerified: false }),
@@ -51,6 +54,10 @@ export function configuredPublicRulingModelProfile(profileOrId, env = {}) {
 
 export function publicRulingModelProfileAvailable(profileOrId, env = {}) {
   const selected = configuredPublicRulingModelProfile(profileOrId, env);
+  if (selected?.provider === "bai") {
+    return Boolean(String(env.BAI_API_KEY || "").trim()
+      && validHttpsBaseUrl(env.BAI_BASE_URL || DEFAULT_PUBLIC_BAI_BASE_URL));
+  }
   if (selected?.provider === "openai") {
     return Boolean(String(env.OCG_FINAL_OPENAI_API_KEY || "").trim()
       && String(env.PUBLIC_OPENAI_BUDGET_RUN_ID || "").trim()
@@ -83,6 +90,10 @@ export function assertPublicRulingModelProfileAvailable(profileOrId, env = {}) {
 }
 
 function validHttpsRelayBaseUrl(value) {
+  return validHttpsBaseUrl(value);
+}
+
+function validHttpsBaseUrl(value) {
   try {
     const url = new URL(String(value || ""));
     return url.protocol === "https:" && !url.username && !url.password && !url.search && !url.hash;

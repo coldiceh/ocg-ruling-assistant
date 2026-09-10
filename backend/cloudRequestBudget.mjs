@@ -57,6 +57,24 @@ function amount(value, label, allowZero = false) {
   return number;
 }
 function nano(value) { return Math.ceil(value * UNIT); }
+function deepSeekBusyRates(env={}) {
+  return {
+    cacheHitCnyPerMtok:amount(env.DEEPSEEK_CLOUD_BUSY_CACHE_HIT_CNY_PER_MTOK??0.1,'deepseek_cache_hit_rate'),
+    cacheMissCnyPerMtok:amount(env.DEEPSEEK_CLOUD_BUSY_CACHE_MISS_CNY_PER_MTOK??3,'deepseek_cache_miss_rate'),
+    outputCnyPerMtok:amount(env.DEEPSEEK_CLOUD_BUSY_OUTPUT_CNY_PER_MTOK??9,'deepseek_output_rate'),
+  };
+}
+function deepSeekBusyCost(usage={},env={}) {
+  const rates=deepSeekBusyRates(env);
+  const prompt=Math.max(0,Number(usage.prompt_tokens??usage.input_tokens??0));
+  const hit=Math.min(prompt,Math.max(0,Number(usage.prompt_cache_hit_tokens??usage.cached_input_tokens??0)));
+  const explicitMiss=Number(usage.prompt_cache_miss_tokens);
+  const miss=Number.isFinite(explicitMiss)?Math.min(prompt,Math.max(0,explicitMiss)):prompt-hit;
+  const uncategorized=Math.max(0,prompt-hit-miss);
+  const output=Math.max(0,Number(usage.completion_tokens??usage.output_tokens??0));
+  return (hit*rates.cacheHitCnyPerMtok+(miss+uncategorized)*rates.cacheMissCnyPerMtok
+    +output*rates.outputCnyPerMtok)/1_000_000;
+}
 function dayKeyAt(now, timezone) {
   const day = Object.fromEntries(new Intl.DateTimeFormat('en-US', {
     timeZone: timezone || 'Asia/Shanghai', year:'numeric',month:'2-digit',day:'2-digit',
@@ -223,12 +241,14 @@ export async function getCloudEvidenceBudgetStatus({env, fetchImpl = globalThis.
   let reservedNano = 0;
   let relaySpentNano = 0;
   let relayReservedNano = 0;
+  let baiSpentNano = 0;
+  let baiReservedNano = 0;
   const fields=parseHashResult(payload.result);
   for (let index = 0; index < payload.result.length; index += 2) {
     if (['actualNano','theoreticalNano'].includes(payload.result[index])) continue;
     const ticket = JSON.parse(payload.result[index + 1]);
     if (!['reserved','usage_settled'].includes(ticket.status)) throw new Error('cloud_budget_ticket_invalid');
-    if (ticket.provider === 'siliconflow') {
+    if (['siliconflow','deepseek'].includes(ticket.provider)) {
       if (!Number.isSafeInteger(ticket.actualNano) || ticket.actualNano < 0) throw new Error('cloud_budget_ticket_invalid');
       spentNano += ticket.actualNano;
       if (ticket.status === 'reserved') reservedNano += ticket.actualNano;
@@ -237,6 +257,11 @@ export async function getCloudEvidenceBudgetStatus({env, fetchImpl = globalThis.
       if (!Number.isSafeInteger(ticket.theoreticalNano) || ticket.theoreticalNano < 0) throw new Error('cloud_budget_ticket_invalid');
       if (ticket.status === 'reserved') relayReservedNano += ticket.theoreticalNano;
       else relaySpentNano += ticket.theoreticalNano;
+    }
+    if (ticket.provider === 'bai') {
+      if (!Number.isSafeInteger(ticket.theoreticalNano) || ticket.theoreticalNano < 0) throw new Error('cloud_budget_ticket_invalid');
+      if (ticket.status === 'reserved') baiReservedNano += ticket.theoreticalNano;
+      else baiSpentNano += ticket.theoreticalNano;
     }
   }
   const actualLimit=amount(env.CLOUD_BUDGET_ACTUAL_LIMIT_CNY,'actual_limit');
@@ -248,6 +273,10 @@ export async function getCloudEvidenceBudgetStatus({env, fetchImpl = globalThis.
   return {spentTodayCny:spentNano / UNIT, reservedTodayCny:reservedNano / UNIT,
     dailyBudgetCny:actualLimit,relayPool:{spentUsd:relaySpentNano/UNIT,reservedUsd:relayReservedNano/UNIT,
       theoreticalLimitUsd:theoreticalLimit,accountedUsd:accountedTheoreticalNano/UNIT,
+      actualRemainingCny:Math.max(0,actualLimit-accountedActualNano/UNIT)},
+    baiPool:{spentUsd:baiSpentNano/UNIT,reservedUsd:baiReservedNano/UNIT,
+      theoreticalLimitUsd:theoreticalLimit,accountedUsd:accountedTheoreticalNano/UNIT,
+      costBasis:'official_theoretical',actualCostKnown:false,
       actualRemainingCny:Math.max(0,actualLimit-accountedActualNano/UNIT)}};
 }
 
@@ -277,10 +306,11 @@ export function createCloudRequestBudget({env, fetchImpl = globalThis.fetch, com
     if (payload.error || !Array.isArray(payload.result)) throw new Error('cloud_budget_store_invalid_response');
     return payload.result;
   });
-  async function reserve({provider,model,operation,actualCny,theoreticalUsd}) {
+  async function reserve({provider,model,operation,actualCny,theoreticalUsd,pricingBasis}) {
     amount(actualCny,'reservation_actual',true);
     amount(theoreticalUsd,'reservation_theoretical',true);
     const ticket={id:randomUUID(),provider,model,operation,status:'reserved',startedAtUtc:new Date().toISOString(),
+      ...(pricingBasis?{pricingBasis}:{}),
       actualNano:nano(actualCny),theoreticalNano:nano(theoreticalUsd),started:performance.now()};
     const migrationArgs=officialDailyMigration?['official_daily_v1',officialDailyMigration.startUtc,officialDailyMigration.endUtc]:[];
     const result=await send(['EVAL',CLOUD_BUDGET_RESERVE,officialDailyMigration?'2':'1',key,
@@ -327,7 +357,24 @@ export function createCloudRequestBudget({env, fetchImpl = globalThis.fetch, com
       return result;
     } catch(error) { ticket.uncertainty='request_or_settlement_failed_reservation_retained'; throw error; }
   }
-  async function openai({body,invoke}) {
+  async function deepseek({body,invoke}) {
+    const model=String(body?.model||'').trim();
+    const output=body?.max_tokens;
+    if(!model) throw new Error('cloud_budget_model_required');
+    if(!Number.isSafeInteger(output)||output<=0) throw new Error('cloud_budget_explicit_output_limit_required');
+    const input=Buffer.byteLength(JSON.stringify(body),'utf8');
+    const reserveUsage={prompt_tokens:input,prompt_cache_miss_tokens:input,completion_tokens:output};
+    const ticket=await reserve({provider:'deepseek',model,operation:'chat_completions',
+      actualCny:deepSeekBusyCost(reserveUsage,env),theoreticalUsd:0,pricingBasis:'busy_rate_estimate'});
+    try {
+      const result=await invoke();
+      if(usagePresent(result.usage)) await settle(ticket,{usage:result.usage,returnedModel:result.model,
+        actualCny:deepSeekBusyCost(result.usage,env),actualUpperCny:deepSeekBusyCost(result.usage,env),theoreticalUsd:0});
+      else ticket.uncertainty='provider_usage_missing_reservation_retained';
+      return result;
+    } catch(error) { ticket.uncertainty='request_or_settlement_failed_reservation_retained'; throw error; }
+  }
+  async function openai({body,invoke,provider='openai'}) {
     const model=body.model;
     const output=body.max_completion_tokens;
     if(!Number.isSafeInteger(output)||output<=0) throw new Error('cloud_budget_explicit_output_limit_required');
@@ -343,7 +390,8 @@ export function createCloudRequestBudget({env, fetchImpl = globalThis.fetch, com
       0,officialRates.cacheWriteUsdPerMillion-officialRates.inputUsdPerMillion,
     )/1e6;
     const ticket=await reserve({
-      provider:'openai',model,operation:'chat_completions',actualCny:0,theoreticalUsd,
+      provider,model,operation:'chat_completions',actualCny:0,theoreticalUsd,
+      ...(provider==='bai'?{pricingBasis:'official_theoretical'}:{}),
     });
     try {
       const result=await invoke();
@@ -380,13 +428,14 @@ export function createCloudRequestBudget({env, fetchImpl = globalThis.fetch, com
       theoreticalUsd:records.filter(r=>r.status==='usage_settled').reduce((n,r)=>n+r.theoreticalNano/UNIT,0),
       reservedCny:records.filter(r=>r.status==='reserved').reduce((n,r)=>n+r.actualNano/UNIT,0),
       reservedTheoreticalUsd:records.filter(r=>r.status==='reserved').reduce((n,r)=>n+r.theoreticalNano/UNIT,0),
-      calls:records.map(({started,...r})=>({...r,actualCny:r.estimatedActualCny??null,accountedActualUpperCny:r.actualNano/UNIT,theoreticalUsd:r.theoreticalNano/UNIT}))};
+      actualCostKnown:!records.some(record=>record.provider==='bai'),
+      calls:records.map(({started,...r})=>({...r,actualCny:r.provider==='bai'?null:r.estimatedActualCny??null,accountedActualUpperCny:r.provider==='bai'?null:r.actualNano/UNIT,theoreticalUsd:r.theoreticalNano/UNIT}))};
   }
-  return {relay,openai,beforeSend,onResponse,snapshot};
+  return {relay,deepseek,openai,bai:request=>openai({...request,provider:'bai'}),beforeSend,onResponse,snapshot};
 }
 
 export async function runCloudBudgetedQuestion({env,fetchImpl,budget},invoke) {
-  if(env.RAG_MODEL_PROVIDER && !['relay','openai','deepseek','glm'].includes(env.RAG_MODEL_PROVIDER)) {
+  if(env.RAG_MODEL_PROVIDER && !['relay','openai','bai','deepseek','glm'].includes(env.RAG_MODEL_PROVIDER)) {
     throw new Error('cloud_budget_provider_not_supported');
   }
   const controller=budget||createCloudRequestBudget({env,fetchImpl});
@@ -430,6 +479,14 @@ export async function runOfficialOpenAIRequest({env,body,invoke,fetchImpl=global
     }
     throw error;
   }
+}
+export function runCloudBaiRequest({body,invoke}) {
+  const controller=scope.getStore();
+  return controller?controller.bai({body,invoke}):invoke();
+}
+export function runCloudDeepSeekRequest({body,invoke}) {
+  const controller=scope.getStore();
+  return controller?controller.deepseek({body,invoke}):invoke();
 }
 export function cloudSiliconFlowCallbacks() {
   const controller=scope.getStore();

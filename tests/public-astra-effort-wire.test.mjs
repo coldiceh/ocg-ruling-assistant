@@ -8,6 +8,7 @@ import {
 import { answerPublicRulingQuestion } from "../backend/publicAnswerService.mjs";
 
 const OFFICIAL_ENV = Object.freeze({
+  BAI_API_KEY: "synthetic-bai-key",
   OCG_FINAL_OPENAI_API_KEY: "synthetic-official-key",
   PUBLIC_OPENAI_BUDGET_RUN_ID: "public-official-astra",
   PUBLIC_OPENAI_BUDGET_LIMIT_USD: "5",
@@ -20,8 +21,9 @@ const OFFICIAL_ENV = Object.freeze({
 
 test("public capabilities expose the exact allowlisted models and efforts", () => {
   const capabilities = getPublicRulingModelCapabilities(OFFICIAL_ENV);
-  assert.equal(capabilities.defaultRulingModelProfile, "official-astra-low");
-  assert.equal(capabilities.rulingModelProfiles.length, 18);
+  assert.equal(capabilities.defaultRulingModelProfile, "bai-astra-low");
+  assert.equal(capabilities.rulingModelProfiles.length, 19);
+  assert.equal(capabilities.rulingModelProfiles.find(({ id }) => id === "bai-astra-low").available, true);
   assert.equal(capabilities.rulingModelProfiles.find(({ id }) => id === "official-astra-low").available, true);
   for (const effort of ["low", "medium", "high", "xhigh", "max"]) {
     for (const model of ["gpt-5.6-sol", "gpt-6-astra"]) {
@@ -99,14 +101,14 @@ test("public finalization sends one fixed official Chat Completions request and 
   assert.equal(result.estimatedCostUsd, 0.287018);
 });
 
-test("public body-like profile and effort values cannot change the official final request", () => {
+test("public body-like profile and effort values cannot change the b.ai default final request", () => {
   const env = createPublicAnswerModelEnv({
     ...OFFICIAL_ENV,
     RAG_MODEL: "arbitrary-model",
     RAG_REASONING_EFFORT: "max",
     RELAY_MODEL: "gpt-5.6-sol",
   }, undefined);
-  assert.equal(env.RAG_MODEL_PROVIDER, "openai");
+  assert.equal(env.RAG_MODEL_PROVIDER, "bai");
   assert.equal(env.RAG_MODEL, "gpt-6-astra");
   assert.equal(env.RAG_REASONING_EFFORT, "low");
 });

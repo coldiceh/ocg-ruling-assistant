@@ -30,13 +30,13 @@ test('public daily budget reads actual SiliconFlow tickets and keeps ChatGPT the
     'relay', JSON.stringify({provider:'relay',status:'usage_settled',actualNano:300000000,theoreticalNano:250000000}),
   ]);
   const status = await getRagBudgetStatus({ env, now:new Date('2026-09-08T16:00:01Z'), fetchImpl:redis.fetchImpl });
-  const evidence = status.buckets.find(item => item.id === 'evidence_preparation:siliconflow');
-  assert.ok(evidence, 'the retired DeepSeek preparation bucket must be replaced');
-  assert.equal(evidence.label, 'Qwen3 资料检索（硅基流动）');
+  const evidence = status.buckets.find(item => item.id === 'evidence_preparation:deepseek');
+  assert.ok(evidence, 'the selected DeepSeek preparation bucket must be present');
+  assert.equal(evidence.label, 'DeepSeek 与硅基流动资料准备');
   assert.equal(evidence.spentTodayCny, 0.013);
   assert.equal(evidence.dailyBudgetCny, 10);
   assert.equal(evidence.reservedTodayCny, 0.001);
-  assert.equal(status.buckets.some(item => item.id === 'evidence_preparation:deepseek'), false);
+  assert.equal(status.buckets.some(item => item.id === 'evidence_preparation:siliconflow'), false);
   assert.equal(status.buckets.find(item => item.id === 'final_ruling:relay').spentTodayUsd, 0.25);
   assert.equal(status.buckets.find(item => item.id === 'final_ruling:relay').dailyBudgetUsd, 10);
   assert.match(status.buckets.find(item => item.id === 'final_ruling:relay').label,/共享/);
@@ -48,7 +48,7 @@ test('public daily budget reads actual SiliconFlow tickets and keeps ChatGPT the
 test('a new calendar day shows zero from its own empty ledger without resetting history', async () => {
   const redis = storage();
   const status = await getRagBudgetStatus({ env, now:new Date('2026-09-09T16:00:01Z'), fetchImpl:redis.fetchImpl });
-  const evidence = status.buckets.find(item => item.id === 'evidence_preparation:siliconflow');
+  const evidence = status.buckets.find(item => item.id === 'evidence_preparation:deepseek');
   assert.equal(evidence?.spentTodayCny, 0);
   assert.equal(evidence?.dailyBudgetCny, 10);
   assert.deepEqual(redis.commands.filter(command => command[0] === 'HGETALL'),

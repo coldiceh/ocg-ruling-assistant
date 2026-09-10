@@ -9,8 +9,8 @@ import {
 } from "../backend/publicQueryScopeClassifier.mjs";
 
 const CONFIGURED_ENV = Object.freeze({
-  RELAY_API_KEY: "test-relay-key",
-  RELAY_BASE_URL: "https://relay.example.test/v1",
+  BAI_API_KEY: "test-bai-key",
+  BAI_BASE_URL: "https://api.example.test/v1",
 });
 
 test("query scope prompt treats the complete user input as quoted data", () => {
@@ -45,9 +45,11 @@ test("only a high-confidence out-of-scope model decision qualifies as a risk con
   assert.equal(result.confidence, "high");
   assert.equal(shouldTriggerPublicQueryRisk(result), true);
   assert.equal(seen.length, 1);
-  assert.equal(seen[0].modelName, "gpt-5.6-sol");
+  assert.equal(seen[0].model, "gpt-6-astra");
   assert.equal(seen[0].reasoningEffort, "low");
-  assert.equal(seen[0].maxTokens, 256);
+  assert.equal(seen[0].maxOutputTokens, 256);
+  assert.equal(Object.hasOwn(seen[0], "modelName"), false);
+  assert.equal(Object.hasOwn(seen[0], "maxTokens"), false);
   assert.equal(Object.hasOwn(seen[0], "thinkingMode"), false);
   assert.equal(Object.hasOwn(seen[0], "allowResponseFormatFallback"), false);
   assert.equal(result.estimatedCostCny, 0);
@@ -119,20 +121,22 @@ test("disabled, dry-run and server-owned private evaluation paths bypass classif
   assert.equal(result.scope, "uncertain");
 });
 
-test("a leftover DeepSeek key cannot enable or dispatch the public classifier", async () => {
-  const deepSeekOnlyEnv = {
+test("leftover DeepSeek and relay keys cannot enable or dispatch the public classifier", async () => {
+  const legacyProviderOnlyEnv = {
     DEEPSEEK_API_KEY: "leftover-key-must-not-be-used",
     DEEPSEEK_BASE_URL: "https://api.deepseek.com",
+    RELAY_API_KEY: "leftover-relay-key-must-not-be-used",
+    RELAY_BASE_URL: "https://relay.example.test/v1",
   };
-  assert.deepEqual(publicQueryScopeClassifierStatus(deepSeekOnlyEnv), {
+  assert.deepEqual(publicQueryScopeClassifierStatus(legacyProviderOnlyEnv), {
     enabled: false,
-    reason: "relay_not_configured",
+    reason: "bai_not_configured",
   });
 
   let calls = 0;
   const result = await classifyPublicQueryScope({
     question: "这是不是一个裁定问题？",
-    env: deepSeekOnlyEnv,
+    env: legacyProviderOnlyEnv,
     fetchImpl: async () => {
       calls += 1;
       throw new Error("must not dispatch");
@@ -140,7 +144,7 @@ test("a leftover DeepSeek key cannot enable or dispatch the public classifier", 
   });
   assert.equal(calls, 0);
   assert.equal(result.scope, "uncertain");
-  assert.equal(result.reasonCode, "relay_not_configured");
+  assert.equal(result.reasonCode, "bai_not_configured");
 });
 
 test("a caller abort remains an abort instead of becoming a fail-open decision", async () => {

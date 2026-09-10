@@ -9,8 +9,8 @@ import {answerRagRulingQuestion} from '../backend/ragRulingPipeline.mjs';
 import {computeRagDataRevision} from '../backend/ragDataRevisionManifest.mjs';
 import {buildSafeCandidates} from '../scripts/lib/manual-capture-evidence-selection.mjs';
 import {writeCloudEvidenceCorpus} from '../scripts/build-cloud-evidence-assets.mjs';
-import {createCloudRequestBudget,CLOUD_BUDGET_RESERVE,CLOUD_BUDGET_SETTLE} from '../backend/cloudRequestBudget.mjs';
-import {createPublicAnswerModelEnv} from '../backend/ragModelClient.mjs';
+import {createCloudRequestBudget,CLOUD_BUDGET_RESERVE,CLOUD_BUDGET_SETTLE,runCloudBudgetedQuestion} from '../backend/cloudRequestBudget.mjs';
+import {callCardNameExtractionModel,callDeepSeekJsonTask,createPublicAnswerModelEnv} from '../backend/ragModelClient.mjs';
 
 function relayTextResponse(text, model) {
   return new Response([
@@ -29,29 +29,89 @@ test('all model information needs survive normalization, with exact duplicate re
   assert.throws(()=>normalizeCloudEvidencePlan({informationNeeds:[{}]}),/missing_need/);
 });
 
-test('planning receives only raw question and confirmed card texts and preserves usage',async()=>{
+test('planning receives only raw question and confirmed card texts and preserves DeepSeek usage',async()=>{
   let request;
   const result=await generateCloudEvidencePlan({question:'player question',cardTexts:[{text:'complete text'}],
     invokeTask:async value=>{request=value;return {informationNeeds:[{need:'condition',query:'query'}],
-      usage:{prompt_tokens:8,completion_tokens:9},requestedModel:'gpt-6-astra'};}});
-  assert.equal(request.modelName,'gpt-6-astra');
-  assert.equal(request.reasoningEffort,'low');
+      usage:{prompt_tokens:8,completion_tokens:9},requestedModel:'configured-deepseek-model',providerUsed:'deepseek'};}});
+  assert.equal(request.modelName,undefined);
+  assert.equal(request.thinkingMode,'disabled');
   assert.equal(request.maxTokens,4096);
   assert.equal(request.prompt.split('\n').at(-1),JSON.stringify({question:'player question',cardTexts:[{text:'complete text'}]}));
   assert.deepEqual(result.telemetry.tokenUsage,{prompt_tokens:8,completion_tokens:9});
 });
 
-test('cloud public auxiliary configuration uses Astra low and 60 seconds without changing other routes',()=>{
+test('cloud public auxiliary configuration defaults to DeepSeek and keeps explicit Relay rollback without changing final selection',()=>{
   const source={RAG_CARD_MODEL_TIMEOUT_MS:'12000',RAG_CARD_MODEL_MAX_OUTPUT_TOKENS:'800',RAG_MAX_PROMPT_CHARS:'36000'};
   const baseline=createPublicAnswerModelEnv(source,'official-astra-low');
   const cloud=createPublicAnswerModelEnv({...source,RAG_EVIDENCE_PIPELINE:'cloud_evidence_v1'},'official-astra-low');
+  const rollback=createPublicAnswerModelEnv({...source,RAG_EVIDENCE_PIPELINE:'cloud_evidence_v1',
+    CLOUD_EVIDENCE_AUXILIARY_PROVIDER:'relay'},'official-astra-low');
   assert.equal(baseline.RELAY_CARD_MODEL,'gpt-5.6-sol');
   assert.equal(baseline.RAG_CARD_MODEL_TIMEOUT_MS,'12000');
-  assert.equal(cloud.RELAY_CARD_MODEL,'gpt-6-astra');
-  assert.equal(cloud.RAG_CARD_MODEL_REASONING_EFFORT,'low');
+  assert.equal(cloud.RAG_CARD_MODEL_PROVIDER,'deepseek');
+  assert.equal(cloud.CLOUD_EVIDENCE_PLAN_PROVIDER,'deepseek');
   assert.equal(cloud.RAG_CARD_MODEL_TIMEOUT_MS,'60000');
   assert.equal(cloud.RAG_CARD_MODEL_MAX_OUTPUT_TOKENS,source.RAG_CARD_MODEL_MAX_OUTPUT_TOKENS);
   assert.equal(cloud.RAG_MAX_PROMPT_CHARS,source.RAG_MAX_PROMPT_CHARS);
+  assert.equal(cloud.MODEL_PROVIDER,'openai');
+  assert.equal(cloud.RAG_MODEL,'gpt-6-astra');
+  assert.equal(rollback.RAG_CARD_MODEL_PROVIDER,'relay');
+  assert.equal(rollback.CLOUD_EVIDENCE_PLAN_PROVIDER,'relay');
+  assert.equal(rollback.MODEL_PROVIDER,'openai');
+});
+
+test('DeepSeek JSON task uses the configured transport, disabled thinking, JSON mode, usage, and CNY budget',async()=>{
+  const requests=[];
+  const env={DEEPSEEK_API_KEY:'synthetic-deepseek-key',DEEPSEEK_BASE_URL:'https://deepseek.example.test/v1',
+    DEEPSEEK_CARD_MODEL:'configured-deepseek-model',API_DAILY_BUDGET_CNY:'10'};
+  const result=await callDeepSeekJsonTask({prompt:'original retrieval prompt',maxTokens:4096,env,
+    fetchImpl:async(url,options)=>{
+      requests.push({url:String(url),headers:options.headers,body:JSON.parse(options.body)});
+      return Response.json({id:'ds-json-1',model:'configured-deepseek-model',
+        choices:[{finish_reason:'stop',message:{content:'wrapper\n```json\n{"informationNeeds":[{"need":"n","query":"q"}]}\n```'}}],
+        usage:{prompt_tokens:1000,completion_tokens:500,total_tokens:1500}});
+    }});
+  assert.equal(requests.length,1);
+  assert.equal(requests[0].url,'https://deepseek.example.test/v1/chat/completions');
+  assert.deepEqual(requests[0].body,{
+    model:'configured-deepseek-model',messages:[{role:'user',content:'original retrieval prompt'}],stream:false,
+    response_format:{type:'json_object'},thinking:{type:'disabled'},temperature:0,max_tokens:4096,
+  });
+  assert.deepEqual(result.usage,{prompt_tokens:1000,completion_tokens:500,total_tokens:1500,
+    reasoning_tokens:0,prompt_cache_hit_tokens:0,prompt_cache_miss_tokens:1000,cache_write_tokens:0});
+  assert.equal(result.providerUsed,'deepseek');
+  assert.equal(result.costCurrency,'CNY');
+  assert.equal(result.estimatedCostCny>0,true);
+  assert.equal(result.budgetStatus.bucket.provider,'deepseek');
+});
+
+test('explicit cloud Relay rollback reserves and settles card extraction and planning exactly once each',async()=>{
+  const commands=[];
+  const env=createPublicAnswerModelEnv({RAG_EVIDENCE_PIPELINE:'cloud_evidence_v1',
+    CLOUD_EVIDENCE_AUXILIARY_PROVIDER:'relay',RELAY_API_KEY:'rollback-key',
+    RELAY_BASE_URL:'https://relay.example.test/v1',RELAY_PRICING_MULTIPLIER:'0.27',
+    RELAY_SITE_DOLLAR_CNY:'1'},'official-astra-low');
+  const budget=createCloudRequestBudget({env:{...env,CLOUD_BUDGET_RUN_ID:'rollback-test',
+    CLOUD_BUDGET_ACTUAL_LIMIT_CNY:'10',CLOUD_BUDGET_THEORETICAL_LIMIT_USD:'5'},
+    command:async args=>{commands.push(args);return [args[1]===CLOUD_BUDGET_RESERVE?'reserved':'settled'];}});
+  let transportCalls=0;
+  const fetchImpl=async(_url,options)=>{
+    transportCalls+=1;
+    const prompt=JSON.parse(options.body).messages.map(message=>message.content).join('\n');
+    return relayTextResponse(prompt.includes('你只负责补充游戏王OCG资料检索线索')
+      ? JSON.stringify({informationNeeds:[{need:'need',query:'query'}]})
+      : JSON.stringify({cardNames:[]}), 'gpt-6-astra');
+  };
+  const result=await runCloudBudgetedQuestion({env,budget},async()=>{
+    await callCardNameExtractionModel({userQuery:'rollback question',dataRevision:'rollback-v1',env,fetchImpl});
+    await generateCloudEvidencePlan({question:'rollback question',cardTexts:[{text:'complete text'}],env,fetchImpl});
+    return {answer:'done'};
+  });
+  assert.equal(transportCalls,2);
+  assert.equal(commands.filter(command=>command[1]===CLOUD_BUDGET_RESERVE).length,2);
+  assert.equal(commands.filter(command=>command[1]===CLOUD_BUDGET_SETTLE).length,2);
+  assert.deepEqual(result.debug.cloudCosts.calls.map(call=>call.provider),['relay','relay']);
 });
 
 test('production prepared evidence seam runs after identity preparation and skips old query planning',async()=>{
@@ -99,8 +159,9 @@ test(`cloud production path preserves the complete wire prompt and captures it o
       }}),
     env:createPublicAnswerModelEnv({VERCEL:'1',VERCEL_ENV:deploymentEnv,RAG_EVIDENCE_PIPELINE:'cloud_evidence_v1',CLOUD_EVIDENCE_ASSET_DIR:assetDir,
       CLOUD_EVIDENCE_DENSE:'false',CLOUD_EVIDENCE_RERANK:'false',RAG_MAX_PROMPT_CHARS:'8000',
-      RAG_LIVE_OFFICIAL_QA:'false',RAG_CARD_MODEL_PROVIDER:'relay',RAG_MODEL_PROVIDER:'relay',
-      RAG_MODEL:'gpt-6-astra',RELAY_API_KEY:'synthetic-key',RELAY_BASE_URL:'https://relay.example.test/v1',
+      RAG_LIVE_OFFICIAL_QA:'false',RAG_MODEL_PROVIDER:'relay',
+      RAG_MODEL:'gpt-6-astra',DEEPSEEK_API_KEY:'synthetic-deepseek-key',
+      DEEPSEEK_BASE_URL:'https://deepseek.example.test',DEEPSEEK_CARD_MODEL:'configured-deepseek-model',
       OCG_FINAL_OPENAI_API_KEY:'synthetic-official-key',
       PUBLIC_OPENAI_BUDGET_RUN_ID:'integration-official',PUBLIC_OPENAI_BUDGET_LIMIT_USD:'5',
       PUBLIC_OPENAI_BUDGET_INITIAL_USD:'0.6054225',
@@ -117,18 +178,23 @@ test(`cloud production path preserves the complete wire prompt and captures it o
         throw new Error('cloud pipeline must not use the legacy public Relay budget gate');
       }
       assert.ok([
-        'https://relay.example.test/v1/chat/completions',
+        'https://deepseek.example.test/chat/completions',
         'https://api.openai.com/v1/chat/completions',
       ].includes(String(url)));
       const request=JSON.parse(options.body);
-      wireConfigs.push({model:request.model,effort:request.reasoning_effort,maxTokens:request.max_completion_tokens});
+      wireConfigs.push({model:request.model,thinking:request.thinking?.type,
+        responseFormat:request.response_format?.type,maxTokens:request.max_tokens??request.max_completion_tokens});
       const prompt=request.messages.map(message=>message.content).join('\n');
-      if(prompt.includes('提取所有可能的卡名候选')){
-        calls.push('card');return relayTextResponse(JSON.stringify({cardNames:[card.name]}),request.model);
+      if(prompt.includes('你负责游戏王问题的提及抽取')){
+        calls.push('card');return Response.json({model:request.model,choices:[{finish_reason:'stop',message:{content:
+          JSON.stringify({cardNames:[card.name],groupMentions:[]})}}],
+          usage:{prompt_tokens:8,completion_tokens:4,total_tokens:12}});
       }
-      if(prompt.includes('生成资料检索计划，不回答裁定')){
+      if(prompt.includes('你只负责补充游戏王OCG资料检索线索')){
         calls.push('plan');planInput=JSON.parse(prompt.split('\n').at(-1));
-        return relayTextResponse(JSON.stringify({informationNeeds:[{need:'整合测试龙的发动处理',query:'統合テストドラゴンの処理'}]}),request.model);
+        return Response.json({model:request.model,choices:[{finish_reason:'stop',message:{content:
+          JSON.stringify({informationNeeds:[{need:'整合测试龙的发动处理',query:'統合テストドラゴンの処理'}]})}}],
+          usage:{prompt_tokens:8,completion_tokens:4,total_tokens:12}});
       }
       calls.push('final');finalPrompt=prompt;
       assert.equal(String(url),'https://api.openai.com/v1/chat/completions');
@@ -139,14 +205,14 @@ test(`cloud production path preserves the complete wire prompt and captures it o
   const cloudReservations=cloudBudgetCommands
     .filter(command=>command[1]===CLOUD_BUDGET_RESERVE)
     .map(command=>JSON.parse(command[11]));
-  assert.deepEqual(cloudReservations.map(ticket=>[ticket.provider,ticket.model,ticket.status]),[
-    ['relay','gpt-6-astra','reserved'],
-    ['relay','gpt-6-astra','reserved'],
+  assert.deepEqual(cloudReservations.map(ticket=>[ticket.provider,ticket.model,ticket.status,ticket.pricingBasis]),[
+    ['deepseek','configured-deepseek-model','reserved','busy_rate_estimate'],
+    ['deepseek','deepseek-v4.1-flash-expires-on-0910','reserved','busy_rate_estimate'],
   ]);
   assert.equal(cloudBudgetCommands.filter(command=>command[1]===CLOUD_BUDGET_SETTLE).length,2);
   assert.deepEqual(wireConfigs.slice(0,2),[
-    {model:'gpt-6-astra',effort:'low',maxTokens:800},
-    {model:'gpt-6-astra',effort:'low',maxTokens:4096},
+    {model:'configured-deepseek-model',thinking:'disabled',responseFormat:'json_object',maxTokens:800},
+    {model:'deepseek-v4.1-flash-expires-on-0910',thinking:'disabled',responseFormat:'json_object',maxTokens:4096},
   ]);
   assert.equal(planInput.question,question);
   assert.ok(planInput.cardTexts.some(item=>item.cardIds.includes(card.id)));
@@ -163,6 +229,10 @@ test(`cloud production path preserves the complete wire prompt and captures it o
   assert.equal(answer.shortAnswer,'这是模拟远端返回的完整裁定正文。');
   assert.ok(answer.resolvedCards.some(item=>item.id===card.id));
   assert.equal(answer.debug.cloudEvidence.selectedCount,1);
+  assert.equal(answer.debug.cloudCosts.calls.length,2);
+  assert.equal(answer.debug.cloudCosts.calls.every(call=>call.provider==='deepseek'&&call.status==='usage_settled'),true);
+  assert.equal(answer.debug.cloudCosts.actualCny,0.00012);
+  assert.equal(answer.debug.cloudCosts.theoreticalUsd,0);
   if(deploymentEnv==='preview') {
     assert.equal(answer.debug.cloudEvidenceCapture?.actualPrompt,finalPrompt);
     assert.deepEqual(answer.debug.cloudEvidenceCapture.informationNeeds,['整合测试龙的发动处理']);
