@@ -18,7 +18,6 @@ import {
 } from "./privateEvaluationDiagnostics.mjs";
 import { normalizeRuleSearchQueryText } from "./ruleSearchQueryText.mjs";
 import {
-  runCloudDeepSeekRequest,
   runCloudRelayRequest,
   runOfficialOpenAIRequest,
   getCloudEvidenceBudgetStatus,
@@ -556,118 +555,15 @@ export async function callRagModel({
 }
 
 /**
- * Runs one DeepSeek auxiliary JSON task through the evidence-preparation CNY
- * budget. The wire contract is fixed to non-thinking JSON mode with no retry,
- * repair-model call, or response-format fallback.
+ * Legacy compatibility export. DeepSeek remains available for final rulings,
+ * but it must never be dispatched for auxiliary JSON/evidence work.
  */
-export async function callDeepSeekJsonTask({
-  prompt,
-  modelName,
-  maxTokens = null,
-  env = globalThis.process?.env || {},
-  fetchImpl = globalThis.fetch,
-  signal,
-  now = new Date(),
-} = {}) {
-  const normalizedPrompt = String(prompt || "").trim();
-  if (!normalizedPrompt) throw new TypeError("DeepSeek JSON task prompt must not be empty");
-  if (!String(env.DEEPSEEK_API_KEY || "").trim()) {
-    const error = new Error("DeepSeek is not configured");
-    error.code = "deepseek_not_configured";
-    throw error;
-  }
-  if (typeof fetchImpl !== "function") throw new TypeError("DeepSeek JSON task requires fetch");
-  if (signal?.aborted) throw abortSignalError(signal);
-
-  deepSeekChatCompletionsUrl(env.DEEPSEEK_BASE_URL);
-  const resolvedModelName = String(
-    modelName
-      || env.DEEPSEEK_RULE_MODEL
-      || env.RAG_RULE_MODEL
-      || env.DEEPSEEK_CARD_MODEL
-      || env.RAG_CARD_MODEL
-      || DEFAULT_DEEPSEEK_CARD_MODEL,
-  ).trim();
-  const resolvedMaxTokens = optionalPositiveInteger(maxTokens)
-    || DEFAULT_JSON_TASK_MAX_OUTPUT_TOKENS;
-  const execution = await runBudgetedAuxiliaryModelCall({
-    provider: "deepseek",
-    stage: "evidence_preparation",
-    modelName: resolvedModelName,
-    prompt: normalizedPrompt,
-    maxTokens: resolvedMaxTokens,
-    env,
-    fetchImpl,
-    now,
-    signal,
-    invoke: () => callDeepSeek({
-      prompt: normalizedPrompt,
-      env,
-      modelName: resolvedModelName,
-      maxTokens: resolvedMaxTokens,
-      fetchImpl,
-      temperature: 0,
-      thinkingMode: "disabled",
-      reasoningEffort: null,
-      requireJson: true,
-      allowResponseFormatFallback: false,
-      cloudBudgeted: env.RAG_EVIDENCE_PIPELINE === "cloud_evidence_v1",
-      signal,
-    }),
-  });
-  if (execution.blocked) {
-    const error = new Error("DeepSeek evidence-preparation budget is exhausted");
-    error.code = "api_daily_budget_exceeded";
-    error.budgetStatus = execution.budgetStatus;
-    error.budgetWarnings = execution.warnings;
-    Object.assign(error, {
-      costCurrency: execution.costCurrency,
-      estimatedCost: execution.estimatedCost,
-      estimatedCostCny: execution.estimatedCostCny,
-      estimatedCostUsd: execution.estimatedCostUsd,
-    });
-    throw error;
-  }
-
-  const response = execution.value || {};
-  let parsed;
-  try {
-    parsed = parseRagModelJson(response.rawText);
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      throw new SyntaxError("DeepSeek JSON task output must be an object");
-    }
-  } catch (caught) {
-    const error = new Error("DeepSeek JSON task returned an invalid JSON object", {
-      cause: caught instanceof Error ? caught : undefined,
-    });
-    error.name = "DeepSeekJsonTaskContentError";
-    error.code = "deepseek_json_task_invalid_json";
-    error.usage = execution.usage;
-    error.budgetStatus = execution.budgetStatus;
-    Object.assign(error, {
-      costCurrency: execution.costCurrency,
-      estimatedCost: execution.estimatedCost,
-      estimatedCostCny: execution.estimatedCostCny,
-      estimatedCostUsd: execution.estimatedCostUsd,
-    });
-    throw error;
-  }
-
-  return {
-    ...parsed,
-    rawText: response.rawText,
-    usage: execution.usage,
-    warnings: [...(response.warnings || []), ...(execution.warnings || [])],
-    providerUsed: "deepseek",
-    requestedModel: resolvedModelName,
-    returnedModel: String(response.responseModel || "") || null,
-    thinkingMode: "disabled",
-    costCurrency: execution.costCurrency,
-    estimatedCost: execution.estimatedCost,
-    estimatedCostCny: execution.estimatedCostCny,
-    estimatedCostUsd: execution.estimatedCostUsd,
-    budgetStatus: execution.budgetStatus,
-  };
+export async function callDeepSeekJsonTask() {
+  const error = new Error(
+    "DeepSeek auxiliary JSON tasks are disabled; use Relay GPT-5.6 Sol low",
+  );
+  error.code = "deepseek_auxiliary_disabled";
+  throw error;
 }
 
 /**
@@ -812,7 +708,7 @@ export async function callCardNameExtractionModel({
     ...relayGeneration.warnings,
   ];
   const maxTokens = readNumber(env.RAG_CARD_MODEL_MAX_OUTPUT_TOKENS, 800);
-  const prompt = buildCardNameExtractionPrompt(userQuery, { typed: provider === "deepseek" });
+  const prompt = buildCardNameExtractionPrompt(userQuery);
 
   if (dryRun === true || isEnabled(env.RAG_DRY_RUN)) {
     return emptyCardNameExtractionResult(provider, modelName, true, [
@@ -857,11 +753,8 @@ export async function callCardNameExtractionModel({
         };
       }
       const raw = execution.value.rawPayload;
-      const parsedExtraction = parseCardNameExtractionOutput(raw);
       return {
-        candidates: parsedExtraction.candidates,
-        groupMentions: parsedExtraction.groupMentions,
-        typedMentionSetProvided: parsedExtraction.typedMentionSetProvided,
+        candidates: normalizeCardNameCandidates(raw),
         rawText: String(raw || ""),
         providerUsed: provider,
         modelUsed: modelName,
@@ -939,7 +832,6 @@ export async function callCardNameExtractionModel({
             reasoningEffort: null,
             requireJson: true,
             allowResponseFormatFallback: false,
-            cloudBudgeted: env.RAG_EVIDENCE_PIPELINE === "cloud_evidence_v1",
             signal: requestSignal,
           })
           : provider === "gemini"
@@ -978,8 +870,6 @@ export async function callCardNameExtractionModel({
     const parsedExtraction = validateExtractionResponse(response, "card");
     const result = {
       candidates: parsedExtraction.items,
-      groupMentions: parsedExtraction.groupMentions,
-      typedMentionSetProvided: parsedExtraction.typedMentionSetProvided === true,
       rawText: response.rawText,
       providerUsed: provider,
       modelUsed: modelName,
@@ -1919,13 +1809,6 @@ export function resolveRagProvider(env = {}) {
 export function createPublicAnswerModelEnv(env = {}, profileValue) {
   const source = env && typeof env === "object" ? env : {};
   const result = { ...source };
-  const cloudEvidence = source.RAG_EVIDENCE_PIPELINE === "cloud_evidence_v1";
-  const configuredCloudAuxiliaryProvider = String(
-    source.CLOUD_EVIDENCE_AUXILIARY_PROVIDER || "deepseek",
-  ).trim().toLowerCase();
-  const cloudAuxiliaryProvider = ["deepseek", "relay"].includes(configuredCloudAuxiliaryProvider)
-    ? configuredCloudAuxiliaryProvider
-    : "deepseek";
   const profile = configuredPublicRulingModelProfile(
     resolvePublicRulingModelProfile(profileValue || source.PUBLIC_RULING_MODEL_PROFILE),
     source,
@@ -2036,19 +1919,17 @@ export function createPublicAnswerModelEnv(env = {}, profileValue) {
   if (profile.provider === "relay") result.RELAY_MODEL = profile.model;
   if (profile.provider === "deepseek") result.DEEPSEEK_FLASH_MODEL = profile.model;
   if (profile.provider === "glm") result.GLM_MODEL = profile.model;
-  // Retain the legacy tier flag for public profile compatibility. Auxiliary
-  // DeepSeek model selection uses its dedicated card/rule variables instead.
+  // Retain the legacy tier flag for public profile compatibility. Public card
+  // extraction no longer reads it or dispatches to DeepSeek.
   result.RAG_MODEL_TIER = "flash";
-  result.RAG_CARD_MODEL_PROVIDER = mockRequested ? "mock" : cloudEvidence ? cloudAuxiliaryProvider : "relay";
+  result.RAG_CARD_MODEL_PROVIDER = mockRequested ? "mock" : "relay";
   result.RAG_RULE_MODEL_PROVIDER = mockRequested ? "mock" : "relay";
-  result.CLOUD_EVIDENCE_PLAN_PROVIDER = mockRequested ? "mock" : cloudAuxiliaryProvider;
   // Public answers deliberately use a single final semantic judge. Keep this
   // hard-disabled even if an old Vercel environment variable still says true;
   // controlled/admin experiments call the reviewer with their own environment.
   result.RAG_EVIDENCE_APPLICABILITY_ENABLED = "false";
-  result.RELAY_CARD_MODEL = cloudEvidence && cloudAuxiliaryProvider === "relay"
-    ? "gpt-6-astra"
-    : DEFAULT_RELAY_AUXILIARY_MODEL;
+  const cloudEvidence = source.RAG_EVIDENCE_PIPELINE === "cloud_evidence_v1";
+  result.RELAY_CARD_MODEL = cloudEvidence ? "gpt-6-astra" : DEFAULT_RELAY_AUXILIARY_MODEL;
   if (cloudEvidence) result.RAG_CARD_MODEL_TIMEOUT_MS = "60000";
   result.RAG_CARD_MODEL_REASONING_EFFORT = "low";
   const configuredRuleModel = String(source.RELAY_RULE_MODEL || DEFAULT_RELAY_RULE_MODEL)
@@ -2235,7 +2116,7 @@ export async function getRagBudgetStatus({
     }] : []), ...PUBLIC_BUDGET_BUCKETS.map((bucket, index) => cloudEvidence && bucket.id === 'evidence_preparation:deepseek'
       ? {
         ...budgetBucketStatusPayload({
-        bucket:{id:'evidence_preparation:deepseek',stage:'evidence_preparation',provider:'deepseek',label:'DeepSeek 与硅基流动资料准备',currency:'CNY'},
+          bucket:{id:'evidence_preparation:siliconflow',stage:'evidence_preparation',provider:'siliconflow',label:'Qwen3 资料检索（硅基流动）',currency:'CNY'},
           bucketConfig:{currency:'CNY',dailyBudgetAmount:cloudEvidence.dailyBudgetCny},
           spent:cloudEvidence.spentTodayCny,
         }),
@@ -2365,7 +2246,6 @@ async function callDeepSeek({
   reasoningEffort,
   requireJson = true,
   allowResponseFormatFallback = false,
-  cloudBudgeted = false,
   signal,
 }) {
   const endpoint = deepSeekChatCompletionsUrl(env.DEEPSEEK_BASE_URL);
@@ -2385,37 +2265,23 @@ async function callDeepSeek({
     body.temperature = temperature ?? readNumber(env.RAG_MODEL_TEMPERATURE, 0);
   }
   if (Number.isInteger(maxTokens) && maxTokens > 0) body.max_tokens = maxTokens;
+  let response = await postJson(fetchImpl, endpoint, {
+    authorization: `Bearer ${env.DEEPSEEK_API_KEY}`,
+    "content-type": "application/json",
+  }, body, { signal });
   const warnings = [];
-  const dispatch = async (requestBody) => {
-    const response = await postJson(fetchImpl, endpoint, {
+  if (allowResponseFormatFallback && jsonResponseModeEnabled && !response.ok && response.status === 400) {
+    const fallbackBody = { ...body };
+    delete fallbackBody.response_format;
+    throwIfAbortedBeforeProviderDispatch(signal);
+    response = await postJson(fetchImpl, endpoint, {
       authorization: `Bearer ${env.DEEPSEEK_API_KEY}`,
       "content-type": "application/json",
-    }, requestBody, { signal });
-    assertProviderHttpResponse(response, "deepseek");
-    return readProviderJson(response, { signal });
-  };
-  let payload;
-  if (cloudBudgeted) {
-    if (allowResponseFormatFallback) throw new Error("cloud DeepSeek auxiliary calls do not support response-format fallback");
-    payload = await runCloudDeepSeekRequest({ body, invoke: () => dispatch(body) });
-  } else {
-    let response = await postJson(fetchImpl, endpoint, {
-      authorization: `Bearer ${env.DEEPSEEK_API_KEY}`,
-      "content-type": "application/json",
-    }, body, { signal });
-    if (allowResponseFormatFallback && jsonResponseModeEnabled && !response.ok && response.status === 400) {
-      const fallbackBody = { ...body };
-      delete fallbackBody.response_format;
-      throwIfAbortedBeforeProviderDispatch(signal);
-      response = await postJson(fetchImpl, endpoint, {
-        authorization: `Bearer ${env.DEEPSEEK_API_KEY}`,
-        "content-type": "application/json",
-      }, fallbackBody, { signal });
-      warnings.push("deepseek_response_format_fallback");
-    }
-    assertProviderHttpResponse(response, "deepseek");
-    payload = await readProviderJson(response, { signal });
+    }, fallbackBody, { signal });
+    warnings.push("deepseek_response_format_fallback");
   }
+  assertProviderHttpResponse(response, "deepseek");
+  const payload = await readProviderJson(response, { signal });
   const choice = payload?.choices?.[0] || {};
   const message = choice.message || {};
   const rawText = extractChatMessageText(message.content);
@@ -3623,14 +3489,13 @@ function buildExternallyManagedBudgetPreflight({
   provider = "openai",
   stage = "final_ruling",
   label = "官方 OpenAI 最终裁定",
-  currency = "USD",
 } = {}) {
   const bucket = Object.freeze({
     id: `${stage}:${provider}`,
     stage,
     provider,
     label,
-    currency,
+    currency: "USD",
   });
   return {
     managedExternally: true,
@@ -3642,7 +3507,7 @@ function buildExternallyManagedBudgetPreflight({
     bucketReservedAmountCny: 0,
     bucketReservedAmountUsd: 0,
     bucket,
-    bucketConfig: { currency },
+    bucketConfig: { currency: "USD" },
     warnings: [],
     status: null,
   };
@@ -3661,14 +3526,13 @@ async function buildBudgetPreflight({ provider, stage, modelName, prompt, maxTok
       privateEvaluationBudget,
     });
   }
-  if ((provider === "relay" || (provider === "deepseek" && stage === "evidence_preparation"))
+  if (provider === "relay"
       && env.RAG_EVIDENCE_PIPELINE === "cloud_evidence_v1"
       && cloudRequestBudgetActive()) {
     return buildExternallyManagedBudgetPreflight({
-      provider,
+      provider: "relay",
       stage: "evidence_preparation",
-      label: provider === "deepseek" ? "云证据 DeepSeek 调用" : "云证据 Relay 调用",
-      currency: provider === "deepseek" ? "CNY" : "USD",
+      label: "云证据 Relay 调用",
     });
   }
   const config = budgetConfig(env);
@@ -4889,18 +4753,7 @@ function budgetBucketConfig(env, bucket) {
   };
 }
 
-export function buildCardNameExtractionPrompt(userQuery, { typed = false } = {}) {
-  if (typed) {
-    return [
-      "你负责游戏王问题的提及抽取，不回答裁定，也不查找未给出的卡片。把问题中的名称分为两个独立数组：",
-      "cardNames：明确命名的单张卡，或有上下文依据的单卡简称、俗称、可能写错的名字。包括双方及句中其他被点名的卡，无括号也要提取。保留完整名称，不拆出其中系列部分；不知道正式名也可保留该单卡原称呼。",
-      "groupMentions：系列、种族、属性、卡片种类等集合名称，以及只由这些特征描述而未给出个体名称的卡。指向场上某一只实际怪兽，并不等于给出了该怪兽的卡名；“我方”“一只”“作为对象”等限定不能把集合名变成单卡简称。引号也不决定属于哪类。只有上下文给出某个具体卡名与简称的对应，或该称呼本身就是单卡名称，才归cardNames。",
-      "每项只放入其实际类别。不能猜测未命名对象是该系列的哪张卡。动作、效果、区域、连锁编号不放入任一数组。重复提及合并。",
-      "只输出JSON：{\"cardNames\":[{\"name\":\"单卡称呼\",\"originalText\":\"对应原文\",\"confidence\":\"high或medium或low\"}],\"groupMentions\":[\"系列或类别原文\"]}。没有内容的数组为空。",
-      "玩家问题：",
-      String(userQuery || ""),
-    ].join("\n");
-  }
+function buildCardNameExtractionPrompt(userQuery) {
   const example = {
     cardNames: [
       { name: "正式或可能的卡名", originalText: "玩家原文片段", confidence: "medium" },
@@ -5168,22 +5021,13 @@ function validateExtractionResponse(response = {}, kind) {
     return typeof value === "string" && Boolean(value.trim());
   });
   if (!structurallyValid) return { items: [], cacheable: false, reason: "invalid_schema" };
-  const parsedCardExtraction = kind === "card" ? parseCardNameExtractionOutput(parsed) : null;
   const items = kind === "card"
-    ? parsedCardExtraction.candidates
+    ? normalizeCardNameCandidates(parsed)
     : normalizeRuleSearchQueries(parsed);
   if (source.length > 0 && items.length === 0) {
     return { items: [], cacheable: false, reason: "no_valid_items" };
   }
-  return {
-    items,
-    ...(kind === "card" ? {
-      groupMentions: parsedCardExtraction.groupMentions,
-      typedMentionSetProvided: parsedCardExtraction.typedMentionSetProvided,
-    } : {}),
-    cacheable: true,
-    reason: "valid",
-  };
+  return { items, cacheable: true, reason: "valid" };
 }
 
 function isTruncatedProviderResponse(response = {}) {
@@ -5192,7 +5036,7 @@ function isTruncatedProviderResponse(response = {}) {
     || (response?.warnings || []).some((warning) => /truncated|token_limit|max_tokens/iu.test(String(warning || "")));
 }
 
-function normalizeCardNameCandidates(rawText, { preserveTypedMentions = false } = {}) {
+function normalizeCardNameCandidates(rawText) {
   let parsed = null;
   try {
     parsed = rawText && typeof rawText === "object" ? rawText : parseRagModelJson(rawText);
@@ -5219,11 +5063,8 @@ function normalizeCardNameCandidates(rawText, { preserveTypedMentions = false } 
         : "medium",
       source: "model_card_name_extractor",
     }))
-    .filter((item) => preserveTypedMentions
-      ? Boolean(item.name)
-      : item.name.length >= 2 && /[A-Za-z\u3040-\u30ff\u3400-\u9fff0-9]/u.test(item.name))
-    .filter((item) => preserveTypedMentions
-      || !/^(?:效果|发动|發動|适用|適用|对象|對象|场上|場上|墓地|除外|手卡|卡组|牌组|连锁|連鎖)$/u.test(item.name));
+    .filter((item) => item.name.length >= 2 && /[A-Za-z\u3040-\u30ff\u3400-\u9fff0-9]/u.test(item.name))
+    .filter((item) => !/^(?:效果|发动|發動|适用|適用|对象|對象|场上|場上|墓地|除外|手卡|卡组|牌组|连锁|連鎖)$/u.test(item.name));
   const seen = new Set();
   const result = [];
   for (const candidate of candidates) {
@@ -5231,45 +5072,9 @@ function normalizeCardNameCandidates(rawText, { preserveTypedMentions = false } 
     if (seen.has(key)) continue;
     seen.add(key);
     result.push(candidate);
-    if (!preserveTypedMentions && result.length >= 12) break;
+    if (result.length >= 12) break;
   }
   return result;
-}
-
-export function parseCardNameExtractionOutput(rawText) {
-  let parsed = null;
-  try {
-    parsed = rawText && typeof rawText === "object" ? rawText : parseRagModelJson(rawText);
-  } catch {
-    return { candidates: [], groupMentions: [], typedMentionSetProvided: false };
-  }
-  const typedMentionSetProvided = isTypedCardMentionSet(parsed);
-  const groupMentions = Array.isArray(parsed?.groupMentions)
-    ? [...new Set(parsed.groupMentions
-      .filter((item) => typeof item === "string")
-      .map((item) => nonEmpty(item))
-      .filter(Boolean))]
-    : [];
-  return {
-    candidates: normalizeCardNameCandidates(parsed, { preserveTypedMentions: typedMentionSetProvided }),
-    groupMentions,
-    typedMentionSetProvided,
-  };
-}
-
-function isTypedCardMentionSet(parsed) {
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return false;
-  if (!Array.isArray(parsed.cardNames) || !Array.isArray(parsed.groupMentions)) return false;
-  const cardNamesValid = parsed.cardNames.every((item) => {
-    if (typeof item === "string") return Boolean(item.trim());
-    if (!item || typeof item !== "object" || Array.isArray(item)) return false;
-    return typeof (item.name ?? item.cardName ?? item.candidate) === "string"
-      && Boolean(String(item.name ?? item.cardName ?? item.candidate).trim());
-  });
-  const groupMentionsValid = parsed.groupMentions.every((item) => (
-    typeof item === "string" && Boolean(item.trim())
-  ));
-  return cardNamesValid && groupMentionsValid;
 }
 
 function normalizeRuleSearchQueries(rawText) {
@@ -5391,8 +5196,6 @@ function normalizeRuleQueryCheckpoint(value) {
 function emptyCardNameExtractionResult(providerUsed, modelUsed, dryRun, warnings = []) {
   return {
     candidates: [],
-    groupMentions: [],
-    typedMentionSetProvided: false,
     rawText: "",
     providerUsed,
     modelUsed,
@@ -5557,7 +5360,7 @@ function resolveConfiguredModelTier(env = {}) {
   return tier === "flash" ? "flash" : "pro";
 }
 
-export function modelNameForCardExtractionProvider(provider, env) {
+function modelNameForCardExtractionProvider(provider, env) {
   if (provider === "deepseek") return String(env.DEEPSEEK_CARD_MODEL || env.RAG_CARD_MODEL || DEFAULT_DEEPSEEK_CARD_MODEL);
   if (provider === "relay") {
     return resolveRelayAuxiliaryModelName(env.RELAY_CARD_MODEL, env).modelName;

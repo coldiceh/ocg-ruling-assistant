@@ -58,31 +58,21 @@ const EFFECT_LINE_PATTERN = /^(?:效果\s*[：:]|[①②③④⑤⑥⑦⑧⑨⑩
 const CARD_TEXT_BOUNDARY_PATTERN = /^(?:问题|问|Q|Ｑ|场景|请问|此时|那么|如果|假设)\s*[：:]/iu;
 const NON_CARD_HEADING_NAMES = new Set(["效果", "问题", "问", "q", "场景", "请问", "补充", "答案"]);
 
-export function extractRagCards(userQuery, {
-  cards = [],
-  maxCards = 6,
-  modelCardNameCandidates = [],
-  mentionSetSource = "query_scan",
-} = {}) {
+export function extractRagCards(userQuery, { cards = [], maxCards = 6, modelCardNameCandidates = [] } = {}) {
   const query = String(userQuery || "");
-  const typedModelOwnsMentionSet = mentionSetSource === "typed_model";
   const cardLimit = normalizeMaxCards(maxCards);
   const aliasIndex = buildAliasIndex(cards);
   const cardNameScanQuery = maskNonCardQuotedExpressions(query, { aliasIndex });
   const normalizedQuery = normalizeCardKey(cardNameScanQuery);
-  const queryNumberedIdentities = typedModelOwnsMentionSet ? [] : extractNumberedCardIdentities(query);
-  const queryNumberedIdentityKeys = new Set(queryNumberedIdentities.map(numberedIdentityKey));
+  const queryNumberedIdentityKeys = new Set(extractNumberedCardIdentities(query).map(numberedIdentityKey));
   const userProvidedCardTexts = extractUserProvidedCardTextBlocks(query);
-  const nonCardQuotedMentionKeys = typedModelOwnsMentionSet ? new Set() : new Set(
+  const nonCardQuotedMentionKeys = new Set(
     collectQuotedMentionEntries(query, { aliasIndex })
       .filter((item) => item.role !== "card")
       .map((item) => normalizeCardKey(item.mention))
       .filter(Boolean),
   );
-  const normalizedModelMentions = normalizeModelCardNameCandidates(modelCardNameCandidates, {
-    preserveTypedMentions: typedModelOwnsMentionSet,
-  });
-  const modelMentions = typedModelOwnsMentionSet ? normalizedModelMentions : normalizedModelMentions
+  const modelMentions = normalizeModelCardNameCandidates(modelCardNameCandidates)
     .filter((mention) => [mention.originalText, mention.name].some((surface) => (
       isPlausibleUnresolvedCardMention(surface, "model_card_name_extractor")
     )))
@@ -95,14 +85,14 @@ export function extractRagCards(userQuery, {
       })
     ));
   let exactMentionSeeds = [
-    ...buildModelMentionSeeds(modelMentions, { preserveTypedMentions: typedModelOwnsMentionSet }),
-    ...(typedModelOwnsMentionSet ? [] : extractNumberedCardMentionCandidates(query).map((input) => ({ input, reason: "numbered_card_not_found", source: "numbered_card_identity" }))),
-    ...(typedModelOwnsMentionSet ? [] : extractQuotedMentions(query, { aliasIndex }).map((input) => ({ input, reason: "quoted_mention_not_found", source: "quoted_mention" }))),
+    ...buildModelMentionSeeds(modelMentions),
+    ...extractNumberedCardMentionCandidates(query).map((input) => ({ input, reason: "numbered_card_not_found", source: "numbered_card_identity" })),
+    ...extractQuotedMentions(query, { aliasIndex }).map((input) => ({ input, reason: "quoted_mention_not_found", source: "quoted_mention" })),
     ...userProvidedCardTexts.map((item) => ({ input: item.name, reason: "user_provided_text_name_not_found", source: "user_provided_text" })),
   ];
-  let unquotedMentionSeeds = (typedModelOwnsMentionSet ? [] : extractUnquotedCardMentionCandidates(cardNameScanQuery))
+  let unquotedMentionSeeds = extractUnquotedCardMentionCandidates(cardNameScanQuery)
     .map((input) => ({ input, reason: "unquoted_candidate_not_found", source: "unquoted_heuristic" }));
-  const distinctiveMentionSeeds = (typedModelOwnsMentionSet ? [] : extractContextualDistinctiveMentionCandidates(cardNameScanQuery))
+  const distinctiveMentionSeeds = extractContextualDistinctiveMentionCandidates(cardNameScanQuery)
     .filter((input) => findUniqueDistinctiveFragmentCandidate(cards, input))
     .map((input) => ({
       input,
@@ -110,18 +100,14 @@ export function extractRagCards(userQuery, {
       source: "contextual_distinctive_fragment",
     }));
   exactMentionSeeds.push(...distinctiveMentionSeeds);
-  const queryAliasEntries = typedModelOwnsMentionSet
-    ? []
-    : collectQueryAliasEntries(aliasIndex, normalizedQuery, queryNumberedIdentityKeys);
+  const queryAliasEntries = collectQueryAliasEntries(aliasIndex, normalizedQuery, queryNumberedIdentityKeys);
   const exactSpanSelection = buildExactMentionSpanSelection(
     cardNameScanQuery,
     queryAliasEntries,
     exactMentionSeeds,
   );
-  if (!typedModelOwnsMentionSet) {
-    exactMentionSeeds = markAndFilterMentionSeeds(exactMentionSeeds, exactSpanSelection);
-    unquotedMentionSeeds = markAndFilterMentionSeeds(unquotedMentionSeeds, exactSpanSelection);
-  }
+  exactMentionSeeds = markAndFilterMentionSeeds(exactMentionSeeds, exactSpanSelection);
+  unquotedMentionSeeds = markAndFilterMentionSeeds(unquotedMentionSeeds, exactSpanSelection);
   const resolved = [];
   const unresolvedMentions = [];
   const ambiguousMentions = [];
@@ -130,7 +116,7 @@ export function extractRagCards(userQuery, {
   const nearEditAmbiguityLockedMentionKeys = new Set();
   const numberedMentionKeysRequiringExternalVerification = new Set();
 
-  for (const identity of queryNumberedIdentities) {
+  for (const identity of extractNumberedCardIdentities(query)) {
     const input = `${identity.family === "cno" ? "CNo." : "No."}${identity.number}`;
     const inputKey = normalizeCardKey(input);
     const candidates = findCardsByNumberedIdentity(cards, identity);
@@ -212,8 +198,7 @@ export function extractRagCards(userQuery, {
     if (!mentionKey || seenMentionKeys.has(mentionKey)) continue;
     seenMentionKeys.add(mentionKey);
     const candidates = resolveMentionCandidates(cards, aliasIndex, mention);
-    const allowUnresolvedHypothesis = typedModelOwnsMentionSet
-      || isPlausibleUnresolvedCardMention(mention, seed.source);
+    const allowUnresolvedHypothesis = isPlausibleUnresolvedCardMention(mention, seed.source);
     const requiresExternalNumberedIdentityVerification = numberedMentionKeysRequiringExternalVerification.has(mentionKey);
     const nearestEditCandidates = candidates.length
       || seed.deferToNestedKnownSpan
@@ -314,47 +299,46 @@ export function extractRagCards(userQuery, {
     if (unresolved.length > 1) ambiguousMentions.push(buildAmbiguousMention(hit.candidates[0].matchedAlias, unresolved));
   }
 
-  if (!typedModelOwnsMentionSet) {
-    applyContextualExtraDeckMaterialResolution({
-      query,
-      cards: Array.isArray(cards) ? cards : EMPTY_CARD_LIST,
-      resolved,
-      seenCards,
-      unresolvedMentions,
-    });
+  applyContextualExtraDeckMaterialResolution({
+    query,
+    cards: Array.isArray(cards) ? cards : EMPTY_CARD_LIST,
+    resolved,
+    seenCards,
+    unresolvedMentions,
+  });
 
-    applyContextualShortMentionResolution({
-      query,
-      cards: Array.isArray(cards) ? cards : EMPTY_CARD_LIST,
-      resolved,
-      seenCards,
-      unresolvedMentions,
-      ambiguousMentions,
-    });
+  applyContextualShortMentionResolution({
+    query,
+    cards: Array.isArray(cards) ? cards : EMPTY_CARD_LIST,
+    resolved,
+    seenCards,
+    unresolvedMentions,
+    ambiguousMentions,
+  });
 
-    applyContextualNearEditResolution({
-      aliasIndex,
-      resolved,
-      seenCards,
-      unresolvedMentions,
-      ambiguousMentions,
-      ambiguityLockedMentionKeys: nearEditAmbiguityLockedMentionKeys,
-    });
+  applyContextualNearEditResolution({
+    aliasIndex,
+    resolved,
+    seenCards,
+    unresolvedMentions,
+    ambiguousMentions,
+    ambiguityLockedMentionKeys: nearEditAmbiguityLockedMentionKeys,
+  });
 
-    applyReferencedCardTextResolution({
-      query,
-      aliasIndex,
-      resolved,
-      seenCards,
-      maxCards: cardLimit,
-    });
-  }
+  applyReferencedCardTextResolution({
+    query,
+    aliasIndex,
+    resolved,
+    seenCards,
+    maxCards: cardLimit,
+  });
 
   const visibleResolved = resolved.slice(0, cardLimit);
   const omittedResolved = resolved.slice(cardLimit);
-  const filteredUnresolvedMentions = typedModelOwnsMentionSet
-    ? unresolvedMentions
-    : suppressResolvedGameplayClauseMentions(unresolvedMentions, visibleResolved);
+  const filteredUnresolvedMentions = suppressResolvedGameplayClauseMentions(
+    unresolvedMentions,
+    visibleResolved,
+  );
   const cardLimitMentions = omittedResolved.map((card) => ({
     input: card.input || card.name,
     reason: "resolved_card_limit_exceeded",
@@ -370,7 +354,6 @@ export function extractRagCards(userQuery, {
     omittedResolvedCards: cardLimitMentions,
     userProvidedCardTexts,
     modelCardNameCandidates: modelMentions,
-    mentionSetSource,
   };
 }
 
@@ -1142,7 +1125,7 @@ function hasColloquialActivationSubjectSignal(value) {
   return true;
 }
 
-function buildModelMentionSeeds(modelMentions, { preserveTypedMentions = false } = {}) {
+function buildModelMentionSeeds(modelMentions) {
   return modelMentions
     .map((item) => {
       const name = String(item.name || "").trim();
@@ -1157,7 +1140,7 @@ function buildModelMentionSeeds(modelMentions, { preserveTypedMentions = false }
         searchTexts,
       };
     })
-    .filter((item) => preserveTypedMentions ? Boolean(item.input) : looksLikeCardMention(item.input));
+    .filter((item) => looksLikeCardMention(item.input));
 }
 
 function buildNormalizedSpanProjection(value) {
@@ -2473,19 +2456,16 @@ function cardIdentity(card = {}) {
   return String(card.id || card.cardId || normalizeCardKey(card.name || card.cnName || card.jaName || card.enName || ""));
 }
 
-function normalizeModelCardNameCandidates(items, { preserveTypedMentions = false } = {}) {
-  const normalized = (Array.isArray(items) ? items : [])
+function normalizeModelCardNameCandidates(items) {
+  return dedupeBy((Array.isArray(items) ? items : [])
     .map((item) => ({
       name: String(item?.name || item?.cardName || item || "").trim(),
       originalText: String(item?.originalText || item?.surface || item?.mention || item?.name || item || "").trim(),
       confidence: String(item?.confidence || "medium").toLowerCase(),
       source: "model_card_name_extractor",
     }))
-    .filter((item) => preserveTypedMentions ? Boolean(item.name) : looksLikeCardMention(item.name));
-  return dedupeBy(
-    preserveTypedMentions ? normalized : normalized.slice(0, 12),
-    (item) => `${normalizeCardKey(item.name)}\u0000${exactSurfaceKey(item.originalText)}`,
-  );
+    .filter((item) => looksLikeCardMention(item.name))
+    .slice(0, 12), (item) => `${normalizeCardKey(item.name)}\u0000${exactSurfaceKey(item.originalText)}`);
 }
 
 function dedupeMentionObjects(items) {
