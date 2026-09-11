@@ -37,11 +37,8 @@ export async function preparePublicAnswer({
     } };
 }
 
-export function preparedAnswerProgress(preparation, now = Date.now) {
-  return {
-    ...preparation.progress,
-    totalMs: preparation.progress.totalMs + Math.max(0, now() - preparation.preparedAt),
-  };
+export function preparedAnswerProgress(preparation) {
+  return { ...preparation.progress };
 }
 
 export async function finalizePublicAnswer({
@@ -50,6 +47,7 @@ export async function finalizePublicAnswer({
   selectProfile = selectAvailablePublicProfile, addGeneration = withPublicGenerationInfo,
 } = {}) {
   signal?.throwIfAborted();
+  const finalizeStartedAt = now();
   const selection = await selectProfile(preparation.profileId, env);
   let profile = selection.profile;
   let fallbackFrom = preparation.fallbackFrom || selection.fallbackFrom;
@@ -90,13 +88,21 @@ export async function finalizePublicAnswer({
     } };
   }
   answer = await addGeneration(answer, profile, env, {fallbackFrom});
+  const completedAt = now();
   answer = { ...answer, debug: { ...answer.debug,
     requestDiagnostics: { ...preparation.requestDiagnostics,
       preparationProgress: preparation.progress,
-      completedAt: new Date(now()).toISOString(),
+      completedAt: new Date(completedAt).toISOString(),
     },
   } };
-  return { answer, latency: { profileId: profile.id, durationMs: Math.max(0, now() - preparation.startedAt), exactMatchMs: 0 } };
+  const measuredPreparationMs = Number.isFinite(preparation.progress?.totalMs)
+    ? preparation.progress.totalMs
+    : Number.isFinite(preparation.requestDiagnostics?.durationMs)
+      ? preparation.requestDiagnostics.durationMs
+      : Number(preparation.preparedAt) - Number(preparation.startedAt);
+  const preparationDurationMs = Math.max(0, measuredPreparationMs);
+  return { answer, latency: { profileId: profile.id,
+    durationMs: preparationDurationMs + Math.max(0, completedAt - finalizeStartedAt), exactMatchMs: 0 } };
 }
 
 function combinedCloudCosts(preparation, finalization) {
