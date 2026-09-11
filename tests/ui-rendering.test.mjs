@@ -797,7 +797,7 @@ test("backend answers bypass persistent browser cache and bust static assets", a
     readFile(new URL("../config.json", import.meta.url), "utf8"),
   ]);
   const config = JSON.parse(configText.replace(/^\uFEFF/u, ""));
-  assert.match(html, /src\/app\.js\?v=20260911-admin-console-1/u);
+  assert.match(html, /src\/app\.js\?v=20260911-admin-console-2/u);
   assert.match(html, /src\/styles\.css\?v=20260911-admin-console-1/u);
   assert.equal(config.answerApiUrl, "https://ocg-ruling-assistant.vercel.app/api/answer");
   assert.match(app, /cache: "no-store"/u);
@@ -833,7 +833,7 @@ test("ui_hides_engine_details_by_default", async () => {
   const adminPanel = sourceBetween(html, '<section class="admin-lab"', '<section class="disclaimer-panel"');
   assert.doesNotMatch(publicBudget, /budgetResetButton|budgetCapButton|重置额度|封顶至/u);
   assert.match(adminPanel, /id="budgetResetButton"[^>]+hidden>重置今日公开问答额度/u);
-  assert.match(adminPanel, /id="budgetCapButton"[^>]+hidden>今日公开问答额度封顶/u);
+  assert.match(adminPanel, /id="budgetCapButton"[^>]+hidden>今日 GPT 额度封顶/u);
   assert.match(html, /免责声明/u);
   assert.match(html, /不是 KONAMI 官方项目/u);
   assert.match(html, /id="themeToggle"/u);
@@ -938,7 +938,7 @@ test("admin_model_lab_is_hidden_and_requires_a_real_session", async () => {
   assert.match(app, /adminFeatureEnabled\("history"\)/u);
   assert.doesNotMatch(html, /id="adminHistoryTitle"|实验历史|评估题集|同一冻结证据模型对比/u);
   assert.match(html, /id="adminBudgetPools"/u);
-  assert.match(html, /查看当前额度状态，并可封顶或重置今日公开问答额度/u);
+  assert.match(html, /封顶 GPT 的今日额度，或重置今日公开问答额度/u);
   assert.match(app, /实际结算/u);
   assert.match(app, /保留预约/u);
   assert.match(app, /历史未分类占用/u);
