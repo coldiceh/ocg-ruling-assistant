@@ -306,6 +306,10 @@ export function createCloudEvidenceProvider({
         return roundRobinLexicalDense(lexical, completeDenseQueue(corpus.candidates, scores), limit);
       });
       let candidates = interleaveCloudEvidenceQueues(queues, limit);
+      // Keep an independent lane for the original question. More optional hints
+      // must not dilute its lexical queue to one turn out of every hint surface.
+      // This changes ordering only; no score threshold or semantic gate is used.
+      candidates = interleaveCloudEvidenceQueues([lexicalQueues[0] || [], candidates], limit);
       const recalledBindings = candidates.map(candidate => candidate.binding);
       timingsMs.candidates = lexicalElapsed + elapsed(step);
       // `embedding` is wall time and includes this scheduled lexical work;

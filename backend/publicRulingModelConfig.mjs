@@ -7,7 +7,8 @@ export const DEFAULT_PUBLIC_DEEPSEEK_MODEL = "deepseek-flash";
 // The dated preview has been replaced by this official release.
 export function resolveOfficialDeepSeekModel(value) {
   const model = String(value || DEFAULT_PUBLIC_DEEPSEEK_MODEL).trim();
-  return model === 'deepseek-v4.1-flash-expires-on-0910' ? DEFAULT_PUBLIC_DEEPSEEK_MODEL : model;
+  return ['deepseek-v4-flash', 'deepseek-v4.1-flash-expires-on-0910'].includes(model)
+    ? DEFAULT_PUBLIC_DEEPSEEK_MODEL : model;
 }
 export const DEFAULT_PUBLIC_GLM_MODEL = "glm-5.3";
 

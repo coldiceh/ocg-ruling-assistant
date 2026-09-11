@@ -1,11 +1,27 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createCloudEvidenceProvider, interleaveCloudEvidenceQueues, packCloudEvidenceCandidates } from "../backend/cloudEvidenceProvider.mjs";
-import { buildSafeCandidates } from "../scripts/lib/manual-capture-evidence-selection.mjs";
+import { buildSafeCandidates, buildManualCaptureCompleteLexicalQueryQueue } from "../scripts/lib/manual-capture-evidence-selection.mjs";
 import { buildManualCaptureEmbeddingDocumentViews, MANUAL_CAPTURE_EMBEDDING_QUERY_INSTRUCTION } from "../scripts/lib/manual-capture-local-embedding-shadow.mjs";
 import { buildRagRulingPromptBundle } from "../backend/ragRulingPrompt.mjs";
 
 const revision = "synthetic-corpus-revision";
+
+test("optional hint count cannot dilute the independent original lexical queue", async () => {
+  const corpus = corpusFor(records(48));
+  const userQuery = "synthetic term0 request";
+  const original = buildManualCaptureCompleteLexicalQueryQueue({query:userQuery,candidates:corpus.candidates});
+  const provider = createCloudEvidenceProvider({
+    loadCorpus: async () => corpus,
+    generatePlan: async () => ({informationNeeds:Array.from({length:20},(_,i)=>`synthetic term${10+i} request`),queryTexts:[]}),
+  });
+  const result = await provider.retrieve(input({VERCEL_ENV:'preview',CLOUD_EVIDENCE_CANDIDATE_LIMIT:'16',CLOUD_EVIDENCE_DENSE:'false',CLOUD_EVIDENCE_RERANK:'false'}));
+  const order = result.debug.cloudEvidence.candidateBindings;
+  // This is a source-order/count contract, not a relevance or sufficiency test.
+  original.slice(0,8).forEach((row,index)=>{
+    assert.ok(order.indexOf(row.binding)>=0 && order.indexOf(row.binding)<=2*index,`original position ${index} was diluted`);
+  });
+});
 const cardResolution = { resolvedCards: [], unresolvedMentions: [], ambiguousMentions: [] };
 const emptyEvidence = () => ({
   cardTexts: [], userProvidedCardTexts: [], officialQaDirectCandidates: [], officialQaRelated: [],
