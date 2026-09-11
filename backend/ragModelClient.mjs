@@ -2184,6 +2184,15 @@ export function createPublicAnswerModelEnv(env = {}, profileValue) {
   // Retain the legacy tier flag for public profile compatibility. Auxiliary
   // DeepSeek model selection uses its dedicated card/rule variables instead.
   result.RAG_MODEL_TIER = "flash";
+  if (profile.provider === "deepseek" && profile.thinkingMode === "enabled") {
+    // Public thinking profiles need room for reasoning AND the visible answer.
+    // Do not inherit the legacy generic 4096-token cap intended for short output.
+    // Match DeepSeek's documented defaults, while retaining a dedicated server cap.
+    result.RAG_MAX_OUTPUT_TOKENS = String(readPositiveNumber(
+      source.RAG_FLASH_THINKING_MAX_OUTPUT_TOKENS || source.RAG_THINKING_MAX_OUTPUT_TOKENS,
+      profile.reasoningEffort === "max" ? 131072 : 65536,
+    ));
+  }
   result.RAG_CARD_MODEL_PROVIDER = mockRequested ? "mock" : cloudEvidence ? cloudAuxiliaryProvider : "relay";
   result.RAG_RULE_MODEL_PROVIDER = mockRequested ? "mock" : cloudEvidence ? cloudAuxiliaryProvider : "relay";
   result.CLOUD_EVIDENCE_PLAN_PROVIDER = mockRequested ? "mock" : cloudAuxiliaryProvider;
