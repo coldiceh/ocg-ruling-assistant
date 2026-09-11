@@ -15,6 +15,7 @@ import {
   resolvePublicRulingModelProfile,
 } from "../backend/publicRulingModelConfig.mjs";
 import { runCloudBudgetedQuestion } from "../backend/cloudRequestBudget.mjs";
+import { PUBLIC_FINAL_BUDGET_LUA } from "../backend/cloudFinalBudget.mjs";
 
 const BAI_ENV = Object.freeze({
   BAI_API_KEY: "synthetic-bai-key",
@@ -213,7 +214,7 @@ test("public b.ai dispatch joins the active cloud budget context", async () => {
   assert.equal(result.debug.cloudCosts.calls[0].provider, "bai");
 });
 
-test("public budget status separates settled b.ai use from the shared allowance", async () => {
+test("public budget status uses only b.ai settled and reserved amounts for its allowance", async () => {
   const env = {
     RAG_EVIDENCE_PIPELINE: "cloud_evidence_v1",
     CLOUD_BUDGET_PERIOD: "daily",
@@ -226,6 +227,10 @@ test("public budget status separates settled b.ai use from the shared allowance"
   };
   const fetchImpl = async (_url, options) => {
     const command = JSON.parse(options.body);
+    if (command[1] === PUBLIC_FINAL_BUDGET_LUA) return Response.json({result:[JSON.stringify({
+      relay:{spent:0,reserved:0,legacy:400000000,accounted:400000000},
+      bai:{spent:200000000,reserved:100000000,legacy:0,accounted:300000000},closed:false,
+    })]});
     if (command[0] === "HGETALL") {
       return Response.json({ result: [
         "actualNano", "300000000",
@@ -260,10 +265,11 @@ test("public budget status separates settled b.ai use from the shared allowance"
   assert.equal(preparation.spentTodayCny, 0.3);
   assert.equal(bai.spentTodayUsd, 0.2);
   assert.equal(bai.reservedTodayUsd, 0.1);
-  assert.equal(bai.sharedAccountedUsd, 0.7);
-  assert.equal(bai.remainingTodayUsd, 4.3);
+  assert.equal(bai.accountedTodayUsd, 0.3);
+  assert.equal(bai.remainingTodayUsd, 4.7);
   assert.equal(bai.costBasis, "official_theoretical");
-  assert.equal(bai.sharedPoolLabel, "与既有调用共享理论美元限额");
+  assert.equal(bai.sharedPoolLabel, undefined);
+  assert.equal(bai.label, "GPT最终裁定");
 });
 
 function baiSseResponse({

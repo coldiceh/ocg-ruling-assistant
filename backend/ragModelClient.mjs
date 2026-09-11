@@ -23,6 +23,7 @@ import {
 import { normalizeRuleSearchQueryText } from "./ruleSearchQueryText.mjs";
 import {
   runCloudDeepSeekRequest,
+  manageCloudFinalBudget,
   runCloudBaiRequest,
   runCloudRelayRequest,
   runOfficialOpenAIRequest,
@@ -130,7 +131,7 @@ const PUBLIC_BUDGET_BUCKETS = Object.freeze([
   Object.freeze({ id: "final_ruling:glm", stage: "final_ruling", provider: "glm", label: "GLM 最终裁定", currency: "CNY" }),
   Object.freeze({ id: "final_ruling:deepseek", stage: "final_ruling", provider: "deepseek", label: "DeepSeek 最终裁定", currency: "CNY" }),
   Object.freeze({ id: "final_ruling:relay", stage: "final_ruling", provider: "relay", label: "ChatGPT 最终裁定", currency: "USD" }),
-  Object.freeze({ id: "final_ruling:bai", stage: "final_ruling", provider: "bai", label: "GPT", currency: "USD" }),
+  Object.freeze({ id: "final_ruling:bai", stage: "final_ruling", provider: "bai", label: "GPT最终裁定", currency: "USD" }),
 ]);
 const memoryBudget = new Map();
 const privateEvaluationBudgetLedger = new Map();
@@ -357,6 +358,7 @@ export async function callRagModel({
         })
         : provider === "relay"
           ? await callRelay({
+            stage: 'final_ruling',
             prompt,
             env,
             modelName,
@@ -2406,8 +2408,14 @@ export async function getRagBudgetStatus({
       ? { ...budgetBucketStatusPayload({
         bucket:{...bucket,label:'中转 GPT 最终裁定'},
         bucketConfig:{currency:'USD',dailyBudgetAmount:cloudEvidence.relayPool.theoreticalLimitUsd},
-        spent:cloudEvidence.relayPool.accountedUsd,
+        spent:cloudEvidence.relayPool.spentUsd,
+        blocked:cloudEvidence.relayPool.blocked,
+        manuallyClosed:cloudEvidence.relayPool.manuallyClosed,
       }), reservedTodayUsd:cloudEvidence.relayPool.reservedUsd,
+        remainingToday:cloudEvidence.relayPool.remainingUsd ?? Math.max(0,cloudEvidence.relayPool.theoreticalLimitUsd-cloudEvidence.relayPool.accountedUsd),
+        remainingTodayUsd:cloudEvidence.relayPool.remainingUsd ?? Math.max(0,cloudEvidence.relayPool.theoreticalLimitUsd-cloudEvidence.relayPool.accountedUsd),
+        legacyUnclassifiedUsd:cloudEvidence.relayPool.legacyUnclassifiedUsd ?? 0,
+        costBasis:'official_theoretical',
         actualRemainingCny:cloudEvidence.relayPool.actualRemainingCny }
       : cloudEvidence?.baiPool && bucket.id === "final_ruling:bai"
       ? {
@@ -2418,19 +2426,20 @@ export async function getRagBudgetStatus({
             dailyBudgetAmount: cloudEvidence.baiPool.theoreticalLimitUsd,
           },
           spent: cloudEvidence.baiPool.spentUsd,
+          blocked: cloudEvidence.baiPool.blocked,
+          manuallyClosed: cloudEvidence.baiPool.manuallyClosed,
         }),
         reservedTodayUsd: cloudEvidence.baiPool.reservedUsd,
-        sharedAccountedUsd: cloudEvidence.baiPool.accountedUsd,
-        remainingToday: Math.max(
+        accountedTodayUsd: cloudEvidence.baiPool.accountedUsd,
+        remainingToday: cloudEvidence.baiPool.remainingUsd ?? Math.max(
           0,
           cloudEvidence.baiPool.theoreticalLimitUsd - cloudEvidence.baiPool.accountedUsd,
         ),
-        remainingTodayUsd: Math.max(
+        remainingTodayUsd: cloudEvidence.baiPool.remainingUsd ?? Math.max(
           0,
           cloudEvidence.baiPool.theoreticalLimitUsd - cloudEvidence.baiPool.accountedUsd,
         ),
         actualRemainingCny: cloudEvidence.baiPool.actualRemainingCny,
-        sharedPoolLabel: "与既有调用共享理论美元限额",
         costBasis: "official_theoretical",
       }
       : budgetBucketStatusPayload({
@@ -2454,6 +2463,9 @@ export async function resetRagBudget({
   const ioDeadline = createBudgetRedisDeadline(env);
   if (storage === "unconfigured") {
     return getRagBudgetStatus({ env, fetchImpl, now });
+  }
+  if (env.RAG_EVIDENCE_PIPELINE === 'cloud_evidence_v1' && env.CLOUD_BUDGET_PERIOD === 'daily') {
+    await manageCloudFinalBudget({env, fetchImpl, now, action:'reset'});
   }
   const relayBucket = PUBLIC_BUDGET_BUCKETS.find((bucket) => bucket.id === "final_ruling:relay");
   await Promise.all([
@@ -2483,7 +2495,7 @@ export async function resetRagBudget({
 
 /**
  * Stops further anonymous ChatGPT rulings for the current budget day by
- * setting only the public Relay USD bucket to its configured hard ceiling.
+ * closing both independently accounted public GPT final-ruling buckets.
  * Admin experiments use a separate ledger and are deliberately untouched.
  */
 export async function capPublicChatGptBudget({
@@ -2498,6 +2510,10 @@ export async function capPublicChatGptBudget({
       ...await getRagBudgetStatus({ env, fetchImpl, now }),
       action: "cap_public_chatgpt",
     };
+  }
+  if (env.RAG_EVIDENCE_PIPELINE === 'cloud_evidence_v1' && env.CLOUD_BUDGET_PERIOD === 'daily') {
+    await manageCloudFinalBudget({env, fetchImpl, now, action:'cap'});
+    return {...await getRagBudgetStatus({env, fetchImpl, now}), action:'cap_public_chatgpt'};
   }
   const bucket = PUBLIC_BUDGET_BUCKETS.find((item) => item.id === "final_ruling:relay");
   const bucketConfig = budgetBucketConfig(env, bucket);
@@ -2719,6 +2735,7 @@ async function callRelay({
   reasoningEffort,
   requireJson = true,
   signal,
+  stage = 'evidence_preparation',
 }) {
   const endpoint = relayChatCompletionsUrl(env.RELAY_BASE_URL || DEFAULT_PUBLIC_RELAY_BASE_URL);
   const body = {
@@ -2733,7 +2750,7 @@ async function callRelay({
     body.max_completion_tokens = maxTokens;
   }
 
-  const payload = await runCloudRelayRequest({body,invoke:()=>requestRelayChatCompletionSse({
+  const payload = await runCloudRelayRequest({body,stage,invoke:()=>requestRelayChatCompletionSse({
     fetchImpl, endpoint, apiKey:env.RELAY_API_KEY, body, env, signal,
   })});
   const choice = payload?.choices?.[0] || {};

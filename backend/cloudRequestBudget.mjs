@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
 import { estimateOpenAIModelCost, estimateRelayModelCost, getModelPricingConfig } from './modelPricing.mjs';
+import { publicFinalBudgetEnabled, publicFinalBudgetKeys, publicFinalBudgetCommand, publicFinalPoolStatus } from './cloudFinalBudget.mjs';
 
 const scope = new AsyncLocalStorage();
 const UNIT = 1_000_000_000;
@@ -228,10 +229,12 @@ export async function getOfficialOpenAIBudgetStatus({env={},fetchImpl=globalThis
 export async function getCloudEvidenceBudgetStatus({env, fetchImpl = globalThis.fetch, now = new Date()} = {}) {
   const {key} = cloudBudgetScope(env, now);
   const redis = redisConfig(env);
-  const response = await fetchImpl(redis.url, {
+  const [response, finalResult] = await Promise.all([fetchImpl(redis.url, {
     method:'POST', headers:{authorization:`Bearer ${redis.token}`,'content-type':'application/json'},
     body:JSON.stringify(['HGETALL', key]), signal:AbortSignal.timeout(5000),
-  });
+  }), publicFinalBudgetEnabled(env)
+    ? sendRedisCommand({env, fetchImpl}, publicFinalBudgetCommand(key, 'status'))
+    : null]);
   if (!response.ok) throw new Error(`cloud_budget_store_http_${response.status}`);
   const payload = await response.json();
   if (payload.error || !Array.isArray(payload.result) || payload.result.length % 2 !== 0) {
@@ -270,6 +273,9 @@ export async function getCloudEvidenceBudgetStatus({env, fetchImpl = globalThis.
   const accountedTheoreticalNano=Number(fields.get('theoreticalNano')??nano(amount(env.CLOUD_BUDGET_INITIAL_THEORETICAL_USD||0,'initial_theoretical',true)));
   if(!Number.isSafeInteger(accountedActualNano)||accountedActualNano<0
       ||!Number.isSafeInteger(accountedTheoreticalNano)||accountedTheoreticalNano<0) throw new Error('cloud_budget_total_invalid');
+  const finalPools = finalResult
+    ? publicFinalPoolStatus(JSON.parse(finalResult[0]), theoreticalLimit)
+    : null;
   return {spentTodayCny:spentNano / UNIT, reservedTodayCny:reservedNano / UNIT,
     dailyBudgetCny:actualLimit,relayPool:{spentUsd:relaySpentNano/UNIT,reservedUsd:relayReservedNano/UNIT,
       theoreticalLimitUsd:theoreticalLimit,accountedUsd:accountedTheoreticalNano/UNIT,
@@ -277,11 +283,22 @@ export async function getCloudEvidenceBudgetStatus({env, fetchImpl = globalThis.
     baiPool:{spentUsd:baiSpentNano/UNIT,reservedUsd:baiReservedNano/UNIT,
       theoreticalLimitUsd:theoreticalLimit,accountedUsd:accountedTheoreticalNano/UNIT,
       costBasis:'official_theoretical',actualCostKnown:false,
-      actualRemainingCny:Math.max(0,actualLimit-accountedActualNano/UNIT)}};
+      actualRemainingCny:Math.max(0,actualLimit-accountedActualNano/UNIT)},
+    ...(finalPools || {}),
+    // Preserve the original aggregate, including unattributed initial amounts.
+    legacyCloudAccountedUsd:accountedTheoreticalNano/UNIT};
+}
+
+export async function manageCloudFinalBudget({env, fetchImpl = globalThis.fetch, now = new Date(), action} = {}) {
+  if (!['cap', 'reset'].includes(action)) throw new TypeError('cloud_budget_action_invalid');
+  const {key} = cloudBudgetScope(env, now);
+  await sendRedisCommand({env, fetchImpl}, publicFinalBudgetCommand(key, action));
 }
 
 export function createCloudRequestBudget({env, fetchImpl = globalThis.fetch, command, now = new Date(),officialDailyMigration} = {}) {
   const {namespace, period, dayKey, key} = cloudBudgetScope(env, now);
+  const separatePublicFinal = publicFinalBudgetEnabled(env);
+  const finalKeys = publicFinalBudgetKeys(key);
   const limits = {
     actualCny:amount(env.CLOUD_BUDGET_ACTUAL_LIMIT_CNY,'actual_limit',true),
     theoreticalUsd:amount(env.CLOUD_BUDGET_THEORETICAL_LIMIT_USD,'theoretical_limit'),
@@ -306,14 +323,17 @@ export function createCloudRequestBudget({env, fetchImpl = globalThis.fetch, com
     if (payload.error || !Array.isArray(payload.result)) throw new Error('cloud_budget_store_invalid_response');
     return payload.result;
   });
-  async function reserve({provider,model,operation,actualCny,theoreticalUsd,pricingBasis}) {
+  async function reserve({provider,model,operation,actualCny,theoreticalUsd,pricingBasis,stage='evidence_preparation'}) {
     amount(actualCny,'reservation_actual',true);
     amount(theoreticalUsd,'reservation_theoretical',true);
-    const ticket={id:randomUUID(),provider,model,operation,status:'reserved',startedAtUtc:new Date().toISOString(),
+    const ticket={id:randomUUID(),provider,model,operation,stage,status:'reserved',startedAtUtc:new Date().toISOString(),
       ...(pricingBasis?{pricingBasis}:{}),
       actualNano:nano(actualCny),theoreticalNano:nano(theoreticalUsd),started:performance.now()};
     const migrationArgs=officialDailyMigration?['official_daily_v1',officialDailyMigration.startUtc,officialDailyMigration.endUtc]:[];
-    const result=await send(['EVAL',CLOUD_BUDGET_RESERVE,officialDailyMigration?'2':'1',key,
+    const splitFinal = separatePublicFinal && stage === 'final_ruling' && ['relay','bai'].includes(provider);
+    const result=await send(splitFinal
+      ? publicFinalBudgetCommand(key, 'reserve', [provider, JSON.stringify(ticket), String(nano(limits.theoreticalUsd))])
+      : ['EVAL',CLOUD_BUDGET_RESERVE,officialDailyMigration?'2':'1',key,
       ...(officialDailyMigration?[officialDailyMigration.legacyKey]:[]),ticket.id,String(ticket.actualNano),String(ticket.theoreticalNano),
       String(nano(limits.actualCny)),String(nano(limits.theoreticalUsd)),String(nano(initial.actualCny)),String(nano(initial.theoreticalUsd)),JSON.stringify(ticket),...migrationArgs]);
     if(result[0]!=='reserved') throw new Error(result[0]==='blocked'?'cloud_budget_total_exceeded':'cloud_budget_reservation_uncertain');
@@ -328,11 +348,13 @@ export function createCloudRequestBudget({env, fetchImpl = globalThis.fetch, com
     amount(theoreticalUsd,'settled_theoretical',true);
     const settled={...ticket,status:'usage_settled',estimatedActualCny:Math.round(actualCny*UNIT)/UNIT,actualNano:nano(actualUpperCny),theoreticalNano:nano(theoreticalUsd),usage,
       returnedModel:returnedModel||null,elapsedMs:performance.now()-ticket.started,completedAtUtc:new Date().toISOString()};
-    const result=await send(['EVAL',CLOUD_BUDGET_SETTLE,'1',key,ticket.id,String(settled.actualNano),String(settled.theoreticalNano),JSON.stringify(settled)]);
+    const settlementKey = separatePublicFinal && ticket.stage === 'final_ruling' && ['relay','bai'].includes(ticket.provider)
+      ? finalKeys[ticket.provider === 'relay' ? 1 : 2] : key;
+    const result=await send(['EVAL',CLOUD_BUDGET_SETTLE,'1',settlementKey,ticket.id,String(settled.actualNano),String(settled.theoreticalNano),JSON.stringify(settled)]);
     if(result[0]!=='settled') throw new Error('cloud_budget_settlement_uncertain');
     Object.assign(ticket,settled);
   }
-  async function relay({body,invoke}) {
+  async function relay({body,invoke,stage='final_ruling'}) {
     const relayMultiplier = amount(relayMultiplierValue,'relay_multiplier');
     const siteDollarCny = amount(siteDollarCnyValue,'site_dollar_cny');
     const model=body.model;
@@ -346,7 +368,7 @@ export function createCloudRequestBudget({env, fetchImpl = globalThis.fetch, com
     const theoreticalUsd=estimateOpenAIModelCost({model,usage:reserveUsage,inputBillingBasis:'all_uncached'}).totalCostUsd
       + input*Math.max(0,officialRates.cacheWriteUsdPerMillion-officialRates.inputUsdPerMillion)/1e6;
     const actualCny=estimateRelayModelCost({model,usage:reserveUsage,pricingMultiplier:1,usdToCnyRate:siteDollarCny,inputBillingBasis:'all_uncached'}).totalCostCny;
-    const ticket=await reserve({provider:'relay',model,operation:'chat_completions',actualCny,theoreticalUsd});
+    const ticket=await reserve({provider:'relay',model,operation:'chat_completions',stage,actualCny,theoreticalUsd});
     let result;
     try { result=await invoke(); }
     catch(error) { ticket.uncertainty='request_or_settlement_failed_reservation_retained'; throw error; }
@@ -396,7 +418,7 @@ export function createCloudRequestBudget({env, fetchImpl = globalThis.fetch, com
       0,officialRates.cacheWriteUsdPerMillion-officialRates.inputUsdPerMillion,
     )/1e6;
     const ticket=await reserve({
-      provider,model,operation:'chat_completions',actualCny:0,theoreticalUsd,
+      provider,model,operation:'chat_completions',stage:'final_ruling',actualCny:0,theoreticalUsd,
       ...(provider==='bai'?{pricingBasis:'official_theoretical'}:{}),
     });
     let result;
@@ -458,9 +480,9 @@ export async function runCloudBudgetedQuestion({env,fetchImpl,budget},invoke) {
 export function cloudRequestBudgetActive() {
   return Boolean(scope.getStore());
 }
-export function runCloudRelayRequest({body,invoke}) {
+export function runCloudRelayRequest({body,invoke,stage='final_ruling'}) {
   const controller=scope.getStore();
-  return controller?controller.relay({body,invoke}):invoke();
+  return controller?controller.relay({body,invoke,stage}):invoke();
 }
 export async function runOfficialOpenAIRequest({env,body,invoke,fetchImpl=globalThis.fetch,now=new Date()}) {
   const daily=officialDailyConfig(env,now);
