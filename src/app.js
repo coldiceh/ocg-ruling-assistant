@@ -89,41 +89,7 @@ const ui = {
   adminRiskControlActionStatus: document.querySelector("#adminRiskControlActionStatus"),
   adminRiskControlUnlockButton: document.querySelector("#adminRiskControlUnlockButton"),
   adminBudgetPools: document.querySelector("#adminBudgetPools"),
-  adminQuestionInput: document.querySelector("#adminQuestionInput"),
-  adminCopyPublicQuestionButton: document.querySelector("#adminCopyPublicQuestionButton"),
-  adminPreparationProviderSelect: document.querySelector("#adminPreparationProviderSelect"),
-  adminPreparationModelSelect: document.querySelector("#adminPreparationModelSelect"),
-  adminPreparationEffortSelect: document.querySelector("#adminPreparationEffortSelect"),
-  adminPreparationModeSelect: document.querySelector("#adminPreparationModeSelect"),
-  adminProviderSelect: document.querySelector("#adminProviderSelect"),
-  adminModelSelect: document.querySelector("#adminModelSelect"),
-  adminEffortSelect: document.querySelector("#adminEffortSelect"),
-  adminModeSelect: document.querySelector("#adminModeSelect"),
-  adminPromptVersionSelect: document.querySelector("#adminPromptVersionSelect"),
-  adminStartButton: document.querySelector("#adminStartButton"),
-  adminCancelButton: document.querySelector("#adminCancelButton"),
-  adminRunStatus: document.querySelector("#adminRunStatus"),
-  adminRunIdentity: document.querySelector("#adminRunIdentity"),
-  adminElapsedText: document.querySelector("#adminElapsedText"),
-  adminStageList: document.querySelector("#adminStageList"),
-  adminResultSummary: document.querySelector("#adminResultSummary"),
-  adminMetrics: document.querySelector("#adminMetrics"),
-  adminEvidenceDetails: document.querySelector("#adminEvidenceDetails"),
-  adminEvidenceSummary: document.querySelector("#adminEvidenceSummary"),
-  adminEvidenceJson: document.querySelector("#adminEvidenceJson"),
-  adminResultJson: document.querySelector("#adminResultJson"),
-  adminExportJsonButton: document.querySelector("#adminExportJsonButton"),
-  adminExportCsvButton: document.querySelector("#adminExportCsvButton"),
-  adminRatingForm: document.querySelector("#adminRatingForm"),
-  adminRatingSelect: document.querySelector("#adminRatingSelect"),
-  adminRatingNotes: document.querySelector("#adminRatingNotes"),
-  adminRatingButton: document.querySelector("#adminRatingButton"),
-  adminRatingStatus: document.querySelector("#adminRatingStatus"),
-  adminComparisonSection: document.querySelector("#adminComparisonSection"),
-  adminComparisonOptions: document.querySelector("#adminComparisonOptions"),
-  adminCompareButton: document.querySelector("#adminCompareButton"),
-  adminComparisonStatus: document.querySelector("#adminComparisonStatus"),
-  adminComparisonResults: document.querySelector("#adminComparisonResults"),
+  adminBudgetActionStatus: document.querySelector("#adminBudgetActionStatus"),
   adminHistoryRefreshButton: document.querySelector("#adminHistoryRefreshButton"),
   adminHistoryStatus: document.querySelector("#adminHistoryStatus"),
   adminHistoryList: document.querySelector("#adminHistoryList"),
@@ -1832,6 +1798,7 @@ async function resetBudgetStatus() {
   const password = window.prompt("请输入重置额度密码");
   if (!password) return;
   ui.budgetResetButton.disabled = true;
+  if (ui.adminBudgetActionStatus) ui.adminBudgetActionStatus.textContent = "正在重置今日公开问答额度…";
   if (ui.budgetHint) ui.budgetHint.textContent = "正在重置今日额度...";
   try {
     const response = await fetch(appConfig.budgetApiUrl, {
@@ -1845,8 +1812,10 @@ async function resetBudgetStatus() {
     }
     if (!response.ok) throw new Error(`budget reset ${response.status}`);
     renderBudgetStatus(await response.json(), "已重置今日累计用量。");
+    if (ui.adminBudgetActionStatus) ui.adminBudgetActionStatus.textContent = "今日公开问答额度已重置。";
   } catch {
     renderBudgetStatus(null, "重置失败：没有权限或后端暂时不可用。");
+    if (ui.adminBudgetActionStatus) ui.adminBudgetActionStatus.textContent = "重置失败：没有权限或后端暂时不可用。";
   } finally {
     ui.budgetResetButton.disabled = false;
   }
@@ -1857,6 +1826,7 @@ async function capPublicChatGptBudgetStatus() {
   const password = window.prompt("请输入额度管理密码");
   if (!password) return;
   ui.budgetCapButton.disabled = true;
+  if (ui.adminBudgetActionStatus) ui.adminBudgetActionStatus.textContent = "正在封顶今日公开问答额度…";
   if (ui.budgetHint) ui.budgetHint.textContent = "正在停止今日公开 ChatGPT 调用...";
   try {
     const response = await fetch(appConfig.budgetApiUrl, {
@@ -1874,8 +1844,10 @@ async function capPublicChatGptBudgetStatus() {
     const limit = Number(relayBucket?.dailyBudgetUsd ?? relayBucket?.dailyBudget);
     const limitText = Number.isFinite(limit) && limit > 0 ? `（今日上限 $${formatUsd(limit)}）` : "";
     renderBudgetStatus(status, `已停止今日公开 ChatGPT 调用${limitText}；不会影响管理员实验额度。`);
+    if (ui.adminBudgetActionStatus) ui.adminBudgetActionStatus.textContent = `今日公开问答额度已封顶${limitText}。`;
   } catch {
     renderBudgetStatus(null, "封顶失败：没有权限或后端暂时不可用。");
+    if (ui.adminBudgetActionStatus) ui.adminBudgetActionStatus.textContent = "封顶失败：没有权限或后端暂时不可用。";
   } finally {
     ui.budgetCapButton.disabled = false;
   }
@@ -1886,7 +1858,36 @@ function renderBudgetStatus(status, message = "") {
   ui.budgetHint.textContent = message
     || status?.storageWarning
     || "仅显示最终裁定额度，消耗按官方单价与实际 token 折算。每日北京时间 0 点更新，不代表中转实际扣费或账户余额。";
-  renderBudgetBuckets(status?.buckets || (status?.bucket ? [status.bucket] : []));
+  const buckets = status?.buckets || (status?.bucket ? [status.bucket] : []);
+  renderBudgetBuckets(buckets);
+  renderAdminPublicBudgetStatus(buckets);
+}
+
+function renderAdminPublicBudgetStatus(buckets = []) {
+  if (!ui.adminBudgetPools) return;
+  clearElement(ui.adminBudgetPools);
+  const publicBuckets = Array.isArray(buckets)
+    ? buckets.filter((bucket) => bucket?.stage === "final_ruling" && bucket?.provider !== "openai")
+    : [];
+  if (!publicBuckets.length) {
+    appendText(ui.adminBudgetPools, "p", "今日额度暂未读取或未配置。");
+    return;
+  }
+  for (const bucket of publicBuckets) {
+    const card = document.createElement("article");
+    card.className = "admin-budget-pool";
+    const title = String(bucket?.label || [bucket?.provider, bucket?.stage].filter(Boolean).join(" · ") || "公开问答");
+    appendText(card, "strong", title);
+    const currency = bucket?.currency === "USD" ? "USD" : "CNY";
+    const spentRaw = currency === "USD" ? (bucket?.spentTodayUsd ?? bucket?.spentToday) : (bucket?.spentTodayCny ?? bucket?.spentToday);
+    const limitRaw = currency === "USD" ? (bucket?.dailyBudgetUsd ?? bucket?.dailyBudget) : (bucket?.dailyBudgetCny ?? bucket?.dailyBudget);
+    const spent = Number(spentRaw);
+    const limit = Number(limitRaw);
+    const spentText = Number.isFinite(spent) ? (currency === "USD" ? `$${formatUsd(spent)}` : `¥${formatCny(spent)}`) : "未记录";
+    const limitText = Number.isFinite(limit) && limit > 0 ? (currency === "USD" ? ` / $${formatUsd(limit)}` : ` / ¥${formatCny(limit)}`) : "";
+    appendText(card, "p", `${spentText}${limitText}`);
+    ui.adminBudgetPools.appendChild(card);
+  }
 }
 
 function renderBudgetBuckets(buckets = []) {
@@ -2482,8 +2483,9 @@ function setAdminAuthenticated(authenticated, payload = {}) {
   } else {
     adminCapabilityState = null;
     clearAdminRiskControlStatus();
-    setAdminControlsEnabled(false);
-    updateAdminComparisonAvailability();
+    if (ui.adminBudgetActionStatus) ui.adminBudgetActionStatus.textContent = "";
+    if (ui.adminQuestionHistoryList) clearElement(ui.adminQuestionHistoryList);
+    if (ui.adminQuestionHistoryStatus) ui.adminQuestionHistoryStatus.textContent = "登录后读取后台历史提问。";
   }
 }
 
@@ -2685,14 +2687,10 @@ function normalizeAdminRiskControlStatus(value) {
 
 async function loadAdminLabBootstrap() {
   setAdminLoginStatus("管理员登录有效。", "good");
-  await loadAdminCapabilities();
   await Promise.allSettled([
     loadAdminRiskControlStatus(),
-    adminFeatureEnabled("history") ? loadAdminHistory() : showAdminFeatureUnavailable("history"),
     loadAdminQuestionHistory(),
-    adminFeatureEnabled("evaluation") ? loadAdminEvaluationCases() : showAdminFeatureUnavailable("evaluation"),
   ]);
-  await restoreStoredAdminRun();
 }
 
 async function loadAdminCapabilities() {
@@ -4551,10 +4549,12 @@ function normalizeStoredAdminRunId(value) {
 
 async function loadAdminQuestionHistory() {
   if (!adminSession.authenticated || !ui.adminQuestionHistoryList) return;
+  const historySessionToken = adminSession.csrfToken;
   ui.adminQuestionHistoryRefreshButton.disabled = true;
   ui.adminQuestionHistoryStatus.textContent = "正在读取后台最近保存的提问…";
   try {
     const payload = await requestAdminQuestionHistory();
+    if (!adminSession.authenticated || adminSession.csrfToken !== historySessionToken) return;
     const entries = firstAdminArray(
       payload?.entries,
       payload?.records,
@@ -4563,12 +4563,15 @@ async function loadAdminQuestionHistory() {
     );
     renderAdminQuestionHistory(entries.slice(0, 100));
   } catch (error) {
+    if (!adminSession.authenticated || adminSession.csrfToken !== historySessionToken) return;
     ui.adminQuestionHistoryStatus.textContent = adminErrorMessage(
       error,
       "暂时无法读取后台历史提问。",
     );
   } finally {
-    ui.adminQuestionHistoryRefreshButton.disabled = false;
+    if (adminSession.authenticated && adminSession.csrfToken === historySessionToken) {
+      ui.adminQuestionHistoryRefreshButton.disabled = false;
+    }
   }
 }
 
@@ -4594,29 +4597,99 @@ async function requestAdminQuestionHistory() {
 function renderAdminQuestionHistory(entries) {
   clearElement(ui.adminQuestionHistoryList);
   ui.adminQuestionHistoryStatus.textContent = entries.length
-    ? `后台最近保存的 ${entries.length} 条提问（最多 100 条）。`
+    ? `后台最近保存的 ${entries.length} 条提问（最多 100 条）。旧记录未保存的字段显示“未记录”。`
     : "后台暂时没有已保存的提问。";
   for (const entry of entries) {
-    const question = String(entry?.question || "").trim();
-    if (!question) continue;
     const item = document.createElement("li");
-    const button = document.createElement("button");
-    button.type = "button";
-    button.title = "载入到新实验";
-    appendText(button, "strong", question);
-    appendText(button, "small", [
-      formatAdminDate(entry?.createdAt),
-      entry?.mode ? `来源：${String(entry.mode)}` : "",
-      "点击载入",
-    ].filter(Boolean).join(" · "));
-    button.addEventListener("click", () => {
-      ui.adminQuestionInput.value = question;
-      ui.adminQuestionInput.focus();
-      ui.adminQuestionHistoryStatus.textContent = "已载入这条历史提问，可直接开始新实验。";
-    });
-    item.appendChild(button);
+    const card = document.createElement("details");
+    card.className = "admin-history-card";
+    const heading = document.createElement("summary");
+    heading.className = "admin-history-card-head";
+    appendText(heading, "strong", adminHistoryPreview(entry?.question));
+    appendText(heading, "small", [
+      adminHistoryStatusLabel(entry?.status),
+      formatAdminDate(entry?.createdAt) || "未记录",
+    ].join(" · "));
+    card.appendChild(heading);
+
+    const details = document.createElement("dl");
+    details.className = "admin-history-details";
+    appendAdminHistoryField(details, "问题全文", adminHistoryText(entry?.question));
+    appendAdminHistoryField(details, "结果 / 答案全文", adminHistoryAnswerText(entry));
+    appendAdminHistoryField(details, "调用者 IP", adminHistoryText(entry?.ip));
+    appendAdminHistoryField(details, "IP 来源", adminHistoryIpSourceLabel(entry?.ipSource));
+    appendAdminHistoryField(details, "时间", formatAdminDate(entry?.createdAt) || "未记录");
+    appendAdminHistoryField(details, "完成时间", formatAdminDate(entry?.completedAt) || "未记录");
+    appendAdminHistoryField(details, "状态", adminHistoryStatusLabel(entry?.status));
+    appendAdminHistoryField(details, "请求 ID", adminHistoryText(entry?.requestId));
+    appendAdminHistoryField(details, "记录 ID", adminHistoryText(entry?.id));
+    appendAdminHistoryField(details, "最终模型", adminHistoryText(entry?.model));
+    appendAdminHistoryField(details, "所选档位", adminHistoryText(entry?.profileId));
+    appendAdminHistoryField(details, "推理档位", adminHistoryText(entry?.reasoningEffort));
+    appendAdminHistoryField(details, "耗时", adminHistoryDuration(entry?.latencyMs));
+    if (entry?.mode !== undefined) appendAdminHistoryField(details, "来源", adminHistoryText(entry?.mode));
+    if (entry?.errorCode !== undefined) appendAdminHistoryField(details, "错误码", adminHistoryText(entry?.errorCode));
+    card.appendChild(details);
+    item.appendChild(card);
     ui.adminQuestionHistoryList.appendChild(item);
   }
+}
+
+function adminHistoryText(value, fallback = "未记录") {
+  if (value === null || value === undefined) return fallback;
+  if (typeof value === "string") return value.trim() || fallback;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  return fallback;
+}
+
+function adminHistoryPreview(value) {
+  const text = adminHistoryText(value).replace(/\s+/gu, " ");
+  const characters = [...text];
+  return characters.length > 120 ? `${characters.slice(0, 120).join("")}…` : text;
+}
+
+function adminHistoryAnswerText(entry) {
+  return adminHistoryText(entry?.answer);
+}
+
+function adminHistoryStatusLabel(value) {
+  const status = adminHistoryText(value);
+  const labels = {
+    preparing: "准备中",
+    prepared: "已准备",
+    completed: "已完成",
+    blocked: "已拦截",
+    failed: "失败",
+  };
+  return labels[status] ? `${labels[status]}（${status}）` : status;
+}
+
+function adminHistoryIpSourceLabel(value) {
+  const source = adminHistoryText(value, "").toLowerCase();
+  const labels = {
+    vercel: "Vercel 连接",
+    socket: "服务器连接",
+    unavailable: "不可用",
+  };
+  return labels[source] || (source ? adminHistoryText(value) : "未记录");
+}
+
+function adminHistoryDuration(value) {
+  if (value === null || value === undefined || value === "") return "未记录";
+  const duration = Number(value);
+  if (!Number.isFinite(duration)) return "未记录";
+  const seconds = (duration / 1000).toFixed(3);
+  return `${seconds} 秒（${duration.toLocaleString("zh-CN", { maximumFractionDigits: 3 })} ms）`;
+}
+
+function appendAdminHistoryField(parent, label, value) {
+  const row = document.createElement("div");
+  const term = document.createElement("dt");
+  term.textContent = label;
+  const detail = document.createElement("dd");
+  detail.textContent = adminHistoryText(value);
+  row.append(term, detail);
+  parent.appendChild(row);
 }
 
 async function loadAdminEvaluationCases() {
@@ -6292,37 +6365,9 @@ async function init() {
   ui.budgetResetButton?.addEventListener("click", () => resetBudgetStatus());
   ui.budgetCapButton?.addEventListener("click", () => capPublicChatGptBudgetStatus());
   ui.adminLoginForm?.addEventListener("submit", handleAdminLogin);
-  document.getElementById('adminEvidenceCaptureForm')?.addEventListener('submit', handleAdminEvidenceCapture);
-  document.getElementById('adminCaptureDownload')?.addEventListener('click', () => {
-    const value = document.getElementById('adminCaptureResult').value;
-    if (value) downloadAdminFile(`final-answer-input-${Date.now()}.private.txt`, value, 'text/plain;charset=utf-8');
-  });
-  document.getElementById('adminCaptureDiagnosticDownload')?.addEventListener('click', () => {
-    const value = document.getElementById('adminCaptureDiagnosticResult').value;
-    if (value) downloadAdminFile(`evidence-diagnostic-${Date.now()}.private.json`, value, 'application/json;charset=utf-8');
-  });
   ui.adminLogoutButton?.addEventListener("click", handleAdminLogout);
   ui.adminRiskControlUnlockButton?.addEventListener("click", unlockAdminRiskControl);
-  ui.adminCopyPublicQuestionButton?.addEventListener("click", () => {
-    ui.adminQuestionInput.value = ui.questionInput.value;
-    ui.adminQuestionInput.focus();
-  });
-  ui.adminProviderSelect?.addEventListener("change", syncAdminModelControls);
-  ui.adminModelSelect?.addEventListener("change", syncAdminModelSpecificControls);
-  ui.adminModeSelect?.addEventListener("change", syncAdminFinalReasoningCompatibility);
-  ui.adminPreparationProviderSelect?.addEventListener("change", syncAdminPreparationModelControls);
-  ui.adminPreparationModelSelect?.addEventListener("change", syncAdminPreparationModelSpecificControls);
-  ui.adminStartButton?.addEventListener("click", startAdminExperiment);
-  ui.adminCancelButton?.addEventListener("click", cancelAdminExperiment);
-  ui.adminHistoryRefreshButton?.addEventListener("click", loadAdminHistory);
   ui.adminQuestionHistoryRefreshButton?.addEventListener("click", loadAdminQuestionHistory);
-  ui.adminEvaluationRefreshButton?.addEventListener("click", loadAdminEvaluationCases);
-  ui.adminEvaluationLoadButton?.addEventListener("click", loadSelectedAdminEvaluation);
-  ui.adminRatingForm?.addEventListener("submit", submitAdminRating);
-  ui.adminComparisonOptions?.addEventListener("change", updateAdminComparisonAvailability);
-  ui.adminCompareButton?.addEventListener("click", runAdminModelComparison);
-  ui.adminExportJsonButton?.addEventListener("click", () => exportAdminRun("json"));
-  ui.adminExportCsvButton?.addEventListener("click", () => exportAdminRun("csv"));
 }
 
 function selectRulingVersion(version) {

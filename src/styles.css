@@ -350,6 +350,13 @@ dialog {
   color: var(--faint);
 }
 
+.privacy-note {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 #questionInput:focus,
 input:focus,
 textarea:focus,
@@ -1112,6 +1119,76 @@ button:focus-visible {
 
 .admin-history-list li {
   min-width: 0;
+}
+
+.admin-history-card {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: var(--glass-strong);
+}
+
+.admin-history-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.admin-history-card > summary::-webkit-details-marker {
+  display: none;
+}
+
+.admin-history-card[open] > summary {
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.admin-history-card-head strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.admin-history-card-head small {
+  flex: 0 0 auto;
+  margin-top: 0;
+  text-align: right;
+}
+
+.admin-history-details {
+  display: grid;
+  gap: 8px;
+  margin: 10px 0 0;
+}
+
+.admin-history-details > div {
+  display: grid;
+  grid-template-columns: minmax(100px, 0.25fr) minmax(0, 1fr);
+  gap: 12px;
+}
+
+.admin-history-details dt {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.admin-history-details dd {
+  min-width: 0;
+  margin: 0;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.admin-budget-actions {
+  justify-content: flex-start;
+  gap: 10px;
+  margin-top: 12px;
 }
 
 .admin-history-list button {

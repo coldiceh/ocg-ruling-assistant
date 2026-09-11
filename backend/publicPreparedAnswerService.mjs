@@ -4,14 +4,19 @@ import { assertPublicRulingModelProfileAvailable, resolvePublicRulingModelProfil
 import { finalizePreparedRagRulingQuestionForVersion } from "./rulingVersionRegistry.mjs";
 import { preparationError } from "./publicAnswerPreparationStore.mjs";
 import { PUBLIC_EXHAUSTED_FALLBACK_PROFILE, selectAvailablePublicProfile, withPublicGenerationInfo } from './publicGenerationInfo.mjs';
+import { updateQueryAudit } from './queryAuditStore.mjs';
+import { queryAuditAnswerPatch, queryAuditFailurePatch, saveQueryAuditUpdate } from './publicQueryAudit.mjs';
 
 export async function preparePublicAnswer({
   payload, env, signal, progress, store,
   answerPublic = answerPublicRulingQuestion, now = Date.now,
+  requestContext, updateAudit = updateQueryAudit,
 } = {}) {
+  let result;
+  try {
   signal?.throwIfAborted();
   const startedAt = now();
-  const result = await answerPublic({ payload, env, signal, progress, prepareForContinuation: true });
+  result = await answerPublic({ payload, env, signal, progress, requestContext, prepareForContinuation: true });
   // Existing early answers (for example empty/non-ruling requests) do not
   // require another model call, and keep their original public envelope.
   if (result.answer?.status !== "evidence_prepared") return result;
@@ -26,7 +31,11 @@ export async function preparePublicAnswer({
     cloudCosts: result.answer.debug?.cloudCosts || null,
     requestDiagnostics: result.answer.debug?.requestDiagnostics || null,
     fallbackFrom: result.fallbackFrom || null,
+    auditId: result.auditId || null,
   });
+  await saveQueryAuditUpdate(result.auditId, {
+    status: "prepared", profileId: result.latency.profileId, latencyMs: measuredProgress.totalMs,
+  }, env, updateAudit);
   return { preparationId, progress: measuredProgress,
     evidencePackage: { text: result.answer.continuation.promptBundle.prompt, filename: 'ocg-evidence.txt',
       diagnostics: {
@@ -35,6 +44,10 @@ export async function preparePublicAnswer({
         ruleHints: result.answer.continuation.ruleQueryModel || null,
       },
     } };
+  } catch (error) {
+    await saveQueryAuditUpdate(result?.auditId, queryAuditFailurePatch(error), env, updateAudit);
+    throw error;
+  }
 }
 
 export function preparedAnswerProgress(preparation) {
@@ -45,7 +58,9 @@ export async function finalizePublicAnswer({
   preparation, env, signal, progress,
   finalize = finalizePreparedRagRulingQuestionForVersion, now = Date.now,
   selectProfile = selectAvailablePublicProfile, addGeneration = withPublicGenerationInfo,
+  updateAudit = updateQueryAudit,
 } = {}) {
+  try {
   signal?.throwIfAborted();
   const finalizeStartedAt = now();
   const selection = await selectProfile(preparation.profileId, env);
@@ -101,8 +116,16 @@ export async function finalizePublicAnswer({
       ? preparation.requestDiagnostics.durationMs
       : Number(preparation.preparedAt) - Number(preparation.startedAt);
   const preparationDurationMs = Math.max(0, measuredPreparationMs);
-  return { answer, latency: { profileId: profile.id,
-    durationMs: preparationDurationMs + Math.max(0, completedAt - finalizeStartedAt), exactMatchMs: 0 } };
+  const latency = { profileId: profile.id,
+    durationMs: preparationDurationMs + Math.max(0, completedAt - finalizeStartedAt), exactMatchMs: 0 };
+  await saveQueryAuditUpdate(preparation.auditId, queryAuditAnswerPatch(answer, {
+    latencyMs: latency.durationMs, profileId: profile.id,
+  }), env, updateAudit);
+  return { answer, latency };
+  } catch (error) {
+    await saveQueryAuditUpdate(preparation?.auditId, queryAuditFailurePatch(error), env, updateAudit);
+    throw error;
+  }
 }
 
 function combinedCloudCosts(preparation, finalization) {

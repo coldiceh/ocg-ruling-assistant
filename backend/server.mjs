@@ -31,6 +31,7 @@ import {
   wantsPublicAnswerProgress,
 } from "./publicAnswerProgress.mjs";
 import { readRequestBody as readBody } from "./requestBodyReader.mjs";
+import { readQueryAuditRequestContext } from "./publicQueryAudit.mjs";
 
 const port = Number(process.env.PORT || 8787);
 const host = String(process.env.HOST || "127.0.0.1").trim();
@@ -123,6 +124,7 @@ const server = createServer(async (request, response) => {
       const payload = parsePublicAnswerPayload(body);
       if (wantsPublicAnswerProgress(request, requestChannel)) {
         await answerWithProgressStream({
+          request,
           response,
           requestAbort,
           requestChannel,
@@ -133,6 +135,7 @@ const server = createServer(async (request, response) => {
       const result = await answerPublicRulingQuestion({
         payload,
         env: process.env,
+        requestContext: readQueryAuditRequestContext(request, process.env),
         signal: requestAbort.signal,
       });
       sendJson(response, 200, presentPublicAnswer(result.answer, {
@@ -159,6 +162,7 @@ const server = createServer(async (request, response) => {
 });
 
 async function answerWithProgressStream({
+  request,
   response,
   requestAbort,
   requestChannel,
@@ -175,6 +179,7 @@ async function answerWithProgressStream({
     const result = await answerPublicRulingQuestion({
       payload,
       env: process.env,
+      requestContext: readQueryAuditRequestContext(request, process.env),
       signal: requestAbort.signal,
       progress,
     });

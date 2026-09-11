@@ -19,6 +19,7 @@ import {
   wantsPublicAnswerProgress,
 } from "../backend/publicAnswerProgress.mjs";
 import { createPublicAnswerPreparationStore } from "../backend/publicAnswerPreparationStore.mjs";
+import { readQueryAuditRequestContext } from "../backend/publicQueryAudit.mjs";
 import { preparePublicAnswer, finalizePublicAnswer, preparedAnswerProgress } from "../backend/publicPreparedAnswerService.mjs";
 import {
   buildPublicOfftopicRiskControlAnswer,
@@ -78,6 +79,7 @@ return async function handler(request, response) {
     const result = await answerPublicRulingQuestion({
       payload,
       env: process.env,
+      requestContext: readQueryAuditRequestContext(request, process.env),
       signal: requestAbort.signal,
     });
     response.status(200).json(presentPublicAnswer(result.answer, {
@@ -163,7 +165,8 @@ async function answerInSeparateRequest({ request, response, requestAbort, reques
       timer = setInterval(() => progress.tick(), 1000);
       timer.unref?.();
       result = payload.action === "prepare"
-        ? await prepare({ payload, env, signal: requestAbort.signal, progress, store })
+        ? await prepare({ payload, env, signal: requestAbort.signal, progress, store,
+          requestContext: readQueryAuditRequestContext(request, env) })
         : await finalize({ preparation: claim.preparation, env, signal: requestAbort.signal, progress });
       measured = result.progress || progress.complete();
       if (claim?.state === "claimed") {
@@ -255,6 +258,7 @@ async function answerInSeparateRequest({ request, response, requestAbort, reques
 }
 
 async function answerWithProgressStream({
+  request,
   response,
   requestAbort,
   requestChannel,
@@ -271,6 +275,7 @@ async function answerWithProgressStream({
     const result = await answerPublicRulingQuestion({
       payload,
       env: process.env,
+      requestContext: readQueryAuditRequestContext(request, process.env),
       signal: requestAbort.signal,
       progress,
     });
