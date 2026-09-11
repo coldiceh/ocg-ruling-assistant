@@ -33,3 +33,53 @@ test('non-generated answers omit unrecorded model fields and retain the exact an
   assert.equal(Object.hasOwn(patch,'model'),false);
   assert.equal(Object.hasOwn(patch,'reasoningEffort'),false);
 });
+
+test('query audit records explicit final output failures instead of completed', () => {
+  const incomplete = queryAuditAnswerPatch({
+    shortAnswer: '模型输出未完整结束，本次未生成裁定，请重试。',
+    riskFlags: ['model_output_not_displayable', 'model_plain_text_incomplete'],
+    debug: { generationAttempts: [{ finishReason: 'length' }] },
+  });
+  assert.equal(incomplete.status, 'failed');
+  assert.equal(incomplete.errorCode, 'model_plain_text_incomplete');
+
+  const empty = queryAuditAnswerPatch({
+    shortAnswer: '',
+    riskFlags: ['model_output_not_displayable', 'model_plain_text_empty'],
+    debug: { generationAttempts: [{ finishReason: 'stop' }] },
+  });
+  assert.equal(empty.status, 'failed');
+  assert.equal(empty.errorCode, 'model_plain_text_empty');
+
+  const providerFailure = queryAuditAnswerPatch({
+    shortAnswer: '模型服务本次响应超时，未生成裁定，请稍后重试。',
+    riskFlags: ['model_output_not_displayable', 'model_provider_timeout'],
+    debug: { providerFailure: { kind: 'timeout', code: 'model_provider_timeout' } },
+  });
+  assert.equal(providerFailure.status, 'failed');
+  assert.equal(providerFailure.errorCode, 'model_output_not_displayable');
+});
+
+test('query audit preserves parser outcome and explicit statuses', () => {
+  const length = queryAuditAnswerPatch({
+    shortAnswer: 'partial body',
+    riskFlags: ['model_plain_text_incomplete'],
+    debug: { generationAttempts: [{ finishReason: 'length' }] },
+  });
+  assert.equal(length.status, 'failed');
+  assert.equal(length.errorCode, 'model_plain_text_incomplete');
+
+  const completed = queryAuditAnswerPatch({
+    shortAnswer: '完整正文',
+    debug: { generationAttempts: [{ finishReason: 'stop' }] },
+  });
+  assert.equal(completed.status, 'completed');
+  assert.equal(Object.hasOwn(completed, 'errorCode'), false);
+
+  const blocked = queryAuditAnswerPatch({
+    shortAnswer: '',
+    riskFlags: ['model_plain_text_empty'],
+  }, { status: 'blocked' });
+  assert.equal(blocked.status, 'blocked');
+  assert.equal(Object.hasOwn(blocked, 'errorCode'), false);
+});

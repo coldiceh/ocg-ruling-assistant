@@ -20,15 +20,33 @@ export function queryAuditAnswerPatch(answer, { status = "completed", latencyMs,
   const model = answer?.generation?.model;
   const effort = answer?.generation?.reasoningEffort
     || (answer?.generation?.thinkingMode === "disabled" ? "none" : null);
+  const errorCode = status === "completed" ? queryAuditAnswerFailureCode(answer) : null;
   return {
-    status,
+    status: errorCode ? "failed" : status,
     completedAt: new Date().toISOString(),
     answer: typeof answer?.shortAnswer === "string" ? answer.shortAnswer : "",
+    ...(errorCode ? { errorCode } : {}),
     ...(typeof model === "string" && model ? { model } : {}),
     ...(typeof effort === "string" && effort ? { reasoningEffort: effort } : {}),
     ...(Number.isFinite(latencyMs) ? { latencyMs: Math.max(0, latencyMs) } : {}),
     ...(profileId ? { profileId } : {}),
   };
+}
+
+function queryAuditAnswerFailureCode(answer) {
+  // Reflect the final parser's existing transport/output result in the audit.
+  // Do not independently reinterpret the model response or change its answer.
+  const riskFlags = Array.isArray(answer?.riskFlags) ? answer.riskFlags : [];
+  for (const flag of [
+    "model_plain_text_incomplete",
+    "model_plain_text_empty",
+    "model_output_not_displayable",
+    "public_final_output_not_displayable",
+  ]) {
+    if (riskFlags.includes(flag)) return flag;
+  }
+
+  return null;
 }
 
 export function queryAuditFailurePatch(error) {
