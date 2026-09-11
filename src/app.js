@@ -1876,13 +1876,14 @@ function renderAdminPublicBudgetStatus(buckets = []) {
   for (const bucket of publicBuckets) {
     const card = document.createElement("article");
     card.className = "admin-budget-pool";
-    const title = String(bucket?.label || [bucket?.provider, bucket?.stage].filter(Boolean).join(" · ") || "公开问答");
+    const title = bucket?.provider === "bai" ? "GPT"
+      : String(bucket?.label || [bucket?.provider, bucket?.stage].filter(Boolean).join(" · ") || "公开问答");
     appendText(card, "strong", title);
     const currency = bucket?.currency === "USD" ? "USD" : "CNY";
     const spentRaw = currency === "USD" ? (bucket?.spentTodayUsd ?? bucket?.spentToday) : (bucket?.spentTodayCny ?? bucket?.spentToday);
     const limitRaw = currency === "USD" ? (bucket?.dailyBudgetUsd ?? bucket?.dailyBudget) : (bucket?.dailyBudgetCny ?? bucket?.dailyBudget);
-    const spent = Number(spentRaw);
-    const limit = Number(limitRaw);
+    const spent = spentRaw === null || spentRaw === undefined || spentRaw === "" ? NaN : Number(spentRaw);
+    const limit = limitRaw === null || limitRaw === undefined || limitRaw === "" ? NaN : Number(limitRaw);
     const spentText = Number.isFinite(spent) ? (currency === "USD" ? `$${formatUsd(spent)}` : `¥${formatCny(spent)}`) : "未记录";
     const limitText = Number.isFinite(limit) && limit > 0 ? (currency === "USD" ? ` / $${formatUsd(limit)}` : ` / ¥${formatCny(limit)}`) : "";
     appendText(card, "p", `${spentText}${limitText}`);
