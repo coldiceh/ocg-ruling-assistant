@@ -57,6 +57,7 @@ export async function activatePublicOfftopicRiskControl({
   now = () => new Date(),
   randomInt = cryptoRandomInt,
   durationMinutes,
+  diagnostic,
 } = {}) {
   const context = riskControlContext(env, fetchImpl);
   if (!context.ok) return failOpenStatus(context.reason, context.storage, { triggered: false });
@@ -69,6 +70,7 @@ export async function activatePublicOfftopicRiskControl({
     activatedAt: new Date(nowMs).toISOString(),
     expiresAt: new Date(nowMs + ttlSeconds * 1000).toISOString(),
     durationMinutes: duration,
+    ...(diagnostic ? { diagnostic } : {}),
   });
 
   try {
@@ -178,6 +180,7 @@ function activeStatusFromStoredValue(value, nowMs) {
     expiresAt: record.expiresAt,
     durationMinutes: record.durationMinutes,
     remainingMinutes: Math.max(1, Math.ceil((expiresAtMs - nowMs) / 60000)),
+    ...(record.diagnostic ? { diagnostic: record.diagnostic } : {}),
   };
 }
 
@@ -228,7 +231,7 @@ function parseStoredRecord(value) {
       || !Number.isFinite(expiresAtMs)
       || expiresAtMs <= activatedAtMs
     ) return null;
-    return { activatedAt, expiresAt, durationMinutes };
+    return { activatedAt, expiresAt, durationMinutes, ...(parsed.diagnostic ? { diagnostic: parsed.diagnostic } : {}) };
   } catch {
     return null;
   }

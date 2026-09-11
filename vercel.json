@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "pnpm run check:rag-revision && pnpm run check:rag-runtime && node scripts/sync-cloud-evidence-assets.mjs --data-dir data --cloud-dir data/cloud-evidence-v1 --check-only",
+  "buildCommand": "pnpm run check:rag-revision && pnpm run check:rag-runtime && node scripts/sync-cloud-evidence-assets.mjs --data-dir data --cloud-dir data/cloud-evidence-v1 --check-only && node scripts/build-public-release.mjs",
   "outputDirectory": "public",
   "env": {
     "PUBLIC_OPENAI_DAILY_LIMIT_USD": "5",
@@ -32,7 +32,7 @@
     },
     "api/answer.js": {
       "maxDuration": 300,
-      "includeFiles": "{data/legacy-lua-semantic-cache-v2/**,data/qa-discovery-index.json,data/rag-data-revision-manifest.json,data/rag-runtime-v1/**,data/cloud-evidence-v1/**}",
+      "includeFiles": "{data/public-release.json,data/legacy-lua-semantic-cache-v2/**,data/qa-discovery-index.json,data/rag-data-revision-manifest.json,data/rag-runtime-v1/**,data/cloud-evidence-v1/**}",
       "excludeFiles": "{data/{cards,rulings,qa-index,evidence-index,ocg-rule-corpus,official-responses}.json,data/evidence-index.json.gz}"
     },
     "api/admin-model-lab.js": {

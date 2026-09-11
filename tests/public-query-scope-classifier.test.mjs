@@ -45,7 +45,7 @@ test("only a high-confidence out-of-scope model decision qualifies as a risk con
   assert.equal(result.confidence, "high");
   assert.equal(shouldTriggerPublicQueryRisk(result), true);
   assert.equal(seen.length, 1);
-  assert.equal(seen[0].modelName, "deepseek-v4.1-flash-expires-on-0910");
+  assert.equal(seen[0].modelName, "deepseek-flash");
   assert.equal(seen[0].maxTokens, 256);
   assert.equal(Object.hasOwn(seen[0], "model"), false);
   assert.equal(Object.hasOwn(seen[0], "maxOutputTokens"), false);
@@ -81,7 +81,7 @@ test("classifier dispatches the official DeepSeek 4.1 Flash non-thinking JSON wi
       });
       return Response.json({
         id: "scope-classifier-1",
-        model: "deepseek-v4.1-flash-expires-on-0910",
+        model: "deepseek-flash",
         choices: [{
           finish_reason: "stop",
           message: {
@@ -101,7 +101,7 @@ test("classifier dispatches the official DeepSeek 4.1 Flash non-thinking JSON wi
   assert.equal(requests[0].url, "https://api.deepseek.example.test/v1/chat/completions");
   assert.equal(requests[0].headers.authorization, "Bearer test-deepseek-key");
   assert.deepEqual(requests[0].body, {
-    model: "deepseek-v4.1-flash-expires-on-0910",
+    model: "deepseek-flash",
     messages: [{ role: "user", content: buildPublicQueryScopePrompt("明确的非裁定请求") }],
     stream: false,
     response_format: { type: "json_object" },
@@ -110,7 +110,7 @@ test("classifier dispatches the official DeepSeek 4.1 Flash non-thinking JSON wi
     max_tokens: 256,
   });
   assert.equal(result.provider, "deepseek");
-  assert.equal(result.model, "deepseek-v4.1-flash-expires-on-0910");
+  assert.equal(result.model, "deepseek-flash");
   assert.equal(result.thinkingMode, "disabled");
   assert.equal(result.reasoningEffort, null);
   assert.equal(result.scope, "out_of_scope");

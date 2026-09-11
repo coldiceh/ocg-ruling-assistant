@@ -66,5 +66,5 @@ function generationFooter(shortAnswer, generation) {
   const configuredReasoningEffort = String(generation.reasoningEffort || '').trim();
   const reasoningEffort = configuredReasoningEffort
     || (generation.thinkingMode === 'disabled' ? 'none（未开启思考）' : '未取得');
-  return `\n\n实际最终模型：${model}；实际推理强度：${reasoningEffort}`;
+  return `\n\n实际最终模型：${model}；请求推理强度：${reasoningEffort}`;
 }

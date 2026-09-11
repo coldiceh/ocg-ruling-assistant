@@ -60,17 +60,22 @@ const NON_CARD_HEADING_NAMES = new Set(["效果", "问题", "问", "q", "场景"
 
 export function extractRagCards(userQuery, {
   cards = [],
-  maxCards = 6,
+  maxCards: _legacyMaxCards,
   modelCardNameCandidates = [],
   mentionSetSource = "query_scan",
 } = {}) {
   const query = String(userQuery || "");
   const typedModelOwnsMentionSet = mentionSetSource === "typed_model";
-  const cardLimit = normalizeMaxCards(maxCards);
+  // Card count is not an admission limit. The request and final prompt retain
+  // their existing byte/character budgets and fail explicitly if the complete
+  // fixed card envelope cannot fit.
+  const cardLimit = Number.POSITIVE_INFINITY;
   const aliasIndex = buildAliasIndex(cards);
   const cardNameScanQuery = maskNonCardQuotedExpressions(query, { aliasIndex });
   const normalizedQuery = normalizeCardKey(cardNameScanQuery);
-  const queryNumberedIdentities = typedModelOwnsMentionSet ? [] : extractNumberedCardIdentities(query);
+  // Explicit No./CNo. identifiers are mechanical identity input and remain
+  // available even when the typed model owns ordinary name mentions.
+  const queryNumberedIdentities = extractNumberedCardIdentities(query);
   const queryNumberedIdentityKeys = new Set(queryNumberedIdentities.map(numberedIdentityKey));
   const userProvidedCardTexts = extractUserProvidedCardTextBlocks(query);
   const nonCardQuotedMentionKeys = typedModelOwnsMentionSet ? new Set() : new Set(
@@ -350,24 +355,15 @@ export function extractRagCards(userQuery, {
     });
   }
 
-  const visibleResolved = resolved.slice(0, cardLimit);
-  const omittedResolved = resolved.slice(cardLimit);
+  const visibleResolved = resolved;
   const filteredUnresolvedMentions = typedModelOwnsMentionSet
     ? unresolvedMentions
     : suppressResolvedGameplayClauseMentions(unresolvedMentions, visibleResolved);
-  const cardLimitMentions = omittedResolved.map((card) => ({
-    input: card.input || card.name,
-    reason: "resolved_card_limit_exceeded",
-    source: "card_limit",
-    resolvedCardId: card.id,
-    resolvedCardName: card.name,
-  }));
-
   return {
     resolvedCards: visibleResolved,
     unresolvedMentions: dedupeMentionObjects(filteredUnresolvedMentions),
     ambiguousMentions: dedupeBy(ambiguousMentions, (item) => normalizeCardKey(item.input)),
-    omittedResolvedCards: cardLimitMentions,
+    omittedResolvedCards: [],
     userProvidedCardTexts,
     modelCardNameCandidates: modelMentions,
     mentionSetSource,
@@ -1019,7 +1015,7 @@ export function extractUnquotedCardMentionCandidates(query) {
       if (candidate && hasCardNameSignal(candidate)) candidates.push(candidate);
     }
   }
-  return dedupeBy(candidates, normalizeCardKey).slice(0, 12);
+  return dedupeBy(candidates, normalizeCardKey);
 }
 
 function extractContextualDistinctiveMentionCandidates(query) {
@@ -1044,7 +1040,7 @@ function extractContextualDistinctiveMentionCandidates(query) {
     }
   }
 
-  return dedupeBy(candidates, normalizeCardKey).slice(0, 12);
+  return dedupeBy(candidates, normalizeCardKey);
 }
 
 function cleanUnquotedMention(value) {
@@ -1545,11 +1541,6 @@ function findUniqueDistinctiveFragmentCandidate(cards, mention) {
   const preferred = mixedScriptMatches.length ? mixedScriptMatches : uniquelyMatched;
   const identities = new Set(preferred.map(({ candidate }) => cardIdentity(candidate.card)));
   return identities.size === 1 ? preferred[0].candidate : null;
-}
-
-function normalizeMaxCards(maxCards) {
-  const parsed = Number.parseInt(maxCards, 10);
-  return Number.isFinite(parsed) ? Math.max(0, parsed) : 6;
 }
 
 function extractMixedScriptSeriesToken(value) {
@@ -2483,7 +2474,7 @@ function normalizeModelCardNameCandidates(items, { preserveTypedMentions = false
     }))
     .filter((item) => preserveTypedMentions ? Boolean(item.name) : looksLikeCardMention(item.name));
   return dedupeBy(
-    preserveTypedMentions ? normalized : normalized.slice(0, 12),
+    normalized,
     (item) => `${normalizeCardKey(item.name)}\u0000${exactSurfaceKey(item.originalText)}`,
   );
 }

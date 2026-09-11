@@ -59,9 +59,9 @@ function amount(value, label, allowZero = false) {
 function nano(value) { return Math.ceil(value * UNIT); }
 function deepSeekBusyRates(env={}) {
   return {
-    cacheHitCnyPerMtok:amount(env.DEEPSEEK_CLOUD_BUSY_CACHE_HIT_CNY_PER_MTOK??0.1,'deepseek_cache_hit_rate'),
-    cacheMissCnyPerMtok:amount(env.DEEPSEEK_CLOUD_BUSY_CACHE_MISS_CNY_PER_MTOK??3,'deepseek_cache_miss_rate'),
-    outputCnyPerMtok:amount(env.DEEPSEEK_CLOUD_BUSY_OUTPUT_CNY_PER_MTOK??9,'deepseek_output_rate'),
+    cacheHitCnyPerMtok:amount(env.DEEPSEEK_CLOUD_BUSY_CACHE_HIT_CNY_PER_MTOK??0.04,'deepseek_cache_hit_rate'),
+    cacheMissCnyPerMtok:amount(env.DEEPSEEK_CLOUD_BUSY_CACHE_MISS_CNY_PER_MTOK??2,'deepseek_cache_miss_rate'),
+    outputCnyPerMtok:amount(env.DEEPSEEK_CLOUD_BUSY_OUTPUT_CNY_PER_MTOK??8,'deepseek_output_rate'),
   };
 }
 function deepSeekBusyCost(usage={},env={}) {
@@ -321,6 +321,8 @@ export function createCloudRequestBudget({env, fetchImpl = globalThis.fetch, com
     return ticket;
   }
   async function settle(ticket,{actualCny,actualUpperCny=actualCny,theoreticalUsd,usage,returnedModel}) {
+    // Provider usage is observed before persistence; keep it if Redis fails.
+    Object.assign(ticket,{usage,returnedModel:returnedModel||null,providerResponseReceivedAtUtc:new Date().toISOString()});
     amount(actualCny,'settled_actual',true);
     amount(actualUpperCny,'settled_actual_upper',true);
     amount(theoreticalUsd,'settled_theoretical',true);
@@ -345,17 +347,19 @@ export function createCloudRequestBudget({env, fetchImpl = globalThis.fetch, com
       + input*Math.max(0,officialRates.cacheWriteUsdPerMillion-officialRates.inputUsdPerMillion)/1e6;
     const actualCny=estimateRelayModelCost({model,usage:reserveUsage,pricingMultiplier:1,usdToCnyRate:siteDollarCny,inputBillingBasis:'all_uncached'}).totalCostCny;
     const ticket=await reserve({provider:'relay',model,operation:'chat_completions',actualCny,theoreticalUsd});
-    try {
-      const result=await invoke();
-      if(usagePresent(result.usage)) await settle(ticket,{
+    let result;
+    try { result=await invoke(); }
+    catch(error) { ticket.uncertainty='request_or_settlement_failed_reservation_retained'; throw error; }
+    if(usagePresent(result.usage)) {
+      try { await settle(ticket,{
         usage:result.usage,returnedModel:result.model,
         actualCny:estimateRelayModelCost({model,usage:result.usage,pricingMultiplier:relayMultiplier,usdToCnyRate:siteDollarCny}).totalCostCny,
         actualUpperCny:estimateRelayModelCost({model,usage:result.usage,pricingMultiplier:1,usdToCnyRate:siteDollarCny,inputBillingBasis:'all_uncached'}).totalCostCny,
         theoreticalUsd:estimateOpenAIModelCost({model,usage:result.usage}).totalCostUsd,
-      });
-      else ticket.uncertainty='provider_usage_missing_reservation_retained';
-      return result;
-    } catch(error) { ticket.uncertainty='request_or_settlement_failed_reservation_retained'; throw error; }
+      }); }
+      catch { ticket.uncertainty='provider_response_received_settlement_uncertain_reservation_retained'; }
+    } else ticket.uncertainty='provider_usage_missing_reservation_retained';
+    return result;
   }
   async function deepseek({body,invoke}) {
     const model=String(body?.model||'').trim();
@@ -366,13 +370,15 @@ export function createCloudRequestBudget({env, fetchImpl = globalThis.fetch, com
     const reserveUsage={prompt_tokens:input,prompt_cache_miss_tokens:input,completion_tokens:output};
     const ticket=await reserve({provider:'deepseek',model,operation:'chat_completions',
       actualCny:deepSeekBusyCost(reserveUsage,env),theoreticalUsd:0,pricingBasis:'busy_rate_estimate'});
-    try {
-      const result=await invoke();
-      if(usagePresent(result.usage)) await settle(ticket,{usage:result.usage,returnedModel:result.model,
-        actualCny:deepSeekBusyCost(result.usage,env),actualUpperCny:deepSeekBusyCost(result.usage,env),theoreticalUsd:0});
-      else ticket.uncertainty='provider_usage_missing_reservation_retained';
-      return result;
-    } catch(error) { ticket.uncertainty='request_or_settlement_failed_reservation_retained'; throw error; }
+    let result;
+    try { result=await invoke(); }
+    catch(error) { ticket.uncertainty='request_or_settlement_failed_reservation_retained'; throw error; }
+    if(usagePresent(result.usage)) {
+      try { await settle(ticket,{usage:result.usage,returnedModel:result.model,
+        actualCny:deepSeekBusyCost(result.usage,env),actualUpperCny:deepSeekBusyCost(result.usage,env),theoreticalUsd:0}); }
+      catch { ticket.uncertainty='provider_response_received_settlement_uncertain_reservation_retained'; }
+    } else ticket.uncertainty='provider_usage_missing_reservation_retained';
+    return result;
   }
   async function openai({body,invoke,provider='openai'}) {
     const model=body.model;
@@ -393,18 +399,20 @@ export function createCloudRequestBudget({env, fetchImpl = globalThis.fetch, com
       provider,model,operation:'chat_completions',actualCny:0,theoreticalUsd,
       ...(provider==='bai'?{pricingBasis:'official_theoretical'}:{}),
     });
-    try {
-      const result=await invoke();
-      if(usagePresent(result.usage)) await settle(ticket,{
-        usage:result.usage,returnedModel:result.model,actualCny:0,actualUpperCny:0,
-        theoreticalUsd:estimateOpenAIModelCost({model,usage:result.usage}).totalCostUsd,
-      });
-      else ticket.uncertainty='provider_usage_missing_reservation_retained';
-      return result;
-    } catch(error) {
+    let result;
+    try { result=await invoke(); }
+    catch(error) {
       ticket.uncertainty='request_or_settlement_failed_reservation_retained';
       throw error;
     }
+    if(usagePresent(result.usage)) {
+      try { await settle(ticket,{
+        usage:result.usage,returnedModel:result.model,actualCny:0,actualUpperCny:0,
+        theoreticalUsd:estimateOpenAIModelCost({model,usage:result.usage}).totalCostUsd,
+      }); }
+      catch { ticket.uncertainty='provider_response_received_settlement_uncertain_reservation_retained'; }
+    } else ticket.uncertainty='provider_usage_missing_reservation_retained';
+    return result;
   }
   async function beforeSend({operation,model,count}) {
     const rate=operation==='embeddings'?0.07:operation==='rerank'?0.28:null;

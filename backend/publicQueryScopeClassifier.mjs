@@ -70,6 +70,7 @@ export async function classifyPublicQueryScope({
       thinkingMode: CLASSIFIER_THINKING_MODE,
       reasoningEffort: CLASSIFIER_REASONING_EFFORT,
       usage: payload?.usage || {},
+      returnedModel: payload?.returnedModel || null,
       estimatedCostCny: Number(payload?.estimatedCostCny || 0),
       estimatedCostUsd: Number(payload?.estimatedCostUsd || 0),
     });

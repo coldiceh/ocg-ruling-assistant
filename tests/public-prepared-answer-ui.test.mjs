@@ -12,11 +12,20 @@ function createClient(fetchImpl, {
   selectedProfile = "official-astra-low",
   requestId = null,
   onPrepared = null,
+  sessionStorageImpl = {
+    values: new Map(),
+    setItem(key, value) { this.values.set(key, value); },
+    getItem(key) { return this.values.get(key) ?? null; },
+    removeItem(key) { this.values.delete(key); },
+  },
 } = {}) {
-  return new Function("fetch", "TextDecoder", "onPrepared", `
+  return new Function("fetch", "TextDecoder", "onPrepared", "sessionStorage", `
     const appConfig = { answerApiUrl: "https://example.invalid/api/answer" };
+    const publicAnswerPreparationStorageKey = "ocg-public-answer-preparation-id";
     let selectedRulingModelProfile = ${JSON.stringify(selectedProfile)};
+    let selectedRulingVersion = "latest";
     let analysisRequestId = ${JSON.stringify(requestId ?? 0)};
+    let activeAnalysisPhase = null;
     let preparedEvidencePackage = null;
     const ui = {
       evidencePackagePanel: { hidden: true },
@@ -42,8 +51,11 @@ function createClient(fetchImpl, {
       getAnalysisRequestId() { return analysisRequestId; },
       getSelectedProfile() { return selectedRulingModelProfile; },
       getPreparedEvidencePackage() { return preparedEvidencePackage; },
+      getActiveAnalysisPhase() { return activeAnalysisPhase; },
+      recover: recoverStoredPublicAnswer,
+      readStoredPreparationId: readStoredPublicAnswerPreparationId,
     };
-  `)(fetchImpl, TextDecoder, onPrepared);
+  `)(fetchImpl, TextDecoder, onPrepared, sessionStorageImpl);
 }
 
 function sse(...events) {
@@ -77,6 +89,12 @@ function endEvent() {
 
 test("prepare/finalize sends the exact two body shapes in serial order", async () => {
   const requests = [];
+  const stored = new Map();
+  const sessionStorageImpl = {
+    setItem(key, value) { stored.set(key, value); },
+    getItem(key) { return stored.get(key) ?? null; },
+    removeItem(key) { stored.delete(key); },
+  };
   const clientInstance = createClient(async (url, options) => {
     requests.push({ url, body: JSON.parse(options.body) });
     if (requests.length === 1) {
@@ -86,12 +104,13 @@ test("prepare/finalize sends the exact two body shapes in serial order", async (
         endEvent(),
       );
     }
+    assert.equal(clientInstance.readStoredPreparationId(), "a".repeat(64));
     return sse(
       { type: "stage_start", data: { stageId: "generate_ruling" } },
       answerEvent(),
       endEvent(),
     );
-  });
+  }, { sessionStorageImpl });
 
   const result = await clientInstance.request("Synthetic question", "latest", { requestId: 0 });
   assert.equal(result.verdict, "synthetic");
@@ -111,6 +130,67 @@ test("prepare/finalize sends the exact two body shapes in serial order", async (
     preparationId: "a".repeat(64),
   });
   assert.equal(clientInstance.preparedProgress.length, 1);
+  assert.equal(clientInstance.readStoredPreparationId(), "");
+});
+
+test("a completed stored preparation is recovered through a read-only status request", async () => {
+  const preparationId = "9".repeat(64);
+  const stored = new Map([["ocg-public-answer-preparation-id", preparationId]]);
+  const sessionStorageImpl = {
+    setItem(key, value) { stored.set(key, value); },
+    getItem(key) { return stored.get(key) ?? null; },
+    removeItem(key) { stored.delete(key); },
+  };
+  const requests = [];
+  const recoveredAnswer = { effectiveRulingVersion: "latest", verdict: "recovered" };
+  const clientInstance = createClient(async (url, options) => {
+    requests.push({ url, options, body: JSON.parse(options.body) });
+    return new Response(JSON.stringify({
+      status: "completed",
+      result: { answer: recoveredAnswer, progress: { totalMs: 240 } },
+    }), { status: 200, headers: { "content-type": "application/json" } });
+  }, { sessionStorageImpl });
+
+  const recovered = await clientInstance.recover();
+  assert.equal(recovered.verdict, recoveredAnswer.verdict);
+  assert.equal(recovered.effectiveRulingVersion, "latest");
+  assert.equal(recovered.requestedRulingVersion, "latest");
+  assert.deepEqual(requests[0].body, { action: "status", preparationId });
+  assert.equal(requests[0].options.signal, undefined);
+  assert.equal(clientInstance.readStoredPreparationId(), "");
+  assert.deepEqual(clientInstance.preparedProgress, [{ totalMs: 240 }]);
+});
+
+test("ready and running recovery poll only status for the same preparation until completion", async () => {
+  const preparationId = "8".repeat(64);
+  const stored = new Map([["ocg-public-answer-preparation-id", preparationId]]);
+  const sessionStorageImpl = {
+    setItem(key, value) { stored.set(key, value); },
+    getItem(key) { return stored.get(key) ?? null; },
+    removeItem(key) { stored.delete(key); },
+  };
+  const requests = [];
+  const states = ["ready", "running", "completed"];
+  const clientInstance = createClient(async (_url, options) => {
+    const body = JSON.parse(options.body);
+    requests.push(body);
+    const status = states.shift();
+    return new Response(JSON.stringify(status === "completed"
+      ? { status, result: { answer: { effectiveRulingVersion: "latest", verdict: "recovered-after-poll" } } }
+      : { status }), { status: 200, headers: { "content-type": "application/json" } });
+  }, { sessionStorageImpl });
+  const waits = [];
+
+  const recovered = await clientInstance.recover({
+    maxAttempts: 3,
+    pollIntervalMs: 5,
+    wait: async (milliseconds) => { waits.push(milliseconds); },
+  });
+  assert.equal(recovered.verdict, "recovered-after-poll");
+  assert.deepEqual(requests, Array.from({ length: 3 }, () => ({ action: "status", preparationId })));
+  assert.deepEqual(waits, [5, 5]);
+  assert.equal(requests.some((body) => body.action === "finalize"), false);
+  assert.equal(clientInstance.readStoredPreparationId(), "");
 });
 
 test("prepare-only sends one prepare request and retains the downloadable package", async () => {
@@ -265,4 +345,29 @@ test("preparation HTTP conflicts and stream failures remain request failures", a
     assert.equal(error.publicMessage, "Synthetic storage failure");
     return true;
   });
+});
+
+test("editing the question does not abort or invalidate a dispatched final request", () => {
+  const source = app.slice(
+    app.indexOf("function scheduleAnalysis"),
+    app.indexOf("init();", app.indexOf("function scheduleAnalysis")),
+  );
+  let cleared = 0;
+  let reset = 0;
+  const run = new Function("clearTimeout", "clearPreparedEvidencePackage", "resetAnalysis", `
+    let analysisTimer = 7;
+    let analysisRequestId = 11;
+    let activeAnalysisPhase = "finalize";
+    const appConfig = { answerApiUrl: "https://example.invalid/api/answer" };
+    const ui = { questionInput: { value: "edited while finalizing" } };
+    function analyzeQuestion() {}
+    function setTimeout() { throw new Error("must not schedule another request"); }
+    ${source}
+    scheduleAnalysis();
+    return { analysisRequestId, activeAnalysisPhase };
+  `)(() => {}, () => { cleared += 1; }, () => { reset += 1; });
+
+  assert.deepEqual(run, { analysisRequestId: 11, activeAnalysisPhase: "finalize" });
+  assert.equal(cleared, 0);
+  assert.equal(reset, 0);
 });

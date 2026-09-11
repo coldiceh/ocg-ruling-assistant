@@ -187,7 +187,7 @@ test(`cloud production path preserves the complete wire prompt and captures it o
       const prompt=request.messages.map(message=>message.content).join('\n');
       if(prompt.includes('你负责游戏王问题的提及抽取')){
         calls.push('card');return Response.json({model:request.model,choices:[{finish_reason:'stop',message:{content:
-          JSON.stringify({cardNames:[card.name],groupMentions:[]})}}],
+          JSON.stringify({cardNames:[{name:card.name,originalText:card.name,mentionType:'card'}],groupMentions:[]})}}],
           usage:{prompt_tokens:8,completion_tokens:4,total_tokens:12}});
       }
       if(prompt.includes('你只负责补充游戏王OCG资料检索线索')){
@@ -207,12 +207,12 @@ test(`cloud production path preserves the complete wire prompt and captures it o
     .map(command=>JSON.parse(command[11]));
   assert.deepEqual(cloudReservations.map(ticket=>[ticket.provider,ticket.model,ticket.status,ticket.pricingBasis]),[
     ['deepseek','configured-deepseek-model','reserved','busy_rate_estimate'],
-    ['deepseek','deepseek-v4.1-flash-expires-on-0910','reserved','busy_rate_estimate'],
+    ['deepseek','deepseek-flash','reserved','busy_rate_estimate'],
   ]);
   assert.equal(cloudBudgetCommands.filter(command=>command[1]===CLOUD_BUDGET_SETTLE).length,2);
   assert.deepEqual(wireConfigs.slice(0,2),[
     {model:'configured-deepseek-model',thinking:'disabled',responseFormat:'json_object',maxTokens:800},
-    {model:'deepseek-v4.1-flash-expires-on-0910',thinking:'disabled',responseFormat:'json_object',maxTokens:4096},
+    {model:'deepseek-flash',thinking:'disabled',responseFormat:'json_object',maxTokens:4096},
   ]);
   assert.equal(planInput.question,question);
   assert.ok(planInput.cardTexts.some(item=>item.cardIds.includes(card.id)));
@@ -231,7 +231,7 @@ test(`cloud production path preserves the complete wire prompt and captures it o
   assert.equal(answer.debug.cloudEvidence.selectedCount,1);
   assert.equal(answer.debug.cloudCosts.calls.length,2);
   assert.equal(answer.debug.cloudCosts.calls.every(call=>call.provider==='deepseek'&&call.status==='usage_settled'),true);
-  assert.equal(answer.debug.cloudCosts.actualCny,0.00012);
+  assert.equal(answer.debug.cloudCosts.actualCny,0.000096);
   assert.equal(answer.debug.cloudCosts.theoreticalUsd,0);
   if(deploymentEnv==='preview') {
     assert.equal(answer.debug.cloudEvidenceCapture?.actualPrompt,finalPrompt);

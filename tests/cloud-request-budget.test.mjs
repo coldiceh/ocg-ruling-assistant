@@ -31,6 +31,44 @@ test('b.ai records official token cost separately and keeps missing usage reserv
   assert.equal(result.debug.cloudCosts.calls[1].status,'reserved');
   assert.ok(result.debug.cloudCosts.reservedTheoreticalUsd>0);
 });
+
+test('successful provider responses survive uncertain settlement without another model call',async()=>{
+  const cases=[
+    {provider:'relay',method:'relay',requestBody:body,usage:{prompt_tokens:12,completion_tokens:3,total_tokens:15}},
+    {provider:'deepseek',method:'deepseek',requestBody:{model:'deepseek-v4-flash',messages:body.messages,max_tokens:64},
+      usage:{prompt_tokens:12,prompt_cache_hit_tokens:2,prompt_cache_miss_tokens:10,completion_tokens:3,total_tokens:15}},
+    {provider:'openai',method:'openai',requestBody:body,usage:{prompt_tokens:12,completion_tokens:3,total_tokens:15}},
+    {provider:'bai',method:'bai',requestBody:body,usage:{prompt_tokens:12,completion_tokens:3,total_tokens:15}},
+  ];
+  for(const testCase of cases) {
+    const commands=[];
+    const command=async args=>{
+      commands.push(args);
+      if(args[1]===CLOUD_BUDGET_RESERVE) return ['reserved'];
+      throw new Error('simulated settlement outage');
+    };
+    const budget=createCloudRequestBudget({env,command});
+    let providerInvocations=0;
+    const providerResult={body:`${testCase.provider} answer`,model:testCase.requestBody.model,usage:testCase.usage};
+    const result=await runCloudBudgetedQuestion({env:{...env,RAG_MODEL_PROVIDER:testCase.provider},budget},
+      ()=>budget[testCase.method]({body:testCase.requestBody,invoke:async()=>{
+        providerInvocations+=1;
+        return providerResult;
+      }}));
+    assert.equal(providerInvocations,1,testCase.provider);
+    assert.equal(result.body,providerResult.body,testCase.provider);
+    assert.deepEqual(result.usage,providerResult.usage,testCase.provider);
+    assert.equal(commands.length,2,testCase.provider);
+    assert.equal(commands.filter(args=>args[1]===CLOUD_BUDGET_RESERVE).length,1,testCase.provider);
+    assert.equal(commands.filter(args=>args[1]===CLOUD_BUDGET_SETTLE).length,1,testCase.provider);
+    assert.equal(result.debug.cloudCosts.calls[0].status,'reserved',testCase.provider);
+    assert.deepEqual(result.debug.cloudCosts.calls[0].usage,testCase.usage,testCase.provider);
+    assert.equal(result.debug.cloudCosts.calls[0].uncertainty,
+      'provider_response_received_settlement_uncertain_reservation_retained',testCase.provider);
+    assert.ok(result.debug.cloudCosts.reservedCny>0 || result.debug.cloudCosts.reservedTheoreticalUsd>0,
+      testCase.provider);
+  }
+});
 function recorder({block=false}={}) {
   const calls=[];
   return {calls,command:async args=>{
@@ -181,7 +219,7 @@ test('DeepSeek cloud budget uses busy flash rates once and retains an unknown re
     usage:{prompt_tokens:1000,prompt_cache_hit_tokens:250,prompt_cache_miss_tokens:750,
       completion_tokens:100,total_tokens:1100}})});
   assert.equal(settledRedis.calls.length,2);
-  assert.equal(settled.snapshot().actualCny,0.003175);
+  assert.equal(settled.snapshot().actualCny,0.00231); // (250*0.04 + 750*2 + 100*8) / 1e6
   assert.equal(settled.snapshot().calls[0].pricingBasis,'busy_rate_estimate');
 
   const unknownRedis=recorder();

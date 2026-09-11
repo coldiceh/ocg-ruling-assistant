@@ -12,6 +12,20 @@ const PUBLIC_ENV = {
   UPSTASH_REDIS_REST_TOKEN: "test-token",
 };
 
+test('risk activation receives non-question classifier metadata and request identity', async()=>{
+  let activation;
+  await answerPublicRulingQuestion({payload:{question:'private fixture question'},env:PUBLIC_ENV,
+    appendAudit:async()=>({}),readRiskControl:async()=>({ok:true,active:false}),
+    classifyScope:async()=>({scope:'out_of_scope',confidence:'high',reasonCode:'not_ruling_question',model:'fixture-model',usage:{prompt_tokens:10}}),
+    activateRiskControl:async request=>{activation=request;return {active:true,triggered:true,remainingMinutes:5};},
+    answerRuling:async()=>assert.fail('locked request must not invoke final'),
+  });
+  assert.equal(activation.diagnostic.model,'fixture-model');
+  assert.equal(activation.diagnostic.usage.prompt_tokens,10);
+  assert.match(activation.diagnostic.requestId,/^[a-f0-9-]{36}$/);
+  assert.equal(JSON.stringify(activation.diagnostic).includes('private fixture question'),false);
+});
+
 test("an existing off-topic lock returns before exact matching, classification, card work, or ruling generation", async () => {
   const calls = [];
   const result = await answerPublicRulingQuestion({

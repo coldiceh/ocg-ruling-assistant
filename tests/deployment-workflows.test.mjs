@@ -154,7 +154,7 @@ test("Vercel verifies source, runtime, and cloud asset bindings before deploymen
 
   assert.equal(
     config.buildCommand,
-    "pnpm run check:rag-revision && pnpm run check:rag-runtime && node scripts/sync-cloud-evidence-assets.mjs --data-dir data --cloud-dir data/cloud-evidence-v1 --check-only",
+    "pnpm run check:rag-revision && pnpm run check:rag-runtime && node scripts/sync-cloud-evidence-assets.mjs --data-dir data --cloud-dir data/cloud-evidence-v1 --check-only && node scripts/build-public-release.mjs",
   );
   assert.equal(config.outputDirectory, "public");
   assert.equal(

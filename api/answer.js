@@ -34,6 +34,7 @@ export function createPublicAnswerHandler({
   prepare = preparePublicAnswer,
   finalize = finalizePublicAnswer,
   readRiskControl = readPublicOfftopicRiskControl,
+  now = Date.now,
 } = {}) {
 return async function handler(request, response) {
   setCors(response);
@@ -59,9 +60,9 @@ return async function handler(request, response) {
     const payload = parsePublicAnswerPayload(request.body, {
       declaredBytes: declaredRequestBodyBytes(request),
     });
-    if (payload.action === "prepare" || payload.action === "finalize") {
+    if (["prepare", "finalize", "status"].includes(payload.action)) {
       await answerInSeparateRequest({ request, response, requestAbort, requestChannel,
-        payload, env, store: createStore({ env }), prepare, finalize, readRiskControl });
+        payload, env, store: createStore({ env }), prepare, finalize, readRiskControl, now });
       return;
     }
     if (wantsPublicAnswerProgress(request, requestChannel)) {
@@ -102,8 +103,21 @@ return async function handler(request, response) {
 export default createPublicAnswerHandler();
 
 async function answerInSeparateRequest({ request, response, requestAbort, requestChannel,
-  payload, env, store, prepare, finalize, readRiskControl }) {
+  payload, env, store, prepare, finalize, readRiskControl, now }) {
   const streaming = wantsPublicAnswerProgress(request, requestChannel);
+  if (payload.action === "status") {
+    const status = await store.status(payload.preparationId);
+    response.status(200).json({
+      status: status.state,
+      ...(status.result ? {
+        result: {
+          ...status.result,
+          answer: presentPublicAnswer(status.result.answer, { channel: "web", env }),
+        },
+      } : {}),
+    });
+    return;
+  }
   if (payload.action === "finalize"
       && shouldApplyPublicOfftopicRiskControl(env)
       && publicOfftopicRiskControlStorageStatus(env).enabled) {
@@ -129,6 +143,7 @@ async function answerInSeparateRequest({ request, response, requestAbort, reques
   // Claim is an atomic one-way state transition before any final generation.
   // Unknown claim outcomes are never retried or treated as authorization.
   const claim = payload.action === "finalize" ? await store.claim(payload.preparationId) : null;
+  const finalizeStartedAtMs = claim?.state === "claimed" ? now() : null;
   if (streaming) beginPublicAnswerEventStream(response);
   const progress = createPublicAnswerProgress({
     emit: streaming ? (type, data) => sendPublicAnswerEvent(response, type, data) : () => {},
@@ -152,9 +167,53 @@ async function answerInSeparateRequest({ request, response, requestAbort, reques
         : await finalize({ preparation: claim.preparation, env, signal: requestAbort.signal, progress });
       measured = result.progress || progress.complete();
       if (claim?.state === "claimed") {
+        const finalizeCompletedAtMs = now();
+        const completionPersistenceStartedAtMs = now();
+        result = {
+          ...result,
+          answer: {
+            ...result.answer,
+            debug: {
+              ...result.answer?.debug,
+              requestDiagnostics: {
+                ...result.answer?.debug?.requestDiagnostics,
+                preparationId: payload.preparationId,
+                finalizeStartedAt: new Date(finalizeStartedAtMs).toISOString(),
+                finalizeCompletedAt: new Date(finalizeCompletedAtMs).toISOString(),
+                completionPersistenceStartedAt: new Date(completionPersistenceStartedAtMs).toISOString(),
+              },
+            },
+          },
+          latency: {
+            ...result.latency,
+            preparationId: payload.preparationId,
+            finalizeStartedAtMs,
+            finalizeCompletedAtMs,
+            completionPersistenceStartedAtMs,
+          },
+        };
         // A storage acknowledgement failure must not discard a real answer.
         // The record stays running/completed, preventing duplicate generation.
-        await store.complete(payload.preparationId, { ...result, progress: measured }).catch(() => null);
+        try {
+          await store.complete(payload.preparationId, { ...result, progress: measured });
+        } catch (error) {
+          result = {
+            ...result,
+            answer: {
+              ...result.answer,
+              debug: {
+                ...result.answer?.debug,
+                requestDiagnostics: {
+                  ...result.answer?.debug?.requestDiagnostics,
+                  completionPersistence: {
+                    status: "save-unconfirmed",
+                    code: error?.code || "answer_preparation_save_unconfirmed",
+                  },
+                },
+              },
+            },
+          };
+        }
       }
     }
     if (requestAbort.signal.aborted) return;

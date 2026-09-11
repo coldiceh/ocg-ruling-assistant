@@ -273,18 +273,7 @@ export async function retrieveRagEvidence({
     ...canonicalLocalCandidates.filter((card) => card.identityCanonicalizationConflict !== true),
     ...canonicalBaigeCards,
   ]);
-  let retrievalCards = mergedRetrievalCards.slice(0, limits.maxCards);
-  if (traceLineage) {
-    emitRagLineageListTrace(lineageTraceSink, {
-      type: "LOCAL_TRUNCATION",
-      stage: "retrieval_cards",
-      channel: "resolved_cards",
-      beforeItems: mergedRetrievalCards,
-      afterItems: retrievalCards,
-      requestLimit: limits.maxCards,
-      requestLimitProvenance: "RUNTIME_CONFIG",
-    });
-  }
+  let retrievalCards = mergedRetrievalCards;
   // Resolve identity conflicts before any card text, scoped FAQ or live-QA
   // lookup is built. A model-supplied canonical expansion may remain useful
   // debug information, but it must not leak evidence into the prompt while the
@@ -4985,7 +4974,6 @@ function resolveUnresolvedMentionCards(unresolvedMentions, cardProvider, limits,
   const result = [];
   const minConfidence = readPositiveDecimal(limits.localFuzzyMinConfidence, 0.74);
   for (const mention of unresolvedMentions || []) {
-    if (result.length >= limits.maxCards) break;
     // An unresolved explicit No./CNo. identity may have several forms sharing
     // the same number. A generic local fuzzy match must not pick one of them;
     // leave the surface unresolved for exact external identity lookup instead.
@@ -5027,7 +5015,7 @@ async function resolveUnresolvedMentionCardsWithBaige(unresolvedMentions, {
   signal,
 }) {
   throwIfAborted(signal);
-  const mentions = (unresolvedMentions || []).slice(0, limits.maxCards);
+  const mentions = unresolvedMentions || [];
   const minConfidence = readPositiveDecimal(env.RAG_BAIGE_MIN_CONFIDENCE, 0.72);
   const result = await Promise.all(mentions.map(async (mention) => {
     const modelExpansionQueries = modelIdentityExpansionQueries(mention);
@@ -5198,7 +5186,7 @@ async function resolveUnresolvedMentionCardsWithBaige(unresolvedMentions, {
     }
     return null;
   }));
-  return dedupeCards(result.filter(Boolean)).slice(0, limits.maxCards);
+  return dedupeCards(result.filter(Boolean));
 }
 
 function mentionSearchQueries(mention) {
@@ -5402,7 +5390,7 @@ async function enrichCardsWithBaige(cards, {
   signal,
 }) {
   throwIfAborted(signal);
-  const sourceCards = (cards || []).slice(0, limits.maxCards);
+  const sourceCards = cards || [];
   const result = await Promise.all(sourceCards.map(async (card) => {
     const needsNumberedIdentityEnrichment = card.numberedIdentityNameMismatch === true;
     const needsSurfaceIdentityVerification = !needsNumberedIdentityEnrichment
@@ -6079,7 +6067,9 @@ async function searchBaige(query, { fetchImpl, env, limits, debug, signal }) {
   const result = await searchCards(query, {
     fetchImpl,
     env,
-    limit: Math.max(3, limits.maxCards),
+    // This bounds alternatives for one surface, not the number of cards in the
+    // question. Every independent mention still reaches this lookup.
+    limit: 6,
     signal,
   });
   debug.searchCount += 1;
@@ -6425,8 +6415,7 @@ function normalizeUserProvidedCardTexts(items, limits) {
       source: "user_provided_text",
       official: false,
     }))
-    .filter((item) => item.name && item.text)
-    .slice(0, limits.maxCards), (item) => normalizeCardKey(item.name));
+    .filter((item) => item.name && item.text), (item) => normalizeCardKey(item.name));
 }
 
 function dedupeCards(cards) {
@@ -6512,7 +6501,6 @@ function deepFreezeLineageSnapshot(value, seen = new WeakSet()) {
 
 function readRetrievalLimits(env, maxPerBucket) {
   return {
-    maxCards: readPositiveNumber(env.RAG_MAX_CARDS, 6),
     maxOfficialQa: readPositiveNumber(env.RAG_MAX_OFFICIAL_QA, maxPerBucket),
     maxRelatedEvidence: readPositiveNumber(env.RAG_MAX_RELATED_EVIDENCE, Math.max(14, maxPerBucket)),
     maxRuleSearchQueries: readPositiveNumber(env.RAG_MAX_RULE_SEARCH_QUERIES, 16),

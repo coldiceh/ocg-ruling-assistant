@@ -480,37 +480,34 @@ test("ordinary compact prompt keeps the complete question and card text while pa
   }
 });
 
-test("only the emergency compact prompt may abbreviate the question and card text", () => {
+test("an emergency budget cannot abbreviate the question or resolved card text", () => {
   const userQuery = `EMERGENCY_QUERY_HEAD ${"超低预算问题".repeat(420)} EMERGENCY_QUERY_TAIL`;
   const effectText = `EMERGENCY_CARD_HEAD ${"超低预算卡文".repeat(420)} EMERGENCY_CARD_TAIL`;
-  const bundle = buildRagRulingPromptBundle({
-    userQuery,
-    cardResolution: {
-      resolvedCards: [{ id: "emergency-card", name: "匿名紧急对象", effectText }],
-      unresolvedMentions: [],
-      ambiguousMentions: [],
+  assert.throws(
+    () => buildRagRulingPromptBundle({
+      userQuery,
+      cardResolution: {
+        resolvedCards: [{ id: "emergency-card", name: "匿名紧急对象", effectText }],
+        unresolvedMentions: [],
+        ambiguousMentions: [],
+      },
+      evidence: {
+        officialQaDirectCandidates: [],
+        officialQaRelated: [],
+        provisionalOfficialResponses: [],
+        faqRelated: [],
+        cardTexts: [],
+        userProvidedCardTexts: [],
+        rawRelatedEvidence: [],
+      },
+      env: { RAG_MAX_PROMPT_CHARS: "1000" },
+    }),
+    (error) => {
+      assert.equal(error.code, "evidence_prompt_budget_exceeded");
+      assert.equal(error.details?.reason, "fixed_envelope_does_not_fit");
+      return true;
     },
-    evidence: {
-      officialQaDirectCandidates: [],
-      officialQaRelated: [],
-      provisionalOfficialResponses: [],
-      faqRelated: [],
-      cardTexts: [],
-      userProvidedCardTexts: [],
-      rawRelatedEvidence: [],
-    },
-    env: { RAG_MAX_PROMPT_CHARS: "1000" },
-  });
-
-  assert.ok(bundle.warnings.includes("rag_prompt_compacted_to_max_chars"));
-  const payload = parsePromptPayload(bundle.prompt);
-  assert.ok(Array.isArray(payload.evidence));
-  assert.equal(payload.userQuery.length, 80);
-  assert.equal(payload.resolvedCards[0].effectText.length, 60);
-  assert.match(payload.userQuery, /^EMERGENCY_QUERY_HEAD/u);
-  assert.match(payload.userQuery, /EMERGENCY_QUERY_TAIL$/u);
-  assert.match(payload.resolvedCards[0].effectText, /^EMERGENCY_CARD_HEAD/u);
-  assert.match(payload.resolvedCards[0].effectText, /EMERGENCY_CARD_TAIL$/u);
+  );
 });
 
 test("the actual 36k prompt keeps the complete projected tail of the highest-priority official QA", () => {
