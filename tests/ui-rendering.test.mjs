@@ -797,8 +797,8 @@ test("backend answers bypass persistent browser cache and bust static assets", a
     readFile(new URL("../config.json", import.meta.url), "utf8"),
   ]);
   const config = JSON.parse(configText.replace(/^\uFEFF/u, ""));
-  assert.match(html, /src\/app\.js\?v=20260910-gpt-final-budget-1/u);
-  assert.match(html, /src\/styles\.css\?v=20260910-scope-deepseek-ui-1/u);
+  assert.match(html, /src\/app\.js\?v=20260911-admin-console-1/u);
+  assert.match(html, /src\/styles\.css\?v=20260911-admin-console-1/u);
   assert.equal(config.answerApiUrl, "https://ocg-ruling-assistant.vercel.app/api/answer");
   assert.match(app, /cache: "no-store"/u);
   assert.doesNotMatch(app, /backendAnswerCacheTtlMs|buildBackendCacheKey|readCachedBackendAnswer|writeCachedBackendAnswer|ocg-ruling-answer:v/u);
@@ -832,8 +832,8 @@ test("ui_hides_engine_details_by_default", async () => {
   const publicBudget = sourceBetween(html, '<section class="budget-panel"', '<section class="admin-lab"');
   const adminPanel = sourceBetween(html, '<section class="admin-lab"', '<section class="disclaimer-panel"');
   assert.doesNotMatch(publicBudget, /budgetResetButton|budgetCapButton|重置额度|封顶至/u);
-  assert.match(adminPanel, /id="budgetResetButton"[^>]+hidden>重置公开问答额度/u);
-  assert.match(adminPanel, /id="budgetCapButton"[^>]+hidden>立即将公开 ChatGPT 今日额度封顶至 10 美元/u);
+  assert.match(adminPanel, /id="budgetResetButton"[^>]+hidden>重置今日公开问答额度/u);
+  assert.match(adminPanel, /id="budgetCapButton"[^>]+hidden>今日公开问答额度封顶/u);
   assert.match(html, /免责声明/u);
   assert.match(html, /不是 KONAMI 官方项目/u);
   assert.match(html, /id="themeToggle"/u);
@@ -926,9 +926,6 @@ test("admin_model_lab_is_hidden_and_requires_a_real_session", async () => {
   assert.match(html, /id="adminLabPanel"[^>]+hidden/u);
   assert.match(html, /admin=1<\/code> 只负责显示本区域，并不代表已经登录/u);
   assert.match(html, /id="adminPasswordInput" type="password"/u);
-  assert.match(html, /data-admin-stage="understand"/u);
-  assert.match(html, /data-admin-stage="generate_ruling"/u);
-  assert.match(html, /FAST \/ NORMAL \/ SLOW 只是耗时标签，不会触发自动取消/u);
   assert.match(app, /params\.get\("admin"\) === "1"/u);
   assert.match(app, /\/api\/admin-auth/u);
   assert.match(app, /\/api\/admin-model-lab/u);
@@ -939,9 +936,9 @@ test("admin_model_lab_is_hidden_and_requires_a_real_session", async () => {
   assert.match(app, /adminDurationCategory/u);
   assert.match(app, /run\?\.stageTiming\?\.stages/u);
   assert.match(app, /adminFeatureEnabled\("history"\)/u);
-  assert.match(html, /id="adminHistoryTitle">实验历史/u);
+  assert.doesNotMatch(html, /id="adminHistoryTitle"|实验历史|评估题集|同一冻结证据模型对比/u);
   assert.match(html, /id="adminBudgetPools"/u);
-  assert.match(html, /保留预约[^<]*不代表供应商已经收费/u);
+  assert.match(html, /查看当前额度状态，并可封顶或重置今日公开问答额度/u);
   assert.match(app, /实际结算/u);
   assert.match(app, /保留预约/u);
   assert.match(app, /历史未分类占用/u);
@@ -949,14 +946,13 @@ test("admin_model_lab_is_hidden_and_requires_a_real_session", async () => {
   assert.match(html, /id="adminQuestionHistoryTitle">后台历史提问/u);
   assert.match(css, /\.admin-history-list li\s*\{[^}]*min-width:\s*0/u);
   assert.match(css, /\.admin-history-list button\s*\{[^}]*max-width:\s*100%[^}]*overflow:\s*hidden/u);
-  assert.match(html, /id="adminComparisonTitle">同一冻结证据模型对比/u);
-  assert.match(html, /不会重新检索资料/u);
-  assert.match(html, /最多 100 条；不等同于上方的模型实验历史/u);
+  assert.match(html, /显示最近保存的公开问答记录，最多 100 条/u);
+  assert.doesNotMatch(html, /id="adminComparisonSection"|id="adminEvaluationSelect"|id="adminHistoryList"/u);
   assert.match(app, /getAdminEndpointUrl\("\/api\/admin-queries"\)/u);
   assert.match(app, /url\.searchParams\.set\("limit", "100"\)/u);
   assert.match(app, /sessionStorage\.setItem\(adminCurrentRunStorageKey, id\)/u);
   assert.match(app, /sessionStorage\.getItem\(adminCurrentRunStorageKey\)/u);
-  assert.match(app, /await restoreStoredAdminRun\(\)/u);
+  assert.doesNotMatch(sourceBetween(app, "async function loadAdminLabBootstrap", "async function loadAdminCapabilities"), /restoreStoredAdminRun/u);
   assert.match(app, /triggerAdminRunExecution\(adminCurrentRunId\)/u);
   assert.match(app, /adminExecuteAttemptedRunIds\.has\(id\)/u);
   assert.match(app, /!shouldTriggerAdminRunExecution\(adminCurrentRun\)/u);
@@ -978,7 +974,7 @@ test("admin_model_lab_is_hidden_and_requires_a_real_session", async () => {
   assert.match(app, /finalAttemptPolicy: "single"/u);
   assert.match(app, /data\?\.fileName/u);
   assert.match(app, /data\?\.contentType/u);
-  assert.match(html, /option value="partially_correct">部分正确/u);
+  assert.doesNotMatch(html, /adminRatingForm|option value="partially_correct"/u);
   assert.match(app, /rating: String\(ui\.adminRatingSelect\?\.value \|\| ""\)/u);
   assert.doesNotMatch(app, /prompt\("请输入管理员密码"\)/u);
   assert.doesNotMatch(app, /body:\s*\{[^}]*password[^}]*\}[\s\S]{0,240}\/api\/admin-queries/u);
@@ -990,41 +986,21 @@ test("admin_model_lab_is_hidden_and_requires_a_real_session", async () => {
   assert.match(adminSession, /SameSite=None/u);
 });
 
-test("admin evidence capture presents the exact final prompt separately from diagnostics", async () => {
+test("admin history presents the complete public question record fields", async () => {
   const [html, app] = await Promise.all([
     readFile(new URL("../index.html", import.meta.url), "utf8"),
     readFile(new URL("../src/app.js", import.meta.url), "utf8"),
   ]);
-  const extractorSource = sourceBetween(
-    app,
-    "function getAdminCapturedActualPrompt",
-    "async function handleAdminEvidenceCapture",
-  );
-  const extractPrompt = new Function(`${extractorSource}; return getAdminCapturedActualPrompt;`)();
-  const exactPrompt = "SYSTEM\n\n动态证据正文\nEND";
-  assert.equal(extractPrompt({
-    answer: {
-      status: "evidence_captured",
-      capture: { promptBundle: { prompt: exactPrompt } },
-    },
-  }), exactPrompt);
-  assert.equal(extractPrompt({ answer: { status: "evidence_captured", capture: {} } }), null);
-
-  const handlerSource = sourceBetween(
-    app,
-    "async function handleAdminEvidenceCapture",
-    "async function requestAdminLab",
-  );
-  assert.match(html, /id="adminCaptureResult"[^>]+aria-label="最终作答输入"/u);
-  assert.match(html, /id="adminCaptureDiagnosticResult"[^>]+aria-label="完整诊断记录"/u);
-  assert.match(html, /id="adminCaptureDownload"[^>]*>下载最终作答输入/u);
-  assert.match(html, /id="adminCaptureDiagnosticDownload"[^>]*>下载完整诊断记录/u);
-  assert.match(handlerSource, /diagnosticField\.value = JSON\.stringify\(result, null, 2\)/u);
-  assert.match(handlerSource, /resultField\.value = actualPrompt/u);
-  assert.doesNotMatch(handlerSource, /resultField\.value = JSON\.stringify/u);
-  assert.match(handlerSource, /缺少最终作答输入/u);
-  assert.match(app, /final-answer-input-\$\{Date\.now\(\)\}\.private\.txt/u);
-  assert.match(app, /evidence-diagnostic-\$\{Date\.now\(\)\}\.private\.json/u);
+  assert.match(html, /id="adminQuestionHistoryList"/u);
+  assert.match(app, /function renderAdminQuestionHistory\(entries\)/u);
+  for (const label of ["问题全文", "结果 \/ 答案全文", "调用者 IP", "IP 来源", "请求 ID", "记录 ID", "最终模型", "所选档位", "推理档位", "耗时"]) {
+    assert.match(app, new RegExp(label, "u"));
+  }
+  assert.match(app, /entry\?\.answer/u);
+  assert.match(app, /entry\?\.errorCode/u);
+  assert.match(app, /createElement\("details"\)/u);
+  assert.match(app, /characters\.slice\(0, 120\)/u);
+  assert.doesNotMatch(html, /adminEvidenceCaptureForm|adminCaptureResult|adminCaptureDiagnosticResult/u);
 });
 
 test("admin frozen-evidence comparison offers supported configured model combinations", async () => {

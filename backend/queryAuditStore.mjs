@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { randomUUID } from "node:crypto";
 
 const DEFAULT_KEY = "rag-query-audit:v1";
 const DEFAULT_MAX_ENTRIES = 100;
@@ -6,6 +6,24 @@ const MAX_ENTRIES = 100;
 const DEFAULT_LIST_LIMIT = 100;
 const DEFAULT_RETENTION_DAYS = 30;
 const DEFAULT_TIMEOUT_MS = 1800;
+const MAX_QUESTION_LENGTH = 12000;
+const UPDATE_ENTRY = `
+local values = redis.call("LRANGE", KEYS[1], 0, 99)
+for index, raw in ipairs(values) do
+  local decoded, entry = pcall(cjson.decode, raw)
+  if decoded and type(entry) == "table" and entry.id == ARGV[1] then
+    local patch = cjson.decode(ARGV[2])
+    for field, value in pairs(patch) do
+      entry[field] = value
+    end
+    local updated = cjson.encode(entry)
+    redis.call("LSET", KEYS[1], index - 1, updated)
+    return updated
+  end
+end
+return nil
+`.trim();
+const AUDIT_STATUSES = new Set(["preparing", "prepared", "completed", "blocked", "failed"]);
 
 export function queryAuditStorageStatus(env = globalThis.process?.env || {}) {
   if (isDisabled(env.QUERY_AUDIT_ENABLED)) {
@@ -21,12 +39,17 @@ export function queryAuditStorageStatus(env = globalThis.process?.env || {}) {
 export async function appendQueryAudit({
   question,
   mode = "rag",
+  requestId,
+  requestContext,
+  profileId,
   env = globalThis.process?.env || {},
   fetchImpl = globalThis.fetch,
   now = new Date(),
 } = {}) {
   const status = queryAuditStorageStatus(env);
-  const normalizedQuestion = String(question || "").trim().slice(0, 6000);
+  const normalizedQuestion = Array.from(String(question || "").trim())
+    .slice(0, MAX_QUESTION_LENGTH)
+    .join("");
   if (!status.enabled || !normalizedQuestion || typeof fetchImpl !== "function") {
     return {
       stored: false,
@@ -37,13 +60,15 @@ export async function appendQueryAudit({
 
   const createdAt = validDate(now).toISOString();
   const entry = {
-    id: createHash("sha256")
-      .update(createdAt + "\u0000" + String(mode || "rag") + "\u0000" + normalizedQuestion)
-      .digest("hex")
-      .slice(0, 20),
+    id: randomUUID(),
     createdAt,
     question: normalizedQuestion,
     mode: String(mode || "rag").slice(0, 32),
+    status: "preparing",
+    ...optionalString("requestId", requestId),
+    ...optionalString("ip", requestContext?.ip),
+    ...optionalString("ipSource", requestContext?.ipSource),
+    ...optionalString("profileId", profileId),
   };
   const key = String(env.QUERY_AUDIT_REDIS_KEY || DEFAULT_KEY).trim() || DEFAULT_KEY;
   const maxEntries = boundedInteger(env.QUERY_AUDIT_MAX_ENTRIES, DEFAULT_MAX_ENTRIES, 10, MAX_ENTRIES);
@@ -60,6 +85,38 @@ export async function appendQueryAudit({
     redisCommand(env, fetchImpl, ["EXPIRE", key, String(retentionSeconds)]),
   ]);
   return { stored: true, ...status, entry };
+}
+
+export async function updateQueryAudit({
+  id,
+  patch,
+  env = globalThis.process?.env || {},
+  fetchImpl = globalThis.fetch,
+} = {}) {
+  const storage = queryAuditStorageStatus(env);
+  const normalizedId = String(id || "").trim();
+  if (!storage.enabled || typeof fetchImpl !== "function") {
+    const error = new Error("query_audit_storage_unavailable");
+    error.code = "query_audit_storage_unavailable";
+    throw error;
+  }
+  if (!normalizedId) {
+    const error = new Error("query_audit_id_required");
+    error.code = "query_audit_id_required";
+    throw error;
+  }
+
+  const normalizedPatch = normalizeAuditPatch(patch);
+  const key = String(env.QUERY_AUDIT_REDIS_KEY || DEFAULT_KEY).trim() || DEFAULT_KEY;
+  const updated = await redisCommand(env, fetchImpl, [
+    "EVAL", UPDATE_ENTRY, "1", key, normalizedId, JSON.stringify(normalizedPatch),
+  ]);
+  if (updated === null || updated === undefined) {
+    return { updated: false, ...storage, reason: "not_found" };
+  }
+  const entry = parseEntry(updated);
+  if (!entry) throw new Error("query_audit_update_response_invalid");
+  return { updated: true, ...storage, entry };
 }
 
 export async function listQueryAudits({
@@ -91,18 +148,22 @@ async function redisCommand(env, fetchImpl, command) {
   const redis = redisConfig(env);
   if (!redis.url || !redis.token) throw new Error("redis_not_configured");
   const timeoutMs = boundedInteger(env.QUERY_AUDIT_REDIS_TIMEOUT_MS, DEFAULT_TIMEOUT_MS, 250, 5000);
-  const response = await withTimeout(fetchImpl(redis.url, {
-    method: "POST",
-    headers: {
-      authorization: "Bearer " + redis.token,
-      "content-type": "application/json",
-    },
-    body: JSON.stringify(command),
-  }), timeoutMs, "query_audit_redis_timeout");
-  if (!response?.ok) throw new Error("redis " + (response?.status || "error"));
-  const payload = await response.json();
-  if (payload?.error) throw new Error(String(payload.error));
-  return payload?.result;
+  const controller = new AbortController();
+  return withTimeout((async () => {
+    const response = await fetchImpl(redis.url, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer " + redis.token,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(command),
+      signal: controller.signal,
+    });
+    if (!response?.ok) throw new Error("redis " + (response?.status || "error"));
+    const payload = await response.json();
+    if (payload?.error) throw new Error(String(payload.error));
+    return payload?.result;
+  })(), timeoutMs, "query_audit_redis_timeout", () => controller.abort());
 }
 
 function redisConfig(env = {}) {
@@ -118,15 +179,46 @@ function parseEntry(value) {
     const question = String(parsed?.question || "").trim();
     const createdAt = String(parsed?.createdAt || "").trim();
     if (!question || !createdAt) return null;
-    return {
+    const entry = {
       id: String(parsed.id || ""),
       createdAt,
       question,
       mode: String(parsed.mode || "rag"),
     };
+    for (const field of ["requestId", "ip", "ipSource", "profileId", "status", "completedAt", "answer", "model", "reasoningEffort", "errorCode"]) {
+      if (Object.hasOwn(parsed, field)) entry[field] = parsed[field];
+    }
+    if (Object.hasOwn(parsed, "latencyMs")) entry.latencyMs = parsed.latencyMs;
+    return entry;
   } catch {
     return null;
   }
+}
+
+function normalizeAuditPatch(patch) {
+  const source = patch && typeof patch === "object" && !Array.isArray(patch) ? patch : {};
+  const normalized = {};
+  if (Object.hasOwn(source, "status")) {
+    if (!AUDIT_STATUSES.has(source.status)) throw new TypeError("query_audit_status_invalid");
+    normalized.status = source.status;
+  }
+  for (const field of ["completedAt", "answer", "model", "reasoningEffort", "errorCode", "profileId"]) {
+    if (!Object.hasOwn(source, field)) continue;
+    if (typeof source[field] !== "string") throw new TypeError(`query_audit_${field}_invalid`);
+    normalized[field] = source[field];
+  }
+  if (Object.hasOwn(source, "latencyMs")) {
+    if (!Number.isFinite(source.latencyMs) || source.latencyMs < 0) {
+      throw new TypeError("query_audit_latency_invalid");
+    }
+    normalized.latencyMs = source.latencyMs;
+  }
+  return normalized;
+}
+
+function optionalString(field, value) {
+  if (typeof value !== "string" || !value.trim()) return {};
+  return { [field]: value.trim() };
 }
 
 function validDate(value) {
@@ -144,10 +236,13 @@ function isDisabled(value) {
   return /^(?:0|false|off|no)$/iu.test(String(value || "").trim());
 }
 
-function withTimeout(promise, timeoutMs, label) {
+function withTimeout(promise, timeoutMs, label, onTimeout = () => {}) {
   let timer;
   const timeout = new Promise((_, reject) => {
-    timer = setTimeout(() => reject(new Error(label)), timeoutMs);
+    timer = setTimeout(() => {
+      reject(new Error(label));
+      onTimeout();
+    }, timeoutMs);
   });
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }

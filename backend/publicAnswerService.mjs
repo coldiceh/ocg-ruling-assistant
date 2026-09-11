@@ -13,7 +13,8 @@ import {
   getPublicRulingModelCapabilities,
   resolvePublicRulingModelProfile,
 } from "./publicRulingModelConfig.mjs";
-import { appendQueryAudit } from "./queryAuditStore.mjs";
+import { appendQueryAudit, updateQueryAudit } from "./queryAuditStore.mjs";
+import { queryAuditAnswerPatch, queryAuditFailurePatch, saveQueryAuditUpdate } from "./publicQueryAudit.mjs";
 import {
   publicAnswerLatencyStorageStatus,
   readPublicAnswerLatencyProfiles,
@@ -196,6 +197,8 @@ export async function answerPublicRulingQuestion({
   signal,
   progress,
   appendAudit = appendQueryAudit,
+  updateAudit = updateQueryAudit,
+  requestContext,
   readRiskControl = readPublicOfftopicRiskControl,
   classifyScope = classifyPublicQueryScope,
   activateRiskControl = activatePublicOfftopicRiskControl,
@@ -220,12 +223,23 @@ export async function answerPublicRulingQuestion({
 
   // Audit begins before any early return so every public question remains
   // visible to the administrator.
-  const auditPromise = appendAudit({
+  const auditPromise = Promise.resolve().then(() => appendAudit({
     question: normalizedPayload.question,
     mode,
     env,
-  }).catch(() => null);
+    requestId: requestDiagnostics.requestId,
+    profileId: normalizedPayload.rulingModelProfile || env.PUBLIC_RULING_MODEL_PROFILE,
+    requestContext,
+  })).catch(() => null);
+  const auditResult = async (answer, status, extra = {}) => {
+    const audit = await auditPromise;
+    await saveQueryAuditUpdate(audit?.entry?.id, queryAuditAnswerPatch(answer, {
+      status, latencyMs: Date.now() - publicRequestStartedAt, ...extra,
+    }), env, updateAudit);
+    return audit?.entry?.id;
+  };
 
+  try {
   // Risk control runs at the shared public entry before exact matching, model
   // profile selection, card extraction, retrieval, or final ruling generation.
   if (shouldApplyPublicOfftopicRiskControl(env)) {
@@ -233,9 +247,10 @@ export async function answerPublicRulingQuestion({
     if (storage.enabled) {
       const activeControl = await readRiskControl({ env }).catch(() => null);
       if (activeControl?.active === true) {
-        await auditPromise;
+        const answer = buildPublicOfftopicRiskControlAnswer({ status: activeControl, env });
+        await auditResult(answer, "blocked");
         return {
-          answer: buildPublicOfftopicRiskControlAnswer({ status: activeControl, env }),
+          answer,
           latency: null,
         };
       }
@@ -253,13 +268,12 @@ export async function answerPublicRulingQuestion({
         if (shouldTriggerPublicQueryRisk(scopeDecision)) {
           const activated = await activateRiskControl({ env, diagnostic: { requestId: requestDiagnostics.requestId, ...requestDiagnostics.scope } }).catch(() => null);
           if (activated?.active === true) {
-            await auditPromise;
+            const answer = buildPublicOfftopicRiskControlAnswer({
+              status: activated, triggered: activated.triggered === true, env,
+            });
+            await auditResult(answer, "blocked");
             return {
-              answer: buildPublicOfftopicRiskControlAnswer({
-                status: activated,
-                triggered: activated.triggered === true,
-                env,
-              }),
+              answer,
               latency: null,
             };
           }
@@ -282,7 +296,7 @@ export async function answerPublicRulingQuestion({
     });
     exactMatchMs = Math.max(0, Date.now() - exactMatchStartedAt);
     if (exactAnswer) {
-      await auditPromise;
+      await auditResult(exactAnswer, "completed");
       return { answer: exactAnswer, latency: null };
     }
   }
@@ -291,7 +305,6 @@ export async function answerPublicRulingQuestion({
   const profile = selection.profile;
   assertPublicRulingModelProfileAvailable(profile, env);
   const publicEnv = createPublicAnswerModelEnv(env, profile.id);
-  try {
     let answer = await answerRuling({
       rulingVersion: normalizedPayload.rulingVersion,
       question: normalizedPayload.question,
@@ -304,10 +317,15 @@ export async function answerPublicRulingQuestion({
     requestDiagnostics.completedAt = new Date().toISOString();
     requestDiagnostics.durationMs = Math.max(0, Date.now() - publicRequestStartedAt);
     answer = { ...answer, debug: { ...answer.debug, requestDiagnostics } };
-    await auditPromise;
     if (!prepareForContinuation) answer = await withPublicGenerationInfo(answer, profile, env, {fallbackFrom:selection.fallbackFrom});
+    const audit = await auditPromise;
+    if (answer.status !== "evidence_prepared") {
+      await auditResult(answer, "completed", { profileId: profile.id });
+    }
     return {
       answer,
+      // Internal envelope only; HTTP adapters expose the answer explicitly.
+      ...(audit?.entry?.id ? { auditId: audit.entry.id } : {}),
       ...(selection.fallbackFrom ? {fallbackFrom:selection.fallbackFrom} : {}),
       latency: {
         profileId: profile.id,
@@ -319,7 +337,8 @@ export async function answerPublicRulingQuestion({
     };
   } catch (error) {
     error.requestDiagnostics = { ...requestDiagnostics, failedAt: new Date().toISOString() };
-    await auditPromise;
+    const audit = await auditPromise;
+    await saveQueryAuditUpdate(audit?.entry?.id, queryAuditFailurePatch(error), env, updateAudit);
     throw error;
   }
 }
