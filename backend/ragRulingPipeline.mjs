@@ -611,10 +611,8 @@ async function answerRagRulingQuestionInternal({
   let cardResolution;
   let frozenCardResolutionRejections = [];
   try {
-    const maxCards = readNumber(env.RAG_MAX_CARDS, 6);
     const localCardResolution = extractRagCards(query, {
       cards: data.cards || [],
-      maxCards,
     });
     timingsMs.deterministicPreflight = elapsedMs(preflightStartedAt);
 
@@ -632,14 +630,12 @@ async function answerRagRulingQuestionInternal({
     const extractedCardResolution = cardNameModel.typedMentionSetProvided === true
       ? extractRagCards(query, {
         cards: data.cards || [],
-        maxCards,
         modelCardNameCandidates: cardNameModel.candidates || [],
         mentionSetSource: "typed_model",
       })
       : (cardNameModel.candidates || []).length
       ? extractRagCards(query, {
         cards: data.cards || [],
-        maxCards,
         modelCardNameCandidates: cardNameModel.candidates,
       })
       : localCardResolution;
@@ -741,7 +737,10 @@ async function answerRagRulingQuestionInternal({
   }
   timingsMs.retrieval = elapsedMs(retrievalStartedAt);
 
-  const effectiveCardResolution = reconcileCardResolution(cardResolution, retrievedEvidence);
+  const effectiveCardResolution = appendTypedCardInterfaceGaps(
+    reconcileCardResolution(cardResolution, retrievedEvidence),
+    cardNameModel.invalidTypedMentions,
+  );
 
   // Without an explicitly injected provider, the public pure-LLM path ends
   // evidence preparation here and passes the retriever result through exactly.
@@ -892,6 +891,32 @@ function reconcileCardResolution(cardResolution = {}, evidence = {}) {
     unresolvedMentions: remainingUnresolved,
     ambiguousMentions,
   };
+}
+
+function appendTypedCardInterfaceGaps(cardResolution = {}, invalidTypedMentions = []) {
+  const gaps = Array.isArray(invalidTypedMentions)
+    ? invalidTypedMentions.filter((item) => (
+      item && typeof item === "object"
+        && String(item.input || "").trim()
+        && item.reason === "typed_card_mention_missing_original_text"
+    )).map((item) => ({
+      input: String(item.input).trim(),
+      reason: item.reason,
+      source: "card_name_model_interface",
+    }))
+    : [];
+  if (!gaps.length) return cardResolution;
+  const unresolvedMentions = [...(cardResolution.unresolvedMentions || [])];
+  const seen = new Set(unresolvedMentions.map((item) => (
+    `${String(item?.input || "").trim()}\u0000${String(item?.reason || "")}`
+  )));
+  for (const gap of gaps) {
+    const key = `${gap.input}\u0000${gap.reason}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unresolvedMentions.push(gap);
+  }
+  return { ...cardResolution, unresolvedMentions };
 }
 
 function cardMatchesMention(mention, cards) {

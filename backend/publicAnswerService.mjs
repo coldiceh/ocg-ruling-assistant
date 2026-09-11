@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+import { getPublicReleaseInfo } from './publicReleaseInfo.mjs';
 import {
   createPublicAnswerModelEnv,
   getRagBudgetStatus,
@@ -93,12 +95,12 @@ export function parsePublicAnswerPayload(body, {
     );
   }
 
-  if (payload.action === "finalize") {
+  if (payload.action === "finalize" || payload.action === "status") {
     if (!isPublicPreparationId(payload.preparationId)
       || Object.keys(payload).some((key) => !["action", "preparationId"].includes(key))) {
-      throw publicAnswerRequestError("finalize requires only a valid preparationId", "invalid_preparation_id");
+      throw publicAnswerRequestError(`${payload.action} requires only a valid preparationId`, "invalid_preparation_id");
     }
-    return { action: "finalize", preparationId: payload.preparationId };
+    return { action: payload.action, preparationId: payload.preparationId };
   }
   if (payload.action !== undefined && payload.action !== "prepare") {
     throw publicAnswerRequestError("Unsupported answer action", "invalid_answer_action");
@@ -184,6 +186,7 @@ export async function getPublicAnswerModelInfo({ env = process.env } = {}) {
     pipeline: env.RAG_EVIDENCE_PIPELINE === 'cloud_evidence_v1' ? 'cloud_evidence_v1' : 'rag_baseline',
     legacyModes: [],
     answerExecution: "prepared_v1",
+    release: getPublicReleaseInfo(env),
   };
 }
 
@@ -201,10 +204,11 @@ export async function answerPublicRulingQuestion({
   prepareForContinuation = false,
 } = {}) {
   const publicRequestStartedAt = Date.now();
+  const requestDiagnostics = { requestId: randomUUID(), startedAt: new Date(publicRequestStartedAt).toISOString() };
   progress?.start?.();
   const normalizedPayload = parsePublicAnswerPayload(payload);
-  if (normalizedPayload.action === "finalize") {
-    throw publicAnswerRequestError("finalize must use a saved preparation", "invalid_answer_action");
+  if (normalizedPayload.action === "finalize" || normalizedPayload.action === "status") {
+    throw publicAnswerRequestError(`${normalizedPayload.action} must use a saved preparation`, "invalid_answer_action");
   }
   const mode = String(normalizedPayload.mode || "rag").toLowerCase();
   if (mode !== "rag") {
@@ -239,13 +243,15 @@ export async function answerPublicRulingQuestion({
       // Storage and classifier failures retain the old fail-open behavior.
       // If the current lock cannot be read, skip the classifier and lock write.
       if (activeControl?.ok === true) {
+        const scopeStartedAt = Date.now();
         const scopeDecision = await classifyScope({
           question: normalizedPayload.question,
           env,
           signal,
         }).catch(() => null);
+        requestDiagnostics.scope = scopeDiagnostic(scopeDecision, Date.now() - scopeStartedAt);
         if (shouldTriggerPublicQueryRisk(scopeDecision)) {
-          const activated = await activateRiskControl({ env }).catch(() => null);
+          const activated = await activateRiskControl({ env, diagnostic: { requestId: requestDiagnostics.requestId, ...requestDiagnostics.scope } }).catch(() => null);
           if (activated?.active === true) {
             await auditPromise;
             return {
@@ -295,6 +301,9 @@ export async function answerPublicRulingQuestion({
       progress,
       ...(prepareForContinuation === true ? { prepareForContinuation: true } : {}),
     });
+    requestDiagnostics.completedAt = new Date().toISOString();
+    requestDiagnostics.durationMs = Math.max(0, Date.now() - publicRequestStartedAt);
+    answer = { ...answer, debug: { ...answer.debug, requestDiagnostics } };
     await auditPromise;
     if (!prepareForContinuation) answer = await withPublicGenerationInfo(answer, profile, env, {fallbackFrom:selection.fallbackFrom});
     return {
@@ -309,9 +318,20 @@ export async function answerPublicRulingQuestion({
       },
     };
   } catch (error) {
+    error.requestDiagnostics = { ...requestDiagnostics, failedAt: new Date().toISOString() };
     await auditPromise;
     throw error;
   }
+}
+
+function scopeDiagnostic(decision, durationMs) {
+  return {
+    scope: decision?.scope || 'uncertain', confidence: decision?.confidence || 'low',
+    reasonCode: decision?.reasonCode || 'classifier_failed', model: decision?.model || null,
+    returnedModel: decision?.returnedModel || null, provider: decision?.provider || null,
+    thinkingMode: decision?.thinkingMode || null, durationMs: Math.max(0, durationMs),
+    usage: decision?.usage || {}, estimatedCostCny: decision?.estimatedCostCny ?? null,
+  };
 }
 
 export function shouldApplyPublicOfftopicRiskControl(env = process.env) {
@@ -353,7 +373,10 @@ export function publicAnswerHttpError(error) {
       error: publicMessage || (error instanceof Error ? error.message : String(error)),
       code: error?.code || "answer_failed",
       ...(officialQaBodyDetails ? { details: officialQaBodyDetails } : {}),
-      ...(error?.cloudCosts ? {debug:{cloudCosts:error.cloudCosts}} : {}),
+      ...((error?.cloudCosts || error?.requestDiagnostics) ? {debug:{
+        ...(error.cloudCosts ? {cloudCosts:error.cloudCosts} : {}),
+        ...(error.requestDiagnostics ? {requestDiagnostics:error.requestDiagnostics} : {}),
+      }} : {}),
     },
   };
 }

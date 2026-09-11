@@ -41,21 +41,32 @@ export default async function handler(request, response) {
   response.status(404).json({ error: "Card not found", warnings });
 }
 
-function pickBestApiCard(cards, { id, query }) {
+export function pickBestApiCard(cards, { id, query }) {
   if (!cards.length) return null;
   const normalizedId = normalizeId(id);
   if (normalizedId) {
     const exactId = cards.find((card) => normalizeId(card.id || card.cardId || card.passcode) === normalizedId);
-    if (exactId) return exactId;
+    return exactId || null;
   }
   const queryKey = normalizeKey(query);
-  return cards
-    .slice()
-    .sort((left, right) => {
-      const leftExact = [left.cnName, left.name, left.jpName, left.jaName, left.enName].some((name) => normalizeKey(name) === queryKey) ? 1 : 0;
-      const rightExact = [right.cnName, right.name, right.jpName, right.jaName, right.enName].some((name) => normalizeKey(name) === queryKey) ? 1 : 0;
-      return rightExact - leftExact || Number(right.confidence || 0) - Number(left.confidence || 0);
-    })[0];
+  if (!queryKey) return null;
+  const exactMatches = cards.filter((card) => (
+    [
+      card.cnName,
+      card.name,
+      card.jpName,
+      card.jaName,
+      card.enName,
+      ...(card.aliases || []),
+    ].some((name) => normalizeKey(name) === queryKey)
+  ));
+  const identities = new Map();
+  for (const card of exactMatches) {
+    const identity = normalizeId(card.id || card.cardId || card.passcode);
+    if (!identity) continue;
+    if (!identities.has(identity)) identities.set(identity, card);
+  }
+  return identities.size === 1 ? [...identities.values()][0] : null;
 }
 
 function toCardApiResponse(card, warnings) {

@@ -24,10 +24,17 @@ export async function preparePublicAnswer({
     pipeline: env.RAG_EVIDENCE_PIPELINE || "rag_baseline",
     startedAt, preparedAt: now(), progress: measuredProgress,
     cloudCosts: result.answer.debug?.cloudCosts || null,
+    requestDiagnostics: result.answer.debug?.requestDiagnostics || null,
     fallbackFrom: result.fallbackFrom || null,
   });
   return { preparationId, progress: measuredProgress,
-    evidencePackage: { text: result.answer.continuation.promptBundle.prompt, filename: 'ocg-evidence.txt' } };
+    evidencePackage: { text: result.answer.continuation.promptBundle.prompt, filename: 'ocg-evidence.txt',
+      diagnostics: {
+        request: result.answer.debug?.requestDiagnostics || null,
+        retrieval: result.answer.continuation.evidence?.debug?.cloudEvidence || null,
+        ruleHints: result.answer.continuation.ruleQueryModel || null,
+      },
+    } };
 }
 
 export function preparedAnswerProgress(preparation, now = Date.now) {
@@ -83,6 +90,12 @@ export async function finalizePublicAnswer({
     } };
   }
   answer = await addGeneration(answer, profile, env, {fallbackFrom});
+  answer = { ...answer, debug: { ...answer.debug,
+    requestDiagnostics: { ...preparation.requestDiagnostics,
+      preparationProgress: preparation.progress,
+      completedAt: new Date(now()).toISOString(),
+    },
+  } };
   return { answer, latency: { profileId: profile.id, durationMs: Math.max(0, now() - preparation.startedAt), exactMatchMs: 0 } };
 }
 

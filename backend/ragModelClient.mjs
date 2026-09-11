@@ -4,6 +4,7 @@ import {
   DEFAULT_PUBLIC_BAI_BASE_URL,
   DEFAULT_PUBLIC_BAI_MODEL,
   DEFAULT_PUBLIC_DEEPSEEK_MODEL,
+  resolveOfficialDeepSeekModel,
   DEFAULT_PUBLIC_RELAY_BASE_URL,
   DEFAULT_PUBLIC_RELAY_MODEL,
   DEFAULT_PUBLIC_GLM_MODEL,
@@ -31,8 +32,8 @@ import {
 } from './cloudRequestBudget.mjs';
 
 const DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com";
-const DEFAULT_DEEPSEEK_MODEL = "deepseek-v4-flash";
-const DEFAULT_DEEPSEEK_CARD_MODEL = "deepseek-v4-flash";
+const DEFAULT_DEEPSEEK_MODEL = DEFAULT_PUBLIC_DEEPSEEK_MODEL;
+const DEFAULT_DEEPSEEK_CARD_MODEL = DEFAULT_PUBLIC_DEEPSEEK_MODEL;
 const DEFAULT_RELAY_AUXILIARY_MODEL = "gpt-5.6-sol";
 const DEFAULT_RELAY_RULE_MODEL = "gpt-5.6-sol";
 const DEFAULT_GLM_BASE_URL = "https://open.bigmodel.cn/api/paas/v4";
@@ -984,11 +985,17 @@ export async function callCardNameExtractionModel({
         candidates: parsedExtraction.candidates,
         groupMentions: parsedExtraction.groupMentions,
         typedMentionSetProvided: parsedExtraction.typedMentionSetProvided,
+        invalidTypedMentions: parsedExtraction.invalidTypedMentions,
+        formatWarnings: parsedExtraction.formatWarnings,
         rawText: String(raw || ""),
         providerUsed: provider,
         modelUsed: modelName,
         dryRun: false,
-        warnings: [...providerWarnings, ...execution.warnings],
+        warnings: [
+          ...providerWarnings,
+          ...execution.warnings,
+          ...parsedExtraction.formatWarnings,
+        ],
         tokenUsage: execution.usage,
         costCurrency: execution.costCurrency,
         estimatedCost: execution.estimatedCost,
@@ -1102,6 +1109,8 @@ export async function callCardNameExtractionModel({
       candidates: parsedExtraction.items,
       groupMentions: parsedExtraction.groupMentions,
       typedMentionSetProvided: parsedExtraction.typedMentionSetProvided === true,
+      invalidTypedMentions: parsedExtraction.invalidTypedMentions || [],
+      formatWarnings: parsedExtraction.formatWarnings || [],
       rawText: response.rawText,
       providerUsed: provider,
       modelUsed: modelName,
@@ -1110,6 +1119,7 @@ export async function callCardNameExtractionModel({
         ...providerWarnings,
         ...execution.warnings,
         ...(response.warnings || []),
+        ...(parsedExtraction.formatWarnings || []),
         ...(parsedExtraction.cacheable ? [] : [`card_name_model_not_cached:${parsedExtraction.reason}`]),
       ],
       tokenUsage: execution.usage,
@@ -2176,12 +2186,12 @@ export function createPublicAnswerModelEnv(env = {}, profileValue) {
   result.RAG_RULE_MODEL_PROVIDER = mockRequested ? "mock" : cloudEvidence ? cloudAuxiliaryProvider : "relay";
   result.CLOUD_EVIDENCE_PLAN_PROVIDER = mockRequested ? "mock" : cloudAuxiliaryProvider;
   if (cloudEvidence && cloudAuxiliaryProvider === "deepseek") {
-    result.DEEPSEEK_CARD_MODEL = String(
+    result.DEEPSEEK_CARD_MODEL = resolveOfficialDeepSeekModel(
       source.DEEPSEEK_CARD_MODEL || DEFAULT_PUBLIC_DEEPSEEK_MODEL,
-    ).trim();
-    result.DEEPSEEK_RULE_MODEL = String(
+    );
+    result.DEEPSEEK_RULE_MODEL = resolveOfficialDeepSeekModel(
       source.DEEPSEEK_RULE_MODEL || DEFAULT_PUBLIC_DEEPSEEK_MODEL,
-    ).trim();
+    );
   }
   // Public answers deliberately use a single final semantic judge. Keep this
   // hard-disabled even if an old Vercel environment variable still says true;
@@ -2329,8 +2339,8 @@ export function resolveRuleQueryExtractionProvider(env = {}) {
 }
 
 export function estimateDeepSeekCostCny(usage = {}, env = {}) {
-  const inputPrice = readTieredProviderNumber(env, "DEEPSEEK", "INPUT_CNY_PER_MTOK", 1);
-  const outputPrice = readTieredProviderNumber(env, "DEEPSEEK", "OUTPUT_CNY_PER_MTOK", 2);
+  const inputPrice = readTieredProviderNumber(env, "DEEPSEEK", "INPUT_CNY_PER_MTOK", 2);
+  const outputPrice = readTieredProviderNumber(env, "DEEPSEEK", "OUTPUT_CNY_PER_MTOK", 8);
   const promptTokens = Number(usage.prompt_tokens || 0);
   const completionTokens = Number(usage.completion_tokens || 0);
   // Public budgets intentionally assume every input token missed cache. Cache
@@ -5306,7 +5316,7 @@ function candidateAssessmentSourceFromParsedValue(parsed) {
 }
 
 function ruleQueryCardContext(cards = [], userProvidedCardTexts = []) {
-  return [...(cards || []), ...(userProvidedCardTexts || [])].slice(0, 12).map((card) => ({
+  return [...(cards || []), ...(userProvidedCardTexts || [])].map((card) => ({
     name: nonEmpty(card?.name || card?.cnName || card?.jaName || card?.enName || card?.cards?.[0]).slice(0, 120),
     ...(typeof card?.cnName === "string" ? { cnName: card.cnName } : {}),
     ...(typeof card?.jaName === "string" ? { jaName: card.jaName } : {}),
@@ -5412,7 +5422,8 @@ function validateExtractionResponse(response = {}, kind) {
     return { items: [], cacheable: false, reason: "invalid_schema" };
   }
   const source = parsed[selectedField];
-  const structurallyValid = source.every((item) => {
+  const parsedCardExtraction = kind === "card" ? parseCardNameExtractionOutput(parsed) : null;
+  const structurallyValid = parsedCardExtraction?.typedMentionSetProvided === true || source.every((item) => {
     if (typeof item === "string") return Boolean(item.trim());
     if (!item || typeof item !== "object" || Array.isArray(item)) return false;
     const value = kind === "card"
@@ -5421,21 +5432,23 @@ function validateExtractionResponse(response = {}, kind) {
     return typeof value === "string" && Boolean(value.trim());
   });
   if (!structurallyValid) return { items: [], cacheable: false, reason: "invalid_schema" };
-  const parsedCardExtraction = kind === "card" ? parseCardNameExtractionOutput(parsed) : null;
   const items = kind === "card"
     ? parsedCardExtraction.candidates
     : normalizeRuleSearchQueries(parsed);
-  if (source.length > 0 && items.length === 0) {
+  if (source.length > 0 && items.length === 0 && parsedCardExtraction?.typedMentionSetProvided !== true) {
     return { items: [], cacheable: false, reason: "no_valid_items" };
   }
+  const invalidTypedMentions = parsedCardExtraction?.invalidTypedMentions || [];
   return {
     items,
     ...(kind === "card" ? {
       groupMentions: parsedCardExtraction.groupMentions,
       typedMentionSetProvided: parsedCardExtraction.typedMentionSetProvided,
+      invalidTypedMentions,
+      formatWarnings: parsedCardExtraction.formatWarnings,
     } : {}),
-    cacheable: true,
-    reason: "valid",
+    cacheable: invalidTypedMentions.length === 0,
+    reason: invalidTypedMentions.length ? "invalid_typed_items" : "valid",
   };
 }
 
@@ -5458,10 +5471,16 @@ function normalizeCardNameCandidates(rawText, { preserveTypedMentions = false } 
         : [];
   const candidates = source
     .map((item) => typeof item === "string"
-      ? { name: item, originalText: item, confidence: "medium" }
+      ? {
+          name: item,
+          originalText: preserveTypedMentions ? "" : item,
+          confidence: "medium",
+        }
       : {
           name: item?.name || item?.cardName || item?.candidate || "",
-          originalText: item?.originalText || item?.surface || item?.mention || item?.input || item?.name || "",
+          originalText: preserveTypedMentions
+            ? typedCardMentionOriginalText(item)
+            : item?.originalText || item?.surface || item?.mention || item?.input || item?.name || "",
           confidence: item?.confidence || item?.confidenceSelfEstimate || "medium",
         })
     .map((item) => ({
@@ -5473,7 +5492,7 @@ function normalizeCardNameCandidates(rawText, { preserveTypedMentions = false } 
       source: "model_card_name_extractor",
     }))
     .filter((item) => preserveTypedMentions
-      ? Boolean(item.name)
+      ? Boolean(item.name && item.originalText)
       : item.name.length >= 2 && /[A-Za-z\u3040-\u30ff\u3400-\u9fff0-9]/u.test(item.name))
     .filter((item) => preserveTypedMentions
       || !/^(?:效果|发动|發動|适用|適用|对象|對象|场上|場上|墓地|除外|手卡|卡组|牌组|连锁|連鎖)$/u.test(item.name));
@@ -5484,7 +5503,6 @@ function normalizeCardNameCandidates(rawText, { preserveTypedMentions = false } 
     if (seen.has(key)) continue;
     seen.add(key);
     result.push(candidate);
-    if (!preserveTypedMentions && result.length >= 12) break;
   }
   return result;
 }
@@ -5494,9 +5512,20 @@ export function parseCardNameExtractionOutput(rawText) {
   try {
     parsed = rawText && typeof rawText === "object" ? rawText : parseRagModelJson(rawText);
   } catch {
-    return { candidates: [], groupMentions: [], typedMentionSetProvided: false };
+    return {
+      candidates: [],
+      groupMentions: [],
+      typedMentionSetProvided: false,
+      invalidTypedMentions: [],
+      formatWarnings: [],
+    };
   }
-  const typedMentionSetProvided = isTypedCardMentionSet(parsed);
+  const typedMentionSetShape = Array.isArray(parsed?.cardNames)
+    && Array.isArray(parsed?.groupMentions);
+  const typedMentionSetProvided = typedMentionSetShape;
+  const invalidTypedMentions = typedMentionSetShape
+    ? collectInvalidTypedCardMentions(parsed.cardNames)
+    : [];
   const groupMentions = Array.isArray(parsed?.groupMentions)
     ? [...new Set(parsed.groupMentions
       .filter((item) => typeof item === "string")
@@ -5507,22 +5536,33 @@ export function parseCardNameExtractionOutput(rawText) {
     candidates: normalizeCardNameCandidates(parsed, { preserveTypedMentions: typedMentionSetProvided }),
     groupMentions,
     typedMentionSetProvided,
+    invalidTypedMentions,
+    formatWarnings: invalidTypedMentions.map((item) => (
+      `card_name_typed_item_missing_original_text:${item.input}`
+    )),
   };
 }
 
-function isTypedCardMentionSet(parsed) {
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return false;
-  if (!Array.isArray(parsed.cardNames) || !Array.isArray(parsed.groupMentions)) return false;
-  const cardNamesValid = parsed.cardNames.every((item) => {
-    if (typeof item === "string") return Boolean(item.trim());
-    if (!item || typeof item !== "object" || Array.isArray(item)) return false;
-    return typeof (item.name ?? item.cardName ?? item.candidate) === "string"
-      && Boolean(String(item.name ?? item.cardName ?? item.candidate).trim());
-  });
-  const groupMentionsValid = parsed.groupMentions.every((item) => (
-    typeof item === "string" && Boolean(item.trim())
-  ));
-  return cardNamesValid && groupMentionsValid;
+function collectInvalidTypedCardMentions(items = []) {
+  const result = [];
+  for (const [index, item] of items.entries()) {
+    if (item && typeof item === "object" && !Array.isArray(item)
+      && typedCardMentionOriginalText(item)) continue;
+    result.push({
+      input: `cardNames[${index}].originalText`,
+      reason: "typed_card_mention_missing_original_text",
+      source: "card_name_model_interface",
+    });
+  }
+  return result;
+}
+
+function typedCardMentionOriginalText(item = {}) {
+  for (const value of [item.originalText, item.surface, item.mention, item.input]) {
+    const text = nonEmpty(value);
+    if (text) return text;
+  }
+  return "";
 }
 
 function normalizeRuleSearchQueries(rawText) {
@@ -5646,6 +5686,8 @@ function emptyCardNameExtractionResult(providerUsed, modelUsed, dryRun, warnings
     candidates: [],
     groupMentions: [],
     typedMentionSetProvided: false,
+    invalidTypedMentions: [],
+    formatWarnings: [],
     rawText: "",
     providerUsed,
     modelUsed,

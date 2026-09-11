@@ -188,7 +188,7 @@ export async function packCloudEvidenceCandidates({
       throw error;
     }
   }
-  return { evidence, packing, selectedCount: selected.length, attempts };
+  return { evidence, packing, selectedCount: selected.length, selectedBindings: selected.map(item => item.binding), attempts };
 }
 
 function querySurfaces(question, plan) {
@@ -306,6 +306,7 @@ export function createCloudEvidenceProvider({
         return roundRobinLexicalDense(lexical, completeDenseQueue(corpus.candidates, scores), limit);
       });
       let candidates = interleaveCloudEvidenceQueues(queues, limit);
+      const recalledBindings = candidates.map(candidate => candidate.binding);
       timingsMs.candidates = lexicalElapsed + elapsed(step);
       // `embedding` is wall time and includes this scheduled lexical work;
       // subtract this overlap before adding timing fields into a critical path.
@@ -343,9 +344,9 @@ export function createCloudEvidenceProvider({
             planTelemetry: plan.telemetry || null,
             embeddingUsage: embeddingResult?.usage || null,
             rerankUsage: rerankResult?.usage || null,
-            ...(env.VERCEL_ENV === "preview" ? {
-              candidateBindings: candidates.map((candidate) => candidate.binding),
-            } : {}),
+            recalledBindings,
+            candidateBindings: candidates.map((candidate) => candidate.binding),
+            selectedBindings: packed.selectedBindings,
             timingsMs,
           },
         },

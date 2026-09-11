@@ -101,7 +101,6 @@ export function buildRagRulingPromptBundle({
   const hasLegacyReferenceItemLimit = Object.hasOwn(env, "RAG_MAX_PROMPT_REFERENCE_ITEMS")
     && String(env.RAG_MAX_PROMPT_REFERENCE_ITEMS || "").trim() !== "";
   const limits = {
-    maxCards: readNumber(env.RAG_MAX_CARDS, 6),
     maxOfficialQa: readNumber(env.RAG_MAX_OFFICIAL_QA, 7),
     maxRelatedEvidence: readNumber(env.RAG_MAX_RELATED_EVIDENCE, 14),
     // The complete rendered prompt owns the ordinary production budget.  A
@@ -168,7 +167,7 @@ export function buildRagRulingPromptBundle({
   const ruleQueryPlanDiagnostics = buildRuleQueryPlanDiagnostics(promptSafeEvidence.ruleSearchQueries);
   const payload = {
     userQuery: String(userQuery || ""),
-    resolvedCards: summarizeCards(cardResolution.resolvedCards || [], limits.maxCards),
+    resolvedCards: summarizeCards(cardResolution.resolvedCards || []),
     unresolvedMentions: cardResolution.unresolvedMentions || [],
     ambiguousMentions: cardResolution.ambiguousMentions || [],
     decisionChecklist: [...GENERIC_DECISION_CHECKLIST],
@@ -775,14 +774,14 @@ function prepareEvidenceForPrompt(
     // evidence shell adds no fact or citation value to the model envelope.
     cardTexts: limitEvidence(
       omitRepeatedResolvedCardText(evidence.cardTexts, resolvedCards),
-      limits.maxCards,
+      Number.POSITIVE_INFINITY,
       limits.maxCardTextChars,
       "card_text",
       warnings,
       focusCardIds,
       lineageTraceSink,
     ),
-    userProvidedCardTexts: limitEvidence(evidence.userProvidedCardTexts, limits.maxCards, limits.maxCardTextChars, "user_text", warnings, focusCardIds, lineageTraceSink),
+    userProvidedCardTexts: limitEvidence(evidence.userProvidedCardTexts, Number.POSITIVE_INFINITY, limits.maxCardTextChars, "user_text", warnings, focusCardIds, lineageTraceSink),
     rawRelatedEvidence: projectPromptEvidence(evidence.rawRelatedEvidence, limits.maxEvidenceTextChars, "raw_related", focusCardIds),
   };
   if (authoritativeDirectId) return prepared;
@@ -1585,8 +1584,8 @@ function compactEvidenceTextFields(item = {}, textLimit, focusCardIds = []) {
     .filter(([, value]) => value));
 }
 
-function summarizeCards(cards, limit) {
-  return cards.slice(0, limit).map((card) => ({
+function summarizeCards(cards) {
+  return cards.map((card) => ({
     id: card.id || card.cardId || "",
     name: card.name || card.cnName || card.jaName || card.enName || "",
     aliases: card.aliases || [],

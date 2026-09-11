@@ -3,6 +3,7 @@ import { createHash, randomBytes } from "node:crypto";
 // Only server-owned continuations live here. The browser receives a random
 // capability, never the prompt/evidence or provider credentials.
 export const PUBLIC_PREPARATION_TTL_SECONDS = 15 * 60;
+export const PUBLIC_PREPARATION_RUNNING_TTL_SECONDS = 15 * 60;
 const PREFIX = "public-answer-preparation:v1:";
 const CLAIM = `
 local raw = redis.call("GET", KEYS[1])
@@ -12,18 +13,31 @@ if record.deployment ~= ARGV[1] then return {"deployment_changed"} end
 if record.state == "completed" then return {"completed", record.result} end
 if record.state ~= "ready" then return {record.state} end
 record.state = "running"
-redis.call("SET", KEYS[1], cjson.encode(record), "KEEPTTL")
+redis.call("SET", KEYS[1], cjson.encode(record), "EX", ARGV[2])
 return {"claimed", record.preparation}
 `.trim();
 const FINISH = `
 local raw = redis.call("GET", KEYS[1])
 if not raw then return "missing" end
 local record = cjson.decode(raw)
-if record.deployment ~= ARGV[1] or record.state ~= "running" then return "conflict" end
+if record.deployment ~= ARGV[1] then return "conflict" end
+if record.state == "completed" then
+  if record.result == ARGV[3] then return "saved" end
+  return "conflict"
+end
+if record.state ~= "running" then return "conflict" end
 record.state = ARGV[2]
 record.result = ARGV[3]
 redis.call("SET", KEYS[1], cjson.encode(record), "KEEPTTL")
 return "saved"
+`.trim();
+const STATUS = `
+local raw = redis.call("GET", KEYS[1])
+if not raw then return {"missing"} end
+local record = cjson.decode(raw)
+if record.deployment ~= ARGV[1] then return {"deployment_changed"} end
+if record.state == "completed" then return {"completed", record.result} end
+return {record.state}
 `.trim();
 
 export function isPublicPreparationId(value) {
@@ -56,6 +70,11 @@ export function createPublicAnswerPreparationStore({ env = process.env, fetchImp
       throw preparationError("资料暂存服务暂时不可用，请稍后再试", "answer_preparation_storage_unavailable", 503);
     }
   }
+  async function readStatus(id) {
+    const result = await command(["EVAL", STATUS, 1, key(id), deployment]);
+    if (!Array.isArray(result)) throw preparationError("资料状态无法确认", "answer_preparation_state_unknown", 503);
+    return result;
+  }
   return {
     async create(preparation) {
       const id = randomBytes(32).toString("hex");
@@ -67,7 +86,7 @@ export function createPublicAnswerPreparationStore({ env = process.env, fetchImp
       return id;
     },
     async claim(id) {
-      const result = await command(["EVAL", CLAIM, 1, key(id), deployment]);
+      const result = await command(["EVAL", CLAIM, 1, key(id), deployment, PUBLIC_PREPARATION_RUNNING_TTL_SECONDS]);
       if (!Array.isArray(result)) throw preparationError("资料状态无法确认", "answer_preparation_state_unknown", 503);
       if (result[0] === "claimed") return { state: "claimed", preparation: JSON.parse(result[1]) };
       if (result[0] === "completed") return { state: "completed", result: JSON.parse(result[1]) };
@@ -79,9 +98,34 @@ export function createPublicAnswerPreparationStore({ env = process.env, fetchImp
       };
       throw preparationError(...(messages[result[0]] || ["资料状态无法确认", "answer_preparation_state_unknown", 503]));
     },
+    async status(id) {
+      const result = await readStatus(id);
+      if (result[0] === "completed") return { state: "completed", result: JSON.parse(result[1]) };
+      if (["ready", "running", "failed"].includes(result[0])) return { state: result[0] };
+      const messages = {
+        missing: ["资料准备结果已过期或不存在，请重新提交问题", "answer_preparation_expired", 410],
+        deployment_changed: ["服务已更新，请重新提交问题", "answer_preparation_deployment_changed", 409],
+      };
+      throw preparationError(...(messages[result[0]] || ["资料状态无法确认", "answer_preparation_state_unknown", 503]));
+    },
     async complete(id, result) {
-      const saved = await command(["EVAL", FINISH, 1, key(id), deployment, "completed", JSON.stringify(result)]);
-      if (saved !== "saved") throw preparationError("回答保存未确认", "answer_preparation_save_unconfirmed", 503);
+      const serialized = JSON.stringify(result);
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        try {
+          const saved = await command(["EVAL", FINISH, 1, key(id), deployment, "completed", serialized]);
+          if (saved === "saved") return;
+        } catch {
+          // A lost write acknowledgement is confirmed through the read-only path.
+        }
+        try {
+          const current = await readStatus(id);
+          if (current[0] === "completed" && current[1] === serialized) return;
+          if (current[0] !== "running") break;
+        } catch {
+          // One bounded retry remains safe because FINISH is idempotent.
+        }
+      }
+      throw preparationError("回答保存未确认", "answer_preparation_save_unconfirmed", 503);
     },
     async fail(id) {
       await command(["EVAL", FINISH, 1, key(id), deployment, "failed", "null"]);

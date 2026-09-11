@@ -307,10 +307,13 @@ test("relay pricing multiplier scales every cost component and the total", () =>
   assert.equal(cost.totalCostCny, 0.015549);
 });
 
-test("versioned DeepSeek V4 pricing matches the checked official list rates", () => {
+test("DeepSeek pricing adds the current Flash peak rates and preserves legacy model rows", () => {
   const pricing = getDeepSeekModelPricingConfig();
-  assert.equal(pricing.pricingVersion, "deepseek-v4-standard-2026-08-10");
-  assert.equal(pricing.checkedAt, "2026-08-10");
+  assert.equal(pricing.pricingVersion, "deepseek-v4.1-flash-peak-2026-09-10");
+  assert.equal(pricing.models['deepseek-flash'].inputUsdPerMillion, 0.3);
+  assert.equal(pricing.models['deepseek-flash'].cachedInputUsdPerMillion, 0.006);
+  assert.equal(pricing.models['deepseek-flash'].outputUsdPerMillion, 1.2);
+  assert.equal(pricing.checkedAt, "2026-09-10");
   assert.deepEqual(pricing.models["deepseek-v4-flash"], {
     inputUsdPerMillion: 0.14,
     cachedInputUsdPerMillion: 0.0028,

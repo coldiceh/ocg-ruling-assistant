@@ -3,7 +3,12 @@ export const DEFAULT_PUBLIC_BAI_BASE_URL = "https://api.b.ai/v1";
 export const DEFAULT_PUBLIC_BAI_MODEL = "gpt-6-astra";
 export const DEFAULT_PUBLIC_RELAY_BASE_URL = "";
 export const DEFAULT_PUBLIC_RELAY_MODEL = "gpt-6-astra";
-export const DEFAULT_PUBLIC_DEEPSEEK_MODEL = "deepseek-v4.1-flash-expires-on-0910";
+export const DEFAULT_PUBLIC_DEEPSEEK_MODEL = "deepseek-flash";
+// The dated preview has been replaced by this official release.
+export function resolveOfficialDeepSeekModel(value) {
+  const model = String(value || DEFAULT_PUBLIC_DEEPSEEK_MODEL).trim();
+  return model === 'deepseek-v4.1-flash-expires-on-0910' ? DEFAULT_PUBLIC_DEEPSEEK_MODEL : model;
+}
 export const DEFAULT_PUBLIC_GLM_MODEL = "glm-5.3";
 
 function profile({ id, label, provider, model, thinkingMode, reasoningEffort, transport, thirdParty, modelIdentityVerified }) {
@@ -18,7 +23,7 @@ const profiles = [
     profile({ id: `relay-gpt-6-astra-${reasoningEffort}`, label: `中转 GPT-6 Astra · 思考 ${reasoningEffort}`, provider: "relay", model: "gpt-6-astra", thinkingMode: "enabled", reasoningEffort, transport: "chat_completions_sse", thirdParty: true, modelIdentityVerified: false }),
   ]),
   ...[["none", "disabled", null], ["low", "enabled", "low"], ["high", "enabled", "high"], ["max", "enabled", "max"]]
-    .map(([suffix, thinkingMode, reasoningEffort]) => profile({ id: `deepseek-v4.1-flash-${suffix}`, label: `DeepSeek V4.1 Flash 测试版 · 思考 ${suffix}`, provider: "deepseek", model: DEFAULT_PUBLIC_DEEPSEEK_MODEL, thinkingMode, reasoningEffort, transport: "chat_completions", thirdParty: true, modelIdentityVerified: false })),
+    .map(([suffix, thinkingMode, reasoningEffort]) => profile({ id: `deepseek-v4.1-flash-${suffix}`, label: `DeepSeek V4.1 Flash · 思考 ${suffix}`, provider: "deepseek", model: DEFAULT_PUBLIC_DEEPSEEK_MODEL, thinkingMode, reasoningEffort, transport: "chat_completions", thirdParty: false, modelIdentityVerified: true })),
   ...[["low", "enabled", "low"], ["high", "enabled", "high"], ["max", "enabled", "max"]]
     .map(([suffix, thinkingMode, reasoningEffort]) => profile({ id: `glm-5.3-${suffix}`, label: `GLM-5.3 · 思考 ${suffix}`, provider: "glm", model: DEFAULT_PUBLIC_GLM_MODEL, thinkingMode, reasoningEffort, transport: "chat_completions", thirdParty: true, modelIdentityVerified: true })),
 ];
@@ -48,7 +53,7 @@ export function configuredPublicRulingModelProfile(profileOrId, env = {}) {
   return configuredModel ? {
     ...selected,
     label: selected.label.replace(" 测试版", ""),
-    model: configuredModel,
+    model: resolveOfficialDeepSeekModel(configuredModel),
   } : selected;
 }
 

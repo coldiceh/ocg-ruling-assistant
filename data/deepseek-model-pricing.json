@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
-  "pricingVersion": "deepseek-v4-standard-2026-08-10",
+  "pricingVersion": "deepseek-v4.1-flash-peak-2026-09-10",
   "effectiveDate": "2026-04-24",
-  "checkedAt": "2026-08-10",
+  "checkedAt": "2026-09-10",
   "currency": "USD",
   "unit": "per_1m_tokens",
   "processingTier": "standard",
@@ -13,7 +13,8 @@
     "cacheHits": "Cached input tokens use the published cache-hit rate; all other input tokens use the cache-miss rate.",
     "reasoningTokens": "Thinking tokens are included in output tokens and are not billed a second time.",
     "longContext": "No separate long-context surcharge is listed for DeepSeek V4; multipliers therefore remain 1 within the supported context window.",
-    "estimateOnly": "Calculated costs are official list-price estimates, not invoices."
+    "estimateOnly": "Calculated costs are official list-price estimates, not invoices.",
+    "currentFlash": "deepseek-flash uses the official V4.1 Flash peak rate as a conservative estimate. Off-peak rates are half; historical V4 rows remain unchanged and are not current quotations."
   },
   "aliases": {},
   "models": {
@@ -33,6 +34,17 @@
       "cachedInputUsdPerMillion": 0.003625,
       "cacheWriteUsdPerMillion": 0.435,
       "outputUsdPerMillion": 0.87,
+      "longContext": {
+        "thresholdInputTokensExclusive": 1000000,
+        "inputMultiplier": 1,
+        "outputMultiplier": 1
+      }
+    },
+    "deepseek-flash": {
+      "inputUsdPerMillion": 0.3,
+      "cachedInputUsdPerMillion": 0.006,
+      "cacheWriteUsdPerMillion": 0.3,
+      "outputUsdPerMillion": 1.2,
       "longContext": {
         "thresholdInputTokensExclusive": 1000000,
         "inputMultiplier": 1,

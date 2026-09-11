@@ -6,6 +6,7 @@
 const baseCardIndex = [];
 const PAGE_TITLE = document.title;
 const DEFAULT_RULING_MODEL_PROFILE = "bai-astra-low";
+const publicAnswerPreparationStorageKey = "ocg-public-answer-preparation-id";
 const FALLBACK_RULING_MODEL_PROFILE = Object.freeze({
   id: DEFAULT_RULING_MODEL_PROFILE,
   label: "GPT-6 Astra · 思考 low（可用性未确认）",
@@ -151,6 +152,7 @@ let sourceLoadError = "";
 let analysisRequestId = 0;
 let analysisTimer = 0;
 let activeAnalysisAbortController = null;
+let activeAnalysisPhase = null;
 const cardDetailsCache = new Map();
 let visibleCards = [];
 let selectedCardIndex = 0;
@@ -552,7 +554,7 @@ function updateSourceStatus() {
   if (ui.statusDot) ui.statusDot.className = `status-dot ${freshness.className}`.trim();
   if (ui.sourceStatus) {
     if (appConfig.answerApiUrl && sourceMeta?.generatedAt) {
-      ui.sourceStatus.textContent = `资料服务 · ${formatDateTime(sourceMeta.generatedAt)}`;
+      ui.sourceStatus.textContent = `页面资料快照 · ${formatDateTime(sourceMeta.generatedAt)}`;
     } else if (appConfig.answerApiUrl) {
       ui.sourceStatus.textContent = "资料服务";
     } else if (sourceMeta?.generatedAt) {
@@ -675,6 +677,7 @@ async function analyzeQuestion({ prepareOnly = false } = {}) {
   lastSubmittedQuestion = ui.questionInput.value;
   const text = ui.questionInput.value.trim();
   cancelActiveAnalysisRequest();
+  clearStoredPublicAnswerPreparationId();
   const requestId = ++analysisRequestId;
   clearPreparedEvidencePackage();
   if (!text) {
@@ -686,6 +689,7 @@ async function analyzeQuestion({ prepareOnly = false } = {}) {
     const requestedRulingVersion = selectedRulingVersion;
     const abortController = new AbortController();
     activeAnalysisAbortController = abortController;
+    activeAnalysisPhase = "prepare";
     setQueryPending(true);
     renderPending();
     try {
@@ -710,6 +714,7 @@ async function analyzeQuestion({ prepareOnly = false } = {}) {
     } finally {
       if (activeAnalysisAbortController === abortController) {
         activeAnalysisAbortController = null;
+        activeAnalysisPhase = null;
       }
       if (requestId === analysisRequestId) setQueryPending(false);
     }
@@ -746,9 +751,13 @@ async function requestBackendAnswer(text, requestedRulingVersion, {
   if (prepareResult?.kind !== "prepared") {
     return validatePublicAnswerRulingVersion(prepareResult, requestedRulingVersion);
   }
+  storePublicAnswerPreparationId(prepareResult.preparationId);
   setPreparedEvidencePackage(prepareResult.evidencePackage);
 
-  if (prepareOnly) return prepareResult;
+  if (prepareOnly) {
+    activeAnalysisPhase = null;
+    return prepareResult;
+  }
 
   if (signal?.aborted) {
     throw createBackendRequestError({
@@ -760,6 +769,7 @@ async function requestBackendAnswer(text, requestedRulingVersion, {
     throw createBackendRequestError({ code: "answer_request_stale" });
   }
 
+  activeAnalysisPhase = "finalize";
   const finalResult = await postPublicAnswerProgressRequest({
     body: {
       action: "finalize",
@@ -776,7 +786,92 @@ async function requestBackendAnswer(text, requestedRulingVersion, {
       requestedVersion: requestedRulingVersion,
     });
   }
-  return validatePublicAnswerRulingVersion(finalResult, requestedRulingVersion);
+  const answer = validatePublicAnswerRulingVersion(finalResult, requestedRulingVersion);
+  clearStoredPublicAnswerPreparationId(prepareResult.preparationId);
+  return answer;
+}
+
+function normalizePublicAnswerPreparationId(value) {
+  const preparationId = String(value || "");
+  return /^[0-9a-f]{64}$/u.test(preparationId) ? preparationId : "";
+}
+
+function storePublicAnswerPreparationId(value) {
+  const preparationId = normalizePublicAnswerPreparationId(value);
+  if (!preparationId) return;
+  try {
+    sessionStorage.setItem(publicAnswerPreparationStorageKey, preparationId);
+  } catch {
+    // Recovery remains best-effort when browser storage is unavailable.
+  }
+}
+
+function readStoredPublicAnswerPreparationId() {
+  try {
+    return normalizePublicAnswerPreparationId(sessionStorage.getItem(publicAnswerPreparationStorageKey));
+  } catch {
+    return "";
+  }
+}
+
+function clearStoredPublicAnswerPreparationId(expectedId = "") {
+  try {
+    const current = readStoredPublicAnswerPreparationId();
+    if (expectedId && current && current !== expectedId) return;
+    sessionStorage.removeItem(publicAnswerPreparationStorageKey);
+  } catch {
+    // A failed cleanup cannot change the server-side one-request invariant.
+  }
+}
+
+async function recoverStoredPublicAnswer({
+  maxAttempts = 73,
+  pollIntervalMs = 5_000,
+  wait = (milliseconds) => new Promise((resolve) => window.setTimeout(resolve, milliseconds)),
+} = {}) {
+  const preparationId = readStoredPublicAnswerPreparationId();
+  if (!preparationId || !appConfig.answerApiUrl) return null;
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    if (readStoredPublicAnswerPreparationId() !== preparationId) return null;
+    let response;
+    try {
+      response = await fetch(appConfig.answerApiUrl, {
+        method: "POST",
+        cache: "no-store",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "status", preparationId }),
+      });
+    } catch {
+      return null;
+    }
+    const payload = await response.json().catch(() => null);
+    if (!response.ok) {
+      if (["answer_preparation_expired", "answer_preparation_deployment_changed"].includes(payload?.code)) {
+        clearStoredPublicAnswerPreparationId(preparationId);
+      }
+      return null;
+    }
+    if (payload?.status === "failed") {
+      clearStoredPublicAnswerPreparationId(preparationId);
+      return null;
+    }
+    if (payload?.status === "completed") {
+      const answer = payload.result?.answer;
+      if (!answer || typeof answer !== "object" || Array.isArray(answer)) return null;
+      if (payload.result?.progress) applyPreparedProgress(payload.result.progress);
+      let validatedAnswer;
+      try {
+        validatedAnswer = validatePublicAnswerRulingVersion(answer, selectedRulingVersion);
+      } catch {
+        return null;
+      }
+      clearStoredPublicAnswerPreparationId(preparationId);
+      return validatedAnswer;
+    }
+    if (!["ready", "running"].includes(payload?.status) || attempt + 1 >= maxAttempts) return null;
+    await wait(pollIntervalMs);
+  }
+  return null;
 }
 
 async function postPublicAnswerProgressRequest({
@@ -6166,6 +6261,10 @@ async function init() {
   await loadBudgetStatus();
   updateSourceStatus();
   resetAnalysis();
+  const recoveryRequestId = analysisRequestId;
+  recoverStoredPublicAnswer().then((recoveredAnswer) => {
+    if (recoveredAnswer && recoveryRequestId === analysisRequestId) renderBackendAnswer(recoveredAnswer);
+  }).catch(() => null);
   if (adminUiEnabled) await initializeAdminLab();
 
   ui.analyzeButton.addEventListener("click", () => analyzeQuestion());
@@ -6243,7 +6342,7 @@ function selectRulingVersion(version) {
 
 function scheduleAnalysis() {
   clearTimeout(analysisTimer);
-  clearPreparedEvidencePackage();
+  if (appConfig.answerApiUrl && activeAnalysisPhase === "finalize") return;
   clearPreparedEvidencePackage();
   if (!ui.questionInput.value.trim()) {
     analyzeQuestion();

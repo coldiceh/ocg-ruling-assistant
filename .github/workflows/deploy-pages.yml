@@ -24,6 +24,8 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      release_commit: ${{ steps.release.outputs.commit }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -35,6 +37,10 @@ jobs:
       - name: Configure Pages
         uses: actions/configure-pages@v6
 
+      - name: Record exact source commit
+        id: release
+        run: echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
       - name: Build static site
         run: |
           mkdir -p _site/data
@@ -42,6 +48,7 @@ jobs:
           cp -R src _site/src
           cp index.html config.json .nojekyll _site/
           cp data/cards-lite.json data/snapshot-meta.json _site/data/
+          node scripts/build-public-release.mjs _site/data/release.json
           test -s _site/index.html
           test -s _site/assets/bg-day.png
           test -s _site/assets/bg-night.png
@@ -68,3 +75,13 @@ jobs:
       - name: Deploy
         id: deployment
         uses: actions/deploy-pages@v5
+
+      - name: Checkout published source for version verification
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.build.outputs.release_commit }}
+
+      - name: Verify frontend and backend release identity without model calls
+        run: |
+          export EXPECTED_COMMIT="$(git rev-parse HEAD)"
+          node scripts/verify-public-release.mjs "${{ steps.deployment.outputs.page_url }}"

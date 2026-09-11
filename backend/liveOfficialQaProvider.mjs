@@ -33,7 +33,7 @@ export async function retrieveLiveOfficialQa({
   signal,
 } = {}) {
   throwIfAborted(signal);
-  const cards = dedupeCardsById(resolvedCards).slice(0, 6);
+  const cards = dedupeCardsById(resolvedCards);
   const preferredCandidateQaIds = uniqueNumericIds(candidateQaIds);
   if ((!cards.length && !preferredCandidateQaIds.length) || typeof fetchImpl !== "function") {
     return emptyResult("live_qa_requires_resolved_cards_or_local_candidates");
@@ -167,8 +167,7 @@ export async function retrieveCardMetadata({
 } = {}) {
   const startedAt = performance.now();
   const cards = dedupeCardsById(resolvedCards)
-    .filter((card) => !hasExplicitSubtypeMetadata(card))
-    .slice(0, 6);
+    .filter((card) => !hasExplicitSubtypeMetadata(card));
   let httpRequestCount = 0;
   if (!cards.length) {
     return {

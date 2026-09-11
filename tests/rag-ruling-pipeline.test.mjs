@@ -957,17 +957,14 @@ test("the same short surface with conflicting clause contexts stays ambiguous", 
   assert.deepEqual(ambiguity?.candidateCards.map((card) => card.id).sort(), ["18732", "18738"]);
 });
 
-test("resolved cards beyond maxCards remain visible as explicit card-limit mentions", () => {
+test("card extraction does not discard resolved cards through the legacy maxCards option", () => {
   const resolution = extractRagCards(
     "C1发动「VS狂魔博士」的效果，C2手牌龙帝进行替换。",
     { cards: contextualSeriesCards, maxCards: 1 },
   );
-  const omitted = resolution.omittedResolvedCards.find((item) => item.input === "龙帝");
 
-  assert.deepEqual(resolution.resolvedCards.map((card) => card.id), ["18730"]);
-  assert.equal(resolution.unresolvedMentions.some((item) => item.reason === "resolved_card_limit_exceeded"), false);
-  assert.equal(omitted?.reason, "resolved_card_limit_exceeded");
-  assert.equal(omitted?.resolvedCardId, "18732");
+  assert.deepEqual(resolution.resolvedCards.map((card) => card.id), ["18730", "18732"]);
+  assert.deepEqual(resolution.omittedResolvedCards, []);
 });
 
 test("card alias indexes and local providers are cached by source data objects", () => {
@@ -3991,6 +3988,80 @@ test("typed card extraction owns the mention set, including a successful empty s
   assert.deepEqual(legacy.resolvedCards.map((card) => card.id), ["100"]);
 });
 
+test("typed card extraction keeps valid entries and reports entries missing an original surface", () => {
+  const mixed = parseCardNameExtractionOutput(JSON.stringify({
+    cardNames: [
+      { name: "测试龙", originalText: "题面测试龙", confidence: "high" },
+      { name: "未收录测试卡", confidence: "high" },
+    ],
+    groupMentions: [],
+  }));
+  assert.equal(mixed.typedMentionSetProvided, true);
+  assert.deepEqual(mixed.candidates.map(({ name, originalText }) => ({ name, originalText })), [{
+    name: "测试龙",
+    originalText: "题面测试龙",
+  }]);
+  assert.deepEqual(mixed.invalidTypedMentions, [{
+    input: "cardNames[1].originalText",
+    reason: "typed_card_mention_missing_original_text",
+    source: "card_name_model_interface",
+  }]);
+  assert.ok(mixed.formatWarnings.includes("card_name_typed_item_missing_original_text:cardNames[1].originalText"));
+  assert.doesNotMatch(JSON.stringify(mixed.invalidTypedMentions), /未收录测试卡/u);
+
+  const stringEntry = parseCardNameExtractionOutput(JSON.stringify({
+    cardNames: ["测试龙"],
+    groupMentions: [],
+  }));
+  assert.equal(stringEntry.typedMentionSetProvided, true);
+  assert.deepEqual(stringEntry.candidates, []);
+  assert.equal(stringEntry.invalidTypedMentions[0]?.reason, "typed_card_mention_missing_original_text");
+});
+
+test("legacy card extraction response normalization preserves more than twelve candidates", () => {
+  const cardNames = Array.from({ length: 13 }, (_, index) => ({
+    name: `合成卡片${index + 1}`,
+    originalText: `题面卡片${index + 1}`,
+    confidence: "medium",
+  }));
+  const parsed = parseCardNameExtractionOutput({ cardNames });
+
+  assert.equal(parsed.typedMentionSetProvided, false);
+  assert.equal(parsed.candidates.length, 13);
+  assert.deepEqual(
+    parsed.candidates.map((item) => item.originalText),
+    cardNames.map((item) => item.originalText),
+  );
+});
+
+test("rag pipeline keeps typed ownership when one typed card entry lacks originalText", async () => {
+  const answer = await answerRagRulingQuestion({
+    question: "「测试龙」与「未收录测试卡」如何处理？",
+    cards: [cards[0], secondCard],
+    records: [],
+    qaRecords: [],
+    env: { RAG_LIVE_OFFICIAL_QA: "false" },
+    cardModelInvoker: async () => JSON.stringify({
+      cardNames: [
+        { name: "测试龙", originalText: "测试龙", confidence: "high" },
+        { name: "未收录测试卡", confidence: "high" },
+      ],
+      groupMentions: [],
+    }),
+    modelInvoker: async () => JSON.stringify(modelJson("只确认保留原始题面绑定的卡片。")),
+  });
+
+  assert.deepEqual(answer.resolvedCards.map((card) => card.id), ["100"]);
+  assert.ok(answer.debug.unresolvedMentions.some((item) => (
+    item.reason === "typed_card_mention_missing_original_text"
+      && item.input === "cardNames[1].originalText"
+  )));
+  assert.ok(answer.debug.cardNameWarnings.includes(
+    "card_name_typed_item_missing_original_text:cardNames[1].originalText",
+  ));
+  assert.doesNotMatch(JSON.stringify(answer.debug.unresolvedMentions), /未收录测试卡/u);
+});
+
 test("typed mention ownership preserves explicit user card text and stable identity deduplication", () => {
   const resolution = extractRagCards([
     "「测试龙」与测试龙如何处理？",
@@ -4185,6 +4256,37 @@ test("Relay auxiliary extraction caches only complete valid JSON", async () => {
   assert.equal(first.cacheHit, false);
   assert.equal(second.cacheHit, true);
   assert.deepEqual(second.candidates, []);
+});
+
+test("typed extraction responses missing originalText are not written to the success cache", async () => {
+  const env = relayAuxEnv();
+  const now = new Date("2033-04-08T07:08:09.000Z");
+  await resetRagBudget({ env, now });
+  let fetchCount = 0;
+  const fetchImpl = async () => {
+    fetchCount += 1;
+    return relaySseResponse({
+      cardNames: [{ name: "缓存缺口测试卡" }],
+      groupMentions: [],
+    });
+  };
+  const input = {
+    userQuery: "typed-missing-originalText-cache",
+    dataRevision: "typed-missing-originalText-cache-v1",
+    env,
+    now,
+    fetchImpl,
+  };
+
+  const first = await callCardNameExtractionModel(input);
+  const second = await callCardNameExtractionModel(input);
+
+  assert.equal(fetchCount, 2);
+  assert.equal(first.cacheHit, false);
+  assert.equal(second.cacheHit, false);
+  assert.equal(first.typedMentionSetProvided, true);
+  assert.equal(first.invalidTypedMentions[0]?.reason, "typed_card_mention_missing_original_text");
+  assert.ok(first.warnings.includes("card_name_model_not_cached:invalid_typed_items"));
 });
 
 test("Relay singleflight isolates an aborted caller while one caller survives", async () => {
@@ -6145,32 +6247,75 @@ test("cross-card allocation balances a model-assessed premise with strict supple
   ));
 });
 
-test("rag_prompt_truncates_context", () => {
-  const bundle = buildRagRulingPromptBundle({
-    userQuery: "测试问题",
-    cardResolution: { resolvedCards: cards },
-    evidence: {
-      cardTexts: [{ id: "card-text-long", type: "card_text", title: "长文本", text: "长".repeat(5000) }],
-      officialQaDirectCandidates: [],
-      officialQaRelated: [],
-      faqRelated: [],
-      rawRelatedEvidence: [],
-      retrievalWarnings: [],
+test("general prompt rejects an oversized complete evidence record", () => {
+  assert.throws(
+    () => buildRagRulingPromptBundle({
+      userQuery: "测试问题",
+      cardResolution: { resolvedCards: cards },
+      evidence: {
+        cardTexts: [{ id: "card-text-long", type: "card_text", title: "长文本", text: "长".repeat(5000) }],
+        officialQaDirectCandidates: [],
+        officialQaRelated: [],
+        faqRelated: [],
+        rawRelatedEvidence: [],
+        retrievalWarnings: [],
+      },
+      env: {
+        RAG_MAX_CARD_TEXT_CHARS: "100",
+        RAG_MAX_PROMPT_CHARS: "1400",
+      },
+    }),
+    (error) => {
+      assert.equal(error.code, "evidence_prompt_budget_exceeded");
+      assert.equal(error.details?.reason, "complete_reference_does_not_fit");
+      assert.equal(error.details?.evidenceId, "card-text-long");
+      return true;
     },
+  );
+});
+
+test("general prompt preserves more than six resolved card records", () => {
+  const resolvedCards = Array.from({ length: 7 }, (_, index) => ({
+    id: `resolved-${index + 1}`,
+    name: `已解析卡片${index + 1}`,
+    effectText: `卡片${index + 1}的完整短效果文本。`,
+  }));
+  const bundle = buildRagRulingPromptBundle({
+    userQuery: "测试多卡片提示词",
+    cardResolution: { resolvedCards },
+    evidence: {},
     env: {
-      RAG_MAX_CARD_TEXT_CHARS: "100",
-      RAG_MAX_PROMPT_CHARS: "1400",
+      RAG_MAX_CARDS: "6",
+      RAG_MAX_PROMPT_CHARS: "60000",
     },
   });
-  assert.equal(bundle.prompt.length <= 1400, true);
-  assert.ok(bundle.warnings.some((warning) => warning.includes("compacted")));
-  assert.equal(bundle.promptTruncated, true);
-  assert.doesNotMatch(bundle.prompt, /上下文因 RAG_MAX_PROMPT_CHARS 限制被截断/u);
-  assert.match(bundle.prompt, /allowedEvidenceIds/u);
-  assert.match(bundle.prompt, /card-text-long/u);
-  assert.match(bundle.prompt, /allowedEvidenceIds 中真实存在的 id/u);
-  assert.deepEqual(bundle.allowedEvidenceIds, ["card-text-long"]);
-  assert.deepEqual(bundle.evidenceSelectionDiagnostics.map((item) => item.id), ["card-text-long"]);
+
+  for (const card of resolvedCards) {
+    assert.match(bundle.prompt, new RegExp(card.id, "u"));
+    assert.match(bundle.prompt, new RegExp(card.effectText, "u"));
+  }
+});
+
+test("general prompt fails explicitly when complete resolved card text cannot fit", () => {
+  assert.throws(
+    () => buildRagRulingPromptBundle({
+      userQuery: "测试超出提示词预算的卡片原文",
+      cardResolution: {
+        resolvedCards: [{
+          id: "resolved-too-long",
+          name: "超长卡片",
+          effectText: "效".repeat(4000),
+        }],
+      },
+      evidence: {},
+      env: { RAG_MAX_PROMPT_CHARS: "2000" },
+    }),
+    (error) => {
+      assert.equal(error.code, "evidence_prompt_budget_exceeded");
+      assert.equal(error.details?.reason, "fixed_envelope_does_not_fit");
+      return true;
+    },
+  );
 });
 
 test("general prompt applies one score-ranked reference budget and omits resolved-card text duplicates", () => {
@@ -6216,11 +6361,10 @@ test("general prompt applies one score-ranked reference budget and omits resolve
     },
   });
 
-  assert.equal(bundle.allowedEvidenceIds.length, 6);
-  assert.ok(bundle.allowedEvidenceIds.includes("card-text-100"));
+  assert.equal(bundle.allowedEvidenceIds.length, 5);
+  assert.ok(!bundle.allowedEvidenceIds.includes("card-text-100"));
   assert.equal(bundle.prompt.split(cards[0].effectText).length - 1, 1);
   assert.deepEqual(new Set(bundle.allowedEvidenceIds), new Set([
-    "card-text-100",
     "cross-budget-1",
     "rule-budget-1",
     "faq-budget-1",
