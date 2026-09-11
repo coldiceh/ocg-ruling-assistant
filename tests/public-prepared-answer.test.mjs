@@ -7,7 +7,7 @@ import {
   PUBLIC_PREPARATION_RUNNING_TTL_SECONDS,
   PUBLIC_PREPARATION_TTL_SECONDS,
 } from "../backend/publicAnswerPreparationStore.mjs";
-import { preparePublicAnswer, finalizePublicAnswer } from "../backend/publicPreparedAnswerService.mjs";
+import { preparePublicAnswer, finalizePublicAnswer, preparedAnswerProgress } from "../backend/publicPreparedAnswerService.mjs";
 import { createPublicAnswerProgress } from "../backend/publicAnswerProgress.mjs";
 import { answerPublicRulingQuestion, parsePublicAnswerPayload } from "../backend/publicAnswerService.mjs";
 import { classifyPublicRequestChannel, presentPublicAnswer } from "../backend/publicAnswerPresentation.mjs";
@@ -329,6 +329,42 @@ test("early answer does not create a preparation; aborted final never reaches mo
   const controller = new AbortController(); controller.abort(); let calls = 0;
   await assert.rejects(finalizePublicAnswer({ preparation: {}, env, signal: controller.signal, finalize: async () => { calls++; } }), { name: "AbortError" });
   assert.equal(calls, 0);
+});
+
+test("finalize latency adds active preparation and finalization time without the inter-request wait", async () => {
+  let clock = 124_507;
+  const preparation = {
+    profileId: "official-astra-low",
+    pipeline: "rag_baseline",
+    continuation,
+    rulingVersion: "latest",
+    startedAt: 0,
+    progress: { totalMs: 35_531 },
+  };
+  const profile = { id: "official-astra-low", provider: "openai" };
+
+  const result = await finalizePublicAnswer({
+    preparation,
+    env,
+    now: () => clock,
+    selectProfile: async () => ({ profile, fallbackFrom: null }),
+    finalize: async () => {
+      clock += 13_237;
+      return { shortAnswer: "Final synthetic answer", debug: {} };
+    },
+    addGeneration: async (answer) => answer,
+  });
+
+  assert.equal(result.latency.durationMs, 48_768);
+  assert.equal(result.answer.debug.requestDiagnostics.completedAt, "1970-01-01T00:02:17.744Z");
+});
+
+test("finalize progress resumes from measured preparation time without the inter-request wait", () => {
+  const progress = { totalMs: 35_531, stageDurationsMs: { retrieve_rulings: 12_000 } };
+  assert.deepEqual(
+    preparedAnswerProgress({ preparedAt: 35_531, progress }, () => 124_507),
+    progress,
+  );
 });
 
 test("independent final phase can complete after the old total 300-second boundary without resetting preparation timings", () => {
