@@ -2193,6 +2193,15 @@ export function createPublicAnswerModelEnv(env = {}, profileValue) {
       profile.reasoningEffort === "max" ? 131072 : 65536,
     ));
   }
+  if (profile.provider === "glm" && profile.thinkingMode === "enabled") {
+    // GLM's output budget also includes thinking. Use its documented 64K
+    // default instead of the generic short-answer cap retained in deployments.
+    result.RAG_MAX_OUTPUT_TOKENS = String(readPositiveNumber(
+      source.GLM_THINKING_MAX_OUTPUT_TOKENS
+        || source.RAG_FLASH_THINKING_MAX_OUTPUT_TOKENS || source.RAG_THINKING_MAX_OUTPUT_TOKENS,
+      65536,
+    ));
+  }
   result.RAG_CARD_MODEL_PROVIDER = mockRequested ? "mock" : cloudEvidence ? cloudAuxiliaryProvider : "relay";
   result.RAG_RULE_MODEL_PROVIDER = mockRequested ? "mock" : cloudEvidence ? cloudAuxiliaryProvider : "relay";
   result.CLOUD_EVIDENCE_PLAN_PROVIDER = mockRequested ? "mock" : cloudAuxiliaryProvider;

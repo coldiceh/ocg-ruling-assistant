@@ -38,7 +38,7 @@ test('reservation uses the full max thinking cap before any provider dispatch',a
 });
 test('nonthinking and unrelated provider public caps stay unchanged',async()=>{
   assert.equal((await invoke('deepseek-v4.1-flash-none')).body.max_tokens,4096);
-  const other=createPublicAnswerModelEnv({RAG_MAX_OUTPUT_TOKENS:'4096'},'glm-5.3-high');assert.equal(other.RAG_MAX_OUTPUT_TOKENS,'4096');
+  const other=createPublicAnswerModelEnv({RAG_MAX_OUTPUT_TOKENS:'4096'},'relay-gpt-6-astra-high');assert.equal(other.RAG_MAX_OUTPUT_TOKENS,'4096');
 });
 test('length remains a failed generation and is never retried or filled with reasoning',async()=>{
   const {result,calls}=await invoke('deepseek-v4.1-flash-max',{},'length');
