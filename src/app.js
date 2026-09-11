@@ -4581,7 +4581,7 @@ async function loadAdminQuestionHistory() {
 
 async function requestAdminQuestionHistory() {
   const url = new URL(getAdminEndpointUrl("/api/admin-queries"));
-  url.searchParams.set("limit", "100");
+  url.searchParams.set("limit", "30");
   const response = await fetch(url, {
     method: "GET",
     cache: "no-store",
@@ -4601,7 +4601,7 @@ async function requestAdminQuestionHistory() {
 function renderAdminQuestionHistory(entries) {
   clearElement(ui.adminQuestionHistoryList);
   ui.adminQuestionHistoryStatus.textContent = entries.length
-    ? `后台最近保存的 ${entries.length} 条提问（最多 100 条）。旧记录未保存的字段显示“未记录”。`
+    ? `后台最近保存的 ${entries.length} 条提问（最多 30 条）。旧记录未保存的字段显示“未记录”。`
     : "后台暂时没有已保存的提问。";
   for (const entry of entries) {
     const item = document.createElement("li");
