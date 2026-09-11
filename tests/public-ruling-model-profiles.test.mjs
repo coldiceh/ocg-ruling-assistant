@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { callRagModel, createPublicAnswerModelEnv } from "../backend/ragModelClient.mjs";
-import { getPublicRulingModelCapabilities } from "../backend/publicRulingModelConfig.mjs";
+import {
+  configuredPublicRulingModelProfile,
+  getPublicRulingModelCapabilities,
+} from "../backend/publicRulingModelConfig.mjs";
 
 function responsePayload(model) {
   return new Response(JSON.stringify({
@@ -22,6 +25,14 @@ function responsePayload(model) {
     usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
   }), { status: 200, headers: { "content-type": "application/json" } });
 }
+
+test("legacy DeepSeek flash environment name maps to the official release name", () => {
+  const profile = configuredPublicRulingModelProfile("deepseek-v4.1-flash-high", {
+    PUBLIC_DEEPSEEK_MODEL: "deepseek-v4-flash",
+  });
+
+  assert.equal(profile.model, "deepseek-flash");
+});
 
 test("DeepSeek profile uses the explicitly configured model and effort without credential crossover", async () => {
   const calls = [];
