@@ -1857,7 +1857,7 @@ function renderBudgetStatus(status, message = "") {
   if (!ui.budgetPanel) return;
   ui.budgetHint.textContent = message
     || status?.storageWarning
-    || "仅显示最终裁定额度，消耗按官方单价与实际 token 折算。每日北京时间 0 点更新，不代表中转实际扣费或账户余额。";
+    || "每日北京时间 0 点更新。";
   const buckets = status?.buckets || (status?.bucket ? [status.bucket] : []);
   renderBudgetBuckets(buckets);
   renderAdminPublicBudgetStatus(buckets);
@@ -1876,7 +1876,8 @@ function renderAdminPublicBudgetStatus(buckets = []) {
   for (const bucket of publicBuckets) {
     const card = document.createElement("article");
     card.className = "admin-budget-pool";
-    const title = bucket?.provider === "bai" ? "GPT"
+    const title = bucket?.provider === "bai" ? "GPT最终裁定"
+      : bucket?.provider === "relay" ? "中转 GPT 最终裁定"
       : String(bucket?.label || [bucket?.provider, bucket?.stage].filter(Boolean).join(" · ") || "公开问答");
     appendText(card, "strong", title);
     const currency = bucket?.currency === "USD" ? "USD" : "CNY";
@@ -1886,7 +1887,8 @@ function renderAdminPublicBudgetStatus(buckets = []) {
     const limit = limitRaw === null || limitRaw === undefined || limitRaw === "" ? NaN : Number(limitRaw);
     const spentText = Number.isFinite(spent) ? (currency === "USD" ? `$${formatUsd(spent)}` : `¥${formatCny(spent)}`) : "未记录";
     const limitText = Number.isFinite(limit) && limit > 0 ? (currency === "USD" ? ` / $${formatUsd(limit)}` : ` / ¥${formatCny(limit)}`) : "";
-    appendText(card, "p", `${spentText}${limitText}`);
+    const closedText = bucket?.manuallyClosed ? "（已封顶）" : "";
+    appendText(card, "p", `${spentText}${limitText}${closedText}`);
     ui.adminBudgetPools.appendChild(card);
   }
 }
@@ -1899,9 +1901,9 @@ function renderBudgetBuckets(buckets = []) {
     const row = document.createElement("div");
     row.className = "budget-bucket";
     const label = document.createElement("span");
-    label.textContent = bucket?.provider === "bai" ? "GPT"
+    label.textContent = bucket?.provider === "bai" ? "GPT最终裁定"
+      : bucket?.provider === "relay" ? "中转 GPT 最终裁定"
       : String(bucket?.label || [bucket?.provider, bucket?.stage].filter(Boolean).join(" · ") || "模型用量");
-    if (bucket?.sharedPoolLabel && bucket?.provider !== "bai") label.textContent += "（共享额度）";
     const value = document.createElement("strong");
     const currency = bucket?.currency === "USD" ? "USD" : "CNY";
     const rawSpent = currency === "USD"
@@ -1915,11 +1917,12 @@ function renderBudgetBuckets(buckets = []) {
     const spentText = Number.isFinite(spent)
       ? currency === "USD" ? `$${formatUsd(spent)}` : `${formatCny(spent)} 元`
       : "未读取";
-    value.textContent = Number.isFinite(limit) && limit > 0
+    const valueText = Number.isFinite(limit) && limit > 0
       ? currency === "USD"
         ? `${spentText} / $${formatUsd(limit)}`
         : `${Number.isFinite(spent) ? formatCny(spent) : "未读取"} / ${formatCny(limit)} 元`
       : spentText;
+    value.textContent = `${valueText}${bucket?.manuallyClosed ? "（已封顶）" : ""}`;
     row.append(label, value);
     ui.budgetBucketList.appendChild(row);
   }

@@ -797,7 +797,7 @@ test("backend answers bypass persistent browser cache and bust static assets", a
     readFile(new URL("../config.json", import.meta.url), "utf8"),
   ]);
   const config = JSON.parse(configText.replace(/^\uFEFF/u, ""));
-  assert.match(html, /src\/app\.js\?v=20260911-admin-console-2/u);
+  assert.match(html, /src\/app\.js\?v=20260911-budget-split-1/u);
   assert.match(html, /src\/styles\.css\?v=20260911-admin-console-1/u);
   assert.equal(config.answerApiUrl, "https://ocg-ruling-assistant.vercel.app/api/answer");
   assert.match(app, /cache: "no-store"/u);
@@ -823,7 +823,9 @@ test("ui_hides_engine_details_by_default", async () => {
     readFile(new URL("../src/app.js", import.meta.url), "utf8"),
   ]);
   assert.match(html, /裁定流程/u);
-  assert.match(html, /最终裁定今日额度（官方理论消耗）/u);
+  assert.match(html, /最终裁定今日额度</u);
+  assert.match(html, /每日北京时间 0 点更新。/u);
+  assert.doesNotMatch(html, /最终裁定今日额度（官方理论消耗）/u);
   assert.match(html, /id="budgetBucketList"/u);
   assert.doesNotMatch(html, /budgetSpentText|budgetLimitText/u);
   assert.doesNotMatch(app, /budgetSpentText|budgetLimitText/u);
@@ -852,7 +854,7 @@ test("ui_hides_engine_details_by_default", async () => {
   assert.match(app, /不会影响管理员实验额度/u);
   assert.match(app, /storageWarning/u);
   assert.doesNotMatch(app, /bucket\?\.id !== "final_ruling:glm"/u);
-  assert.match(html, /按官方单价与实际 token 折算，不代表中转实际扣费或账户余额/u);
+  assert.match(html, /每日北京时间 0 点更新。/u);
   assert.match(app, /spentTodayUsd/u);
   assert.match(app, /dailyBudgetUsd/u);
   assert.match(app, /\$\$\{formatUsd\(spent\)\}/u);
@@ -2078,11 +2080,13 @@ test("renderBackendAnswer formats markdown safely and presents titled source lin
   assert.equal(render.lastGenerationAnswer?.generation, null);
 });
 
-test("model provider label presents bai as GPT", async () => {
+test("budget labels distinguish final ruling providers", async () => {
   const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
-  const source = sourceBetween(app, "function modelProviderLabel", "function basisFromBackendMode");
-  const label = new Function(`${source}; return modelProviderLabel;`)();
-  assert.equal(label("bai"), "GPT");
+  assert.match(app, /bucket\?\.provider === "bai" \? "GPT最终裁定"/u);
+  assert.match(app, /bucket\?\.provider === "relay" \? "中转 GPT 最终裁定"/u);
+  assert.doesNotMatch(app, /bucket\?\.provider === "bai" \? "GPT"/u);
+  assert.match(app, /bucket\?\.manuallyClosed \? "（已封顶）"/u);
+  assert.doesNotMatch(app, /label\.textContent \+= "（共享额度）"/u);
 });
 
 test("an empty reason list keeps the timing panel titled as ruling flow", async () => {
