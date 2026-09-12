@@ -140,6 +140,7 @@ jobs:
       - name: Check source and generated-file syntax
         id: source_check
         run: |
+          node --test tests/audit-identity-boundaries.test.mjs
           pnpm check
           git diff --check
 
