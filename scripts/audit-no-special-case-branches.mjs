@@ -259,8 +259,10 @@ async function collectProductionFiles(directory, output) {
 
 function containsIdentityBranch(source, token) {
   const escaped = token.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+  // Numeric identities must not match a substring of an unrelated larger number.
+  const identity = /^\d+$/u.test(token) ? `(?<!\\d)${escaped}(?!\\d)` : escaped;
   return new RegExp(
-    `(?:if\\s*\\(|switch\\s*\\(|case\\s+|\\?\\s*|&&|\\|\\|)[^\\n]{0,240}${escaped}|${escaped}[^\\n]{0,240}(?:if\\s*\\(|switch\\s*\\(|case\\s+|\\?\\s*|&&|\\|\\|)`,
+    `(?:if\\s*\\(|switch\\s*\\(|case\\s+|\\?\\s*|&&|\\|\\|)[^\\n]{0,240}${identity}|${identity}[^\\n]{0,240}(?:if\\s*\\(|switch\\s*\\(|case\\s+|\\?\\s*|&&|\\|\\|)`,
     "iu",
   ).test(source);
 }
