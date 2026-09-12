@@ -8,37 +8,37 @@
     "algorithm": "brotli",
     "quality": 5
   },
-  "dataRevision": "6e2ef8c4a075c7cd424bc9cc93993a34fe865da2a7165d26cc80b279773e799e",
-  "sourceSetDigest": "d8c212ed08c86b7c89c9d1e1406165f716d4e440b44139a514db3e45ef0b1a71",
+  "dataRevision": "0713809f9c859fd0d4e454eb9027a5aa5c97bdd600d26bee9c2e19e68f21cc66",
+  "sourceSetDigest": "28bf60a7b86b31f70a36554da19d7cddc38821fcefd88f14c7edb19217a7f41a",
   "sources": [
     {
       "path": "cards.json",
       "bytes": 16989396,
-      "sha256": "e36822a59f2e2bba3c39bf04ac3b17454a7ee8804c023d5dd4e5796b49a5906c",
+      "sha256": "a14667c912f3e4b93d55ca4fe7f26cf88a6d611ad67644d8ac58f14e7f93c413",
       "count": 14379
     },
     {
       "path": "rulings.json",
-      "bytes": 42603057,
-      "sha256": "7193e3fda4cc43bacd58e730a2f1f989ee0a226d6c500a77e94de35d4bc169fb",
-      "count": 31004
+      "bytes": 41853969,
+      "sha256": "34e0238e6db3dd2d579913c4f26c4e8b1615b3023c5e9232eeb5d678b27645c4",
+      "count": 30755
     },
     {
       "path": "qa-index.json",
-      "bytes": 58593654,
-      "sha256": "c55725a6dd429fa0ec7d7a562fb121e8acfd581a0f9718432097baa9780bd3e3",
-      "count": 27550
+      "bytes": 59192200,
+      "sha256": "06c4b3432b6013f7591c4453b911ad0d315e1d25a6c0489591fef2fdd4b28da2",
+      "count": 27679
     },
     {
       "path": "evidence-index.json",
-      "bytes": 160981841,
-      "sha256": "b7f60e8338ad99580281f0cf9439e6d76b76d6d3b79375eccd3e21242151a697",
-      "count": 73976
+      "bytes": 161730194,
+      "sha256": "c0bea5beab545f2d534dc0af395ec366681d659ec7ed13c1e0b96b14c59efc4e",
+      "count": 74121
     },
     {
       "path": "ocg-rule-corpus.json",
       "bytes": 1378892,
-      "sha256": "b6c0ede7826aba1f47d10f29d656f86e8d7474db5cde1b7798a0325ab6f8fd42",
+      "sha256": "d57c104ea3d357c2fcde224f595e994b1648728bb47fcb450129ae976bd8d131",
       "count": 39
     },
     {
@@ -50,39 +50,39 @@
   ],
   "counts": {
     "cards": 14379,
-    "records": 104946,
-    "qaRecords": 27550
+    "records": 104842,
+    "qaRecords": 27679
   },
   "corpora": {
     "cards": {
       "key": "cards",
       "file": "cards.json.br",
       "encoding": "br",
-      "bytes": 1718510,
-      "sha256": "e4e070b53f2971e2db933521fb60d3e789e07ef635768aadb90a3dc6b4a3d32a",
+      "bytes": 1731996,
+      "sha256": "bb97f9756828bfcc97033ec3df8e6c138460244c3a619bcf3d5017a1ac99b7c9",
       "canonicalBytes": 14638107,
-      "canonicalSha256": "1fb9e07f47eb6b4bce5ff5df8d0b23ac2586c31354a1f1633b081c47d4bf1835",
+      "canonicalSha256": "e9bbe1800ee92acc79daad6317e86ac357b59bb2f2cbe179c477829deeab38a8",
       "count": 14379
     },
     "records": {
       "key": "records",
       "file": "records.json.br",
       "encoding": "br",
-      "bytes": 16321943,
-      "sha256": "bf0e0952999a09120a5394cef779774631abea95e0b126bfc1416ff73bf2aab4",
-      "canonicalBytes": 259186348,
-      "canonicalSha256": "1fcdf2f5d2aa7bf071fd6ad5f5839803c0f1d4a01f0d8b9fe55f24530563b455",
-      "count": 104946
+      "bytes": 16323007,
+      "sha256": "e5571d7ebe83ce97c06ef920fb639ee4cb66032ddf475795b46abe804dcf7003",
+      "canonicalBytes": 258883535,
+      "canonicalSha256": "0e67d085d8c5802e40047d7bbc9b10f341b6aa100d0f1a019fa88461c8cc526f",
+      "count": 104842
     },
     "qaRecords": {
       "key": "qaRecords",
       "file": "qa-records.json.br",
       "encoding": "br",
-      "bytes": 4710131,
-      "sha256": "2fbae2639fef792eb5f4553437d50928f9685ee2c728219a1cc1333afccbd59d",
-      "canonicalBytes": 61813255,
-      "canonicalSha256": "774331dd43414d7545967e507f6093b7381ecc9e130250426111189e1c4885ea",
-      "count": 27550
+      "bytes": 4756957,
+      "sha256": "4a4d4091d56e81722784c8bae81231b5f4b76bdf3601ebe50b60dd987821c1e7",
+      "canonicalBytes": 62365291,
+      "canonicalSha256": "f19376beb3bae132068bc1c94ce76ffc915d3e5e37a39554521d991e2eda36f8",
+      "count": 27679
     }
   },
   "artifacts": {
@@ -99,5 +99,5 @@
       "count": 14379
     }
   },
-  "bundleRevision": "e8ea6b6dc5b573fe1bd3810dd16803d0fb36216106d3bdec752321cddf388c5d"
+  "bundleRevision": "c13473dd6bc1a7af8ef15d2845e19fcf743bd4c3113b060e8b7e6fffd274218a"
 }
