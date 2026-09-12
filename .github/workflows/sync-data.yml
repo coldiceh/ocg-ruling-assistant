@@ -3,7 +3,7 @@ name: Sync ruling data
 on:
   workflow_dispatch:
   schedule:
-    - cron: "20 */6 * * *"
+    - cron: "20 0 * * *"
 
 permissions: {}
 
