@@ -51,7 +51,7 @@ jobs:
           FETCH_CONCURRENCY: "8"
           # Keep each CPU embedding increment within the job's time budget;
           # the existing cursor rotates coverage and retains prior Q&A.
-          MAX_QA_TOTAL: "500"
+          MAX_QA_TOTAL: "250"
         run: node scripts/sync-data.mjs
 
       - name: Sync OCG rule corpus
@@ -104,16 +104,35 @@ jobs:
           python -m pip install --disable-pip-version-check \
             transformers==4.56.1 safetensors==0.6.2
 
+      - name: Restore completed incremental embedding rows
+        uses: actions/cache/restore@v5
+        with:
+          path: .cache/cloud-embeddings
+          key: cloud-embedding-rows-v1-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: cloud-embedding-rows-v1-${{ runner.os }}-
+
       - name: Incrementally synchronize and mechanically verify cloud evidence assets
+        id: cloud_sync
+        timeout-minutes: 40
         env:
           CLOUD_EMBED_CPU_THREADS: "4"
           CLOUD_EMBED_BATCH_SIZE: "8"
+          CLOUD_EMBED_CACHE_DIR: .cache/cloud-embeddings
+          # Stop between batches while time remains to persist progress.
+          CLOUD_EMBED_MAX_SECONDS: "2100"
           TOKENIZERS_PARALLELISM: "false"
         run: |
           node scripts/sync-cloud-evidence-assets.mjs \
             --data-dir data \
             --cloud-dir data/cloud-evidence-v1 \
             --python python
+
+      - name: Preserve completed vectors even after an interrupted increment
+        if: ${{ always() && steps.cloud_sync.outcome != 'skipped' }}
+        uses: actions/cache/save@v5
+        with:
+          path: .cache/cloud-embeddings
+          key: cloud-embedding-rows-v1-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Verify source freshness and index ordering
         run: pnpm check:freshness
@@ -127,6 +146,11 @@ jobs:
       - name: Test updated snapshot
         id: snapshot_tests
         run: node --test --test-concurrency=1 tests/sync-ygoresources-selection.test.mjs tests/sync-ocg-rule.test.mjs tests/source-freshness.test.mjs tests/rag-data-source-file.test.mjs tests/rag-data-revision-manifest.test.mjs tests/rag-runtime-bundle.test.mjs tests/rag-runtime-deployment-safety.test.mjs tests/cloud-evidence-assets.test.mjs tests/cloud-evidence-incremental-sync.test.mjs tests/evidence-vector-index.test.mjs tests/deployment-workflows.test.mjs tests/sync-snapshot-publication.test.mjs
+
+      - name: Verify interrupted sync recovery
+        run: |
+          node --test tests/sync-ygoresources-cursor.test.mjs tests/cloud-sync-resume.test.mjs
+          python -m unittest discover -s tests -p 'test_cloud_embedding_cache.py'
 
       - name: Preserve a failed validated snapshot for diagnosis
         if: >-

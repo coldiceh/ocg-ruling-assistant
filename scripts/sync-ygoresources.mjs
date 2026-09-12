@@ -76,7 +76,8 @@ async function main() {
     .filter((qaId) => !indexedQaIds.has(qaId));
   const manifest = await loadManifest(previousMeta.sourceRevision);
   let cards = cardPayloads.map(({ record }) => record);
-  const rulingSync = await loadRulings(cards, cardPayloads, manifest.changedQaIds, {
+  const pendingChanges = uniqueIds([...(previousMeta.pendingQaIds || []), ...manifest.changedQaIds]);
+  const rulingSync = await loadRulings(cards, cardPayloads, pendingChanges, {
     qaDiscoveryRecords,
     detailCursor: previousMeta.qaDetailCursor,
     unindexedQaIds,
@@ -182,7 +183,7 @@ async function main() {
   await writeJson(join(dataDir, "qa-discovery-index.json"), {
     schemaVersion: 1,
     generatedAt,
-    sourceRevision: observedSourceRevision || manifest.revision || previousMeta.sourceRevision || null,
+    sourceRevision: manifest.revision || previousMeta.sourceRevision || null,
     complete: cardSnapshotAuthoritative,
     cardCount: qaDiscoveryRecords.length,
     linkedCardCount: qaDiscoveryRecords.filter((record) => record.qaIds.length > 0).length,
@@ -197,7 +198,10 @@ async function main() {
     freshnessDays,
     sourceFreshness,
     previousSourceRevision: previousMeta.sourceRevision || null,
-    sourceRevision: observedSourceRevision || manifest.revision || previousMeta.sourceRevision || null,
+    // This cursor acknowledges only paths captured by this manifest. Requests
+    // later in the run may observe a newer source version that we never listed.
+    sourceRevision: manifest.revision || previousMeta.sourceRevision || null,
+    pendingQaIds: rulingSync.pendingQaIds,
     lastSuccessfulSyncAt: sourceSyncWarnings.length ? (previousMeta.lastSuccessfulSyncAt || previousMeta.generatedAt || null) : generatedAt,
     lastFailedSyncAt: sourceSyncWarnings.length ? generatedAt : (previousMeta.lastFailedSyncAt || null),
     syncFailureCount: sourceSyncWarnings.length ? Number(previousMeta.syncFailureCount || 0) + 1 : 0,
@@ -253,6 +257,7 @@ async function main() {
     maxCards,
     maxQaTotal,
     qaSyncSelection: qaSyncSelectionStats,
+    pendingQaCount: rulingSync.pendingQaIds.length,
     qaDiscoveryCardCount: qaDiscoveryRecords.length,
     qaDiscoveryQaCount: discoveredQaIds.length,
     qaDiscoveryRelationCount: qaDiscoveryRecords.reduce((sum, record) => sum + record.qaIds.length, 0),
@@ -361,6 +366,8 @@ async function loadRulings(cards, cardPayloads, changedQaIds = [], {
 } = {}) {
   const records = [];
   const removedQaIds = [];
+  const completedQaIds = new Set();
+  const failedQaIds = [];
   records.push(...buildCardTextRecords(cardPayloads));
   records.push(...buildFaqRecords(cardPayloads));
   let recentQaIds = [];
@@ -398,15 +405,22 @@ async function loadRulings(cards, cardPayloads, changedQaIds = [], {
     try {
       const payload = await fetchJson(`/data/qa/${id}`);
       const record = normalizeQa(payload, id, cards);
-      if (record) records.push(record);
-      else detailSnapshotComplete = false;
+      if (record) {
+        records.push(record);
+        completedQaIds.add(String(id));
+      } else {
+        detailSnapshotComplete = false;
+        failedQaIds.push(String(id));
+      }
     } catch (error) {
       const failure = classifyRemoteItemFetchFailure(error);
       if (failure.kind === "removed") {
         removedQaIds.push(String(id));
+        completedQaIds.add(String(id));
         addSourceRetirementWarning(`Q&A ${id} was removed upstream (${failure.status})`);
       } else {
         detailSnapshotComplete = false;
+        failedQaIds.push(String(id));
         addSourceWarning(`Q&A ${id} failed: ${formatError(error)}`);
       }
     }
@@ -415,6 +429,8 @@ async function loadRulings(cards, cardPayloads, changedQaIds = [], {
   return {
     records,
     removedQaIds,
+    pendingQaIds: uniqueIds([...changedQaIds, ...failedQaIds])
+      .filter(id => !completedQaIds.has(id)),
     selectedQaIds: selection.ids,
     nextDetailCursor: selection.nextCursor,
     detailSnapshotComplete,
@@ -437,8 +453,11 @@ async function loadManifest(previousRevision) {
   if (!previousRevision) return { revision: observedSourceRevision, changedPaths: [], changedQaIds: [] };
 
   try {
-    const payload = await fetchJson(`/manifest/${previousRevision}`);
-    return parseManifestPayload(payload, { revision: observedSourceRevision });
+    let manifestRevision = null;
+    const payload = await fetchJson(`/manifest/${previousRevision}`, {
+      onRevision: revision => { manifestRevision = revision; },
+    });
+    return parseManifestPayload(payload, { revision: manifestRevision || previousRevision });
   } catch (error) {
     addSourceWarning(`Manifest check failed: ${formatError(error)}`);
     return { revision: previousRevision, changedPaths: [], changedQaIds: [] };
@@ -1106,7 +1125,7 @@ export function extractKeywords(text) {
   return result;
 }
 
-async function fetchJson(path) {
+async function fetchJson(path, {onRevision} = {}) {
   const url = path.startsWith("http") ? path : `${baseUrl}${path}`;
   let lastError = null;
   for (let attempt = 1; attempt <= fetchRetryCount; attempt += 1) {
@@ -1126,7 +1145,9 @@ async function fetchJson(path) {
       if (revision && (!observedSourceRevision || Number(revision) > Number(observedSourceRevision))) {
         observedSourceRevision = revision;
       }
-      return await response.json();
+      const payload = await response.json();
+      onRevision?.(revision);
+      return payload;
     } catch (error) {
       lastError = error;
       const retryable = !Number.isFinite(Number(error?.status))

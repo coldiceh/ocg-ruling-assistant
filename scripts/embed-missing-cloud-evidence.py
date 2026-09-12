@@ -2,12 +2,15 @@ import argparse
 import hashlib
 import json
 import os
+import sys
+import time
 from pathlib import Path
 
 import numpy as np
 import torch
 import torch.nn.functional as functional
 from transformers import AutoModel, AutoTokenizer
+from cloud_embedding_cache import CloudEmbeddingCache
 
 MODEL_ID = "Qwen/Qwen3-Embedding-0.6B"
 MODEL_REVISION = "97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3"
@@ -68,6 +71,27 @@ def main():
             fail("cloud_sync_embedding_text_binding_invalid")
         texts.append(text)
 
+    dimension = request["dimension"]
+    if not isinstance(dimension, int) or dimension <= 0:
+        fail("cloud_sync_embedding_dimension_invalid")
+    cache = CloudEmbeddingCache(os.environ.get("CLOUD_EMBED_CACHE_DIR"),
+                               {"model": request["model"], "contract": request["inputContractSha256"]}, dimension)
+    output = np.lib.format.open_memmap(
+        f"{args.output}.npy", mode="w+", dtype=np.float32, shape=(len(texts), dimension)
+    )
+    pending = []
+    for index, row in enumerate(rows):
+        cached = cache.load(row["textSha256"])
+        if cached is None:
+            pending.append(index)
+        else:
+            output[index] = np.frombuffer(cached, dtype="<f4")
+    print(f"cloud-embedding-cache:reused={len(texts)-len(pending)} pending={len(pending)}", flush=True)
+    if not pending:
+        finish_output(output, args.output)
+        return
+    started = time.monotonic()
+    max_seconds = float(os.environ.get("CLOUD_EMBED_MAX_SECONDS", "0"))
     torch.set_num_threads(max(1, int(os.environ.get("CLOUD_EMBED_CPU_THREADS", os.cpu_count() or 2))))
     tokenizer = AutoTokenizer.from_pretrained(
         MODEL_ID, revision=MODEL_REVISION, padding_side="left", trust_remote_code=False
@@ -77,16 +101,18 @@ def main():
         torch_dtype=torch.float32, low_cpu_mem_usage=True, attn_implementation="sdpa"
     )
     model.eval()
+    if int(model.config.hidden_size) != dimension:
+        fail("cloud_sync_embedding_dimension_mismatch")
     max_length = int(contract.get("tokenizerMaxLength") or 8192)
     batch_size = max(1, int(os.environ.get("CLOUD_EMBED_BATCH_SIZE", "8")))
-    output = np.lib.format.open_memmap(
-        f"{args.output}.npy", mode="w+", dtype=np.float32,
-        shape=(len(texts), int(model.config.hidden_size))
-    )
     # Length grouping reduces batch padding without changing any input text.
     # Write each vector back to its original request row before serialization.
-    row_order = sorted(range(len(texts)), key=lambda index: len(texts[index]))
-    for start in range(0, len(texts), batch_size):
+    row_order = sorted(pending, key=lambda index: len(texts[index]))
+    for start in range(0, len(pending), batch_size):
+        if max_seconds and time.monotonic() - started >= max_seconds:
+            print("cloud_sync_embedding_checkpoint_saved:resume_next_run", flush=True)
+            output._mmap.close()
+            sys.exit(75)
         row_indices = row_order[start:start + batch_size]
         current = [texts[index] for index in row_indices]
         lengths = tokenizer(current, padding=False, truncation=False, add_special_tokens=True,
@@ -99,7 +125,9 @@ def main():
             hidden = model(**batch).last_hidden_state
             vectors = functional.normalize(last_token_pool(hidden, batch["attention_mask"]).float(), p=2, dim=1)
         output[row_indices] = vectors.numpy().astype(np.float32, copy=False)
-        print(f"missing-cloud-embeddings:{start + len(current)}/{len(texts)}", flush=True)
+        for index in row_indices:
+            cache.save(rows[index]["textSha256"], np.asarray(output[index], dtype="<f4").tobytes())
+        print(f"missing-cloud-embeddings:{start + len(current)}/{len(pending)}", flush=True)
     finish_output(output, args.output)
 
 
