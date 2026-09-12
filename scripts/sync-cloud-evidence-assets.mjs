@@ -124,7 +124,7 @@ export async function syncCloudEvidenceAssets({dataDir,cloudDir,python='python3'
     const vectorResult=await writeIncrementalEvidenceVectorIndex({documents:corpus.documents,oldVectorDir:resolvedCloudDir,
       outputDir:vectorOutput,manifest,embedMissing:async (rows,dimension)=>{
         await fs.writeFile(embeddingRequest,JSON.stringify({schemaVersion:1,model:manifest.model,
-          inputContract:manifest.inputContract,inputContractSha256:manifest.inputContractSha256,rows}));
+          inputContract:manifest.inputContract,inputContractSha256:manifest.inputContractSha256,dimension,rows}));
         await runPythonEmbedder({python,requestFile:embeddingRequest,outputFile:embeddingOutput});
         const bytes=await fs.readFile(embeddingOutput); const rowBytes=dimension*4;
         check(bytes.length===rows.length*rowBytes,'cloud_sync_embedding_output_size_invalid');
