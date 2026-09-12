@@ -1,9 +1,11 @@
 import { isIP } from "node:net";
 import { updateQueryAudit } from "./queryAuditStore.mjs";
+import { classifyPublicRequestChannel } from "./publicAnswerPresentation.mjs";
 
 // Only the HTTP adapter creates this private context. Never accept it from a
 // question payload or place it in model input, public diagnostics or evidence.
-export function readQueryAuditRequestContext(request, env = process.env) {
+export function readQueryAuditRequestContext(request, env = process.env,
+  requestChannel = classifyPublicRequestChannel(request?.body)) {
   const header = (name) => typeof request?.headers?.get === "function"
     ? request.headers.get(name) : request?.headers?.[name];
   const platform = String(env.VERCEL || "") === "1";
@@ -11,9 +13,12 @@ export function readQueryAuditRequestContext(request, env = process.env) {
     ? header("x-vercel-forwarded-for") || header("x-forwarded-for")
     : request?.socket?.remoteAddress;
   const ip = typeof raw === "string" ? raw.trim() : "";
-  return isIP(ip)
-    ? { ip, ipSource: platform ? "vercel" : "socket" }
-    : { ip: null, ipSource: "unavailable" };
+  return {
+    ...(isIP(ip)
+      ? { ip, ipSource: platform ? "vercel" : "socket" }
+      : { ip: null, ipSource: "unavailable" }),
+    requestChannel,
+  };
 }
 
 export function queryAuditAnswerPatch(answer, { status = "completed", latencyMs, profileId } = {}) {
