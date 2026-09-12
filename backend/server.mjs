@@ -135,7 +135,7 @@ const server = createServer(async (request, response) => {
       const result = await answerPublicRulingQuestion({
         payload,
         env: process.env,
-        requestContext: readQueryAuditRequestContext(request, process.env),
+        requestContext: readQueryAuditRequestContext(request, process.env, requestChannel),
         signal: requestAbort.signal,
       });
       sendJson(response, 200, presentPublicAnswer(result.answer, {
@@ -179,7 +179,7 @@ async function answerWithProgressStream({
     const result = await answerPublicRulingQuestion({
       payload,
       env: process.env,
-      requestContext: readQueryAuditRequestContext(request, process.env),
+      requestContext: readQueryAuditRequestContext(request, process.env, requestChannel),
       signal: requestAbort.signal,
       progress,
     });

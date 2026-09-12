@@ -4611,6 +4611,7 @@ function renderAdminQuestionHistory(entries) {
     heading.className = "admin-history-card-head";
     appendText(heading, "strong", adminHistoryPreview(entry?.question));
     appendText(heading, "small", [
+      `来源：${adminHistoryChannelLabel(entry?.requestChannel)}`,
       adminHistoryStatusLabel(entry?.status),
       formatAdminDate(entry?.createdAt) || "未记录",
     ].join(" · "));
@@ -4618,6 +4619,7 @@ function renderAdminQuestionHistory(entries) {
 
     const details = document.createElement("dl");
     details.className = "admin-history-details";
+    appendAdminHistoryField(details, "提问来源", adminHistoryChannelLabel(entry?.requestChannel));
     appendAdminHistoryField(details, "问题全文", adminHistoryText(entry?.question));
     appendAdminHistoryField(details, "结果 / 答案全文", adminHistoryAnswerText(entry));
     appendAdminHistoryField(details, "调用者 IP", adminHistoryText(entry?.ip));
@@ -4631,7 +4633,7 @@ function renderAdminQuestionHistory(entries) {
     appendAdminHistoryField(details, "所选档位", adminHistoryText(entry?.profileId));
     appendAdminHistoryField(details, "推理档位", adminHistoryText(entry?.reasoningEffort));
     appendAdminHistoryField(details, "耗时", adminHistoryDuration(entry?.latencyMs));
-    if (entry?.mode !== undefined) appendAdminHistoryField(details, "来源", adminHistoryText(entry?.mode));
+    if (entry?.mode !== undefined) appendAdminHistoryField(details, "处理模式", adminHistoryText(entry?.mode));
     if (entry?.errorCode !== undefined) appendAdminHistoryField(details, "错误码", adminHistoryText(entry?.errorCode));
     card.appendChild(details);
     item.appendChild(card);
@@ -4654,6 +4656,13 @@ function adminHistoryPreview(value) {
 
 function adminHistoryAnswerText(entry) {
   return adminHistoryText(entry?.answer);
+}
+
+function adminHistoryChannelLabel(value) {
+  if (value === "web") return "网页端";
+  if (value === "external_api") return "Bot/API";
+  if (value === undefined || value === null || value === "") return "未记录";
+  return "未知来源";
 }
 
 function adminHistoryStatusLabel(value) {

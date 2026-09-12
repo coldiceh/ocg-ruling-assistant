@@ -68,6 +68,7 @@ export async function appendQueryAudit({
     ...optionalString("requestId", requestId),
     ...optionalString("ip", requestContext?.ip),
     ...optionalString("ipSource", requestContext?.ipSource),
+    ...optionalString("requestChannel", requestContext?.requestChannel),
     ...optionalString("profileId", profileId),
   };
   const key = String(env.QUERY_AUDIT_REDIS_KEY || DEFAULT_KEY).trim() || DEFAULT_KEY;
@@ -185,7 +186,7 @@ function parseEntry(value) {
       question,
       mode: String(parsed.mode || "rag"),
     };
-    for (const field of ["requestId", "ip", "ipSource", "profileId", "status", "completedAt", "answer", "model", "reasoningEffort", "errorCode"]) {
+    for (const field of ["requestId", "ip", "ipSource", "requestChannel", "profileId", "status", "completedAt", "answer", "model", "reasoningEffort", "errorCode"]) {
       if (Object.hasOwn(parsed, field)) entry[field] = parsed[field];
     }
     if (Object.hasOwn(parsed, "latencyMs")) entry.latencyMs = parsed.latencyMs;

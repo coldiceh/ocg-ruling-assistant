@@ -11,6 +11,7 @@ const AUDIT_ID = "audit-private-7b6e5d4c";
 const PRIVATE_CONTEXT = Object.freeze({
   ip: "203.0.113.42",
   ipSource: "vercel",
+  requestChannel: "web",
   privateMarker: "private-request-context-marker",
 });
 const ENV = Object.freeze({
@@ -73,6 +74,7 @@ function assertPrivateValuesAbsent(value) {
   assert.equal(serialized.includes(AUDIT_ID), false);
   assert.equal(serialized.includes(PRIVATE_CONTEXT.ip), false);
   assert.equal(serialized.includes(PRIVATE_CONTEXT.privateMarker), false);
+  assert.equal(serialized.includes('"requestChannel"'), false);
 }
 
 test("answer service appends request identity and exposes auditId only in its private envelope", async () => {
@@ -104,6 +106,7 @@ test("answer service appends request identity and exposes auditId only in its pr
   assertPrivateValuesAbsent(result.answer);
   assert.equal(JSON.stringify(rulingInput).includes(PRIVATE_CONTEXT.ip), false);
   assert.equal(JSON.stringify(rulingInput).includes(PRIVATE_CONTEXT.privateMarker), false);
+  assert.equal(JSON.stringify(rulingInput).includes('"requestChannel"'), false);
 });
 
 test("risk-control early return marks the audit that was appended as blocked", async () => {
