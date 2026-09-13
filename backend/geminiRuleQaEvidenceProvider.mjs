@@ -5,6 +5,7 @@ import { createGeminiRuleCacheClient } from './geminiRuleCacheClient.mjs';
 import { resolveGeminiSelection, packGeminiSelection } from './geminiRuleQaPacking.mjs';
 
 const ruleContexts = new WeakMap();
+const SELECTION_REVIEW_INSTRUCTION = '本轮任务是为全部子问题收集足以判断的原文，不是只列相关条目。先明确各子问题的待判动作、判断时点和争议条件，再据此选文；不要用另一时点或处理阶段的说明代替所需前提，也不要用自己的规则记忆补足依据。提交前重新阅读所选一般规则所在小节及相关交叉段落，保留会改变本题判断的条件和例外，不能只选概括句而漏掉其适用范围。仍有缺口时使用 search_qa 补查或继续分页。不要输出裁定，不自行总结替代原文。';
 const FINAL_SUBMISSION_INSTRUCTION = '补查结束，现在用已读资料submit_evidence，提交 ruleUnitIds 和 qaHandles；不得编造缺失依据。';
 function normalizeCalls(content) {
   const calls = (content?.parts || []).flatMap(part => part.functionCall ? [part.functionCall] : []);
@@ -43,7 +44,8 @@ export function createGeminiRuleQaEvidenceProvider({ fetchImpl = globalThis.fetc
     const contents = [{ role: 'user', parts: [{ text: JSON.stringify({ question: userQuery,
       confirmedCards: cardResolution.resolvedCards, userProvidedCardTexts: retrievedEvidence.userProvidedCardTexts || [],
       unresolvedMentions: cardResolution.unresolvedMentions || [], ambiguousMentions: cardResolution.ambiguousMentions || [],
-      ruleRevision: rules.ruleRevision, qaRevision: qaTools.qaRevision, initialQa }) }] }];
+      ruleRevision: rules.ruleRevision, qaRevision: qaTools.qaRevision, initialQa }) },
+      { text: SELECTION_REVIEW_INSTRUCTION }] }];
     await onEvent({ type: 'initial', rules, qaTools, initialQa, cache, contents });
     let reminderUsed = false, searchCount = 0;
     timingsMs.model = 0;
@@ -124,7 +126,7 @@ export function createGeminiRuleQaEvidenceProvider({ fetchImpl = globalThis.fetc
           return { ...result, telemetry };
         } else throw new Error('gemini_rule_qa_unknown_tool');
       }
-      contents.push({ role: 'user', parts: responses });
+      contents.push({ role: 'user', parts: [...responses, { text: SELECTION_REVIEW_INSTRUCTION }] });
       if (round === 3) contents.push({ role: 'user', parts: [{ text: FINAL_SUBMISSION_INSTRUCTION }] });
     }
     throw new Error('gemini_rule_qa_round_limit');
