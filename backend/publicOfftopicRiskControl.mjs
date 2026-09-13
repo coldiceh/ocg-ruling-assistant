@@ -2,8 +2,10 @@ import { randomInt as cryptoRandomInt } from "node:crypto";
 import { formatAuthorContactSentence } from "./publicAnswerPresentation.mjs";
 
 const DEFAULT_REDIS_KEY_PREFIX = "rag-public-offtopic-risk-control:v1";
-const DEFAULT_MIN_DURATION_MINUTES = 5;
-const DEFAULT_MAX_DURATION_MINUTES = 60;
+const DEFAULT_MIN_DURATION_MINUTES = 3;
+const DEFAULT_MAX_DURATION_MINUTES = 5;
+// Locks issued before this duration change remain readable until they expire.
+const MAX_STORED_DURATION_MINUTES = 60;
 const DEFAULT_REDIS_TIMEOUT_MS = 1200;
 const MAX_REDIS_TIMEOUT_MS = 5000;
 
@@ -226,7 +228,7 @@ function parseStoredRecord(value) {
       parsed?.version !== 1
       || !Number.isInteger(durationMinutes)
       || durationMinutes < DEFAULT_MIN_DURATION_MINUTES
-      || durationMinutes > DEFAULT_MAX_DURATION_MINUTES
+      || durationMinutes > MAX_STORED_DURATION_MINUTES
       || !Number.isFinite(activatedAtMs)
       || !Number.isFinite(expiresAtMs)
       || expiresAtMs <= activatedAtMs

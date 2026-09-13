@@ -44,41 +44,58 @@ test("off-topic risk control fails open when durable storage is unavailable", as
 });
 
 test("activation uses one anonymous SET NX EX record", async () => {
-  const commands = [];
-  const randomCalls = [];
-  const result = await activatePublicOfftopicRiskControl({
-    env: REDIS_ENV,
-    now: () => NOW,
-    randomInt: (minimum, maximumExclusive) => {
-      randomCalls.push([minimum, maximumExclusive]);
-      return 17;
-    },
-    fetchImpl: async (_url, init) => {
-      commands.push(JSON.parse(init.body));
-      return jsonResponse("OK");
-    },
-  });
+  for (const durationMinutes of [3, 4, 5]) {
+    const commands = [];
+    const randomCalls = [];
+    const result = await activatePublicOfftopicRiskControl({
+      env: REDIS_ENV,
+      now: () => NOW,
+      randomInt: (minimum, maximumExclusive) => {
+        randomCalls.push([minimum, maximumExclusive]);
+        return durationMinutes;
+      },
+      fetchImpl: async (_url, init) => {
+        commands.push(JSON.parse(init.body));
+        return jsonResponse("OK");
+      },
+    });
 
-  assert.deepEqual(randomCalls, [[5, 61]]);
-  assert.equal(result.ok, true);
-  assert.equal(result.active, true);
-  assert.equal(result.triggered, true);
-  assert.equal(result.durationMinutes, 17);
-  assert.equal(result.remainingMinutes, 17);
-  assert.equal(commands.length, 1);
-  assert.deepEqual(commands[0].slice(0, 2), ["SET", LOCK_KEY]);
-  assert.deepEqual(commands[0].slice(3), ["NX", "EX", String(17 * 60)]);
+    assert.deepEqual(randomCalls, [[3, 6]]);
+    assert.equal(result.ok, true);
+    assert.equal(result.active, true);
+    assert.equal(result.triggered, true);
+    assert.equal(result.durationMinutes, durationMinutes);
+    assert.equal(result.remainingMinutes, durationMinutes);
+    assert.equal(commands.length, 1);
+    assert.deepEqual(commands[0].slice(0, 2), ["SET", LOCK_KEY]);
+    assert.deepEqual(commands[0].slice(3), ["NX", "EX", String(durationMinutes * 60)]);
 
-  const stored = JSON.parse(commands[0][2]);
-  assert.deepEqual(Object.keys(stored).sort(), [
-    "activatedAt",
-    "durationMinutes",
-    "expiresAt",
-    "version",
-  ]);
-  assert.equal(JSON.stringify(stored).includes("question"), false);
-  assert.equal(stored.activatedAt, "2026-08-14T00:00:00.000Z");
-  assert.equal(stored.expiresAt, "2026-08-14T00:17:00.000Z");
+    const stored = JSON.parse(commands[0][2]);
+    assert.deepEqual(Object.keys(stored).sort(), [
+      "activatedAt",
+      "durationMinutes",
+      "expiresAt",
+      "version",
+    ]);
+    assert.equal(JSON.stringify(stored).includes("question"), false);
+    assert.equal(stored.activatedAt, "2026-08-14T00:00:00.000Z");
+    assert.equal(
+      stored.expiresAt,
+      `2026-08-14T00:0${durationMinutes}:00.000Z`,
+    );
+
+    const read = await readPublicOfftopicRiskControl({
+      env: REDIS_ENV,
+      now: () => NOW,
+      fetchImpl: async (_url, init) => {
+        assert.deepEqual(JSON.parse(init.body), ["GET", LOCK_KEY]);
+        return jsonResponse(JSON.stringify(stored));
+      },
+    });
+    assert.equal(read.active, true);
+    assert.equal(read.durationMinutes, durationMinutes);
+    assert.equal(read.remainingMinutes, durationMinutes);
+  }
 });
 
 test("a concurrent activation reads the existing lock without extending it", async () => {
@@ -112,13 +129,13 @@ test("read rounds remaining time upward and unlock deletes only the single lock 
   const record = {
     version: 1,
     activatedAt: "2026-08-14T00:00:00.000Z",
-    expiresAt: "2026-08-14T00:06:01.000Z",
-    durationMinutes: 7,
+    expiresAt: "2026-08-14T00:03:01.000Z",
+    durationMinutes: 3,
   };
   const commands = [];
   const status = await readPublicOfftopicRiskControl({
     env: REDIS_ENV,
-    now: () => new Date("2026-08-14T00:05:01.001Z"),
+    now: () => new Date("2026-08-14T00:02:01.001Z"),
     fetchImpl: async (_url, init) => {
       commands.push(JSON.parse(init.body));
       return jsonResponse(JSON.stringify(record));
@@ -141,6 +158,28 @@ test("read rounds remaining time upward and unlock deletes only the single lock 
     ["GET", LOCK_KEY],
     ["DEL", LOCK_KEY],
   ]);
+});
+
+test("read becomes inactive exactly at the 3-to-5 minute lock expiry", async () => {
+  const record = {
+    version: 1,
+    activatedAt: "2026-08-14T00:00:00.000Z",
+    expiresAt: "2026-08-14T00:05:00.000Z",
+    durationMinutes: 5,
+  };
+  const status = await readPublicOfftopicRiskControl({
+    env: REDIS_ENV,
+    now: () => new Date("2026-08-14T00:05:00.000Z"),
+    fetchImpl: async (_url, init) => {
+      assert.deepEqual(JSON.parse(init.body), ["GET", LOCK_KEY]);
+      return jsonResponse(JSON.stringify(record));
+    },
+  });
+
+  assert.equal(status.active, false);
+  assert.equal(status.durationMinutes, 0);
+  assert.equal(status.remainingMinutes, 0);
+  assert.equal(status.expiresAt, null);
 });
 
 test("preview and production always use separate Redis namespaces", () => {
