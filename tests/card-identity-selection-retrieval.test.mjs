@@ -44,6 +44,109 @@ test('model null selection leaves pending candidate identities intact',async()=>
   assert.equal(result.cardResolution.unresolvedMentions[0].input,surface);
 });
 
+const approximateSurface = '社区简称';
+const canonicalName = '标准测试卡';
+const canonicalEffectText = '标准测试卡的完整卡文。';
+const canonicalCard = {
+  id: '910001',
+  cardId: '910001',
+  passcode: '91000001',
+  cid: 910001,
+  name: canonicalName,
+  cnName: canonicalName,
+  aliases: [canonicalName],
+  effectText: canonicalEffectText,
+};
+const approximateLocalCard = {
+  id: canonicalCard.id,
+  cardId: canonicalCard.cardId,
+  passcode: canonicalCard.passcode,
+  cid: canonicalCard.cid,
+  name: canonicalName,
+  input: approximateSurface,
+  aliases: [canonicalName],
+  confidence: 0.92,
+  resolutionSource: 'query',
+  identityMatchKind: 'edit_distance',
+  requiresExternalIdentityVerification: true,
+};
+const canonicalProviderCard = {
+  id: canonicalCard.passcode,
+  cid: canonicalCard.cid,
+  cn_name: canonicalCard.name,
+  text: { types: '[怪兽|效果]', desc: canonicalEffectText },
+};
+
+async function retrieveApproximateLocal({ selector } = {}) {
+  clearBaigeSearchCache();
+  const searches = [];
+  const result = await retrieveRagEvidence({
+    userQuery: `${approximateSurface}的处理如何？`,
+    cardResolution: {
+      resolvedCards: [approximateLocalCard],
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+    },
+    cards: [canonicalCard],
+    records: [],
+    qaRecords: [],
+    identityOnly: true,
+    cardIdentitySelectionProvider: selector,
+    fetchImpl: async (url) => {
+      const query = new URL(url).searchParams.get('search') || '';
+      searches.push(query);
+      const resultCards = query === canonicalName ? [canonicalProviderCard] : [];
+      return new Response(JSON.stringify({ result: resultCards, next: 0 }), {
+        headers: { 'content-type': 'application/json' },
+      });
+    },
+    env: { BAIGE_CACHE_TTL_MS: '1' },
+  });
+  return { result, searches };
+}
+
+test('local unverified candidate reaches the existing selector after canonical provider lookup', async () => {
+  let calls = 0;
+  const { result, searches } = await retrieveApproximateLocal({
+    selector: async ({ candidateSets }) => {
+      calls += 1;
+      assert.equal(candidateSets.length, 1);
+      assert.equal(candidateSets[0].surface, approximateSurface);
+      assert.equal(candidateSets[0].candidates.length, 1);
+      assert.equal(candidateSets[0].candidates[0].name, canonicalName);
+      assert.equal(candidateSets[0].candidates[0].effectText, canonicalEffectText);
+      return [{ mentionId: candidateSets[0].mentionId, candidateId: candidateSets[0].candidates[0].candidateId }];
+    },
+  });
+  assert.ok(searches.includes(canonicalName));
+  assert.equal(calls, 1);
+  assert.equal(result.cardResolution.resolvedCards.length, 1);
+  assert.equal(result.cardResolution.resolvedCards[0].id, canonicalCard.id);
+  assert.equal(result.cardResolution.resolvedCards[0].effectText, canonicalEffectText);
+  assert.equal(result.cardResolution.resolvedCards[0].input, approximateSurface);
+  assert.equal(
+    result.cardResolution.unresolvedMentions.some((item) => item.reason === 'external_identity_verification_failed'),
+    false,
+  );
+});
+
+test('null selection keeps the local unverified candidate pending after canonical lookup', async () => {
+  let calls = 0;
+  const { result, searches } = await retrieveApproximateLocal({
+    selector: async ({ candidateSets }) => {
+      calls += 1;
+      return [{ mentionId: candidateSets[0].mentionId, candidateId: null }];
+    },
+  });
+  assert.ok(searches.includes(canonicalName));
+  assert.equal(calls, 1);
+  assert.equal(result.cardResolution.resolvedCards.length, 0);
+  assert.ok(result.cardResolution.unresolvedMentions.some((item) => (
+    item.input === approximateSurface
+      && item.reason === 'external_identity_verification_failed'
+  )));
+});
+
 test('unknown candidate reference never materializes a card',async()=>{
   const result=await retrieve({selector:async({candidateSets})=>[{mentionId:candidateSets[0].mentionId,candidateId:'C999'}]});
   assert.equal(result.cardResolution.resolvedCards.length,0);

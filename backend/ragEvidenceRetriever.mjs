@@ -199,6 +199,7 @@ export async function retrieveRagEvidence({
       warnings: retrievalWarnings,
       debug: baigeDebug,
       signal,
+      pendingIdentityCandidates,
     }),
     resolveUnresolvedMentionCardsWithBaige(externalResolutionCandidates, {
       fetchImpl,
@@ -212,15 +213,6 @@ export async function retrieveRagEvidence({
     }),
   ]);
   throwIfAborted(signal);
-  const modelSelectedCards = await selectPendingProviderCards({
-    userQuery, mentions: externalResolutionCandidates, pendingIdentityCandidates,
-    alreadyResolved: [...enrichedLocalCards, ...baigeResolvedCards],
-    canonicalCards: data.cards, select: cardIdentitySelectionProvider,
-    warnings: retrievalWarnings, signal,
-  });
-  baigeResolvedCards.push(...modelSelectedCards);
-  const selectedSurfaces = new Set(modelSelectedCards.map(card => card.input));
-  baigeDebug.ambiguousMentions = baigeDebug.ambiguousMentions.filter(mention => !selectedSurfaces.has(mention.input));
   const identityVerificationFailures = enrichedLocalCards
     .filter((card) => card.identityVerificationStatus === "unverified")
     .map((card) => ({
@@ -233,6 +225,16 @@ export async function retrieveRagEvidence({
         confidence: Number(card.confidence || 0),
       }],
     }));
+  const modelSelectedCards = await selectPendingProviderCards({
+    userQuery, mentions: dedupeMentions([...externalResolutionCandidates, ...identityVerificationFailures]),
+    pendingIdentityCandidates,
+    alreadyResolved: [...enrichedLocalCards, ...baigeResolvedCards],
+    canonicalCards: data.cards, select: cardIdentitySelectionProvider,
+    warnings: retrievalWarnings, signal,
+  });
+  baigeResolvedCards.push(...modelSelectedCards);
+  const selectedSurfaces = new Set(modelSelectedCards.map(card => card.input));
+  baigeDebug.ambiguousMentions = baigeDebug.ambiguousMentions.filter(mention => !selectedSurfaces.has(mention.input));
   const canonicalBaigeCandidates = baigeResolvedCards.map((card) => canonicalizeRetrievedCardIdentity(
     card,
     data.cards,
@@ -313,7 +315,7 @@ export async function retrieveRagEvidence({
   timingsMs.cardResolution = Date.now() - stageStartedAt;
   const remainingUnresolvedMentions = dedupeMentions([
     ...unresolvedMentionsAfterRetrieval(unresolvedResolutionCandidates, retrievalCards),
-    ...identityVerificationFailures,
+    ...identityVerificationFailures.filter((mention) => !selectedSurfaces.has(mention.input)),
   ]);
   const hasPendingCardIdentity = remainingUnresolvedMentions.length > 0
     || (preEvidenceCardResolution.ambiguousMentions || []).length > 0
@@ -5475,6 +5477,7 @@ async function enrichCardsWithBaige(cards, {
   warnings,
   debug,
   signal,
+  pendingIdentityCandidates,
 }) {
   throwIfAborted(signal);
   const sourceCards = cards || [];
@@ -5492,6 +5495,13 @@ async function enrichCardsWithBaige(cards, {
     if (!nameQuery) {
       return card;
     }
+    const rememberCandidates = (candidates) => {
+      if (!pendingIdentityCandidates) return;
+      const input = card.input || nameQuery;
+      pendingIdentityCandidates.set(input, [
+        ...(pendingIdentityCandidates.get(input) || []), ...candidates,
+      ]);
+    };
     const modelExpansionQueries = needsSurfaceIdentityVerification
       ? modelIdentityExpansionQueries(card)
       : [];
@@ -5516,6 +5526,7 @@ async function enrichCardsWithBaige(cards, {
         warnings,
         debug,
         signal,
+        onCandidates: rememberCandidates,
       });
       if (!intersection.card) {
         return { ...card, identityVerificationStatus: "unverified" };
@@ -5531,6 +5542,7 @@ async function enrichCardsWithBaige(cards, {
       const searchResult = await searchBaige(nameQuery, { fetchImpl, env, limits, debug, signal });
       warnings.push(...searchResult.warnings);
       primarySearchResults = searchResult.results || [];
+      rememberCandidates(primarySearchResults);
       selection = selectUniqueBaigeCandidate(primarySearchResults, 0.72, {
         canonicalCards,
         surface: card.input || nameQuery,
@@ -5555,6 +5567,7 @@ async function enrichCardsWithBaige(cards, {
         debug,
         signal,
         originalSurfaceResults: primarySearchResults,
+        onCandidates: rememberCandidates,
       });
       best = canonicalLookup.card;
       matchedQuery = canonicalLookup.matchedQuery || nameQuery;
@@ -5662,11 +5675,13 @@ async function verifySurfaceIdentityThroughCanonicalBaigeLookup(card, {
   debug,
   signal,
   originalSurfaceResults = [],
+  onCandidates,
 }) {
   throwIfAborted(signal);
   for (const query of canonicalIdentityVerificationQueries(card, primaryQuery)) {
     const searchResult = await searchBaige(query, { fetchImpl, env, limits, debug, signal });
     warnings.push(...searchResult.warnings);
+    onCandidates?.(searchResult.results || []);
     const selection = selectUniqueBaigeCandidate(searchResult.results || [], 0.72, {
       canonicalCards,
       surface: card.input || primaryQuery,
