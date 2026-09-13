@@ -1,14 +1,14 @@
 import { randomUUID } from "node:crypto";
 
 const DEFAULT_KEY = "rag-query-audit:v1";
-const DEFAULT_MAX_ENTRIES = 30;
-const MAX_ENTRIES = 30;
-const DEFAULT_LIST_LIMIT = 30;
+const DEFAULT_MAX_ENTRIES = 100;
+const MAX_ENTRIES = 100;
+const DEFAULT_LIST_LIMIT = 100;
 const DEFAULT_RETENTION_DAYS = 30;
 const DEFAULT_TIMEOUT_MS = 1800;
 const MAX_QUESTION_LENGTH = 12000;
 const UPDATE_ENTRY = `
-local values = redis.call("LRANGE", KEYS[1], 0, 29)
+local values = redis.call("LRANGE", KEYS[1], 0, 99)
 for index, raw in ipairs(values) do
   local decoded, entry = pcall(cjson.decode, raw)
   if decoded and type(entry) == "table" and entry.id == ARGV[1] then
