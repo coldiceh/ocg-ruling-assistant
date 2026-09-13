@@ -3,6 +3,7 @@ import { RAG_ANSWER_LEVELS } from "./ragRulingPrompt.mjs";
 import {
   DEFAULT_PUBLIC_BAI_BASE_URL,
   DEFAULT_PUBLIC_BAI_MODEL,
+  DEFAULT_PUBLIC_BAI_DEEPSEEK_MODEL,
   DEFAULT_PUBLIC_DEEPSEEK_MODEL,
   resolveOfficialDeepSeekModel,
   DEFAULT_PUBLIC_RELAY_BASE_URL,
@@ -13,6 +14,7 @@ import {
 } from "./publicRulingModelConfig.mjs";
 import { requestRelayChatCompletionSse } from "./rulingModelProviders.mjs";
 import { estimateOpenAIModelCost } from "./modelPricing.mjs";
+import { estimateBaiModelCost } from "./baiModelPricing.mjs";
 import { formatAuthorContactSentence } from "./publicAnswerPresentation.mjs";
 import {
   classifyPrivateEvaluationFailure,
@@ -43,7 +45,6 @@ const PUBLIC_OPENAI_CHAT_COMPLETIONS_URL = "https://api.openai.com/v1/chat/compl
 const PUBLIC_OPENAI_MODEL = "gpt-6-astra";
 const PUBLIC_OPENAI_REASONING_EFFORT = "low";
 const PUBLIC_OPENAI_MAX_COMPLETION_TOKENS = 4096;
-const PUBLIC_BAI_REASONING_EFFORT = "low";
 const PUBLIC_BAI_MAX_COMPLETION_TOKENS = 4096;
 const DEFAULT_JSON_TASK_MAX_OUTPUT_TOKENS = 4000;
 const DEFAULT_RAG_RECOVERY_MAX_OUTPUT_TOKENS = 4096;
@@ -131,7 +132,7 @@ const PUBLIC_BUDGET_BUCKETS = Object.freeze([
   Object.freeze({ id: "final_ruling:glm", stage: "final_ruling", provider: "glm", label: "GLM 最终裁定", currency: "CNY" }),
   Object.freeze({ id: "final_ruling:deepseek", stage: "final_ruling", provider: "deepseek", label: "DeepSeek 最终裁定", currency: "CNY" }),
   Object.freeze({ id: "final_ruling:relay", stage: "final_ruling", provider: "relay", label: "ChatGPT 最终裁定", currency: "USD" }),
-  Object.freeze({ id: "final_ruling:bai", stage: "final_ruling", provider: "bai", label: "GPT最终裁定", currency: "USD" }),
+  Object.freeze({ id: "final_ruling:bai", stage: "final_ruling", provider: "bai", label: "B.AI 最终裁定", currency: "USD" }),
 ]);
 const memoryBudget = new Map();
 const privateEvaluationBudgetLedger = new Map();
@@ -168,14 +169,14 @@ export async function callRagModel({
   const providerResolution = resolveRagProvider(env);
   const provider = providerResolution.provider;
   const modelName = modelNameForProvider(provider, env);
-  const reasoningGeneration = provider === "deepseek" || provider === "glm"
+  const reasoningGeneration = provider === "bai"
+    ? resolveBaiGenerationConfig({modelName, thinkingMode, reasoningEffort, env})
+    : provider === "deepseek" || provider === "glm"
     ? resolveReasoningGenerationConfig({ provider, modelName, thinkingMode, reasoningEffort, env })
-    : provider === "openai" || provider === "bai"
+    : provider === "openai"
       ? {
           thinkingMode: "enabled",
-          reasoningEffort: provider === "bai"
-            ? PUBLIC_BAI_REASONING_EFFORT
-            : PUBLIC_OPENAI_REASONING_EFFORT,
+          reasoningEffort: PUBLIC_OPENAI_REASONING_EFFORT,
           thinkingModeSource: "public_profile",
           reasoningEffortSource: "public_profile",
           warnings: [],
@@ -213,7 +214,7 @@ export async function callRagModel({
       ? {
           ...buildExternallyManagedBudgetPreflight({
             provider: "bai",
-            label: "GPT 最终裁定（官方理论计价）",
+            label: "B.AI 调用（标准价估算）",
           }),
         }
       : await buildBudgetPreflight({
@@ -383,6 +384,9 @@ export async function callRagModel({
             prompt,
             env,
             maxTokens,
+            modelName,
+            thinkingMode: reasoningGeneration.thinkingMode,
+            reasoningEffort: reasoningGeneration.reasoningEffort,
             fetchImpl,
             requireJson: !plainTextOutput,
             signal,
@@ -477,7 +481,7 @@ export async function callRagModel({
     const tokenUsage = sumTokenUsage(responses.map((item) => normalizeUsage(provider, item.usage)));
     const usageComplete = responses.length > 0
       && responses.every((item) => assessUsageCompleteness(provider, item.usage).complete);
-    const measuredCost = estimateActualCostAmount(provider, tokenUsage, env);
+    const measuredCost = estimateActualCostAmount(provider, tokenUsage, env, modelName);
     const reservedCost = roundCost(budget.reservedAmount || 0);
     const actualCost = retainFullReservation || !usageComplete ? reservedCost : measuredCost;
     const spendWarnings = usageComplete
@@ -528,7 +532,7 @@ export async function callRagModel({
       ...(provider === "bai" && !usageComplete
         ? unknownBaiCostResultFields()
         : budgetCostResultFields(budget, actualCost)),
-      ...(provider === "bai" ? { costBasis: "official_theoretical" } : {}),
+      ...(provider === "bai" ? { costBasis: "bai_standard_estimate" } : {}),
       budgetStatus,
       generationAttempts: responses.map((item, index) => summarizeGenerationAttempt(item, index)),
       generationConfig,
@@ -573,7 +577,7 @@ export async function callRagModel({
       ],
       tokenUsage: {},
       ...(provider === "bai"
-        ? { ...unknownBaiCostResultFields(), costBasis: "official_theoretical" }
+        ? { ...unknownBaiCostResultFields(), costBasis: "bai_standard_estimate" }
         : budgetCostResultFields(budget, releaseSafe ? 0 : budget.reservedAmount)),
       budgetStatus: failedBudgetStatus,
       providerFailure,
@@ -828,7 +832,7 @@ export async function callRelayJsonTask({
   };
 }
 
-/** Runs one fixed b.ai Astra-low JSON task without retry or repair. */
+/** Runs one allowlisted B.AI JSON task without retry or repair. */
 export async function callBaiJsonTask({
   prompt,
   model,
@@ -838,6 +842,8 @@ export async function callBaiJsonTask({
   env = globalThis.process?.env || {},
   fetchImpl = globalThis.fetch,
   reasoningEffort,
+  thinkingMode,
+  stage = "final_ruling",
   signal,
 } = {}) {
   const normalizedPrompt = String(prompt || "").trim();
@@ -852,17 +858,7 @@ export async function callBaiJsonTask({
   baiChatCompletionsUrl(env.BAI_BASE_URL);
 
   const requestedModel = String(model || modelName || DEFAULT_PUBLIC_BAI_MODEL).trim();
-  if (requestedModel !== DEFAULT_PUBLIC_BAI_MODEL) {
-    const error = new TypeError(`Unsupported b.ai JSON task model: ${requestedModel || "(empty)"}`);
-    error.code = "bai_json_task_model_not_allowed";
-    throw error;
-  }
-  const requestedEffort = String(reasoningEffort || PUBLIC_BAI_REASONING_EFFORT).trim().toLowerCase();
-  if (requestedEffort !== PUBLIC_BAI_REASONING_EFFORT) {
-    const error = new TypeError(`Unsupported b.ai JSON task reasoning effort: ${requestedEffort || "(empty)"}`);
-    error.code = "bai_json_task_reasoning_effort_not_allowed";
-    throw error;
-  }
+  const generation = resolveBaiGenerationConfig({modelName: requestedModel, thinkingMode, reasoningEffort});
   const resolvedMaxTokens = optionalPositiveInteger(maxOutputTokens)
     || optionalPositiveInteger(maxTokens)
     || DEFAULT_JSON_TASK_MAX_OUTPUT_TOKENS;
@@ -870,6 +866,10 @@ export async function callBaiJsonTask({
     prompt: normalizedPrompt,
     env,
     modelName: requestedModel,
+    thinkingMode: generation.thinkingMode,
+    reasoningEffort: generation.reasoningEffort,
+    stage,
+    temperature: 0,
     maxTokens: resolvedMaxTokens,
     fetchImpl,
     requireJson: true,
@@ -891,10 +891,9 @@ export async function callBaiJsonTask({
   const usage = normalizeUsage("bai", response.usage || {});
   const usageComplete = assessUsageCompleteness("bai", response.usage || {}).complete;
   const estimatedCostUsd = usageComplete
-    ? estimateOpenAIModelCost({
-        model: DEFAULT_PUBLIC_BAI_MODEL,
+    ? estimateBaiModelCost({
+        model: requestedModel,
         usage,
-        reasoningMode: "standard",
       }).totalCostUsd
     : null;
   return {
@@ -908,8 +907,9 @@ export async function callBaiJsonTask({
     providerUsed: "bai",
     requestedModel,
     returnedModel: String(response.responseModel || "") || null,
-    reasoningEffort: PUBLIC_BAI_REASONING_EFFORT,
-    costBasis: "official_theoretical",
+    thinkingMode: generation.thinkingMode,
+    reasoningEffort: generation.reasoningEffort,
+    costBasis: "bai_standard_estimate",
     costCurrency: "USD",
     estimatedCost: estimatedCostUsd,
     estimatedCostCny: estimatedCostUsd === null ? null : 0,
@@ -939,7 +939,7 @@ export async function callCardNameExtractionModel({
     ...relayGeneration.warnings,
   ];
   const maxTokens = readNumber(env.RAG_CARD_MODEL_MAX_OUTPUT_TOKENS, 800);
-  const prompt = buildCardNameExtractionPrompt(userQuery, { typed: provider === "deepseek" });
+  const prompt = buildCardNameExtractionPrompt(userQuery, { typed: provider === "deepseek" || provider === "bai" });
 
   if (dryRun === true || isEnabled(env.RAG_DRY_RUN)) {
     return emptyCardNameExtractionResult(provider, modelName, true, [
@@ -1485,7 +1485,10 @@ export async function callRuleQueryExtractionModel({
     // latter's short timeout made every successful local candidate pass fall
     // back to an empty semantic plan merely because an unrelated stage was
     // configured aggressively.
-    const invokeProvider = () => provider === "relay"
+    const invokeProvider = () => provider === "bai"
+      ? runAbortableProviderOperation({signal: sharedSignal, timeoutMs: readPositiveNumber(env.RAG_RULE_MODEL_TIMEOUT_MS, DEFAULT_RULE_QUERY_EXTRACTION_TIMEOUT_MS), timeoutMessage: "rule_query_model_timeout"},
+        signal => callBai({prompt, env: providerEnv, modelName, maxTokens, fetchImpl, thinkingMode: "disabled", reasoningEffort: null, temperature: readNumber(env.RAG_RULE_MODEL_TEMPERATURE, readNumber(env.RAG_CARD_MODEL_TEMPERATURE, 0)), requireJson: true, stage: "evidence_preparation", signal}))
+      : provider === "relay"
       ? callRelay({
         prompt,
         env: providerEnv,
@@ -2237,9 +2240,7 @@ export function createPublicAnswerModelEnv(env = {}, profileValue) {
   const configuredCloudAuxiliaryProvider = String(
     source.CLOUD_EVIDENCE_AUXILIARY_PROVIDER || "deepseek",
   ).trim().toLowerCase();
-  const cloudAuxiliaryProvider = ["deepseek", "relay"].includes(configuredCloudAuxiliaryProvider)
-    ? configuredCloudAuxiliaryProvider
-    : "deepseek";
+  const cloudAuxiliaryProvider = configuredCloudAuxiliaryProvider === "relay" ? "relay" : "bai";
   const profile = configuredPublicRulingModelProfile(
     resolvePublicRulingModelProfile(profileValue || source.PUBLIC_RULING_MODEL_PROFILE),
     source,
@@ -2296,7 +2297,7 @@ export function createPublicAnswerModelEnv(env = {}, profileValue) {
   for (const key of Object.keys(result)) {
     if (/^(?:OPENAI_|ADMIN_|KIMI_)/iu.test(key)) delete result[key];
     if (profile.provider !== "glm" && /^GLM_/iu.test(key)) delete result[key];
-    if (profile.provider !== "bai" && /^BAI_/iu.test(key)) delete result[key];
+    if (profile.provider !== "bai" && !(cloudEvidence && cloudAuxiliaryProvider === "bai") && /^BAI_/iu.test(key)) delete result[key];
   }
   if (profile.provider !== "openai") delete result.OCG_FINAL_OPENAI_API_KEY;
   if (profile.provider !== "relay") {
@@ -2358,7 +2359,7 @@ export function createPublicAnswerModelEnv(env = {}, profileValue) {
   // Retain the legacy tier flag for public profile compatibility. Auxiliary
   // DeepSeek model selection uses its dedicated card/rule variables instead.
   result.RAG_MODEL_TIER = "flash";
-  if (profile.provider === "deepseek" && profile.thinkingMode === "enabled") {
+  if ((profile.provider === "deepseek" || profile.model === DEFAULT_PUBLIC_BAI_DEEPSEEK_MODEL) && profile.thinkingMode === "enabled") {
     // Public thinking profiles need room for reasoning AND the visible answer.
     // Do not inherit the legacy generic 4096-token cap intended for short output.
     // Match DeepSeek's documented defaults, while retaining a dedicated server cap.
@@ -2367,7 +2368,7 @@ export function createPublicAnswerModelEnv(env = {}, profileValue) {
       profile.reasoningEffort === "max" ? 131072 : 65536,
     ));
   }
-  if (profile.provider === "glm" && profile.thinkingMode === "enabled") {
+  if ((profile.provider === "glm" || profile.model === DEFAULT_PUBLIC_GLM_MODEL) && profile.thinkingMode === "enabled") {
     // GLM's output budget also includes thinking. Use its documented 64K
     // default instead of the generic short-answer cap retained in deployments.
     result.RAG_MAX_OUTPUT_TOKENS = String(readPositiveNumber(
@@ -2417,6 +2418,10 @@ export function resolveCardExtractionProvider(env = {}) {
   }
   const requested = String(env.RAG_CARD_MODEL_PROVIDER || env.RAG_MODEL_PROVIDER || env.MODEL_PROVIDER || "auto").trim().toLowerCase() || "auto";
   const warnings = [];
+  if (requested === "bai") {
+    if (!env.BAI_API_KEY) warnings.push("bai_api_key_missing_card_name_model_disabled");
+    return {provider: env.BAI_API_KEY ? "bai" : "mock", requested, warnings};
+  }
   if (requested === "mock") return { provider: "mock", requested, warnings };
   if (requested === "relay") {
     const relayEnv = createCardExtractionRelayEnv(env);
@@ -2462,6 +2467,10 @@ export function resolveRuleQueryExtractionProvider(env = {}) {
   }
   const requested = String(env.RAG_RULE_MODEL_PROVIDER || env.RAG_CARD_MODEL_PROVIDER || env.RAG_MODEL_PROVIDER || env.MODEL_PROVIDER || "auto").trim().toLowerCase() || "auto";
   const warnings = [];
+  if (requested === "bai") {
+    if (!env.BAI_API_KEY) warnings.push("bai_api_key_missing_rule_query_model_disabled");
+    return {provider: env.BAI_API_KEY ? "bai" : "mock", requested, relayRequired: false, warnings};
+  }
   if (requested === "mock") {
     return { provider: "mock", requested, relayRequired: false, warnings };
   }
@@ -2632,7 +2641,7 @@ export async function getRagBudgetStatus({
           cloudEvidence.baiPool.theoreticalLimitUsd - cloudEvidence.baiPool.accountedUsd,
         ),
         actualRemainingCny: cloudEvidence.baiPool.actualRemainingCny,
-        costBasis: "official_theoretical",
+        costBasis: "bai_standard_estimate",
       }
       : budgetBucketStatusPayload({
       bucket,
@@ -2997,26 +3006,32 @@ async function callBai({
   env,
   modelName = DEFAULT_PUBLIC_BAI_MODEL,
   maxTokens = PUBLIC_BAI_MAX_COMPLETION_TOKENS,
+  temperature,
+  thinkingMode,
+  reasoningEffort,
+  stage = "final_ruling",
   fetchImpl,
   requireJson = true,
   signal,
 }) {
   const endpoint = baiChatCompletionsUrl(env.BAI_BASE_URL);
+  const generation = resolveBaiGenerationConfig({modelName, thinkingMode, reasoningEffort, env});
+  const astra = modelName === DEFAULT_PUBLIC_BAI_MODEL;
   const body = {
-    model: DEFAULT_PUBLIC_BAI_MODEL,
+    model: modelName,
     messages: [{ role: "user", content: prompt }],
     ...(requireJson ? { response_format: { type: "json_object" } } : {}),
-    reasoning_effort: PUBLIC_BAI_REASONING_EFFORT,
+    ...(!astra ? {thinking: {type: generation.thinkingMode}} : {}),
+    ...(generation.thinkingMode === "disabled" ? {temperature: temperature ?? readNumber(env.RAG_MODEL_TEMPERATURE, 0)} : {}),
+    ...(generation.reasoningEffort ? {reasoning_effort: generation.reasoningEffort} : {}),
   };
-  if (String(modelName || DEFAULT_PUBLIC_BAI_MODEL) !== DEFAULT_PUBLIC_BAI_MODEL) {
-    throw new TypeError(`Unsupported b.ai final model: ${String(modelName || "(empty)")}`);
-  }
-  if (Number.isInteger(maxTokens) && maxTokens > 0) body.max_completion_tokens = maxTokens;
+  if (Number.isInteger(maxTokens) && maxTokens > 0) body[astra ? "max_completion_tokens" : "max_tokens"] = maxTokens;
 
   let payload;
   try {
     payload = await runCloudBaiRequest({
       body,
+      stage,
       invoke: () => requestRelayChatCompletionSse({
         fetchImpl,
         endpoint,
@@ -3044,18 +3059,18 @@ async function callBai({
   const warnings = [];
   if (!rawText) warnings.push(`bai_empty_content:${finishReason || "unknown"}`);
   if (finishReason === "length") warnings.push("bai_output_truncated_by_token_limit");
-  if (responseModel && responseModel !== DEFAULT_PUBLIC_BAI_MODEL) warnings.push("bai_response_model_mismatch");
+  if (responseModel && responseModel !== modelName) warnings.push("bai_response_model_mismatch");
   return {
     rawText,
     finishReason,
     contentChars: rawText.length,
     reasoningContentPresent: false,
     reasoningContentChars: 0,
-    requestModel: DEFAULT_PUBLIC_BAI_MODEL,
+    requestModel: modelName,
     responseModel,
     systemFingerprint: String(payload?.system_fingerprint || ""),
-    thinkingMode: "enabled",
-    reasoningEffort: PUBLIC_BAI_REASONING_EFFORT,
+    thinkingMode: generation.thinkingMode,
+    reasoningEffort: generation.reasoningEffort,
     maxOutputTokens: Number.isInteger(maxTokens) && maxTokens > 0 ? maxTokens : null,
     responseFormat: requireJson ? "json_object" : "text",
     transport: "chat_completions_sse",
@@ -4132,6 +4147,7 @@ function buildExternallyManagedBudgetPreflight({
 }
 
 async function buildBudgetPreflight({ provider, stage, modelName, prompt, maxTokens, env, fetchImpl, now, trackSpend = true }) {
+  if (provider === "bai") return buildExternallyManagedBudgetPreflight({provider, stage, label: "B.AI 共享额度"});
   const privateEvaluationBudget = resolvePrivateEvaluationBudget({ provider, stage, env });
   if (privateEvaluationBudget) {
     return buildPrivateEvaluationBudgetPreflight({
@@ -4572,7 +4588,9 @@ async function runBudgetedAuxiliaryModelCall({
       blocked: false,
       value,
       usage,
-      ...budgetCostResultFields(budget, estimatedCost),
+      ...(provider === "bai" && !usageComplete
+        ? unknownBaiCostResultFields()
+        : budgetCostResultFields(budget, estimatedCost)),
       budgetStatus,
       warnings,
     };
@@ -5171,7 +5189,8 @@ function estimateActualCostAmount(provider, usage, env, modelName) {
   if (provider === "relay") {
     return estimateChatGptUncachedCostUsd({ usage, env, modelName });
   }
-  if (provider === "openai" || provider === "bai") {
+  if (provider === "bai") return estimateBaiModelCost({model: modelName || modelNameForProvider(provider, env), usage}).totalCostUsd;
+  if (provider === "openai") {
     return estimateOpenAIModelCost({
       model: PUBLIC_OPENAI_MODEL,
       usage,
@@ -6200,9 +6219,20 @@ function firstConfiguredValue(entries = []) {
   return { source: "", value: undefined };
 }
 
+function resolveBaiGenerationConfig({modelName, thinkingMode, reasoningEffort, env = {}}) {
+  if (![DEFAULT_PUBLIC_BAI_MODEL, DEFAULT_PUBLIC_BAI_DEEPSEEK_MODEL, DEFAULT_PUBLIC_GLM_MODEL].includes(modelName)) {
+    throw new TypeError('Unsupported B.AI model: ' + modelName);
+  }
+  const astra = modelName === DEFAULT_PUBLIC_BAI_MODEL;
+  const mode = modelName === DEFAULT_PUBLIC_GLM_MODEL || astra ? 'enabled' : String(thinkingMode || env.RAG_THINKING_MODE || 'enabled');
+  const effort = mode === 'disabled' ? null : String(reasoningEffort || env.RAG_REASONING_EFFORT || 'low');
+  if (!['enabled', 'disabled'].includes(mode) || (effort !== null && !(astra ? ['low'] : ['low', 'high', 'max']).includes(effort))) throw new TypeError('Unsupported B.AI thinking configuration');
+  return {thinkingMode: mode, reasoningEffort: effort, thinkingModeSource: 'public_profile', reasoningEffortSource: 'public_profile', warnings: []};
+}
+
 function resolveRagMaxOutputTokens(env = {}, { provider = "", thinkingMode = "" } = {}) {
   if (provider === "openai") return PUBLIC_OPENAI_MAX_COMPLETION_TOKENS;
-  if (provider === "bai") return PUBLIC_BAI_MAX_COMPLETION_TOKENS;
+  if (provider === "bai" && modelNameForProvider(provider, env) === DEFAULT_PUBLIC_BAI_MODEL) return PUBLIC_BAI_MAX_COMPLETION_TOKENS;
   const configured = Number(env.RAG_MAX_OUTPUT_TOKENS);
   if (Number.isFinite(configured) && configured > 0) return Math.floor(configured);
   if (provider === "relay") {
@@ -6221,7 +6251,7 @@ function resolveRagMaxOutputTokens(env = {}, { provider = "", thinkingMode = "" 
 
 function modelNameForProvider(provider, env) {
   if (provider === "openai") return PUBLIC_OPENAI_MODEL;
-  if (provider === "bai") return DEFAULT_PUBLIC_BAI_MODEL;
+  if (provider === "bai") return String(env.RAG_MODEL || env.BAI_MODEL || DEFAULT_PUBLIC_BAI_MODEL);
   if (provider === "glm") {
     return String(env.RAG_MODEL || env.GLM_MODEL || DEFAULT_GLM_MODEL);
   }
@@ -6263,6 +6293,7 @@ function resolveConfiguredModelTier(env = {}) {
 }
 
 export function modelNameForCardExtractionProvider(provider, env) {
+  if (provider === "bai") return DEFAULT_PUBLIC_BAI_DEEPSEEK_MODEL;
   if (provider === "deepseek") return String(env.DEEPSEEK_CARD_MODEL || env.RAG_CARD_MODEL || DEFAULT_DEEPSEEK_CARD_MODEL);
   if (provider === "relay") {
     return resolveRelayAuxiliaryModelName(env.RELAY_CARD_MODEL, env).modelName;
@@ -6272,6 +6303,7 @@ export function modelNameForCardExtractionProvider(provider, env) {
 }
 
 function modelNameForRuleQueryExtractionProvider(provider, env) {
+  if (provider === "bai") return DEFAULT_PUBLIC_BAI_DEEPSEEK_MODEL;
   if (provider === "deepseek") return String(env.DEEPSEEK_RULE_MODEL || env.RAG_RULE_MODEL || env.DEEPSEEK_CARD_MODEL || env.RAG_CARD_MODEL || DEFAULT_DEEPSEEK_CARD_MODEL);
   if (provider === "relay") {
     const requested = String(env.RELAY_RULE_MODEL || DEFAULT_RELAY_RULE_MODEL).trim().toLowerCase();
@@ -6420,7 +6452,12 @@ function runLightweightCardProviderOperation({
   timeoutMessage,
 }) {
   return runAbortableProviderOperation({ signal, timeoutMs, timeoutMessage }, (requestSignal) => (
-    provider === "deepseek"
+    provider === "bai"
+      ? callBai({prompt, env: providerEnv, modelName, maxTokens, fetchImpl,
+        temperature: readNumber(env.RAG_CARD_MODEL_TEMPERATURE, 0),
+        thinkingMode: "disabled", reasoningEffort: null, requireJson: true,
+        stage: "evidence_preparation", signal: requestSignal})
+      : provider === "deepseek"
       ? callDeepSeek({
         prompt,
         env,

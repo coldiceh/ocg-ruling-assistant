@@ -1,12 +1,13 @@
 import {
-  callDeepSeekJsonTask,
+  callBaiJsonTask,
   isServerOwnedPrivateEvaluationEnv,
 } from "./ragModelClient.mjs";
-import { DEFAULT_PUBLIC_DEEPSEEK_MODEL } from "./publicRulingModelConfig.mjs";
 
-const CLASSIFIER_MODEL = DEFAULT_PUBLIC_DEEPSEEK_MODEL;
+const CLASSIFIER_PROVIDER = "bai";
+const CLASSIFIER_MODEL = "deepseek-v4.1-flash";
 const CLASSIFIER_THINKING_MODE = "disabled";
 const CLASSIFIER_REASONING_EFFORT = null;
+const CLASSIFIER_STAGE = "evidence_preparation";
 const DEFAULT_TIMEOUT_MS = 12_000;
 const DEFAULT_MAX_OUTPUT_TOKENS = 256;
 
@@ -17,13 +18,13 @@ export function publicQueryScopeClassifierStatus(env = globalThis.process?.env |
   if (isEnabled(env.RAG_DRY_RUN) || isServerOwnedPrivateEvaluationEnv(env)) {
     return { enabled: false, reason: "private_or_dry_run" };
   }
-  if (!String(env.DEEPSEEK_API_KEY || "").trim()) {
-    return { enabled: false, reason: "deepseek_not_configured" };
+  if (!String(env.BAI_API_KEY || "").trim()) {
+    return { enabled: false, reason: "bai_not_configured" };
   }
   return {
     enabled: true,
     reason: "configured",
-    provider: "deepseek",
+    provider: CLASSIFIER_PROVIDER,
     model: CLASSIFIER_MODEL,
     thinkingMode: CLASSIFIER_THINKING_MODE,
     reasoningEffort: CLASSIFIER_REASONING_EFFORT,
@@ -35,7 +36,7 @@ export async function classifyPublicQueryScope({
   env = globalThis.process?.env || {},
   fetchImpl = globalThis.fetch,
   signal,
-  invoke = callDeepSeekJsonTask,
+  invoke = callBaiJsonTask,
 } = {}) {
   const status = publicQueryScopeClassifierStatus(env);
   const normalizedQuestion = String(question || "").trim();
@@ -54,6 +55,9 @@ export async function classifyPublicQueryScope({
     const payload = await invoke({
       prompt: buildPublicQueryScopePrompt(normalizedQuestion),
       modelName: CLASSIFIER_MODEL,
+      thinkingMode: CLASSIFIER_THINKING_MODE,
+      reasoningEffort: CLASSIFIER_REASONING_EFFORT,
+      stage: CLASSIFIER_STAGE,
       maxTokens: boundedInteger(
         env.PUBLIC_QUERY_SCOPE_MAX_OUTPUT_TOKENS,
         DEFAULT_MAX_OUTPUT_TOKENS,
@@ -65,7 +69,7 @@ export async function classifyPublicQueryScope({
       signal: timeout.signal,
     });
     return normalizeScopeDecision(payload, {
-      provider: "deepseek",
+      provider: CLASSIFIER_PROVIDER,
       model: CLASSIFIER_MODEL,
       thinkingMode: CLASSIFIER_THINKING_MODE,
       reasoningEffort: CLASSIFIER_REASONING_EFFORT,
