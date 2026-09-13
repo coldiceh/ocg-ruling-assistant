@@ -136,9 +136,11 @@ const PUBLIC_BUDGET_BUCKETS = Object.freeze([
 const memoryBudget = new Map();
 const privateEvaluationBudgetLedger = new Map();
 const cardNameExtractionCache = new Map();
+const cardIdentitySelectionCache = new Map();
 const ruleQueryExtractionCache = new Map();
 const officialQaApplicabilityCache = new Map();
 const cardNameExtractionFlights = new Map();
+const cardIdentitySelectionFlights = new Map();
 const ruleQueryExtractionFlights = new Map();
 const officialQaApplicabilityFlights = new Map();
 
@@ -1053,47 +1055,19 @@ export async function callCardNameExtractionModel({
       fetchImpl,
       now,
       signal: sharedSignal,
-      invoke: () => runAbortableProviderOperation({
+      invoke: () => runLightweightCardProviderOperation({
+        provider,
+        prompt,
+        env,
+        providerEnv,
+        modelName,
+        maxTokens,
+        fetchImpl,
+        reasoningEffort,
         signal: sharedSignal,
         timeoutMs,
         timeoutMessage: "card_name_model_timeout",
-      }, (requestSignal) => (
-        provider === "deepseek"
-          ? callDeepSeek({
-            prompt,
-            env,
-            modelName,
-            maxTokens,
-            fetchImpl,
-            temperature: readNumber(env.RAG_CARD_MODEL_TEMPERATURE, 0),
-            thinkingMode: "disabled",
-            reasoningEffort: null,
-            requireJson: true,
-            allowResponseFormatFallback: false,
-            cloudBudgeted: env.RAG_EVIDENCE_PIPELINE === "cloud_evidence_v1",
-            signal: requestSignal,
-          })
-          : provider === "gemini"
-          ? callGemini({
-            prompt,
-            env,
-            modelName,
-            maxTokens,
-            fetchImpl,
-            temperature: readNumber(env.RAG_CARD_MODEL_TEMPERATURE, 0),
-            maxTokensEnvName: "GEMINI_CARD_MODEL_MAX_OUTPUT_TOKENS",
-            signal: requestSignal,
-          })
-          : callRelay({
-            prompt,
-            env: providerEnv,
-            modelName,
-            maxTokens,
-            fetchImpl,
-            reasoningEffort,
-            signal: requestSignal,
-          })
-      )),
+      }),
     });
     if (execution.blocked) {
       return {
@@ -1139,6 +1113,206 @@ export async function callCardNameExtractionModel({
             ...providerWarnings,
             ...(error.budgetWarnings || []),
             `card_name_model_failed:${safeErrorMessage(error)}`,
+          ]),
+          budgetStatus: error.budgetStatus || null,
+        };
+      }
+    },
+  });
+}
+
+/**
+ * Selects only stable candidate handles supplied for this request. The model
+ * decides identity from the candidate text; this parser only binds its answer
+ * back to the current request and leaves invalid items pending.
+ *
+ * Mechanical binding check: every emitted pair must reference a mentionId and
+ * candidateId in this request's candidate sets. The observable signal is exact
+ * handle membership, so PASS/FAIL does not interpret names, text, confidence,
+ * or relevance. A false positive only leaves that mention pending. The card
+ * name parser cannot validate these per-request candidate handles, so this
+ * direct binding check is sufficient and no second validator is introduced.
+ */
+export async function callCardIdentitySelectionModel({
+  userQuery,
+  candidateSets = [],
+  dataRevision = "",
+  env = globalThis.process?.env || {},
+  modelInvoker,
+  fetchImpl = globalThis.fetch,
+  now = new Date(),
+  dryRun = false,
+  signal,
+} = {}) {
+  const normalizedCandidateSets = normalizeCardIdentityCandidateSets(candidateSets);
+  const providerResolution = resolveCardExtractionProvider(env);
+  const provider = providerResolution.provider;
+  const modelName = modelNameForCardExtractionProvider(provider, env);
+  const providerEnv = provider === "relay" ? createCardExtractionRelayEnv(env) : env;
+  const relayGeneration = resolveCardExtractionRelayGenerationConfig(provider, env);
+  const reasoningEffort = relayGeneration.reasoningEffort;
+  const providerWarnings = [
+    ...providerResolution.warnings,
+    ...relayGeneration.warnings,
+  ];
+  const maxTokens = readNumber(env.RAG_CARD_MODEL_MAX_OUTPUT_TOKENS, 800);
+  const prompt = buildCardIdentitySelectionPrompt(userQuery, normalizedCandidateSets);
+
+  if (!normalizedCandidateSets.length) {
+    return emptyCardIdentitySelectionResult(provider, modelName, true, [
+      ...providerWarnings,
+      "card_identity_selection_no_candidates",
+    ]);
+  }
+  if (dryRun === true || isEnabled(env.RAG_DRY_RUN)) {
+    return emptyCardIdentitySelectionResult(provider, modelName, true, [
+      ...providerWarnings,
+      "card_identity_selection_dry_run_skipped",
+    ]);
+  }
+
+  if (modelInvoker) {
+    try {
+      const execution = await runBudgetedAuxiliaryModelCall({
+        provider,
+        stage: provider === "relay" ? "final_ruling" : "evidence_preparation",
+        modelName,
+        prompt,
+        maxTokens,
+        env: providerEnv,
+        fetchImpl,
+        now,
+        signal,
+        invoke: async () => {
+          const raw = await modelInvoker({
+            prompt,
+            provider,
+            modelName,
+            maxTokens,
+            reasoningEffort,
+            task: "card_identity_selection",
+            signal,
+          });
+          return {
+            rawPayload: raw,
+            rawText: typeof raw === "string" ? raw : JSON.stringify(raw ?? "") ?? "",
+            usage: raw?.usage || {},
+          };
+        },
+      });
+      if (execution.blocked) {
+        return {
+          ...emptyCardIdentitySelectionResult(provider, modelName, true, [
+            ...providerWarnings,
+            ...execution.warnings,
+            "api_daily_budget_exceeded_card_identity_selection_skipped",
+          ]),
+          budgetStatus: execution.budgetStatus,
+        };
+      }
+      const parsed = parseCardIdentitySelectionOutput(execution.value.rawPayload, normalizedCandidateSets);
+      return cardIdentitySelectionResult({
+        parsed,
+        rawText: execution.value.rawText,
+        provider,
+        modelName,
+        providerWarnings: [...providerWarnings, ...execution.warnings],
+        execution,
+      });
+    } catch (error) {
+      return {
+        ...emptyCardIdentitySelectionResult(provider, modelName, false, [
+          ...providerWarnings,
+          ...(error.budgetWarnings || []),
+          `card_identity_selection_model_failed:${safeErrorMessage(error)}`,
+        ]),
+        budgetStatus: error.budgetStatus || null,
+      };
+    }
+  }
+
+  if (provider === "mock" || !hasProviderKey(provider, providerEnv) || typeof fetchImpl !== "function") {
+    return emptyCardIdentitySelectionResult("mock", "mock-card-identity-selector", true, providerWarnings);
+  }
+
+  const cacheKey = extractionCacheKey({
+    kind: "card-identity-selection-v1",
+    provider,
+    modelName,
+    dataRevision,
+    input: {
+      prompt,
+      candidateSets: normalizedCandidateSets,
+      maxTokens,
+      temperature: readNumber(env.RAG_CARD_MODEL_TEMPERATURE, 0),
+      reasoningEffort,
+    },
+  });
+  return runCachedAuxiliaryCall({
+    cache: cardIdentitySelectionCache,
+    flights: cardIdentitySelectionFlights,
+    cacheKey,
+    cacheWarning: "card_identity_selection_cache_hit",
+    env,
+    signal,
+    work: async (sharedSignal) => {
+      try {
+        const execution = await runBudgetedAuxiliaryModelCall({
+          provider,
+          stage: provider === "relay" ? "final_ruling" : "evidence_preparation",
+          modelName,
+          prompt,
+          maxTokens,
+          env: providerEnv,
+          fetchImpl,
+          now,
+          signal: sharedSignal,
+          invoke: () => runLightweightCardProviderOperation({
+            provider,
+            prompt,
+            env,
+            providerEnv,
+            modelName,
+            maxTokens,
+            fetchImpl,
+            reasoningEffort,
+            signal: sharedSignal,
+            timeoutMs: readPositiveNumber(env.RAG_CARD_MODEL_TIMEOUT_MS, DEFAULT_LIGHTWEIGHT_EXTRACTION_TIMEOUT_MS),
+            timeoutMessage: "card_identity_selection_timeout",
+          }),
+        });
+        if (execution.blocked) {
+          return {
+            ...emptyCardIdentitySelectionResult(provider, modelName, true, [
+              ...providerWarnings,
+              ...execution.warnings,
+              "api_daily_budget_exceeded_card_identity_selection_skipped",
+            ]),
+            budgetStatus: execution.budgetStatus,
+          };
+        }
+        const response = execution.value;
+        const parsed = parseCardIdentitySelectionResponse(response, normalizedCandidateSets);
+        const result = cardIdentitySelectionResult({
+          parsed,
+          rawText: response.rawText,
+          provider,
+          modelName,
+          providerWarnings: [
+            ...providerWarnings,
+            ...execution.warnings,
+            ...(response.warnings || []),
+          ],
+          execution,
+        });
+        if (parsed.cacheable) writeCachedExtraction(cardIdentitySelectionCache, cacheKey, result, env);
+        return result;
+      } catch (error) {
+        return {
+          ...emptyCardIdentitySelectionResult(provider, modelName, false, [
+            ...providerWarnings,
+            ...(error.budgetWarnings || []),
+            `card_identity_selection_model_failed:${safeErrorMessage(error)}`,
           ]),
           budgetStatus: error.budgetStatus || null,
         };
@@ -5600,6 +5774,183 @@ function typedCardMentionOriginalText(item = {}) {
   return "";
 }
 
+function normalizeCardIdentityCandidateSets(value) {
+  const seenMentionIds = new Set();
+  const result = [];
+  for (const item of Array.isArray(value) ? value : []) {
+    const mentionId = identitySelectionHandle(item?.mentionId);
+    if (!mentionId || seenMentionIds.has(mentionId)) continue;
+    seenMentionIds.add(mentionId);
+    const duplicateCandidateIds = new Set();
+    const seenCandidateIds = new Set();
+    const candidates = [];
+    for (const candidate of Array.isArray(item?.candidates) ? item.candidates : []) {
+      const candidateId = identitySelectionHandle(candidate?.candidateId);
+      if (!candidateId) continue;
+      if (seenCandidateIds.has(candidateId)) {
+        duplicateCandidateIds.add(candidateId);
+        continue;
+      }
+      seenCandidateIds.add(candidateId);
+      candidates.push({
+        candidateId,
+        cid: candidate?.cid ?? null,
+        passcode: candidate?.passcode ?? null,
+        name: String(candidate?.name || ""),
+        aliases: Array.isArray(candidate?.aliases) ? candidate.aliases.map((alias) => String(alias || "")) : [],
+        typeLine: String(candidate?.typeLine || ""),
+        effectText: String(candidate?.effectText || ""),
+        pendulumEffectText: String(candidate?.pendulumEffectText || ""),
+        attribute: candidate?.attribute ?? null,
+        race: candidate?.race ?? null,
+        level: candidate?.level ?? null,
+        rank: candidate?.rank ?? null,
+        link: candidate?.link ?? null,
+        atk: candidate?.atk ?? null,
+        def: candidate?.def ?? null,
+      });
+    }
+    const uniqueCandidates = candidates.filter((candidate) => !duplicateCandidateIds.has(candidate.candidateId));
+    if (!uniqueCandidates.length) continue;
+    result.push({
+      mentionId,
+      surface: String(item?.surface || ""),
+      candidates: uniqueCandidates,
+    });
+  }
+  return result;
+}
+
+function identitySelectionHandle(value) {
+  if (typeof value !== "string" && typeof value !== "number") return "";
+  const handle = String(value).trim();
+  return handle || "";
+}
+
+function buildCardIdentitySelectionPrompt(userQuery, candidateSets) {
+  return [
+    "你只负责在给定候选中选择玩家提及所指的单张卡，不回答裁定。",
+    "每个 mentionId 只能返回该组提供的 candidateId，或返回 null 表示无法确定。不得创造候选、不得使用别组候选、不得依据编号以外的信息改写候选身份。",
+    "候选中给出了稳定身份、完整名称、别名、类型行和完整卡文；请依据玩家问题与这些候选选择。",
+    "只输出 JSON，例如：{\"selections\":[{\"mentionId\":\"M1\",\"candidateId\":\"C1\"},{\"mentionId\":\"M2\",\"candidateId\":null}]}。无法确定时 candidateId 必须是 JSON null，不是字符串。",
+    "玩家问题：",
+    String(userQuery || ""),
+    "候选集：",
+    JSON.stringify(candidateSets),
+  ].join("\n");
+}
+
+function parseCardIdentitySelectionResponse(response = {}, candidateSets) {
+  if (isTruncatedProviderResponse(response)) {
+    return { selections: [], warnings: [], cacheable: false, reason: "truncated" };
+  }
+  const rawText = String(response?.rawText || "").trim();
+  if (!rawText) return { selections: [], warnings: [], cacheable: false, reason: "empty_content" };
+  return parseCardIdentitySelectionOutput(rawText, candidateSets);
+}
+
+function parseCardIdentitySelectionOutput(raw, candidateSets) {
+  let parsed;
+  try {
+    parsed = raw && typeof raw === "object" && !Array.isArray(raw)
+      ? raw
+      : parseStrictJsonObject(raw);
+  } catch {
+    return { selections: [], warnings: [], cacheable: false, reason: "invalid_json" };
+  }
+  const source = cardIdentitySelectionSource(parsed);
+  if (!Array.isArray(source)) {
+    return { selections: [], warnings: [], cacheable: false, reason: "invalid_schema" };
+  }
+  const candidatesByMention = new Map((candidateSets || []).map((set) => [
+    set.mentionId,
+    new Set((set.candidates || []).map((candidate) => candidate.candidateId)),
+  ]));
+  const selectedByMention = new Map();
+  const conflictingMentionIds = new Set();
+  const invalidMentionIds = new Set();
+  const warnings = [];
+  let invalid = false;
+  for (const item of source) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      invalid = true;
+      continue;
+    }
+    const mentionId = identitySelectionHandle(item.mentionId);
+    if (!mentionId || !candidatesByMention.has(mentionId)) {
+      invalid = true;
+      warnings.push(`card_identity_selection_unknown_mention_handle:${mentionId || "missing"}`);
+      continue;
+    }
+    if (invalidMentionIds.has(mentionId)) continue;
+    if (item.candidateId !== null && typeof item.candidateId !== "string" && typeof item.candidateId !== "number") {
+      invalid = true;
+      invalidMentionIds.add(mentionId);
+      selectedByMention.delete(mentionId);
+      warnings.push(`card_identity_selection_invalid_candidate_handle:${mentionId}`);
+      continue;
+    }
+    const candidateId = item.candidateId === null ? null : identitySelectionHandle(item.candidateId);
+    if (item.candidateId !== null && (!candidateId || !candidatesByMention.get(mentionId).has(candidateId))) {
+      invalid = true;
+      invalidMentionIds.add(mentionId);
+      selectedByMention.delete(mentionId);
+      warnings.push(`card_identity_selection_unknown_candidate_handle:${mentionId}`);
+      continue;
+    }
+    if (conflictingMentionIds.has(mentionId)) continue;
+    if (!selectedByMention.has(mentionId)) {
+      selectedByMention.set(mentionId, candidateId);
+      continue;
+    }
+    if (selectedByMention.get(mentionId) === candidateId) continue;
+    selectedByMention.delete(mentionId);
+    conflictingMentionIds.add(mentionId);
+    invalidMentionIds.add(mentionId);
+    invalid = true;
+    warnings.push(`card_identity_selection_conflicting_selection:${mentionId}`);
+  }
+  const selections = (candidateSets || [])
+    .filter((set) => selectedByMention.has(set.mentionId) && !invalidMentionIds.has(set.mentionId))
+    .map((set) => ({ mentionId: set.mentionId, candidateId: selectedByMention.get(set.mentionId) }));
+  return {
+    selections,
+    warnings,
+    cacheable: !invalid,
+    reason: invalid ? "invalid_handle_binding" : "valid",
+  };
+}
+
+function cardIdentitySelectionSource(parsed) {
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+  if (Object.hasOwn(parsed, "selections")) return parsed.selections;
+  const nested = [parsed.result, parsed.data, parsed.output, parsed.response]
+    .map(cardIdentitySelectionSource)
+    .filter((value) => Array.isArray(value));
+  return nested.length === 1 ? nested[0] : null;
+}
+
+function cardIdentitySelectionResult({ parsed, rawText, provider, modelName, providerWarnings, execution }) {
+  return {
+    selections: parsed.selections,
+    rawText,
+    providerUsed: provider,
+    modelUsed: modelName,
+    dryRun: false,
+    warnings: [
+      ...providerWarnings,
+      ...(parsed.warnings || []),
+      ...(parsed.cacheable ? [] : [`card_identity_selection_not_cached:${parsed.reason}`]),
+    ],
+    tokenUsage: execution.usage,
+    costCurrency: execution.costCurrency,
+    estimatedCost: execution.estimatedCost,
+    estimatedCostCny: execution.estimatedCostCny,
+    estimatedCostUsd: execution.estimatedCostUsd,
+    budgetStatus: execution.budgetStatus,
+  };
+}
+
 function normalizeRuleSearchQueries(rawText) {
   let source = [];
   if (rawText && typeof rawText === "object") {
@@ -5723,6 +6074,17 @@ function emptyCardNameExtractionResult(providerUsed, modelUsed, dryRun, warnings
     typedMentionSetProvided: false,
     invalidTypedMentions: [],
     formatWarnings: [],
+    rawText: "",
+    providerUsed,
+    modelUsed,
+    dryRun,
+    warnings,
+  };
+}
+
+function emptyCardIdentitySelectionResult(providerUsed, modelUsed, dryRun, warnings = []) {
+  return {
+    selections: [],
     rawText: "",
     providerUsed,
     modelUsed,
@@ -6031,6 +6393,58 @@ async function runAbortableProviderOperation({ signal, timeoutMs, timeoutMessage
   } finally {
     scope.cleanup();
   }
+}
+
+function runLightweightCardProviderOperation({
+  provider,
+  prompt,
+  env,
+  providerEnv,
+  modelName,
+  maxTokens,
+  fetchImpl,
+  reasoningEffort,
+  signal,
+  timeoutMs,
+  timeoutMessage,
+}) {
+  return runAbortableProviderOperation({ signal, timeoutMs, timeoutMessage }, (requestSignal) => (
+    provider === "deepseek"
+      ? callDeepSeek({
+        prompt,
+        env,
+        modelName,
+        maxTokens,
+        fetchImpl,
+        temperature: readNumber(env.RAG_CARD_MODEL_TEMPERATURE, 0),
+        thinkingMode: "disabled",
+        reasoningEffort: null,
+        requireJson: true,
+        allowResponseFormatFallback: false,
+        cloudBudgeted: env.RAG_EVIDENCE_PIPELINE === "cloud_evidence_v1",
+        signal: requestSignal,
+      })
+      : provider === "gemini"
+      ? callGemini({
+        prompt,
+        env,
+        modelName,
+        maxTokens,
+        fetchImpl,
+        temperature: readNumber(env.RAG_CARD_MODEL_TEMPERATURE, 0),
+        maxTokensEnvName: "GEMINI_CARD_MODEL_MAX_OUTPUT_TOKENS",
+        signal: requestSignal,
+      })
+      : callRelay({
+        prompt,
+        env: providerEnv,
+        modelName,
+        maxTokens,
+        fetchImpl,
+        reasoningEffort,
+        signal: requestSignal,
+      })
+  ));
 }
 
 function createProviderAbortScope({ signal, timeoutMs, timeoutMessage }) {

@@ -123,6 +123,7 @@ export async function retrieveRagEvidence({
   ruleSearchQueries = [],
   ruleSearchQueryProvider,
   preparedEvidenceProvider,
+  cardIdentitySelectionProvider,
   enableLiveOfficialQa = false,
   subsumptionCandidatePoolComplete = false,
   maxPerBucket = 5,
@@ -165,6 +166,7 @@ export async function retrieveRagEvidence({
   );
   const retrievalWarnings = [];
   const baigeDebug = { searchCount: 0, cacheHitCount: 0, warnings: [], ambiguousMentions: [] };
+  const pendingIdentityCandidates = new Map();
   const unresolvedMentions = cardResolution.unresolvedMentions || [];
   const parentheticalAliasKeys = collectParentheticalAliasMentionKeys(unresolvedMentions, resolvedCards);
   const unresolvedResolutionCandidates = unresolvedMentions
@@ -206,9 +208,19 @@ export async function retrieveRagEvidence({
       warnings: retrievalWarnings,
       debug: baigeDebug,
       signal,
+      pendingIdentityCandidates,
     }),
   ]);
   throwIfAborted(signal);
+  const modelSelectedCards = await selectPendingProviderCards({
+    userQuery, mentions: externalResolutionCandidates, pendingIdentityCandidates,
+    alreadyResolved: [...enrichedLocalCards, ...baigeResolvedCards],
+    canonicalCards: data.cards, select: cardIdentitySelectionProvider,
+    warnings: retrievalWarnings, signal,
+  });
+  baigeResolvedCards.push(...modelSelectedCards);
+  const selectedSurfaces = new Set(modelSelectedCards.map(card => card.input));
+  baigeDebug.ambiguousMentions = baigeDebug.ambiguousMentions.filter(mention => !selectedSurfaces.has(mention.input));
   const identityVerificationFailures = enrichedLocalCards
     .filter((card) => card.identityVerificationStatus === "unverified")
     .map((card) => ({
@@ -5013,11 +5025,18 @@ async function resolveUnresolvedMentionCardsWithBaige(unresolvedMentions, {
   warnings,
   debug,
   signal,
+  pendingIdentityCandidates,
 }) {
   throwIfAborted(signal);
   const mentions = unresolvedMentions || [];
   const minConfidence = readPositiveDecimal(env.RAG_BAIGE_MIN_CONFIDENCE, 0.72);
   const result = await Promise.all(mentions.map(async (mention) => {
+    const rememberCandidates = (candidates) => {
+      if (!pendingIdentityCandidates) return;
+      pendingIdentityCandidates.set(mention.input, [
+        ...(pendingIdentityCandidates.get(mention.input) || []), ...candidates,
+      ]);
+    };
     const modelExpansionQueries = modelIdentityExpansionQueries(mention);
     if (modelExpansionQueries.length) {
       const intersection = await resolveModelExpansionByStableCidIntersection({
@@ -5029,6 +5048,7 @@ async function resolveUnresolvedMentionCardsWithBaige(unresolvedMentions, {
         warnings,
         debug,
         signal,
+        onCandidates: rememberCandidates,
       });
       if (!intersection.card) {
         if (intersection.candidates.length > 1) {
@@ -5073,6 +5093,7 @@ async function resolveUnresolvedMentionCardsWithBaige(unresolvedMentions, {
       const searchResult = await searchBaige(query, { fetchImpl, env, limits, debug, signal });
       warnings.push(...searchResult.warnings);
       const candidates = searchResult.results || [];
+      rememberCandidates(candidates);
       if (!candidates.length) {
         warnings.push(`baige_no_result:${query}`);
         continue;
@@ -5223,10 +5244,12 @@ async function resolveModelExpansionByStableCidIntersection({
   warnings,
   debug,
   signal,
+  onCandidates,
 }) {
   const originalSearch = await searchBaige(surface, { fetchImpl, env, limits, debug, signal });
   warnings.push(...originalSearch.warnings);
   const originalResults = originalSearch.results || [];
+  onCandidates?.(originalResults);
   const originalEligibleResults = originalResults.filter((candidate) => (
     Number(candidate?.confidence || 0) >= 0.72
       && providerPrimaryNameMechanicallyMatchesSurface(candidate, surface)
@@ -5295,6 +5318,7 @@ async function resolveModelExpansionByStableCidIntersection({
   for (const query of expansionQueries) {
     const searchResult = await searchBaige(query, { fetchImpl, env, limits, debug, signal });
     warnings.push(...searchResult.warnings);
+    onCandidates?.(searchResult.results || []);
     for (const candidate of searchResult.results || []) {
       if (!providerIdentityNameExactlyMatches(candidate, query)) continue;
       const cid = verifiedExternalCardCid(candidate);
@@ -5340,6 +5364,69 @@ async function resolveModelExpansionByStableCidIntersection({
     expansionCids,
     candidates: [expansionCandidatesByCid.get(cid)].filter(Boolean),
   };
+}
+
+async function selectPendingProviderCards({ userQuery, mentions, pendingIdentityCandidates,
+  alreadyResolved, canonicalCards, select, warnings, signal }) {
+  if (typeof select !== 'function') return [];
+  const resolvedInputs = new Set(alreadyResolved
+    .filter(card => card.identityVerificationStatus !== 'unverified')
+    .map(card => card.input));
+  const groups = [];
+  for (const input of new Set(mentions.map(mention => mention.input))) {
+    if (resolvedInputs.has(input)) continue;
+    const candidates = new Map();
+    for (const source of pendingIdentityCandidates.get(input) || []) {
+      // Candidate membership and canonical CID/passcode binding are mechanical;
+      // only the model decides which candidate the user's wording refers to.
+      if (!verifiedExternalCardCid(source) && !verifiedEnginePasscode(source)) continue;
+      const card = canonicalizeRetrievedCardIdentity(toRagCard(source, '', source.confidence), canonicalCards, warnings);
+      if (card.identityCanonicalizationConflict === true) continue;
+      const identity = stableCardIdentityKey(card);
+      if (!candidates.has(identity)) candidates.set(identity, card);
+    }
+    if (candidates.size) groups.push({input, cards:[...candidates.values()]});
+  }
+  if (!groups.length) return [];
+  const candidateSets = groups.map((group, index) => ({
+    mentionId: `M${index + 1}`, surface: group.input,
+    candidates: group.cards.map((card, cardIndex) => ({
+      candidateId: `C${cardIndex + 1}`, cid: card.cid, passcode: card.passcode,
+      name: card.name, aliases: card.aliases, typeLine: card.typeLine,
+      effectText: card.effectText, pendulumEffectText: card.pendulumEffectText,
+      attribute: card.attribute, race: card.race, level: card.level, rank: card.rank,
+      link: card.link, atk: card.atk, def: card.def,
+    })),
+  }));
+  signal?.throwIfAborted();
+  const selections = await select({userQuery, candidateSets, signal});
+  signal?.throwIfAborted();
+  const result = [];
+  for (let index = 0; index < groups.length; index++) {
+    const group = groups[index], set = candidateSets[index];
+    const choices = new Set((Array.isArray(selections) ? selections : [])
+      .filter(row => row?.mentionId === set.mentionId)
+      .map(row => row.candidateId));
+    if (choices.size !== 1) continue;
+    const choice = [...choices][0];
+    if (choice === null) continue;
+    const candidateIndex = set.candidates.findIndex(candidate => candidate.candidateId === choice);
+    if (candidateIndex < 0) {
+      warnings.push(`card_identity_selection_unknown_candidate:${set.mentionId}`);
+      continue;
+    }
+    // Materialize the exact source object addressed by this request's handles.
+    // Invalid/absent references leave the mention pending; they never create a
+    // card or infer meaning from a name, score, or keyword.
+    result.push(ensureCardMentionAlias({
+      ...group.cards[candidateIndex], input: group.input, matchedQuery: group.input,
+      resolutionSource: 'external_identity_verification',
+      identityVerificationStatus: 'verified_external_resolution',
+      identityVerificationSource: 'model_candidate_selection',
+    }));
+    warnings.push(`card_identity_model_selected:${set.mentionId}`);
+  }
+  return result;
 }
 
 function stableExternalCidCandidates(candidates) {
@@ -6282,7 +6369,8 @@ export function reconcileRetrievedCardResolution({
 } = {}) {
   const candidates = mergeCardsByStableIdentity(retrievedCards).map(ensureCardMentionAlias);
   const externallyResolvedSurfaceKeys = new Set(candidates
-    .filter(retrievedExternalIdentityProofIsMechanical)
+    .filter(card => card.identityVerificationSource === 'model_candidate_selection'
+      || retrievedExternalIdentityProofIsMechanical(card))
     .map((card) => normalizeCardKey(card.input))
     .filter(Boolean));
   const ambiguousMentions = dedupeMentions([
