@@ -5,6 +5,7 @@ import { createGeminiRuleCacheClient } from './geminiRuleCacheClient.mjs';
 import { resolveGeminiSelection, packGeminiSelection } from './geminiRuleQaPacking.mjs';
 
 const ruleContexts = new WeakMap();
+const FINAL_SUBMISSION_INSTRUCTION = '补查结束，现在用已读资料submit_evidence，提交 ruleUnitIds 和 qaHandles；不得编造缺失依据。';
 function normalizeCalls(content) {
   const calls = (content?.parts || []).flatMap(part => part.functionCall ? [part.functionCall] : []);
   if (calls.length) return calls;
@@ -40,7 +41,7 @@ export function createGeminiRuleQaEvidenceProvider({ fetchImpl = globalThis.fetc
     let reminderUsed = false, searchCount = 0;
     timingsMs.model = 0;
     timingsMs.qaSearch = 0;
-    for (let round = 1; round <= 3; round++) {
+    for (let round = 1; round <= 4; round++) {
       signal?.throwIfAborted();
       step = performance.now();
       const raw = await client.generate(cache, contents);
@@ -51,9 +52,19 @@ export function createGeminiRuleQaEvidenceProvider({ fetchImpl = globalThis.fetc
       if (!content) throw new Error('gemini_rule_qa_content_absent');
       // Preserve complete native Content/Part, including thoughtSignature, across turns.
       contents.push(content);
-      const calls = normalizeCalls(content);
+      const receivedCalls = normalizeCalls(content);
+      const calls = round === 4
+        ? receivedCalls.filter((call) => call.name === 'submit_evidence')
+        : receivedCalls;
       if (!calls.length) {
-        if (reminderUsed || round === 3) throw new Error('gemini_rule_qa_no_submission');
+        if (round === 4) throw new Error(receivedCalls.length
+          ? 'gemini_rule_qa_final_submission_required'
+          : 'gemini_rule_qa_no_submission');
+        if (reminderUsed) throw new Error('gemini_rule_qa_no_submission');
+        if (round === 3) {
+          contents.push({ role: 'user', parts: [{ text: FINAL_SUBMISSION_INSTRUCTION }] });
+          continue;
+        }
         reminderUsed = true;
         contents.push({ role: 'user', parts: [{ text: '请使用 search_qa 补查，或用 submit_evidence 的 ruleUnitIds 和 qaHandles 两个数组提交完整条目。不要输出裁定。' }] });
         continue;
@@ -107,6 +118,7 @@ export function createGeminiRuleQaEvidenceProvider({ fetchImpl = globalThis.fetc
         } else throw new Error('gemini_rule_qa_unknown_tool');
       }
       contents.push({ role: 'user', parts: responses });
+      if (round === 3) contents.push({ role: 'user', parts: [{ text: FINAL_SUBMISSION_INSTRUCTION }] });
     }
     throw new Error('gemini_rule_qa_round_limit');
   } };
