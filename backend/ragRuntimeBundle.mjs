@@ -76,81 +76,33 @@ export async function loadRagRuntimeBundle({
   const sourceBinding = validateSourceRevisionBinding(manifest, revisionManifest);
   if (!sourceBinding.ok) return fallback(sourceBinding.reason, sourceBinding.reasons);
 
-  const decoded = {};
-  for (const corpus of RAG_RUNTIME_CORPORA) {
-    const descriptor = manifest.corpora[corpus.key];
-    let compressed;
-    try {
-      compressed = await readFile(join(resolvedBundleDir, descriptor.file));
-    } catch (error) {
-      return fallback(classifyReadFailure(error, `corpus_${corpus.key}`));
-    }
-    if (compressed.byteLength !== descriptor.bytes) {
-      return fallback("corpus_compressed_size_mismatch", [corpus.key]);
-    }
-    if (sha256(compressed) !== descriptor.sha256) {
-      return fallback("corpus_compressed_hash_mismatch", [corpus.key]);
-    }
-
-    let canonicalBytes;
-    try {
-      canonicalBytes = await decompressBrotli(compressed);
-    } catch {
-      return fallback("corpus_brotli_decode_failed", [corpus.key]);
-    }
-    if (canonicalBytes.byteLength !== descriptor.canonicalBytes) {
-      return fallback("corpus_canonical_size_mismatch", [corpus.key]);
-    }
-    if (sha256(canonicalBytes) !== descriptor.canonicalSha256) {
-      return fallback("corpus_canonical_hash_mismatch", [corpus.key]);
-    }
-
-    let value;
-    try {
-      value = JSON.parse(canonicalBytes.toString("utf8"));
-    } catch {
-      return fallback("corpus_json_invalid", [corpus.key]);
-    }
-    if (!Array.isArray(value)) return fallback("corpus_not_an_array", [corpus.key]);
-    if (value.length !== descriptor.count || value.length !== manifest.counts[corpus.key]) {
-      return fallback("corpus_count_mismatch", [corpus.key]);
-    }
-    decoded[corpus.key] = value;
+  const entries = [
+    ...RAG_RUNTIME_CORPORA.map((corpus) => ({
+      kind: "corpus",
+      definition: corpus,
+      descriptor: manifest.corpora[corpus.key],
+    })),
+    ...RAG_RUNTIME_AUXILIARY_ARTIFACTS.map((artifact) => ({
+      kind: "artifact",
+      definition: artifact,
+      descriptor: manifest.artifacts[artifact.key],
+    })),
+  ];
+  const loadedEntries = await loadRuntimeEntriesBounded(entries, resolvedBundleDir, manifest.counts, 2);
+  for (const entry of loadedEntries) {
+    if (!entry.result.ok) return fallback(entry.result.reason, entry.result.reasons);
   }
 
-  const decodedArtifacts = {};
-  for (const artifact of RAG_RUNTIME_AUXILIARY_ARTIFACTS) {
-    const descriptor = manifest.artifacts[artifact.key];
-    let compressed;
-    try {
-      compressed = await readFile(join(resolvedBundleDir, descriptor.file));
-    } catch (error) {
-      return fallback(classifyReadFailure(error, `artifact_${artifact.key}`));
-    }
-    if (compressed.byteLength !== descriptor.bytes) {
-      return fallback("artifact_compressed_size_mismatch", [artifact.key]);
-    }
-    if (sha256(compressed) !== descriptor.sha256) {
-      return fallback("artifact_compressed_hash_mismatch", [artifact.key]);
-    }
-    let canonicalBytes;
-    try {
-      canonicalBytes = await decompressBrotli(compressed);
-    } catch {
-      return fallback("artifact_brotli_decode_failed", [artifact.key]);
-    }
-    if (canonicalBytes.byteLength !== descriptor.canonicalBytes) {
-      return fallback("artifact_canonical_size_mismatch", [artifact.key]);
-    }
-    if (sha256(canonicalBytes) !== descriptor.canonicalSha256) {
-      return fallback("artifact_canonical_hash_mismatch", [artifact.key]);
-    }
-    try {
-      decodedArtifacts[artifact.key] = JSON.parse(canonicalBytes.toString("utf8"));
-    } catch {
-      return fallback("artifact_json_invalid", [artifact.key]);
-    }
-  }
+  const decoded = Object.fromEntries(
+    loadedEntries
+      .filter(({ entry }) => entry.kind === "corpus")
+      .map(({ entry, result }) => [entry.definition.key, result.value]),
+  );
+  const decodedArtifacts = Object.fromEntries(
+    loadedEntries
+      .filter(({ entry }) => entry.kind === "artifact")
+      .map(({ entry, result }) => [entry.definition.key, result.value]),
+  );
 
   const data = {
     cards: decoded.cards,
@@ -175,6 +127,74 @@ export async function loadRagRuntimeBundle({
     bundleRevision: manifest.bundleRevision,
     manifest,
   });
+}
+
+async function loadRuntimeEntriesBounded(entries, bundleDir, counts, concurrency) {
+  const results = new Array(entries.length);
+  let nextIndex = 0;
+  async function worker() {
+    while (true) {
+      const index = nextIndex;
+      nextIndex += 1;
+      if (index >= entries.length) return;
+      const entry = entries[index];
+      results[index] = {
+        entry,
+        result: await loadRuntimeEntry(entry, bundleDir, counts),
+      };
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(concurrency, entries.length) }, worker));
+  return results;
+}
+
+async function loadRuntimeEntry({ kind, definition, descriptor }, bundleDir, counts) {
+  const key = definition.key;
+  const prefix = kind === "corpus" ? `corpus_${key}` : `artifact_${key}`;
+  const failurePrefix = kind === "corpus" ? "corpus" : "artifact";
+  let compressed;
+  try {
+    compressed = await readFile(join(bundleDir, descriptor.file));
+  } catch (error) {
+    return failed(classifyReadFailure(error, prefix));
+  }
+  if (compressed.byteLength !== descriptor.bytes) {
+    return failed(`${failurePrefix}_compressed_size_mismatch`, key);
+  }
+  if (sha256(compressed) !== descriptor.sha256) {
+    return failed(`${failurePrefix}_compressed_hash_mismatch`, key);
+  }
+
+  let canonicalBytes;
+  try {
+    canonicalBytes = await decompressBrotli(compressed);
+  } catch {
+    return failed(`${failurePrefix}_brotli_decode_failed`, key);
+  }
+  if (canonicalBytes.byteLength !== descriptor.canonicalBytes) {
+    return failed(`${failurePrefix}_canonical_size_mismatch`, key);
+  }
+  if (sha256(canonicalBytes) !== descriptor.canonicalSha256) {
+    return failed(`${failurePrefix}_canonical_hash_mismatch`, key);
+  }
+
+  let value;
+  try {
+    value = JSON.parse(canonicalBytes.toString("utf8"));
+  } catch {
+    return failed(`${failurePrefix}_json_invalid`, key);
+  }
+  if (kind === "corpus") {
+    if (!Array.isArray(value)) return failed("corpus_not_an_array", key);
+    if (value.length !== descriptor.count || value.length !== counts[key]) {
+      return failed("corpus_count_mismatch", key);
+    }
+  }
+  return { ok: true, value };
+}
+
+function failed(reason, details = []) {
+  return { ok: false, reason, reasons: Array.isArray(details) ? details : [details] };
 }
 
 export function validateRagRuntimeBundleManifest(manifest) {

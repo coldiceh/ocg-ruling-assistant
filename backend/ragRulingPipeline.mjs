@@ -15,6 +15,8 @@ import { buildRagRulingPromptBundle } from "./ragRulingPrompt.mjs";
 import { createCloudEvidenceProvider } from './cloudEvidenceProvider.mjs';
 import { generateCloudEvidencePlan } from './cloudEvidencePlan.mjs';
 import { createGeminiRuleQaEvidenceProvider } from './geminiRuleQaEvidenceProvider.mjs';
+import { loadGeminiRuleQaAssets } from './geminiRuleQaAssets.mjs';
+import { fileURLToPath } from 'node:url';
 import { runCloudBudgetedQuestion, cloudSiliconFlowCallbacks } from './cloudRequestBudget.mjs';
 import { hasNumberedCardIdentityConflict } from "./numberedCardIdentity.mjs";
 import { retrieveExactOfficialQaDirect } from "./officialQaExactDirect.mjs";
@@ -29,6 +31,28 @@ import {
 } from "../scripts/lib/retrieval-evidence-lineage.mjs";
 
 const defaultSnapshotRevisionCache = new WeakMap();
+
+// This only starts local, version-bound snapshot work. No network cache or
+// model request is created until the ordinary retrieval stage consumes it.
+export function preloadRagRequestAssets({ env = {}, dataDir } = {}) {
+  if (env.RAG_EVIDENCE_PIPELINE !== 'cloud_evidence_v1'
+      || !/^(?:1|true|yes|on)$/iu.test(String(env.GEMINI_RULE_QA_ENABLED || '').trim())) return undefined;
+  const observe = (promise) => {
+    // An early scope rejection may never consume the preload. The same
+    // rejection remains available to the normal pipeline when it does proceed.
+    promise.catch(() => {});
+    return promise;
+  };
+  const data = observe(loadRagData(dataDir));
+  return {
+    data,
+    // Stagger the two large snapshots to avoid overlapping their temporary
+    // decompression buffers, while both still run during upstream waiting.
+    geminiAssets: observe(data.then(() => loadGeminiRuleQaAssets({
+      dataDir: env.GEMINI_RULE_QA_DATA_DIR || fileURLToPath(new URL('../data', import.meta.url)),
+    }))),
+  };
+}
 const TRUSTED_FROZEN_IDENTITY_RESOLUTION_SOURCES = new Set([
   "query",
   "external_identity_verification",
@@ -549,6 +573,7 @@ async function answerRagRulingQuestionInternal({
   frozenCardResolution,
   captureEvidenceOnly = false,
   prepareForContinuation = false,
+  preloadedAssets,
   progress,
 } = {}) {
   const pipelineStartedAt = Date.now();
@@ -573,7 +598,7 @@ async function answerRagRulingQuestionInternal({
   try {
     data = await Promise.resolve(!usesCompleteDefaultSnapshot
       ? { cards: cards || [], records: records || [], qaRecords: qaRecords || [] }
-      : loadRagData(dataDir));
+      : preloadedAssets?.data || loadRagData(dataDir));
     dataRevision = buildRagDataRevision(data, env, {
       cacheByIdentity: usesCompleteDefaultSnapshot,
     });
@@ -734,6 +759,7 @@ async function answerRagRulingQuestionInternal({
             retrievedEvidence: preparedEvidence,
             env,
             signal,
+            assetsPromise: preloadedAssets?.geminiAssets,
             packEvidence: (selectedEvidence) => buildRagRulingPromptBundle({
               userQuery: query,
               cardResolution: preparedEvidence.cardResolution,
