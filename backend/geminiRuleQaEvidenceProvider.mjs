@@ -112,7 +112,7 @@ export function createGeminiRuleQaEvidenceProvider({ fetchImpl = globalThis.fetc
           const generationEstimatedCostUsd = ((tokenUsage.prompt_tokens - tokenUsage.cached_input_tokens) * 0.75
             + tokenUsage.cached_input_tokens * 0.075 + tokenUsage.completion_tokens * 3.75) / 1e6;
           const cacheProvisionUsd = cache.reused ? 0 : (cache.tokenCount || 0) * (0.75 + 0.50 * 180 / 3600) / 1e6;
-          const telemetry = { provider: 'gemini', model: client.model, providerUsed: 'gemini', modelUsed: client.model, reasoningEffort: 'low',
+          const telemetry = { provider: 'gemini', model: client.model, providerUsed: 'gemini', modelUsed: client.model, reasoningEffort: 'high',
             dryRun: false, warnings: [], tokenUsage, cacheHit: cache.reused,
             estimatedCostUsd: generationEstimatedCostUsd + cacheProvisionUsd,
             generationEstimatedCostUsd, cacheProvisionUsd, costBasis: 'google_list_theoretical_cache_creation_input_provision_unknown',

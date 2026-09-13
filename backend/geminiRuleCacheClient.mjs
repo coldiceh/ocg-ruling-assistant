@@ -91,7 +91,7 @@ export function createGeminiRuleCacheClient({ env = {}, fetchImpl = globalThis.f
   }
   async function generate(cache, contents) {
     const body = { cachedContent: cache.name, contents,
-      generationConfig: { thinkingConfig: { thinkingLevel: 'low' }, maxOutputTokens: 4096 } };
+      generationConfig: { thinkingConfig: { thinkingLevel: 'high' }, maxOutputTokens: 4096 } };
     const invoke = () => api(`models/${model}:generateContent`, 'POST', body);
     return budgetedRequest({ body, model, operation: 'generate_content', cachedTokenCount: cache.tokenCount, invoke });
   }
