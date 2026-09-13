@@ -1665,6 +1665,7 @@ function renderRagAnswer(answer) {
     ...(debugUiEnabled ? ragBudgetLines(answer.debug?.budgetStatus) : []),
   ]);
   renderSources((answer.usedEvidence || []).map((item) => ({
+    ...item,
     label: ragEvidenceLabel(item.type),
     detail: item.title || item.id || "",
     id: item.id || "",
@@ -1675,6 +1676,9 @@ function renderRagAnswer(answer) {
 }
 
 function ragEvidenceLabel(type) {
+  if (type === "qa") return "Q&A";
+  if (type === "card-faq") return "卡片 FAQ";
+  if (type === "rule-doc") return "规则资料";
   if (type === "official_qa") return "官方 Q&A";
   if (type === "card_text") return "卡片文本";
   if (type === "baige_card_text") return "百鸽卡片文本";
@@ -2194,7 +2198,7 @@ function renderCards(cards, pendingNames = []) {
 function normalizeVisibleCards(cards) {
   const normalizedCards = (cards || []).map((card) => ({
     id: String(card.id || card.cardId || "").trim(),
-    passcode: String(card.passcode || card.cardId || card.id || "").trim(),
+    passcode: String(card.passcode || "").trim(),
     name: String(card.name || card.cnName || card.jaName || card.enName || "").trim(),
     cnName: String(card.cnName || "").trim(),
     jaName: String(card.jaName || card.jpName || "").trim(),
@@ -2353,7 +2357,7 @@ async function loadCardDetail(card) {
   }
 
   const url = new URL(endpoint);
-  const numericId = card.passcode || (/^\d{7,12}$/.test(card.id) ? card.id : "");
+  const numericId = card.passcode;
   if (numericId) url.searchParams.set("id", numericId);
   url.searchParams.set("name", card.cnName || card.name);
   if (card.jaName) url.searchParams.set("jaName", card.jaName);
@@ -5168,7 +5172,7 @@ function setCardImage(candidates, altText) {
 
 function buildLocalImageCandidates(card) {
   const providedImages = [card.imageUrl, ...(card.imageCandidates || [])].filter(Boolean);
-  const id = (card.passcode || card.id || "").replace(/\D+/g, "");
+  const id = String(card.passcode || "").replace(/\D+/g, "");
   if (!id) return providedImages;
   const normalizedId = id.length <= 8 ? id.padStart(8, "0") : id;
   const compactId = normalizedId.replace(/^0+/, "") || normalizedId;
@@ -5788,7 +5792,9 @@ function renderMarkdownInline(parent, value, sourceLinks = []) {
     const index = Number(match.index || 0);
     if (index > cursor) appendText(parent, "span", source.slice(cursor, index));
     if (match[1] !== undefined) {
-      appendText(parent, "strong", match[1]);
+      const strong = document.createElement("strong");
+      renderMarkdownInline(strong, match[1], sourceLinks);
+      parent.appendChild(strong);
     } else {
       const title = match[2] ?? match[4] ?? "";
       const url = safeHttpUrl(match[3]) || sourceLinks.find((item) => item.title === title)?.url || "";
@@ -5823,6 +5829,7 @@ function sourcePageUrl(value) {
   try {
     const url = new URL(safeUrl);
     const qaMatch = /^\/data\/qa\/(\d+)$/u.exec(url.pathname);
+    const cardMatch = /^\/data\/card\/(\d+)$/u.exec(url.pathname);
     if (
       url.protocol === "https:"
       && url.hostname === "db.ygoresources.com"
@@ -5831,9 +5838,11 @@ function sourcePageUrl(value) {
       && !url.password
       && !url.search
       && !url.hash
-      && qaMatch
+      && (qaMatch || cardMatch)
     ) {
-      return `https://www.db.yugioh-card.com/yugiohdb/faq_search.action?fid=${encodeURIComponent(qaMatch[1])}&ope=5&request_locale=ja`;
+      return qaMatch
+        ? `https://www.db.yugioh-card.com/yugiohdb/faq_search.action?fid=${encodeURIComponent(qaMatch[1])}&ope=5&request_locale=ja`
+        : `https://www.db.yugioh-card.com/yugiohdb/faq_search.action?cid=${encodeURIComponent(cardMatch[1])}&ope=4&request_locale=ja`;
     }
   } catch {
     return "";
@@ -5844,10 +5853,8 @@ function sourcePageUrl(value) {
 function buildSourceLinkMap(sources = []) {
   return (Array.isArray(sources) ? sources : [])
     .map((source) => typeof source === "string" ? { detail: source } : source)
-    .map((source) => ({
-      title: String(source?.title || source?.detail || "").trim(),
-      url: sourcePageUrl(source?.sourceUrl || source?.url),
-    }))
+    .flatMap((source) => [...new Set([source?.title || source?.detail, source?.id])]
+      .map(title => ({ title: String(title || "").trim(), url: sourcePageUrl(source?.sourceUrl || source?.url) })))
     .filter((source) => source.title && source.url);
 }
 
@@ -6242,11 +6249,19 @@ function renderSources(sources) {
   ui.sourcesList.hidden = false;
   if (ui.sourceTrace) ui.sourceTrace.hidden = false;
 
+  const groups = new Map();
   for (const source of sources) {
     const normalizedSource = typeof source === "string" ? { label: "资料来源", detail: source } : source;
     const detail = String(normalizedSource.detail || normalizedSource.title || "").trim();
     const url = sourcePageUrl(normalizedSource.url || normalizedSource.sourceUrl || (/^https?:\/\//i.test(detail) ? detail : ""));
-    const title = String(normalizedSource.title || (url && detail !== url ? detail : "资料来源")).trim() || "资料来源";
+    const title = String(normalizedSource.title || (detail !== url ? detail : "资料来源")).trim() || "资料来源";
+    // Only identical source URLs/titles share a row. All selected entries
+    // remain available below, in their original order.
+    const key = JSON.stringify([url, title, normalizedSource.label || normalizedSource.name || "资料来源"]);
+    if (!groups.has(key)) groups.set(key, { url, title, source: normalizedSource, entries: [] });
+    groups.get(key).entries.push(normalizedSource);
+  }
+  for (const { url, title, source: normalizedSource, entries } of groups.values()) {
     const node = document.createElement("div");
     node.className = "source-item";
     appendText(node, "strong", normalizedSource.label || normalizedSource.name || "资料来源");
@@ -6257,11 +6272,31 @@ function renderSources(sources) {
       link.rel = "noreferrer noopener";
       link.textContent = title;
       node.appendChild(link);
-    } else if (detail) {
+    } else {
       appendText(node, "p", title);
+    }
+    const bodies = entries.flatMap(sourceEvidenceBlocks);
+    if (bodies.length) {
+      const details = document.createElement("details");
+      details.className = "source-evidence";
+      appendText(details, "summary", "查看本次引用原文");
+      for (const body of bodies) appendText(details, "pre", body);
+      node.appendChild(details);
     }
     ui.sourcesList.appendChild(node);
   }
+}
+
+function sourceEvidenceBlocks(source) {
+  const keys = ['question', 'rawQuestion', 'rawDetailedQuestion', 'detailedScene', 'answer', 'conclusion', 'text', 'fullText', 'officialText'];
+  let body = source;
+  // Gemini packs the complete QA source record as JSON. Display its available
+  // body fields as plain text; never render source HTML or cut an excerpt.
+  try {
+    const record = JSON.parse(source.text);
+    if (record && ['qa', 'card-faq'].includes(record.recordType)) body = record;
+  } catch { /* Ordinary rule paragraphs are already plain text. */ }
+  return [...new Set(keys.map(key => body[key]).filter(value => typeof value === 'string' && value.length))];
 }
 
 function renderFeedbackPanel(answer) {

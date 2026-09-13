@@ -139,11 +139,12 @@ function makeBigrams(value) {
 
 function normalizeProviderCard(card = {}) {
   const id = String(card.id || card.cardId || card.passcode || "");
+  const passcode = String(card.passcode || card.password || "");
   return {
     ...card,
     id,
     cardId: String(card.cardId || card.id || card.passcode || ""),
-    passcode: String(card.passcode || card.id || card.cardId || ""),
+    passcode,
     name: card.name || card.cnName || card.jaName || card.enName || "",
     aliases: [
       card.name,
@@ -152,7 +153,7 @@ function normalizeProviderCard(card = {}) {
       card.enName,
       ...(Array.isArray(card.aliases) ? card.aliases : []),
     ].filter(Boolean),
-    imageCandidates: buildCardImageCandidates(id),
+    imageCandidates: buildCardImageCandidates(passcode),
   };
 }
 
