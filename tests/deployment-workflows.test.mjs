@@ -153,9 +153,12 @@ test("the ordinary repository check rejects stale revision and runtime artifacts
 
 test("Vercel verifies source, runtime, and cloud asset bindings before deployment", async () => {
   const config = JSON.parse(await readFile(new URL("../vercel.json", import.meta.url), "utf8"));
+  const packageJson = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
+  assert.ok(config.buildCommand.length <= 256, "Vercel schema limits buildCommand to 256 characters");
+  assert.equal(config.buildCommand, "pnpm run build:vercel");
 
   assert.equal(
-    config.buildCommand,
+    packageJson.scripts["build:vercel"],
     "pnpm run check:rag-revision && pnpm run check:rag-runtime && pnpm run build:gemini-rule-qa && node scripts/sync-cloud-evidence-assets.mjs --data-dir data --cloud-dir data/cloud-evidence-v1 --check-only && node scripts/build-public-release.mjs && node scripts/build-web-assets.mjs",
   );
   assert.equal(config.outputDirectory, "public");
