@@ -81,6 +81,8 @@ test("data sync runs the bounded synchronization checks and keeps the complete s
     "tests/rag-data-revision-manifest.test.mjs",
     "tests/rag-runtime-bundle.test.mjs",
     "tests/rag-runtime-deployment-safety.test.mjs",
+    "tests/gemini-qa-tools.test.mjs",
+    "tests/gemini-rule-qa-assets.test.mjs",
     "tests/cloud-evidence-assets.test.mjs",
     "tests/cloud-evidence-incremental-sync.test.mjs",
     "tests/evidence-vector-index.test.mjs",
@@ -154,7 +156,7 @@ test("Vercel verifies source, runtime, and cloud asset bindings before deploymen
 
   assert.equal(
     config.buildCommand,
-    "pnpm run check:rag-revision && pnpm run check:rag-runtime && node scripts/sync-cloud-evidence-assets.mjs --data-dir data --cloud-dir data/cloud-evidence-v1 --check-only && node scripts/build-public-release.mjs",
+    "pnpm run check:rag-revision && pnpm run check:rag-runtime && pnpm run build:gemini-rule-qa && node scripts/sync-cloud-evidence-assets.mjs --data-dir data --cloud-dir data/cloud-evidence-v1 --check-only && node scripts/build-public-release.mjs",
   );
   assert.equal(config.outputDirectory, "public");
   assert.equal(

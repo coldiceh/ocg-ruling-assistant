@@ -13,6 +13,7 @@ import {
 import { buildRagRulingPromptBundle } from "./ragRulingPrompt.mjs";
 import { createCloudEvidenceProvider } from './cloudEvidenceProvider.mjs';
 import { generateCloudEvidencePlan } from './cloudEvidencePlan.mjs';
+import { createGeminiRuleQaEvidenceProvider } from './geminiRuleQaEvidenceProvider.mjs';
 import { runCloudBudgetedQuestion, cloudSiliconFlowCallbacks } from './cloudRequestBudget.mjs';
 import { hasNumberedCardIdentityConflict } from "./numberedCardIdentity.mjs";
 import { retrieveExactOfficialQaDirect } from "./officialQaExactDirect.mjs";
@@ -543,6 +544,7 @@ async function answerRagRulingQuestionInternal({
   officialQaExactOnly = false,
   officialQaExactAlreadyChecked = false,
   evidenceSelectionProvider,
+  geminiEvidenceProvider,
   frozenCardResolution,
   captureEvidenceOnly = false,
   prepareForContinuation = false,
@@ -666,8 +668,22 @@ async function answerRagRulingQuestionInternal({
   const retrievalStartedAt = Date.now();
   const retrievalStage = beginPrivateEvaluationStage(privateEvaluationDiagnostics, "retrieval");
   let retrievedEvidence;
+  let preparedPromptBundle = null;
+  const geminiRuleQaEnabled = cloudEvidence
+    && /^(?:1|true|yes|on)$/iu.test(String(env.GEMINI_RULE_QA_ENABLED || '').trim());
+  // Gemini builds the final prompt inside the retrieval provider, so pending
+  // typed-interface gaps must already be part of the card-resolution envelope
+  // it receives. Other retrieval paths retain their existing ordering.
+  const retrievalCardResolution = geminiRuleQaEnabled
+    ? appendTypedCardInterfaceGaps(cardResolution, cardNameModel.invalidTypedMentions)
+    : cardResolution;
   try {
-    const cloudProvider = cloudEvidence ? createCloudEvidenceProvider({
+    const geminiProvider = geminiRuleQaEnabled
+      ? geminiEvidenceProvider || createGeminiRuleQaEvidenceProvider({
+        fetchImpl: fetchImpl || globalThis.fetch,
+      })
+      : null;
+    const cloudProvider = cloudEvidence && !geminiProvider ? createCloudEvidenceProvider({
       ...cloudSiliconFlowCallbacks(),
       fetchImpl: fetchImpl || globalThis.fetch,
       generatePlan: async ({question,cardTexts,signal:planSignal}) => {
@@ -683,21 +699,43 @@ async function answerRagRulingQuestionInternal({
     }) : null;
     retrievedEvidence = await retrieveRagEvidence({
       userQuery: query,
-      cardResolution,
+      cardResolution: retrievalCardResolution,
       dataDir,
       cards: data.cards,
       records: data.records,
       qaRecords: data.qaRecords,
       enableLiveOfficialQa: true,
       subsumptionCandidatePoolComplete: usesCompleteDefaultSnapshot,
-      preparedEvidenceProvider: cloudProvider ? async (preparedEvidence) => cloudProvider.retrieve({
-        userQuery:query, dataRevision, cardResolution:preparedEvidence.cardResolution,
-        retrievedEvidence:preparedEvidence, env, signal,
-        packEvidence:(selectedEvidence)=>buildRagRulingPromptBundle({
-          userQuery:query,cardResolution:preparedEvidence.cardResolution,
-          evidence:selectedEvidence,env:promptEnv,
-        }),
-      }) : undefined,
+      preparedEvidenceProvider: geminiProvider
+        ? async (preparedEvidence) => {
+          const result = assertPreparedEvidenceResult(await geminiProvider.retrieve({
+            userQuery: query,
+            dataRevision,
+            cardResolution: preparedEvidence.cardResolution,
+            retrievedEvidence: preparedEvidence,
+            env,
+            signal,
+            packEvidence: (selectedEvidence) => buildRagRulingPromptBundle({
+              userQuery: query,
+              cardResolution: preparedEvidence.cardResolution,
+              evidence: selectedEvidence,
+              env: promptEnv,
+            }),
+          }));
+          preparedPromptBundle = result.packing;
+          if (result.telemetry && typeof result.telemetry === 'object') {
+            ruleQueryModel = { ...DISABLED_AUXILIARY_STAGE, ...result.telemetry };
+          }
+          return result.evidence;
+        }
+        : cloudProvider ? async (preparedEvidence) => cloudProvider.retrieve({
+          userQuery:query, dataRevision, cardResolution:preparedEvidence.cardResolution,
+          retrievedEvidence:preparedEvidence, env, signal,
+          packEvidence:(selectedEvidence)=>buildRagRulingPromptBundle({
+            userQuery:query,cardResolution:preparedEvidence.cardResolution,
+            evidence:selectedEvidence,env:promptEnv,
+          }),
+        }) : undefined,
       ruleSearchQueryProvider: async ({
         resolvedCards,
         userProvidedCardTexts,
@@ -737,10 +775,12 @@ async function answerRagRulingQuestionInternal({
   }
   timingsMs.retrieval = elapsedMs(retrievalStartedAt);
 
-  const effectiveCardResolution = appendTypedCardInterfaceGaps(
-    reconcileCardResolution(cardResolution, retrievedEvidence),
-    cardNameModel.invalidTypedMentions,
-  );
+  const effectiveCardResolution = geminiRuleQaEnabled
+    ? reconcileCardResolution(cardResolution, retrievedEvidence)
+    : appendTypedCardInterfaceGaps(
+      reconcileCardResolution(cardResolution, retrievedEvidence),
+      cardNameModel.invalidTypedMentions,
+    );
 
   // Without an explicitly injected provider, the public pure-LLM path ends
   // evidence preparation here and passes the retriever result through exactly.
@@ -763,6 +803,7 @@ async function answerRagRulingQuestionInternal({
         env: promptEnv,
       }),
     });
+    preparedPromptBundle = null;
   }
   if (prepareForContinuation !== true) {
     // Preserve the legacy single request and server capture stage sequence;
@@ -775,7 +816,7 @@ async function answerRagRulingQuestionInternal({
   let finalPromptSha256;
   let displayCards;
   try {
-    promptBundle = buildRagRulingPromptBundle({
+    promptBundle = preparedPromptBundle || buildRagRulingPromptBundle({
       userQuery: query,
       cardResolution: effectiveCardResolution,
       evidence,
@@ -1203,6 +1244,25 @@ function buildRagDataRevision(data = {}, env = {}, { cacheByIdentity = false } =
     defaultSnapshotRevisionCache.set(data, revision);
   }
   return revision;
+}
+
+function assertPreparedEvidenceResult(value) {
+  // Mechanical invariant review: the provider must return the evidence object
+  // together with the exact prompt packing produced from that selection. The
+  // signal is only the presence and types of those fields. A false rejection
+  // stops before final generation, and this direct check is needed because
+  // rebuilding from evidence can reorder or re-project selected source rows.
+  if (!value || typeof value !== 'object' || Array.isArray(value)
+      || !value.evidence || typeof value.evidence !== 'object' || Array.isArray(value.evidence)
+      || !value.packing || typeof value.packing !== 'object' || Array.isArray(value.packing)
+      || typeof value.packing.prompt !== 'string' || !value.packing.prompt
+      || !value.packing.modelEvidence || typeof value.packing.modelEvidence !== 'object'
+      || !Array.isArray(value.packing.allowedEvidenceIds)) {
+    const error = new Error('gemini_rule_qa_prepared_result_invalid');
+    error.code = 'gemini_rule_qa_prepared_result_invalid';
+    throw error;
+  }
+  return value;
 }
 
 function sha256Json(value) {
