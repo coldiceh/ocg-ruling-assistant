@@ -39,7 +39,27 @@ local cny = tonumber(redis.call('HGET', KEYS[1], 'actualNano') or ARGV[6])
 local usd = tonumber(redis.call('HGET', KEYS[1], 'theoreticalNano') or ARGV[7])
 local nextCny = cny + tonumber(ARGV[2])
 local nextUsd = usd + tonumber(ARGV[3])
-if nextCny > tonumber(ARGV[4]) or nextUsd > tonumber(ARGV[5]) then
+local cappedCny, cappedUsd = nextCny, nextUsd
+local unlimited = false
+if ARGV[9] == 'public_gemini_uncapped_v1' then
+  local incoming = cjson.decode(ARGV[8])
+  unlimited = incoming.provider == 'gemini'
+  if not unlimited then
+    -- Keep every charge and unknown reservation in the ledger. Public Gemini
+    -- amounts no longer consume the capped providers' preparation allowance.
+    local fields = redis.call('HGETALL', KEYS[1])
+    for i = 1, #fields, 2 do
+      if fields[i] ~= 'actualNano' and fields[i] ~= 'theoreticalNano' then
+        local prior = cjson.decode(fields[i + 1])
+        if prior.provider == 'gemini' then
+          cappedCny = cappedCny - prior.actualNano
+          cappedUsd = cappedUsd - prior.theoreticalNano
+        end
+      end
+    end
+  end
+end
+if not unlimited and (cappedCny > tonumber(ARGV[4]) or cappedUsd > tonumber(ARGV[5])) then
   return {'blocked', tostring(cny), tostring(usd)}
 end
 redis.call('HSET', KEYS[1], 'actualNano', tostring(nextCny), 'theoreticalNano', tostring(nextUsd), ARGV[1], ARGV[8])
@@ -377,7 +397,8 @@ export function createCloudRequestBudget({env, fetchImpl = globalThis.fetch, com
     const ticket={id:randomUUID(),provider,model,operation,stage,status:'reserved',startedAtUtc:new Date().toISOString(),
       ...(pricingBasis?{pricingBasis}:{}),
       actualNano:nano(actualCny),theoreticalNano:nano(theoreticalUsd),started:performance.now()};
-    const migrationArgs=officialDailyMigration?['official_daily_v1',officialDailyMigration.startUtc,officialDailyMigration.endUtc]:[];
+    const migrationArgs=officialDailyMigration?['official_daily_v1',officialDailyMigration.startUtc,officialDailyMigration.endUtc]
+      :separatePublicFinal?['public_gemini_uncapped_v1']:[];
     const splitFinal = separatePublicFinal && stage === 'final_ruling' && ['relay','bai'].includes(provider);
     const result=await send(splitFinal
       ? publicFinalBudgetCommand(key, 'reserve', [provider, JSON.stringify(ticket), String(nano(limits.theoreticalUsd))])
