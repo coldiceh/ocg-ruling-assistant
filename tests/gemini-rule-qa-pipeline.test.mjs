@@ -94,6 +94,7 @@ test('Gemini rule and QA provider preserves its exact packing in the prepared co
   });
   assert.equal(finalPrompt, packing.prompt);
   assert.equal(final.usedEvidence.some((item) => item.id === 'rule-unit-1'), true);
+  assert.equal(final.usedEvidence.find((item) => item.id === 'rule-unit-1').text, evidence.rawRelatedEvidence[0].text);
 });
 
 test('Gemini rule and QA provider fails mechanically before final generation without a packing', async () => {

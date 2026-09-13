@@ -1489,6 +1489,10 @@ function selectedPromptEvidenceRefs(evidence = {}, allowedEvidenceIds = []) {
         type: String(item?.type || item?.recordType || "related"),
         title: String(item?.title || id),
         sourceUrl: String(item?.sourceUrl || item?.url || ""),
+        // Project the source fields from the actual saved prompt, without
+        // rereading a newer corpus or regenerating evidence for display.
+        ...Object.fromEntries(['question', 'detailedScene', 'answer', 'text', 'fullText', 'officialText']
+          .filter(key => typeof item?.[key] === 'string').map(key => [key, item[key]])),
       });
     }
   }

@@ -1,5 +1,17 @@
 import { buildRagRulingPromptBundle } from './ragRulingPrompt.mjs';
 
+function selectedQaSourceUrl(record = {}) {
+  const explicit = String(record.sourceUrl || '').trim();
+  if (explicit) return explicit;
+  const sourceDetail = (Array.isArray(record.sources) ? record.sources : [])
+    .map((source) => typeof source?.detail === 'string' ? source.detail.trim() : '')
+    .find(Boolean);
+  if (sourceDetail) return sourceDetail;
+  const cardIds = Array.isArray(record.cardIds) ? record.cardIds : [];
+  if (record.recordType !== 'card-faq' || cardIds.length !== 1 || !/^\d+$/u.test(String(cardIds[0]))) return '';
+  return `https://db.ygoresources.com/data/card/${cardIds[0]}`;
+}
+
 function references(value, name) {
   const list = typeof value === 'string' ? [value] : value;
   if (!Array.isArray(list) || list.some(item => typeof item !== 'string')) throw new Error(`gemini_${name}_references_invalid`);
@@ -27,7 +39,7 @@ export function resolveGeminiSelection({ args, rules, qaTools }) {
 export function packGeminiSelection({ selection, userQuery, cardResolution, retrievedEvidence = {}, maxPromptChars = 36000 }) {
   const selectedBodies = [...selection.selectedRules, ...selection.selectedQa.map(({ handle, record }) => ({
     id: handle, recordType: record.recordType, title: record.title,
-    source: record.sourceName || '', sourceUrl: record.sourceUrl || '',
+    source: record.sourceName || '', sourceUrl: selectedQaSourceUrl(record),
     ...Object.fromEntries(['sourceAuthority', 'sourceTier', 'official']
       .filter(key => Object.hasOwn(record, key)).map(key => [key, record[key]])),
     text: JSON.stringify(record),

@@ -6174,12 +6174,12 @@ function throwIfAborted(signal) {
   throw error;
 }
 
-function toRagCard(card, input, confidence) {
+export function toRagCard(card, input, confidence) {
   return ensureCardMentionAlias({
     input,
     id: String(card.id || card.cardId || ""),
     cardId: String(card.cardId || card.id || ""),
-    passcode: String(card.passcode || card.id || ""),
+    passcode: String(card.passcode || ""),
     cid: card.cid ?? null,
     name: card.name || card.cnName || card.jpName || card.enName || String(input || ""),
     cnName: card.cnName || "",

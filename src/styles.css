@@ -1708,6 +1708,18 @@ li + li {
   overflow-wrap: anywhere;
 }
 
+.source-evidence { margin-top: 10px; }
+.source-evidence summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+.source-evidence pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.7;
+  margin: 12px 0 0;
+}
+.source-evidence pre + pre { border-top: 1px solid var(--border); padding-top: 12px; }
+
 .empty {
   color: var(--muted);
   font-size: 14px;
