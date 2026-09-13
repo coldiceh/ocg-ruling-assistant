@@ -1,5 +1,6 @@
 {
   "deploymentLabel": "试用版 · 复杂裁定请核对依据",
+  "adminPageUrl": "https://ocg-ruling-assistant.vercel.app/?admin=1",
   "budgetApiUrl": "https://ocg-ruling-assistant.vercel.app/api/budget",
   "answerApiUrl": "https://ocg-ruling-assistant.vercel.app/api/answer"
 }

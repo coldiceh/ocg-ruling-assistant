@@ -298,6 +298,13 @@ export function inspectAdminRequestOrigin(request, env = globalThis.process?.env
     };
   }
   const rawOrigin = readHeader(request, "origin");
+  if (!rawOrigin && String(request?.method || "").toUpperCase() === "GET") {
+    const sameOrigin = readHeader(request, "sec-fetch-site").trim().toLowerCase() === "same-origin";
+    const refererOrigin = sameOrigin ? refererRequestOrigin(request) : "";
+    if (refererOrigin && allowedOrigins.includes(refererOrigin)) {
+      return { ok: true, status: 200, origin: refererOrigin, allowedOrigins };
+    }
+  }
   const origin = normalizeOrigin(rawOrigin);
   if (!origin) {
     return {
@@ -321,15 +328,24 @@ export function inspectAdminRequestOrigin(request, env = globalThis.process?.env
 }
 
 export function configuredAdminOrigins(env = globalThis.process?.env || {}) {
-  const raw = String(
-    env.ADMIN_ALLOWED_ORIGINS
-    || env.ADMIN_ALLOWED_ORIGIN
-    || "",
-  );
+  const raw = [
+    env.ADMIN_ALLOWED_ORIGINS || env.ADMIN_ALLOWED_ORIGIN || "",
+    env.ADMIN_PAGE_ORIGIN || "",
+  ].join(",");
   return [...new Set(raw
     .split(",")
     .map((value) => normalizeOrigin(value.trim()))
     .filter((value) => value && value !== "*"))];
+}
+
+function refererRequestOrigin(request) {
+  const referer = readHeader(request, "referer").trim();
+  if (!referer) return "";
+  try {
+    return normalizeOrigin(new URL(referer).origin);
+  } catch {
+    return "";
+  }
 }
 
 export function constantTimeSecretEqual(left, right) {
