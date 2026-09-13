@@ -41,8 +41,7 @@ function parseRecords(bytes, sourceName) {
 async function readExistingIndex(outputDir, qaRevision) {
   try {
     const manifest = JSON.parse(await readFile(join(outputDir, GEMINI_RULE_QA_MANIFEST_FILE), "utf8"));
-    if (manifest?.schemaVersion !== GEMINI_RULE_QA_ASSET_SCHEMA_VERSION
-        || manifest?.qaRevision !== qaRevision
+    if (manifest?.qaRevision !== qaRevision
         || manifest?.assets?.qaLexicalIndex?.file !== "qa-lexical-index.bm25.gz") return null;
     const compressed = await readFile(join(outputDir, manifest.assets.qaLexicalIndex.file));
     if (compressed.byteLength !== manifest.assets.qaLexicalIndex.bytes
@@ -103,10 +102,7 @@ export async function buildGeminiRuleQaAssets({
     { file: "qa-index.json", bytes: qaIndexBytes.byteLength, sha256: sha256(qaIndexBytes) },
     { file: "rulings.json", bytes: rulingsBytes.byteLength, sha256: sha256(rulingsBytes) },
   ];
-  const qaRevision = sha256(stableJson({
-    assetSchemaVersion: GEMINI_RULE_QA_ASSET_SCHEMA_VERSION,
-    sources: qaSources,
-  }));
+  const qaRevision = sha256(stableJson(qaSources));
   const ruleRevision = sha256(rulesBytes);
   let revisionManifest;
   try {
@@ -118,27 +114,23 @@ export async function buildGeminiRuleQaAssets({
   if (!/^[a-f0-9]{64}$/u.test(dataRevision)) {
     throw new Error("gemini_rule_qa_data_revision_invalid");
   }
-  const qaRecordsById = new Map();
-  const qaIndexIds = new Set();
+  const qaRecords = [];
+  const qaIds = new Set();
   for (const record of parseRecords(qaIndexBytes, "qa_index")) {
     if (!QA_TYPES.has(String(record?.recordType || ""))) continue;
     const id = String(record?.id || "").trim();
-    if (!id || qaIndexIds.has(id)) throw new Error("gemini_rule_qa_qa_index_identity_invalid");
-    qaIndexIds.add(id);
-    qaRecordsById.set(id, record);
+    if (!id || qaIds.has(id)) throw new Error("gemini_rule_qa_qa_index_identity_invalid");
+    qaIds.add(id);
+    qaRecords.push(record);
   }
-  const rulingIds = new Set();
   for (const record of parseRecords(rulingsBytes, "rulings")) {
     if (!QA_TYPES.has(String(record?.recordType || ""))) continue;
     const id = String(record?.id || "").trim();
     if (!id) throw new Error("gemini_rule_qa_rulings_identity_invalid");
-    if (rulingIds.has(id)) continue;
-    rulingIds.add(id);
-    // The detailed ruling is the canonical source when both snapshots carry
-    // the same stable identity; index-only records remain in insertion order.
-    qaRecordsById.set(id, record);
+    if (qaIds.has(id)) continue;
+    qaIds.add(id);
+    qaRecords.push(record);
   }
-  const qaRecords = [...qaRecordsById.values()];
   const ruleRecords = parseRecords(rulesBytes, "rules")
     .filter((record) => String(record?.recordType || "") === "rule-doc");
   const qaSnapshot = createQaSnapshot({ records: qaRecords, qaRevision });

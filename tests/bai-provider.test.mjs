@@ -6,7 +6,6 @@ import {
   callRagModel,
   createPublicAnswerModelEnv,
   getRagBudgetStatus,
-  modelNameForCardExtractionProvider,
   resolveRuleQueryExtractionProvider,
 } from "../backend/ragModelClient.mjs";
 import {
@@ -69,22 +68,26 @@ test("b.ai Astra low is the third-party public default and keeps credentials iso
   assert.equal(relayEnv.BAI_BASE_URL, undefined);
 });
 
-test("cloud evidence keeps both auxiliary B.AI calls on the verified DeepSeek 4.1 model", () => {
+test("cloud evidence keeps both auxiliary DeepSeek calls on the verified 4.1 model", () => {
   const defaultEnv = createPublicAnswerModelEnv({
     ...BAI_ENV,
+    DEEPSEEK_API_KEY: "synthetic-deepseek-key",
     RAG_EVIDENCE_PIPELINE: "cloud_evidence_v1",
-    CLOUD_EVIDENCE_AUXILIARY_PROVIDER: "bai",
+    CLOUD_EVIDENCE_AUXILIARY_PROVIDER: "deepseek",
   }, "bai-astra-low");
-  assert.equal(defaultEnv.RAG_CARD_MODEL_PROVIDER, "bai");
-  assert.equal(defaultEnv.RAG_RULE_MODEL_PROVIDER, "bai");
-  assert.equal(defaultEnv.CLOUD_EVIDENCE_PLAN_PROVIDER, "bai");
-  assert.equal(modelNameForCardExtractionProvider("bai", defaultEnv), "deepseek-v4.1-flash");
-  assert.equal(resolveRuleQueryExtractionProvider(defaultEnv).provider, "bai");
+  assert.equal(defaultEnv.RAG_CARD_MODEL_PROVIDER, "deepseek");
+  assert.equal(defaultEnv.RAG_RULE_MODEL_PROVIDER, "deepseek");
+  assert.equal(defaultEnv.DEEPSEEK_CARD_MODEL, "deepseek-v4.1-flash-expires-on-0910");
+  assert.equal(defaultEnv.DEEPSEEK_RULE_MODEL, "deepseek-v4.1-flash-expires-on-0910");
+  assert.equal(resolveRuleQueryExtractionProvider(defaultEnv).provider, "deepseek");
 
   const overrideEnv = createPublicAnswerModelEnv({
     ...defaultEnv,
+    DEEPSEEK_CARD_MODEL: "verified-card-model",
+    DEEPSEEK_RULE_MODEL: "verified-rule-model",
   }, "bai-astra-low");
-  assert.equal(modelNameForCardExtractionProvider("bai", overrideEnv), "deepseek-v4.1-flash");
+  assert.equal(overrideEnv.DEEPSEEK_CARD_MODEL, "verified-card-model");
+  assert.equal(overrideEnv.DEEPSEEK_RULE_MODEL, "verified-rule-model");
 });
 
 test("callBaiJsonTask sends one fixed Astra low JSON Chat Completions request", async () => {
@@ -121,7 +124,7 @@ test("callBaiJsonTask sends one fixed Astra low JSON Chat Completions request", 
   assert.equal(result.providerUsed, "bai");
   assert.equal(result.requestedModel, "gpt-6-astra");
   assert.equal(result.reasoningEffort, "low");
-  assert.equal(result.costBasis, "bai_standard_estimate");
+  assert.equal(result.costBasis, "official_theoretical");
   assert.equal(result.estimatedCostUsd, 0.0007);
 });
 
@@ -171,7 +174,7 @@ test("public b.ai finalization reuses the saved plain-text prompt with Astra low
   assert.equal(result.answer.shortAnswer, "Synthetic final answer.");
   assert.equal(result.providerUsed, "bai");
   assert.equal(result.modelUsed, "gpt-6-astra");
-  assert.equal(result.costBasis, "bai_standard_estimate");
+  assert.equal(result.costBasis, "official_theoretical");
   assert.equal(result.estimatedCostUsd, 0.0007);
 });
 
@@ -184,7 +187,7 @@ test("public b.ai dispatch joins the active cloud budget context", async () => {
       return invoke();
     },
     snapshot() {
-      return { calls: [{ provider: "bai", costBasis: "bai_standard_estimate" }] };
+      return { calls: [{ provider: "bai", costBasis: "official_theoretical" }] };
     },
   };
   const env = createPublicAnswerModelEnv({
@@ -264,9 +267,9 @@ test("public budget status uses only b.ai settled and reserved amounts for its a
   assert.equal(bai.reservedTodayUsd, 0.1);
   assert.equal(bai.accountedTodayUsd, 0.3);
   assert.equal(bai.remainingTodayUsd, 4.7);
-  assert.equal(bai.costBasis, "bai_standard_estimate");
+  assert.equal(bai.costBasis, "official_theoretical");
   assert.equal(bai.sharedPoolLabel, undefined);
-  assert.equal(bai.label, "B.AI 最终裁定");
+  assert.equal(bai.label, "GPT最终裁定");
 });
 
 function baiSseResponse({

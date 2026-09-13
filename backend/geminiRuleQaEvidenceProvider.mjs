@@ -3,7 +3,6 @@ import { loadGeminiRuleQaAssets } from './geminiRuleQaAssets.mjs';
 import { buildRuleContext } from './geminiRuleContext.mjs';
 import { createGeminiRuleCacheClient } from './geminiRuleCacheClient.mjs';
 import { resolveGeminiSelection, packGeminiSelection } from './geminiRuleQaPacking.mjs';
-import { createSourceBackedQaTools } from './geminiQaSourceRecords.mjs';
 
 const ruleContexts = new WeakMap();
 const FINAL_SUBMISSION_INSTRUCTION = '补查结束，现在用已读资料submit_evidence，提交 ruleUnitIds 和 qaHandles；不得编造缺失依据。';
@@ -31,13 +30,10 @@ export function createGeminiRuleQaEvidenceProvider({ fetchImpl = globalThis.fetc
     if (!rules) { rules = buildRuleContext(assets.rulesRecords); ruleContexts.set(assets, rules); }
     timingsMs.ruleContext = performance.now() - preparationStep;
     preparationStep = performance.now();
-    const qaTools = createSourceBackedQaTools({
-      qaTools: assets.createQaTools({ cardIds: (cardResolution.resolvedCards || []).map(card => card.id), pageSize: 4 }),
-      fetchImpl, signal,
-    });
+    const qaTools = assets.createQaTools({ cardIds: (cardResolution.resolvedCards || []).map(card => card.id), pageSize: 4 });
     timingsMs.qaRequestView = performance.now() - preparationStep;
     preparationStep = performance.now();
-    const initialQa = await qaTools.search({ queries: [userQuery] });
+    const initialQa = qaTools.search({ queries: [userQuery] });
     timingsMs.initialQaSearch = performance.now() - preparationStep;
     timingsMs.assets = performance.now() - start;
     const client = clientFactory({ env, fetchImpl, signal });
@@ -52,7 +48,7 @@ export function createGeminiRuleQaEvidenceProvider({ fetchImpl = globalThis.fetc
     let reminderUsed = false, searchCount = 0;
     timingsMs.model = 0;
     timingsMs.qaSearch = 0;
-    for (let round = 1; round <= 5; round++) {
+    for (let round = 1; round <= 4; round++) {
       signal?.throwIfAborted();
       step = performance.now();
       const raw = await client.generate(cache, contents);
@@ -64,21 +60,11 @@ export function createGeminiRuleQaEvidenceProvider({ fetchImpl = globalThis.fetc
       // Preserve complete native Content/Part, including thoughtSignature, across turns.
       contents.push(content);
       const receivedCalls = normalizeCalls(content);
-      const calls = round >= 4
+      const calls = round === 4
         ? receivedCalls.filter((call) => call.name === 'submit_evidence')
         : receivedCalls;
       if (!calls.length) {
-        if (round === 4 && receivedCalls.length && receivedCalls.every(call => call.name === 'search_qa')) {
-          // Close unexecuted tool calls, retaining the paid context/signatures.
-          // This single retry repairs only the missing submission protocol.
-          contents.push({ role: 'user', parts: [
-            ...receivedCalls.map(call => ({ functionResponse: { name: call.name,
-              ...(call.id ? { id: call.id } : {}), response: { searchClosed: true, executed: false } } })),
-            { text: '搜索工具已关闭，上述额外搜索未执行。只根据已经读到的完整规则和 QA，提交所需原文编号。现在仅输出 JSON：{"ruleUnitIds":["规则段落编号"],"qaHandles":["已读QA句柄"]}。不要再调用 search_qa，不要编造编号或输出裁定。' },
-          ] });
-          continue;
-        }
-        if (round >= 4) throw new Error(receivedCalls.length
+        if (round === 4) throw new Error(receivedCalls.length
           ? 'gemini_rule_qa_final_submission_required'
           : 'gemini_rule_qa_no_submission');
         if (reminderUsed) throw new Error('gemini_rule_qa_no_submission');
@@ -96,7 +82,7 @@ export function createGeminiRuleQaEvidenceProvider({ fetchImpl = globalThis.fetc
         if (typeof args === 'string') args = JSON.parse(args);
         if (call.name === 'search_qa') {
           step = performance.now();
-          const result = await qaTools.search(args);
+          const result = qaTools.search(args);
           timingsMs.qaSearch += performance.now() - step;
           searchCount++;
           await onEvent({ type: 'search', round, args, result });

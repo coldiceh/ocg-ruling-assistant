@@ -1,7 +1,6 @@
 export const DEFAULT_PUBLIC_RULING_MODEL_PROFILE = "bai-astra-low";
 export const DEFAULT_PUBLIC_BAI_BASE_URL = "https://api.b.ai/v1";
 export const DEFAULT_PUBLIC_BAI_MODEL = "gpt-6-astra";
-export const DEFAULT_PUBLIC_BAI_DEEPSEEK_MODEL = "deepseek-v4.1-flash";
 export const DEFAULT_PUBLIC_RELAY_BASE_URL = "";
 export const DEFAULT_PUBLIC_RELAY_MODEL = "gpt-6-astra";
 export const DEFAULT_PUBLIC_DEEPSEEK_MODEL = "deepseek-flash";
@@ -25,9 +24,9 @@ const profiles = [
     profile({ id: `relay-gpt-6-astra-${reasoningEffort}`, label: `中转 GPT-6 Astra · 思考 ${reasoningEffort}`, provider: "relay", model: "gpt-6-astra", thinkingMode: "enabled", reasoningEffort, transport: "chat_completions_sse", thirdParty: true, modelIdentityVerified: false }),
   ]),
   ...[["none", "disabled", null], ["low", "enabled", "low"], ["high", "enabled", "high"], ["max", "enabled", "max"]]
-    .map(([suffix, thinkingMode, reasoningEffort]) => profile({ id: `deepseek-v4.1-flash-${suffix}`, label: `DeepSeek V4.1 Flash · 思考 ${suffix}`, provider: "bai", model: DEFAULT_PUBLIC_BAI_DEEPSEEK_MODEL, thinkingMode, reasoningEffort, transport: "chat_completions_sse", thirdParty: true, modelIdentityVerified: false })),
+    .map(([suffix, thinkingMode, reasoningEffort]) => profile({ id: `deepseek-v4.1-flash-${suffix}`, label: `DeepSeek V4.1 Flash · 思考 ${suffix}`, provider: "deepseek", model: DEFAULT_PUBLIC_DEEPSEEK_MODEL, thinkingMode, reasoningEffort, transport: "chat_completions", thirdParty: false, modelIdentityVerified: true })),
   ...[["low", "enabled", "low"], ["high", "enabled", "high"], ["max", "enabled", "max"]]
-    .map(([suffix, thinkingMode, reasoningEffort]) => profile({ id: `glm-5.3-${suffix}`, label: `GLM-5.3 · 思考 ${suffix}`, provider: "bai", model: DEFAULT_PUBLIC_GLM_MODEL, thinkingMode, reasoningEffort, transport: "chat_completions_sse", thirdParty: true, modelIdentityVerified: false })),
+    .map(([suffix, thinkingMode, reasoningEffort]) => profile({ id: `glm-5.3-${suffix}`, label: `GLM-5.3 · 思考 ${suffix}`, provider: "glm", model: DEFAULT_PUBLIC_GLM_MODEL, thinkingMode, reasoningEffort, transport: "chat_completions", thirdParty: true, modelIdentityVerified: true })),
 ];
 
 export const PUBLIC_RULING_MODEL_PROFILES = Object.freeze(Object.fromEntries(profiles.map((item) => [item.id, item])));
