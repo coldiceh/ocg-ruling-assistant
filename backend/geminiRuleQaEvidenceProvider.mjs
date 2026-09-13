@@ -20,14 +20,21 @@ function normalizeCalls(content) {
 export function createGeminiRuleQaEvidenceProvider({ fetchImpl = globalThis.fetch,
   loadAssets = loadGeminiRuleQaAssets, clientFactory = createGeminiRuleCacheClient,
   onEvent = async () => {} } = {}) {
-  return { async retrieve({ userQuery, cardResolution, retrievedEvidence, dataRevision, env = {}, signal }) {
+  return { async retrieve({ userQuery, cardResolution, retrievedEvidence, dataRevision, env = {}, signal, assetsPromise }) {
     const start = performance.now(), timingsMs = {}, usage = [];
-    const assets = await loadAssets({ dataDir: env.GEMINI_RULE_QA_DATA_DIR || fileURLToPath(new URL('../data', import.meta.url)) });
+    const assets = await (assetsPromise || loadAssets({ dataDir: env.GEMINI_RULE_QA_DATA_DIR || fileURLToPath(new URL('../data', import.meta.url)) }));
+    timingsMs.assetLoadWait = performance.now() - start;
     if (assets.dataRevision !== dataRevision) throw new Error('gemini_rule_qa_asset_revision_mismatch');
+    let preparationStep = performance.now();
     let rules = ruleContexts.get(assets);
     if (!rules) { rules = buildRuleContext(assets.rulesRecords); ruleContexts.set(assets, rules); }
+    timingsMs.ruleContext = performance.now() - preparationStep;
+    preparationStep = performance.now();
     const qaTools = assets.createQaTools({ cardIds: (cardResolution.resolvedCards || []).map(card => card.id), pageSize: 4 });
+    timingsMs.qaRequestView = performance.now() - preparationStep;
+    preparationStep = performance.now();
     const initialQa = qaTools.search({ queries: [userQuery] });
+    timingsMs.initialQaSearch = performance.now() - preparationStep;
     timingsMs.assets = performance.now() - start;
     const client = clientFactory({ env, fetchImpl, signal });
     let step = performance.now();

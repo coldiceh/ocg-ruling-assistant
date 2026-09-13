@@ -26,6 +26,7 @@ import {
   getRulingVersionCapabilities,
 } from "./rulingVersionRegistry.mjs";
 import { isPublicPreparationId } from "./publicAnswerPreparationStore.mjs";
+import { preloadRagRequestAssets } from './ragRulingPipeline.mjs';
 import { selectAvailablePublicProfile, withPublicGenerationInfo } from './publicGenerationInfo.mjs';
 import {
   activatePublicOfftopicRiskControl,
@@ -204,6 +205,7 @@ export async function answerPublicRulingQuestion({
   activateRiskControl = activatePublicOfftopicRiskControl,
   answerOfficialExact = answerExactOfficialQaQuestionForVersion,
   answerRuling = answerRagRulingQuestionForVersion,
+  preloadAssets = preloadRagRequestAssets,
   prepareForContinuation = false,
 } = {}) {
   const publicRequestStartedAt = Date.now();
@@ -239,6 +241,14 @@ export async function answerPublicRulingQuestion({
     return audit?.entry?.id;
   };
 
+  let preloadedAssets;
+  let preloadStarted = false;
+  const startAssetPreload = () => {
+    if (preloadStarted) return;
+    preloadStarted = true;
+    preloadedAssets = preloadAssets({ env });
+  };
+
   try {
   // Risk control runs at the shared public entry before exact matching, model
   // profile selection, card extraction, retrieval, or final ruling generation.
@@ -258,6 +268,7 @@ export async function answerPublicRulingQuestion({
       // Storage and classifier failures retain the old fail-open behavior.
       // If the current lock cannot be read, skip the classifier and lock write.
       if (activeControl?.ok === true) {
+        startAssetPreload();
         const scopeStartedAt = Date.now();
         const scopeDecision = await classifyScope({
           question: normalizedPayload.question,
@@ -282,6 +293,7 @@ export async function answerPublicRulingQuestion({
     }
   }
 
+  startAssetPreload();
   // Do not invoke the exact-question route from public requests. The RAG
   // pipeline still searches ordinary official Q&A and FAQ evidence.
   let exactMatchMs = 0;
@@ -312,6 +324,7 @@ export async function answerPublicRulingQuestion({
       signal,
       officialQaExactAlreadyChecked: true,
       progress,
+      preloadedAssets,
       ...(prepareForContinuation === true ? { prepareForContinuation: true } : {}),
     });
     requestDiagnostics.completedAt = new Date().toISOString();
