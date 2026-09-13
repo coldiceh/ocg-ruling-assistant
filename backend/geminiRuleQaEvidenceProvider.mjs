@@ -84,7 +84,18 @@ export function createGeminiRuleQaEvidenceProvider({ fetchImpl = globalThis.fetc
           }
           timingsMs.packing = performance.now() - step;
           timingsMs.total = performance.now() - start;
+          const tokenUsage = usage.reduce((sum, row) => ({
+            prompt_tokens: sum.prompt_tokens + (row?.promptTokenCount || 0),
+            completion_tokens: sum.completion_tokens + (row?.candidatesTokenCount || 0) + (row?.thoughtsTokenCount || 0),
+            cached_input_tokens: sum.cached_input_tokens + (row?.cachedContentTokenCount || 0),
+          }), { prompt_tokens: 0, completion_tokens: 0, cached_input_tokens: 0 });
+          const generationEstimatedCostUsd = ((tokenUsage.prompt_tokens - tokenUsage.cached_input_tokens) * 0.75
+            + tokenUsage.cached_input_tokens * 0.075 + tokenUsage.completion_tokens * 3.75) / 1e6;
+          const cacheProvisionUsd = cache.reused ? 0 : (cache.tokenCount || 0) * (0.75 + 0.50 * 180 / 3600) / 1e6;
           const telemetry = { provider: 'gemini', model: client.model, providerUsed: 'gemini', modelUsed: client.model, reasoningEffort: 'low',
+            dryRun: false, warnings: [], tokenUsage, cacheHit: cache.reused,
+            estimatedCostUsd: generationEstimatedCostUsd + cacheProvisionUsd,
+            generationEstimatedCostUsd, cacheProvisionUsd, costBasis: 'google_list_theoretical_cache_creation_input_provision_unknown',
             strategy: 'gemini_rule_cache_card_linked_bm25', dataRevision,
             ruleRevision: rules.ruleRevision, qaRevision: qaTools.qaRevision,
             rounds: round, searchCount, selectedCount: selection.ruleUnitIds.length + selection.qaHandles.length,
