@@ -1,5 +1,40 @@
 import { buildRagRulingPromptBundle } from './ragRulingPrompt.mjs';
 
+const RULE_SOURCE_FIELDS = [
+  'recordType', 'title', 'sourceUrl', 'source', 'sourceAuthority', 'official', 'parentSourceId',
+];
+const RULE_SOURCE_INSTRUCTION = 'ruleSources 保存规则的共用来源字段；每段 sourceRef 对应 ruleSources 中同名条目，其来源字段均继承自该条目。结合来源等级阅读原文，引用使用对应来源的 title。';
+
+function renderSelectedPrompt(prefix, marker, payload) {
+  const original = prefix + marker + JSON.stringify(payload);
+  const ruleSources = {}, sourceRefs = new Map();
+  const selectedBodies = payload.evidence.rawRelatedEvidence.map((item) => {
+    if (item.recordType !== 'rule-doc') return item;
+    const source = Object.fromEntries(RULE_SOURCE_FIELDS
+      .filter(key => Object.hasOwn(item, key)).map(key => [key, item[key]]));
+    // Only identical serialized source fields share an entry. Text, identity,
+    // order and authority values are preserved without interpreting meaning.
+    const sourceKey = JSON.stringify(source);
+    let sourceRef = sourceRefs.get(sourceKey);
+    if (!sourceRef) {
+      sourceRef = `rs${sourceRefs.size + 1}`;
+      sourceRefs.set(sourceKey, sourceRef);
+      ruleSources[sourceRef] = source;
+    }
+    return {
+      ...Object.fromEntries(Object.entries(item).filter(([key]) => !RULE_SOURCE_FIELDS.includes(key))),
+      sourceRef,
+    };
+  });
+  if (!sourceRefs.size) return original;
+  // The copy is model-visible only. Server evidence retains full source fields
+  // for citation links and the player's original-evidence display.
+  const compact = prefix + RULE_SOURCE_INSTRUCTION + '\n' + marker + JSON.stringify({
+    ...payload, evidence: { ...payload.evidence, rawRelatedEvidence: selectedBodies }, ruleSources,
+  });
+  return compact.length < original.length ? compact : original;
+}
+
 function selectedQaSourceUrl(record = {}) {
   const explicit = String(record.sourceUrl || '').trim();
   if (explicit) return explicit;
@@ -56,7 +91,7 @@ export function packGeminiSelection({ selection, userQuery, cardResolution, retr
   payload.allowedEvidenceIds = [...new Set([
     ...(base.allowedEvidenceIds || []), ...selectedBodies.map(item => item.id),
   ])];
-  const prompt = base.prompt.slice(0, at + marker.length) + JSON.stringify(payload);
+  const prompt = renderSelectedPrompt(base.prompt.slice(0, at), marker, payload);
   const packing = { ...base, prompt, promptChars: prompt.length, promptTruncated: false,
     modelEvidence: payload.evidence, allowedEvidenceIds: payload.allowedEvidenceIds,
     selectedEntryChars: selectedBodies.map(item => ({ id: item.id, chars: item.text.length })),
