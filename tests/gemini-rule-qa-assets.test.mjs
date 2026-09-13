@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -18,7 +19,15 @@ async function fixture() {
   const rulings = {
     schemaVersion: 1,
     records: [
-      { id: "qa-1", recordType: "qa", cardIds: ["17"], text: "alpha", official: true },
+      {
+        id: "qa-1",
+        recordType: "qa",
+        cardIds: ["17"],
+        text: "alpha",
+        conclusion: "full answer",
+        sources: [{ label: "YGOResources Q&A", detail: "https://example.test/qa-1" }],
+        official: true,
+      },
       { id: "faq-1", recordType: "card-faq", cardIds: ["29"], text: "beta", sourceTier: "S0" },
       { id: "other-1", recordType: "rule-doc", text: "not a QA" },
     ],
@@ -27,6 +36,7 @@ async function fixture() {
     schemaVersion: 1,
     records: [
       { id: "qa-history", recordType: "qa", cardIds: ["31"], text: "historical alpha", sourceName: "YGOResources DB" },
+      { id: "qa-1", recordType: "qa", cardIds: ["17"], text: "index projection" },
       rulings.records[1],
     ],
   };
@@ -62,6 +72,22 @@ test("builder emits compressed byte-bound assets and loader reuses one immutable
   assert.equal(first.qaRecords.length, 3);
   assert.deepEqual(new Set(first.qaRecords.map((record) => record.id)),
     new Set(["qa-history", "faq-1", "qa-1"]));
+  assert.deepEqual(first.qaRecords.find((record) => record.id === "qa-1"), {
+    id: "qa-1",
+    recordType: "qa",
+    cardIds: ["17"],
+    text: "alpha",
+    conclusion: "full answer",
+    sources: [{ label: "YGOResources Q&A", detail: "https://example.test/qa-1" }],
+    official: true,
+  });
+  assert.deepEqual(first.qaRecords.find((record) => record.id === "qa-history"), {
+    id: "qa-history",
+    recordType: "qa",
+    cardIds: ["31"],
+    text: "historical alpha",
+    sourceName: "YGOResources DB",
+  });
   assert.equal(first.rulesRecords.length, 1);
   assert.strictEqual(first.rulesRecords, first.ruleRecords);
   assert.ok(Object.isFrozen(first.qaRecords[0]));
@@ -73,6 +99,18 @@ test("builder emits compressed byte-bound assets and loader reuses one immutable
   const manifestText = await readFile(join(dataDir, "gemini-rule-qa-v1", "manifest.json"), "utf8");
   assert.match(manifestText, /"encoding": "gzip"/u);
   assert.doesNotMatch(manifestText, /evidence-vectors|\.f32/u);
+});
+
+test("builder rebuilds instead of reusing an older-schema lexical index", async () => {
+  clearGeminiRuleQaAssetsCacheForTests();
+  const dataDir = await fixture();
+  await buildGeminiRuleQaAssets({ dataDir });
+  const manifestPath = join(dataDir, "gemini-rule-qa-v1", "manifest.json");
+  const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+  manifest.schemaVersion = 1;
+  await writeFile(manifestPath, JSON.stringify(manifest));
+  const rebuilt = await buildGeminiRuleQaAssets({ dataDir });
+  assert.equal(rebuilt.indexSource, "rebuilt");
 });
 
 test("loader rejects a mechanically changed compressed asset", async () => {
@@ -98,13 +136,21 @@ test("built production asset contains every current formal QA and FAQ source id"
     loadGeminiRuleQaAssets({ dataDir: fileURLToPath(dataDir) }),
   ]);
   const isQa = (record) => ["qa", "card-faq"].includes(String(record?.recordType || ""));
-  const expectedIds = new Set([
-    ...qaIndex.records.filter(isQa),
-    ...rulings.records.filter(isQa),
-  ].map((record) => String(record.id)));
-  const assetIds = new Set(assets.qaRecords.map((record) => String(record.id)));
-  assert.equal(assetIds.size, expectedIds.size);
-  for (const id of expectedIds) assert.ok(assetIds.has(id), `missing formal source id ${id}`);
+  const canonicalSourceHashes = new Map();
+  for (const record of qaIndex.records.filter(isQa)) {
+    canonicalSourceHashes.set(String(record.id), createHash("sha256").update(JSON.stringify(record)).digest("hex"));
+  }
+  for (const record of rulings.records.filter(isQa)) {
+    canonicalSourceHashes.set(String(record.id), createHash("sha256").update(JSON.stringify(record)).digest("hex"));
+  }
+  const assetHashes = new Map(assets.qaRecords.map((record) => [
+    String(record.id),
+    createHash("sha256").update(JSON.stringify(record)).digest("hex"),
+  ]));
+  assert.equal(assetHashes.size, canonicalSourceHashes.size);
+  for (const [id, sourceHash] of canonicalSourceHashes) {
+    assert.equal(assetHashes.get(id), sourceHash, "canonical source record binding mismatch");
+  }
 });
 
 test("release build and sync workflow regenerate and include the same-version assets", async () => {
@@ -113,10 +159,13 @@ test("release build and sync workflow regenerate and include the same-version as
     readFile(new URL("../vercel.json", import.meta.url), "utf8"),
     readFile(new URL("../package.json", import.meta.url), "utf8"),
   ]);
+  const vercelConfig = JSON.parse(vercel);
+  const scripts = JSON.parse(packageJson).scripts;
   assert.match(workflow, /pnpm build:gemini-rule-qa/u);
   assert.match(workflow, /tests\/gemini-rule-qa-assets\.test\.mjs/u);
-  assert.match(vercel, /pnpm run build:gemini-rule-qa/u);
+  assert.equal(vercelConfig.buildCommand, "pnpm run build:vercel");
   assert.match(vercel, /data\/gemini-rule-qa-v1\/\*\*/u);
-  assert.equal(JSON.parse(packageJson).scripts["build:gemini-rule-qa"],
+  assert.match(scripts["build:vercel"], /pnpm run build:gemini-rule-qa/u);
+  assert.equal(scripts["build:gemini-rule-qa"],
     "node scripts/build-gemini-rule-qa-assets.mjs");
 });

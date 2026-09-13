@@ -3,6 +3,7 @@ import { loadGeminiRuleQaAssets } from './geminiRuleQaAssets.mjs';
 import { buildRuleContext } from './geminiRuleContext.mjs';
 import { createGeminiRuleCacheClient } from './geminiRuleCacheClient.mjs';
 import { resolveGeminiSelection, packGeminiSelection } from './geminiRuleQaPacking.mjs';
+import { createSourceBackedQaTools } from './geminiQaSourceRecords.mjs';
 
 const ruleContexts = new WeakMap();
 const FINAL_SUBMISSION_INSTRUCTION = '补查结束，现在用已读资料submit_evidence，提交 ruleUnitIds 和 qaHandles；不得编造缺失依据。';
@@ -30,10 +31,13 @@ export function createGeminiRuleQaEvidenceProvider({ fetchImpl = globalThis.fetc
     if (!rules) { rules = buildRuleContext(assets.rulesRecords); ruleContexts.set(assets, rules); }
     timingsMs.ruleContext = performance.now() - preparationStep;
     preparationStep = performance.now();
-    const qaTools = assets.createQaTools({ cardIds: (cardResolution.resolvedCards || []).map(card => card.id), pageSize: 4 });
+    const qaTools = createSourceBackedQaTools({
+      qaTools: assets.createQaTools({ cardIds: (cardResolution.resolvedCards || []).map(card => card.id), pageSize: 4 }),
+      fetchImpl, signal,
+    });
     timingsMs.qaRequestView = performance.now() - preparationStep;
     preparationStep = performance.now();
-    const initialQa = qaTools.search({ queries: [userQuery] });
+    const initialQa = await qaTools.search({ queries: [userQuery] });
     timingsMs.initialQaSearch = performance.now() - preparationStep;
     timingsMs.assets = performance.now() - start;
     const client = clientFactory({ env, fetchImpl, signal });
@@ -92,7 +96,7 @@ export function createGeminiRuleQaEvidenceProvider({ fetchImpl = globalThis.fetc
         if (typeof args === 'string') args = JSON.parse(args);
         if (call.name === 'search_qa') {
           step = performance.now();
-          const result = qaTools.search(args);
+          const result = await qaTools.search(args);
           timingsMs.qaSearch += performance.now() - step;
           searchCount++;
           await onEvent({ type: 'search', round, args, result });

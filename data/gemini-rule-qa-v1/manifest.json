@@ -1,8 +1,8 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "kind": "gemini-rule-qa-assets",
   "dataRevision": "cef4de450fe962d469b3055bc7e8e2ec9874dcc1c438031ce2c03558acdc24db",
-  "qaRevision": "8040567e2a6840c49d224fc7dd60ec355b605509c62a2aa58afdb6ef29f133bc",
+  "qaRevision": "9a790ceb11317b11ea554d4aff6a8b14f7d46eb257411ec4f780020c6eec746b",
   "ruleRevision": "1b5aceaf275c334cdc1458bfcaed81a4daa259a04026d42fe6fd45d4fc09ce3a",
   "sources": {
     "qaIndex": {
@@ -35,10 +35,10 @@
     "qaRecords": {
       "file": "qa-records.json.gz",
       "encoding": "gzip",
-      "bytes": 5630850,
-      "sha256": "7f68636f045f44e8a77e472e38a783faf7c3e5b8cf3255bd33db48f895bc16eb",
-      "canonicalBytes": 54966427,
-      "canonicalSha256": "90771c301244f8008144ffca911b5f69ed075c8004409b24ec82c75920802074"
+      "bytes": 5776837,
+      "sha256": "396987ff5189e567745ca1a45e76192eb3cc6fcc92b932dc712eb66f732fa27b",
+      "canonicalBytes": 57490318,
+      "canonicalSha256": "b360cc78b17321aebeb6b3831cdfc34bd238914ce3cea0a93c184bc0521ee2fb"
     },
     "ruleRecords": {
       "file": "rule-records.json.gz",
@@ -51,11 +51,11 @@
     "qaLexicalIndex": {
       "file": "qa-lexical-index.bm25.gz",
       "encoding": "gzip",
-      "bytes": 36159527,
-      "sha256": "f6908a7f884c20b3e6f084513cb25bdf7e60f3131d7610f9ad964579054f3836",
-      "canonicalBytes": 140468136,
-      "canonicalSha256": "07369d1fdb901ec484ffdb4488643d9dafc4fd2bb130b24b8ce8ebfd7735c79d"
+      "bytes": 40816048,
+      "sha256": "635b9c9bbb24c667222ccfd25e0d0e97510bcb8cee07b5844a8d43154af5675d",
+      "canonicalBytes": 163138528,
+      "canonicalSha256": "6fe75b6f3c189ea7594837ef4545f0287efd8012cd93d68be82719ee7fd520b6"
     }
   },
-  "bundleRevision": "e4c2012f1454c78c5bd9427a0463b064fbc8452930fa8eb070931378aec60827"
+  "bundleRevision": "a7d330ad9d0c4e8785c0572406c418d64c6555a7e8e594f442ff2a5311215a53"
 }
