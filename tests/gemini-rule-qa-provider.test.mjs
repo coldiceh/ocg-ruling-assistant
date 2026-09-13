@@ -108,7 +108,7 @@ test('provider does not execute a fourth-round QA search instead of submission',
 
   await assert.rejects(provider.retrieve({ userQuery: 'test query', cardResolution: { resolvedCards: [], unresolvedMentions: [], ambiguousMentions: [] },
     retrievedEvidence: {}, dataRevision: 'revision' }), /gemini_rule_qa_final_submission_required/u);
-  assert.equal(generateCalls, 4);
+  assert.equal(generateCalls, 5);
   assert.equal(searches, 4);
 });
 
@@ -157,4 +157,29 @@ test('cache uses a fixed short TTL and reuses rule identity without QA identity'
   assert.equal(requests[0].body.ttl, '180s');
   assert.equal(first.name, second.name); assert.equal(second.reused, true);
   assert.equal(Object.hasOwn(requests[0].body, 'qaRevision'), false);
+});
+
+test('provider closes an extra final search and retries submission once with the same context', async () => {
+  let calls = 0, searches = 0;
+  const provider = createGeminiRuleQaEvidenceProvider({
+    loadAssets: async () => ({ dataRevision: 'revision', rulesRecords: [], createQaTools: () => ({
+      qaRevision: 'qa', search: () => { searches++; return { items: [] }; }, readSelected: () => [],
+    }) }),
+    clientFactory: () => ({ model: 'gemini-3.8-flash', getCache: async () => ({ reused: true }),
+      generate: async (_cache, contents) => {
+        calls++;
+        if (calls <= 4) return { candidates: [{ content: { role: 'model', parts: [{ thoughtSignature: `sig-${calls}`,
+          functionCall: { name: 'search_qa', id: `call-${calls}`, args: { queries: ['query'] } } }] } }] };
+        assert.equal(calls, 5);
+        assert.equal(contents.at(-2).parts[0].thoughtSignature, 'sig-4');
+        assert.deepEqual(contents.at(-1).parts[0].functionResponse,
+          { name: 'search_qa', id: 'call-4', response: { searchClosed: true, executed: false } });
+        return { candidates: [{ content: { role: 'model', parts: [{ text: '{"ruleUnitIds":[],"qaHandles":[]}' }] } }] };
+      },
+    }),
+  });
+  const result = await provider.retrieve({ userQuery: 'fixture', cardResolution: { resolvedCards: [], unresolvedMentions: [], ambiguousMentions: [] }, retrievedEvidence: {}, dataRevision: 'revision' });
+  assert.equal(calls, 5);
+  assert.equal(searches, 4);
+  assert.equal(result.telemetry.rounds, 5);
 });
