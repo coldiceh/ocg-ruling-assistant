@@ -76,6 +76,9 @@ jobs:
       - name: Build versioned RAG data revision manifest
         run: pnpm build:rag-revision
 
+      - name: Build versioned Gemini rule and QA assets
+        run: pnpm build:gemini-rule-qa
+
       - name: Build and verify versioned RAG runtime bundle
         id: runtime_validation
         run: |
@@ -146,7 +149,7 @@ jobs:
 
       - name: Test updated snapshot
         id: snapshot_tests
-        run: node --test --test-concurrency=1 tests/sync-ygoresources-selection.test.mjs tests/sync-ocg-rule.test.mjs tests/source-freshness.test.mjs tests/rag-data-source-file.test.mjs tests/rag-data-revision-manifest.test.mjs tests/rag-runtime-bundle.test.mjs tests/rag-runtime-deployment-safety.test.mjs tests/cloud-evidence-assets.test.mjs tests/cloud-evidence-incremental-sync.test.mjs tests/evidence-vector-index.test.mjs tests/deployment-workflows.test.mjs tests/sync-snapshot-publication.test.mjs
+        run: node --test --test-concurrency=1 tests/sync-ygoresources-selection.test.mjs tests/sync-ocg-rule.test.mjs tests/source-freshness.test.mjs tests/rag-data-source-file.test.mjs tests/rag-data-revision-manifest.test.mjs tests/rag-runtime-bundle.test.mjs tests/rag-runtime-deployment-safety.test.mjs tests/gemini-qa-tools.test.mjs tests/gemini-rule-qa-assets.test.mjs tests/cloud-evidence-assets.test.mjs tests/cloud-evidence-incremental-sync.test.mjs tests/evidence-vector-index.test.mjs tests/deployment-workflows.test.mjs tests/sync-snapshot-publication.test.mjs
 
       - name: Verify interrupted sync recovery
         run: |

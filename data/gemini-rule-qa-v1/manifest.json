@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "kind": "gemini-rule-qa-assets",
+  "dataRevision": "cef4de450fe962d469b3055bc7e8e2ec9874dcc1c438031ce2c03558acdc24db",
+  "qaRevision": "8040567e2a6840c49d224fc7dd60ec355b605509c62a2aa58afdb6ef29f133bc",
+  "ruleRevision": "1b5aceaf275c334cdc1458bfcaed81a4daa259a04026d42fe6fd45d4fc09ce3a",
+  "sources": {
+    "qaIndex": {
+      "file": "qa-index.json",
+      "bytes": 59636056,
+      "sha256": "1dca2682c3041975d6b174aedfc216ea62c866b890db90dfc225e7f131f7077c"
+    },
+    "rulings": {
+      "file": "rulings.json",
+      "bytes": 41945698,
+      "sha256": "d932cef7b6959afa04ff7763b89c2ba23f15c7545a2f2fbb9362dd18332bceec"
+    },
+    "rules": {
+      "file": "ocg-rule-corpus.json",
+      "bytes": 1378892,
+      "sha256": "1b5aceaf275c334cdc1458bfcaed81a4daa259a04026d42fe6fd45d4fc09ce3a"
+    },
+    "ragDataRevision": {
+      "file": "rag-data-revision-manifest.json",
+      "bytes": 1479,
+      "sha256": "1710406119467f4cf91f0d5f2680448e2831801ca5858ce7e0d10e96894c2c73",
+      "revision": "cef4de450fe962d469b3055bc7e8e2ec9874dcc1c438031ce2c03558acdc24db"
+    }
+  },
+  "counts": {
+    "qaRecords": 27715,
+    "ruleRecords": 32
+  },
+  "assets": {
+    "qaRecords": {
+      "file": "qa-records.json.gz",
+      "encoding": "gzip",
+      "bytes": 5630850,
+      "sha256": "7f68636f045f44e8a77e472e38a783faf7c3e5b8cf3255bd33db48f895bc16eb",
+      "canonicalBytes": 54966427,
+      "canonicalSha256": "90771c301244f8008144ffca911b5f69ed075c8004409b24ec82c75920802074"
+    },
+    "ruleRecords": {
+      "file": "rule-records.json.gz",
+      "encoding": "gzip",
+      "bytes": 294560,
+      "sha256": "e1257af10c0a19bb83bf1374b5fabae5eea828bb71728e00173abe767b2a9ef2",
+      "canonicalBytes": 1201285,
+      "canonicalSha256": "b90bd2c16c7ec9922da429385ad87f6c917cc0daf98d8113004286f13c318664"
+    },
+    "qaLexicalIndex": {
+      "file": "qa-lexical-index.bm25.gz",
+      "encoding": "gzip",
+      "bytes": 36159527,
+      "sha256": "f6908a7f884c20b3e6f084513cb25bdf7e60f3131d7610f9ad964579054f3836",
+      "canonicalBytes": 140468136,
+      "canonicalSha256": "07369d1fdb901ec484ffdb4488643d9dafc4fd2bb130b24b8ce8ebfd7735c79d"
+    }
+  },
+  "bundleRevision": "e4c2012f1454c78c5bd9427a0463b064fbc8452930fa8eb070931378aec60827"
+}

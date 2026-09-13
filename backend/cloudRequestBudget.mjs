@@ -5,6 +5,10 @@ import { publicFinalBudgetEnabled, publicFinalBudgetKeys, publicFinalBudgetComma
 
 const scope = new AsyncLocalStorage();
 const UNIT = 1_000_000_000;
+const GEMINI_INPUT_USD_PER_MTOK = 0.75;
+const GEMINI_CACHED_INPUT_USD_PER_MTOK = 0.075;
+const GEMINI_OUTPUT_USD_PER_MTOK = 3.75;
+const GEMINI_CACHE_STORAGE_USD_PER_MTOK_HOUR = 0.50;
 // Mechanical invariant: every actual dispatch holds a durable reservation in
 // both authorized currencies. Signals are amounts, limits, request IDs and
 // provider usage; no evidence or answer meaning is inspected. A conservative
@@ -120,6 +124,39 @@ function usagePresent(usage) {
   return Number.isSafeInteger(input) && input >= 0 && Number.isSafeInteger(output) && output >= 0
     && input + output > 0
     && (usage.total_tokens === undefined || usage.total_tokens === input + output);
+}
+
+function geminiTokenCount(value, label, { allowZero = true } = {}) {
+  const number = Number(value);
+  if (!Number.isSafeInteger(number) || number < 0 || (!allowZero && number === 0)) {
+    throw new Error(`cloud_budget_invalid_${label}`);
+  }
+  return number;
+}
+
+function geminiGenerateCost(usage = {}) {
+  const prompt = geminiTokenCount(usage.promptTokenCount ?? 0, 'gemini_prompt_tokens');
+  const cached = Math.min(prompt, geminiTokenCount(
+    usage.cachedContentTokenCount ?? 0,
+    'gemini_cached_tokens',
+  ));
+  const candidates = geminiTokenCount(usage.candidatesTokenCount ?? 0, 'gemini_candidate_tokens');
+  const thoughts = geminiTokenCount(usage.thoughtsTokenCount ?? 0, 'gemini_thought_tokens');
+  const total = geminiTokenCount(
+    usage.totalTokenCount ?? prompt + candidates + thoughts,
+    'gemini_total_tokens',
+  );
+  const unclassifiedOutput = Math.max(0, total - prompt - candidates - thoughts);
+  return ((prompt - cached) * GEMINI_INPUT_USD_PER_MTOK
+    + cached * GEMINI_CACHED_INPUT_USD_PER_MTOK
+    + (candidates + thoughts + unclassifiedOutput) * GEMINI_OUTPUT_USD_PER_MTOK) / 1_000_000;
+}
+
+function geminiCacheProvisionCost(tokenCount, ttlSeconds) {
+  const tokens = geminiTokenCount(tokenCount, 'gemini_cache_tokens', { allowZero: false });
+  const ttl = geminiTokenCount(ttlSeconds, 'gemini_cache_ttl_seconds', { allowZero: false });
+  return tokens * (GEMINI_INPUT_USD_PER_MTOK
+    + GEMINI_CACHE_STORAGE_USD_PER_MTOK_HOUR * ttl / 3600) / 1_000_000;
 }
 
 function cloudBudgetScope(env, now) {
@@ -246,6 +283,8 @@ export async function getCloudEvidenceBudgetStatus({env, fetchImpl = globalThis.
   let relayReservedNano = 0;
   let baiSpentNano = 0;
   let baiReservedNano = 0;
+  let geminiSpentNano = 0;
+  let geminiReservedNano = 0;
   const fields=parseHashResult(payload.result);
   for (let index = 0; index < payload.result.length; index += 2) {
     if (['actualNano','theoreticalNano'].includes(payload.result[index])) continue;
@@ -266,6 +305,11 @@ export async function getCloudEvidenceBudgetStatus({env, fetchImpl = globalThis.
       if (ticket.status === 'reserved') baiReservedNano += ticket.theoreticalNano;
       else baiSpentNano += ticket.theoreticalNano;
     }
+    if (ticket.provider === 'gemini') {
+      if (!Number.isSafeInteger(ticket.theoreticalNano) || ticket.theoreticalNano < 0) throw new Error('cloud_budget_ticket_invalid');
+      if (ticket.status === 'reserved') geminiReservedNano += ticket.theoreticalNano;
+      else geminiSpentNano += ticket.theoreticalNano;
+    }
   }
   const actualLimit=amount(env.CLOUD_BUDGET_ACTUAL_LIMIT_CNY,'actual_limit');
   const theoreticalLimit=amount(env.CLOUD_BUDGET_THEORETICAL_LIMIT_USD,'theoretical_limit');
@@ -283,6 +327,10 @@ export async function getCloudEvidenceBudgetStatus({env, fetchImpl = globalThis.
     baiPool:{spentUsd:baiSpentNano/UNIT,reservedUsd:baiReservedNano/UNIT,
       theoreticalLimitUsd:theoreticalLimit,accountedUsd:accountedTheoreticalNano/UNIT,
       costBasis:'official_theoretical',actualCostKnown:false,
+      actualRemainingCny:Math.max(0,actualLimit-accountedActualNano/UNIT)},
+    geminiPool:{spentUsd:geminiSpentNano/UNIT,reservedUsd:geminiReservedNano/UNIT,
+      theoreticalLimitUsd:theoreticalLimit,accountedUsd:accountedTheoreticalNano/UNIT,
+      costBasis:'google_list_theoretical',actualCostKnown:false,
       actualRemainingCny:Math.max(0,actualLimit-accountedActualNano/UNIT)},
     ...(finalPools || {}),
     // Preserve the original aggregate, including unattributed initial amounts.
@@ -436,6 +484,80 @@ export function createCloudRequestBudget({env, fetchImpl = globalThis.fetch, com
     } else ticket.uncertainty='provider_usage_missing_reservation_retained';
     return result;
   }
+  async function gemini({
+    body,
+    invoke,
+    operation,
+    model,
+    cachedTokenCount = 0,
+    cacheTtlSeconds = 180,
+    contentTokenEstimate,
+  }) {
+    if (typeof invoke !== 'function') throw new Error('cloud_budget_gemini_invoke_required');
+    const normalizedModel = String(model || '').trim();
+    if (!normalizedModel) throw new Error('cloud_budget_model_required');
+    if (!['cached_contents_create', 'generate_content'].includes(operation)) {
+      throw new Error('cloud_budget_gemini_operation_invalid');
+    }
+    const bodyBytes = Buffer.byteLength(JSON.stringify(body), 'utf8');
+    let reservedTheoreticalUsd;
+    let pricingBasis;
+    if (operation === 'cached_contents_create') {
+      const estimatedTokens = contentTokenEstimate === undefined
+        ? Math.max(1, bodyBytes)
+        : geminiTokenCount(contentTokenEstimate, 'gemini_cache_token_estimate', { allowZero: false });
+      reservedTheoreticalUsd = geminiCacheProvisionCost(estimatedTokens, cacheTtlSeconds);
+      pricingBasis = 'google_list_theoretical_cache_create_input_provision_unknown';
+    } else {
+      const output = geminiTokenCount(
+        body?.generationConfig?.maxOutputTokens,
+        'gemini_output_limit',
+        { allowZero: false },
+      );
+      const cached = geminiTokenCount(cachedTokenCount, 'gemini_cached_token_estimate');
+      reservedTheoreticalUsd = (bodyBytes * GEMINI_INPUT_USD_PER_MTOK
+        + cached * GEMINI_CACHED_INPUT_USD_PER_MTOK
+        + output * GEMINI_OUTPUT_USD_PER_MTOK) / 1_000_000;
+      pricingBasis = 'google_list_theoretical';
+    }
+    const ticket = await reserve({
+      provider: 'gemini',
+      model: normalizedModel,
+      operation,
+      actualCny: 0,
+      theoreticalUsd: reservedTheoreticalUsd,
+      pricingBasis,
+    });
+    let result;
+    try { result = await invoke(); }
+    catch (error) {
+      ticket.uncertainty = 'request_or_settlement_failed_reservation_retained';
+      throw error;
+    }
+    const usage = result?.usageMetadata || null;
+    const cacheTokens = operation === 'cached_contents_create'
+      ? usage?.totalTokenCount ?? result?.totalTokenCount
+      : null;
+    try {
+      const theoreticalUsd = operation === 'cached_contents_create'
+        ? geminiCacheProvisionCost(cacheTokens, cacheTtlSeconds)
+        : geminiGenerateCost(usage);
+      if (operation === 'generate_content'
+          && (!usage || geminiTokenCount(usage.totalTokenCount ?? 0, 'gemini_total_tokens') === 0)) {
+        throw new Error('cloud_budget_gemini_usage_missing');
+      }
+      await settle(ticket, {
+        usage: usage || { totalTokenCount: cacheTokens },
+        returnedModel: result?.modelVersion || result?.model || normalizedModel,
+        actualCny: 0,
+        actualUpperCny: 0,
+        theoreticalUsd,
+      });
+    } catch {
+      ticket.uncertainty = 'provider_usage_missing_or_settlement_uncertain_reservation_retained';
+    }
+    return result;
+  }
   async function beforeSend({operation,model,count}) {
     const rate=operation==='embeddings'?0.07:operation==='rerank'?0.28:null;
     if(rate===null || !Number.isSafeInteger(count) || count<1) throw new Error('cloud_budget_unsupported_sf_request');
@@ -458,10 +580,13 @@ export function createCloudRequestBudget({env, fetchImpl = globalThis.fetch, com
       theoreticalUsd:records.filter(r=>r.status==='usage_settled').reduce((n,r)=>n+r.theoreticalNano/UNIT,0),
       reservedCny:records.filter(r=>r.status==='reserved').reduce((n,r)=>n+r.actualNano/UNIT,0),
       reservedTheoreticalUsd:records.filter(r=>r.status==='reserved').reduce((n,r)=>n+r.theoreticalNano/UNIT,0),
-      actualCostKnown:!records.some(record=>record.provider==='bai'),
-      calls:records.map(({started,...r})=>({...r,actualCny:r.provider==='bai'?null:r.estimatedActualCny??null,accountedActualUpperCny:r.provider==='bai'?null:r.actualNano/UNIT,theoreticalUsd:r.theoreticalNano/UNIT}))};
+      actualCostKnown:!records.some(record=>['bai','gemini'].includes(record.provider)),
+      calls:records.map(({started,...r})=>({...r,
+        actualCny:['bai','gemini'].includes(r.provider)?null:r.estimatedActualCny??null,
+        accountedActualUpperCny:['bai','gemini'].includes(r.provider)?null:r.actualNano/UNIT,
+        theoreticalUsd:r.theoreticalNano/UNIT}))};
   }
-  return {relay,deepseek,openai,bai:request=>openai({...request,provider:'bai'}),beforeSend,onResponse,snapshot};
+  return {relay,deepseek,openai,bai:request=>openai({...request,provider:'bai'}),gemini,beforeSend,onResponse,snapshot};
 }
 
 export async function runCloudBudgetedQuestion({env,fetchImpl,budget},invoke) {
@@ -517,6 +642,10 @@ export function runCloudBaiRequest({body,invoke}) {
 export function runCloudDeepSeekRequest({body,invoke}) {
   const controller=scope.getStore();
   return controller?controller.deepseek({body,invoke}):invoke();
+}
+export function runCloudGeminiRequest(request) {
+  const controller=scope.getStore();
+  return controller?controller.gemini(request):request.invoke();
 }
 export function cloudSiliconFlowCallbacks() {
   const controller=scope.getStore();
