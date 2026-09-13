@@ -150,7 +150,16 @@ function uncertainDecision(reasonCode) {
 
 function classifierFailureCode(error) {
   const code = String(error?.code || "").trim();
-  if (code) return `classifier_${code}`.slice(0, 80);
+  if (code) {
+    const status = error?.status;
+    const statusSuffix = code === "bai_http_error"
+      && Number.isInteger(status)
+      && status >= 400
+      && status <= 599
+      ? `_${status}`
+      : "";
+    return `classifier_${code}${statusSuffix}`.slice(0, 80);
+  }
   if (error?.name === "AbortError") return "classifier_timeout";
   return "classifier_failed";
 }
