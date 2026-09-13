@@ -5,6 +5,23 @@ const SOURCE_ID = /^ygoresources-qa-(\d+)$/u;
 const SOURCE_TIMEOUT_MS = 30_000;
 const MAX_PAGE_CONCURRENCY = 4;
 
+// normalizeQa owns the title/detail/answer roles. buildQaIndex derives `title`,
+// `question` and `text` from those roles for display and search. The prompt uses
+// the source roles once; the complete frozen record still owns the handle.
+// Unknown source schemas keep all fields. No cross-field meaning comparison.
+export function canonicalQaPromptRecord(record) {
+  const answerField = Object.hasOwn(record, 'answer') && !Object.hasOwn(record, 'conclusion') ? 'answer'
+    : Object.hasOwn(record, 'conclusion') && !Object.hasOwn(record, 'answer') ? 'conclusion' : null;
+  if (record.recordType !== 'qa' || !SOURCE_ID.test(String(record.id || '')) || !answerField
+      || typeof record.rawQuestion !== 'string' || typeof record.rawDetailedQuestion !== 'string'
+      || typeof record[answerField] !== 'string' || Object.hasOwn(record, 'sourceQa')) return record;
+  const derivedKeys = new Set(['title', 'question', 'text', 'rawQuestion', 'rawDetailedQuestion', answerField]);
+  return {
+    ...Object.fromEntries(Object.entries(record).filter(([key]) => !derivedKeys.has(key))),
+    sourceQa: { title: record.rawQuestion, question: record.rawDetailedQuestion, answer: record[answerField] },
+  };
+}
+
 function sourceError(code, { status, url, cause } = {}) {
   const error = new Error(code, cause === undefined ? undefined : { cause });
   error.code = code;
