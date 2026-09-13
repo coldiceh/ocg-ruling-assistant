@@ -1,4 +1,4 @@
-import { callDeepSeekJsonTask, callRelayJsonTask } from './ragModelClient.mjs';
+import { callDeepSeekJsonTask, callRelayJsonTask, callBaiJsonTask } from './ragModelClient.mjs';
 
 export function buildCloudEvidencePlanPrompt({question,cardTexts}) {
   return [
@@ -34,6 +34,7 @@ function optionalHintFailure(error) {
   return new Set(['cloud_evidence_plan_missing_needs','cloud_evidence_plan_missing_need',
     'cloud_evidence_plan_invalid_query','deepseek_json_task_invalid_json',
     'relay_json_task_invalid_json','deepseek_not_configured','relay_not_configured',
+    'bai_json_task_invalid_json','bai_not_configured',
     'MODEL_PROVIDER_TIMEOUT']).has(error?.code)
     || (!error?.code && Number.isInteger(error?.status) && error.status >= 400 && error.status <= 599)
     || (!error?.code && error instanceof TypeError && error.message === 'fetch failed');
@@ -42,9 +43,9 @@ function optionalHintFailure(error) {
 export async function generateCloudEvidencePlan({question,cardTexts,signal,env={},fetchImpl,invokeTask}={}) {
   const started=performance.now();
   const requestedProvider=String(env.CLOUD_EVIDENCE_PLAN_PROVIDER||'deepseek').trim().toLowerCase();
-  const provider=requestedProvider==='relay'?'relay':'deepseek';
-  const task=invokeTask||(provider==='relay'?callRelayJsonTask:callDeepSeekJsonTask);
-  const modelName=provider==='relay'?'gpt-6-astra':String(
+  const provider=['relay','bai'].includes(requestedProvider)?requestedProvider:'deepseek';
+  const task=invokeTask||(provider==='relay'?callRelayJsonTask:provider==='bai'?callBaiJsonTask:callDeepSeekJsonTask);
+  const modelName=provider==='bai'?'deepseek-v4.1-flash':provider==='relay'?'gpt-6-astra':String(
     env.DEEPSEEK_RULE_MODEL||env.RAG_RULE_MODEL||env.DEEPSEEK_CARD_MODEL||env.RAG_CARD_MODEL||'',
   ).trim()||undefined;
   let result;
@@ -55,6 +56,7 @@ export async function generateCloudEvidencePlan({question,cardTexts,signal,env={
     prompt:buildCloudEvidencePlanPrompt({question,cardTexts}),
     modelName,
     ...(provider==='relay'?{reasoningEffort:'low'}:{thinkingMode:'disabled'}),
+    ...(provider==='bai'?{reasoningEffort:null,stage:'evidence_preparation'}:{}),
     maxTokens:4096,
     env,fetchImpl,signal,
   });

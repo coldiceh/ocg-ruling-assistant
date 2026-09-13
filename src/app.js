@@ -1882,7 +1882,7 @@ function renderAdminPublicBudgetStatus(buckets = []) {
   for (const bucket of publicBuckets) {
     const card = document.createElement("article");
     card.className = "admin-budget-pool";
-    const title = bucket?.provider === "bai" ? "GPT最终裁定"
+    const title = bucket?.provider === "bai" ? "B.AI 最终裁定"
       : bucket?.provider === "relay" ? "中转 GPT 最终裁定"
       : String(bucket?.label || [bucket?.provider, bucket?.stage].filter(Boolean).join(" · ") || "公开问答");
     appendText(card, "strong", title);
@@ -1907,7 +1907,7 @@ function renderBudgetBuckets(buckets = []) {
     const row = document.createElement("div");
     row.className = "budget-bucket";
     const label = document.createElement("span");
-    label.textContent = bucket?.provider === "bai" ? "GPT最终裁定"
+    label.textContent = bucket?.provider === "bai" ? "B.AI 最终裁定"
       : bucket?.provider === "relay" ? "中转 GPT 最终裁定"
       : String(bucket?.label || [bucket?.provider, bucket?.stage].filter(Boolean).join(" · ") || "模型用量");
     const value = document.createElement("strong");
@@ -5264,7 +5264,7 @@ function modelProviderLabel(provider) {
   if (value === "gemini") return "Gemini";
   if (value === "openai") return "OpenAI";
   if (value === "relay") return "ChatGPT";
-  if (value === "bai") return "GPT";
+  if (value === "bai") return "B.AI";
   if (value === "ollama") return "Ollama";
   if (value === "mock") return "RAG Mock";
   if (value === "auto") return "自动";
