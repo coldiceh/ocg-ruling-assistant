@@ -1,5 +1,4 @@
 import { buildRagRulingPromptBundle } from './ragRulingPrompt.mjs';
-import { canonicalQaPromptRecord } from './geminiQaSourceRecords.mjs';
 
 const RULE_SOURCE_FIELDS = [
   'recordType', 'title', 'sourceUrl', 'source', 'sourceAuthority', 'official', 'parentSourceId',
@@ -74,11 +73,11 @@ export function resolveGeminiSelection({ args, rules, qaTools }) {
 
 export function packGeminiSelection({ selection, userQuery, cardResolution, retrievedEvidence = {}, maxPromptChars = 36000 }) {
   const selectedBodies = [...selection.selectedRules, ...selection.selectedQa.map(({ handle, record }) => ({
-    id: handle, recordType: record.recordType, title: record.title ?? record.sourceQa?.title,
+    id: handle, recordType: record.recordType, title: record.title,
     source: record.sourceName || '', sourceUrl: selectedQaSourceUrl(record),
     ...Object.fromEntries(['sourceAuthority', 'sourceTier', 'official']
       .filter(key => Object.hasOwn(record, key)).map(key => [key, record[key]])),
-    text: JSON.stringify(canonicalQaPromptRecord(record)),
+    text: JSON.stringify(record),
   }))];
   const baseEvidence = { userProvidedCardTexts: retrievedEvidence.userProvidedCardTexts || [],
     cardTexts: retrievedEvidence.cardTexts || [] };

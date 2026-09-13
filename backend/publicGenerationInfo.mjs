@@ -41,7 +41,7 @@ export async function withPublicGenerationInfo(answer, profile, env, {fallbackFr
     reasoningEffort,
     thinkingMode,
     budget:{currency:pool?.currency || (['openai','relay','bai'].includes(profile.provider) ? 'USD' : 'CNY'),
-      costBasis:pool?.costBasis || (profile.provider === 'bai' ? 'bai_standard_estimate' : null),
+      costBasis:pool?.costBasis || (profile.provider === 'bai' ? 'official_theoretical' : null),
       remainingAmount:remaining, dailyBudgetAmount:dailyLimit,
       sharedPoolLabel:sharesCny ? `${pool.label}（受本站人民币共享总额约束）` : pool?.sharedPoolLabel || pool?.label || '本站每日额度',
       asOf:new Date().toISOString(), timezone:status?.timezone || env.API_BUDGET_TIMEZONE || 'Asia/Shanghai'},

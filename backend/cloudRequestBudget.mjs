@@ -1,7 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
 import { estimateOpenAIModelCost, estimateRelayModelCost, getModelPricingConfig } from './modelPricing.mjs';
-import { estimateBaiModelCost } from './baiModelPricing.mjs';
 import { publicFinalBudgetEnabled, publicFinalBudgetKeys, publicFinalBudgetCommand, publicFinalPoolStatus } from './cloudFinalBudget.mjs';
 
 const scope = new AsyncLocalStorage();
@@ -506,31 +505,6 @@ export function createCloudRequestBudget({env, fetchImpl = globalThis.fetch, com
     } else ticket.uncertainty='provider_usage_missing_reservation_retained';
     return result;
   }
-  async function bai({body,invoke,stage='final_ruling'}) {
-    const model=String(body?.model||'').trim();
-    const output=body?.max_completion_tokens ?? body?.max_tokens;
-    if(!model) throw new Error('cloud_budget_model_required');
-    if(!Number.isSafeInteger(output)||output<=0) throw new Error('cloud_budget_explicit_output_limit_required');
-    const requestStartedAt=new Date();
-    const input=Buffer.byteLength(JSON.stringify(body),'utf8');
-    const reservation=estimateBaiModelCost({model,usage:{input_tokens:input,output_tokens:output},now:requestStartedAt,reserve:true});
-    const ticket=await reserve({provider:'bai',model,operation:'chat_completions',stage,
-      actualCny:0,theoreticalUsd:reservation.totalCostUsd,pricingBasis:reservation.priceBasis});
-    let result;
-    try { result=await invoke(); }
-    catch(error) {
-      ticket.uncertainty='request_or_settlement_failed_reservation_retained';
-      throw error;
-    }
-    if(usagePresent(result.usage)) {
-      try {
-        const settled=estimateBaiModelCost({model,usage:result.usage,now:requestStartedAt});
-        await settle(ticket,{usage:result.usage,returnedModel:result.model,actualCny:0,actualUpperCny:0,
-          theoreticalUsd:settled.totalCostUsd});
-      } catch { ticket.uncertainty='provider_response_received_settlement_uncertain_reservation_retained'; }
-    } else ticket.uncertainty='provider_usage_missing_reservation_retained';
-    return result;
-  }
   async function gemini({
     body,
     invoke,
@@ -633,7 +607,7 @@ export function createCloudRequestBudget({env, fetchImpl = globalThis.fetch, com
         accountedActualUpperCny:['bai','gemini'].includes(r.provider)?null:r.actualNano/UNIT,
         theoreticalUsd:r.theoreticalNano/UNIT}))};
   }
-  return {relay,deepseek,openai,bai,gemini,beforeSend,onResponse,snapshot};
+  return {relay,deepseek,openai,bai:request=>openai({...request,provider:'bai'}),gemini,beforeSend,onResponse,snapshot};
 }
 
 export async function runCloudBudgetedQuestion({env,fetchImpl,budget},invoke) {
@@ -682,9 +656,9 @@ export async function runOfficialOpenAIRequest({env,body,invoke,fetchImpl=global
     throw error;
   }
 }
-export function runCloudBaiRequest({body,invoke,stage='final_ruling'}) {
+export function runCloudBaiRequest({body,invoke}) {
   const controller=scope.getStore();
-  return controller?controller.bai({body,invoke,stage}):invoke();
+  return controller?controller.bai({body,invoke}):invoke();
 }
 export function runCloudDeepSeekRequest({body,invoke}) {
   const controller=scope.getStore();

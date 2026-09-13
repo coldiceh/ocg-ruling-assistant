@@ -5,11 +5,10 @@ import {presentPublicAnswer, PUBLIC_REQUEST_CHANNELS} from '../backend/publicAns
 import {finalizePublicAnswer, preparePublicAnswer} from '../backend/publicPreparedAnswerService.mjs';
 
 test('known exhausted official allowance chooses DeepSeek; unknown allowance does not', async () => {
-  const env = {DEEPSEEK_API_KEY:'synthetic',BAI_API_KEY:'synthetic-bai-key',BAI_BASE_URL:'https://bai.example.test/v1'};
+  const env = {DEEPSEEK_API_KEY:'synthetic'};
   for (const remainingAmount of [0, null, 1]) {
     const selected = await selectAvailablePublicProfile('official-astra-low',env,{readOfficial:async()=>({remainingAmount})});
-    assert.equal(selected.profile.provider,remainingAmount === 0 ? 'bai' : 'openai');
-    if (remainingAmount === 0) assert.equal(selected.profile.model,'deepseek-v4.1-flash');
+    assert.equal(selected.profile.provider,remainingAmount === 0 ? 'deepseek' : 'openai');
   }
 });
 
@@ -77,7 +76,7 @@ test('CNY models without an individual cap report the existing shared allowance'
 
 test('only a rejected official reservation switches once, reusing the same saved prompt',async()=>{
   const preparation={profileId:'official-astra-low',pipeline:'rag_baseline',continuation:{promptBundle:{prompt:'Frozen input'}},rulingVersion:'latest',startedAt:0};
-  const env={DEEPSEEK_API_KEY:'synthetic',BAI_API_KEY:'synthetic-bai-key',BAI_BASE_URL:'https://bai.example.test/v1',OCG_FINAL_OPENAI_API_KEY:'synthetic',PUBLIC_OPENAI_BUDGET_RUN_ID:'test',PUBLIC_OPENAI_BUDGET_LIMIT_USD:'5',PUBLIC_OPENAI_BUDGET_INITIAL_USD:'0',UPSTASH_REDIS_REST_URL:'https://unused.invalid',UPSTASH_REDIS_REST_TOKEN:'synthetic'};
+  const env={DEEPSEEK_API_KEY:'synthetic',OCG_FINAL_OPENAI_API_KEY:'synthetic',PUBLIC_OPENAI_BUDGET_RUN_ID:'test',PUBLIC_OPENAI_BUDGET_LIMIT_USD:'5',PUBLIC_OPENAI_BUDGET_INITIAL_USD:'0',UPSTASH_REDIS_REST_URL:'https://unused.invalid',UPSTASH_REDIS_REST_TOKEN:'synthetic'};
   const selectProfile=async()=>({profile:{id:'official-astra-low',provider:'openai'}});
   const calls=[];
   const result=await finalizePublicAnswer({preparation,env,selectProfile,finalize:async input=>{
@@ -86,7 +85,7 @@ test('only a rejected official reservation switches once, reusing the same saved
   },addGeneration:async(answer,profile,_env,options)=>({...answer,generation:{provider:profile.provider,...options}})});
   assert.equal(calls.length,2);
   assert.equal(calls[0].continuation,calls[1].continuation);
-  assert.equal(calls[1].env.RAG_MODEL_PROVIDER,'bai');
+  assert.equal(calls[1].env.RAG_MODEL_PROVIDER,'deepseek');
   assert.equal(result.generation,undefined);
   assert.equal(result.answer.generation.fallbackFrom,'official-astra-low');
   let failures=0;
