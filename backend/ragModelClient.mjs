@@ -2640,7 +2640,18 @@ export async function getRagBudgetStatus({
       spent: bucketSpent[index],
       blocked: bucket.id === "final_ruling:relay" && manualChatGptClose,
       manuallyClosed: bucket.id === "final_ruling:relay" && manualChatGptClose,
-    }))],
+    })), ...(cloudEvidence?.geminiPool ? [{
+      ...budgetBucketStatusPayload({
+        bucket: {id: 'evidence_preparation:gemini', stage: 'evidence_preparation',
+          provider: 'gemini', label: 'Gemini 规则与 QA 检索', currency: 'USD'},
+        bucketConfig: {currency: 'USD', dailyBudgetAmount: null},
+        spent: cloudEvidence.geminiPool.spentUsd,
+      }),
+      reservedTodayUsd: cloudEvidence.geminiPool.reservedUsd,
+      accountedTodayUsd: cloudEvidence.geminiPool.spentUsd + cloudEvidence.geminiPool.reservedUsd,
+      costBasis: cloudEvidence.geminiPool.costBasis,
+      actualCostKnown: false,
+    }] : [])],
   };
 }
 
