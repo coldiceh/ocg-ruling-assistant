@@ -8,6 +8,8 @@ import {
   createAdminSessionManager,
   createMemoryAdminSessionStore,
   createRedisAdminSessionStore,
+  configuredAdminOrigins,
+  inspectAdminRequestOrigin,
 } from "../backend/adminSession.mjs";
 import { createAdminAuthHandler } from "../api/admin-auth.js";
 
@@ -177,6 +179,72 @@ test("admin origin never falls back to the public API origin", async () => {
   assert.equal(response.statusCode, 503);
   assert.equal(response.payload.error, "admin_origin_not_configured");
   assert.equal(response.headers["access-control-allow-origin"], undefined);
+});
+
+test("first-party page origin is allowlisted and originless GET requires same-origin Referer provenance", async () => {
+  const pageOrigin = "https://admin-page.example.test";
+  const env = adminEnv({
+    ADMIN_ALLOWED_ORIGINS: ADMIN_ORIGIN,
+    ADMIN_PAGE_ORIGIN: pageOrigin,
+  });
+  assert.deepEqual(configuredAdminOrigins(env), [ADMIN_ORIGIN, pageOrigin]);
+  assert.equal(inspectAdminRequestOrigin({
+    method: "GET",
+    headers: {
+      "sec-fetch-site": "same-origin",
+      referer: `${pageOrigin}/?admin=1`,
+    },
+  }, env).origin, pageOrigin);
+
+  const store = createMemoryAdminSessionStore();
+  const handler = createAdminAuthHandler({
+    manager: createAdminSessionManager({ env, store }),
+  });
+  const login = createJsonResponse();
+  await handler({
+    method: "POST",
+    headers: { origin: pageOrigin, "x-forwarded-for": "203.0.113.10" },
+    body: { action: "login", password: env.ADMIN_SESSION_PASSWORD },
+  }, login);
+  assert.equal(login.statusCode, 200);
+  const cookie = cookiePair(login.headers["set-cookie"]);
+
+  const originlessSession = createJsonResponse();
+  await handler({
+    method: "GET",
+    headers: {
+      cookie,
+      "sec-fetch-site": "same-origin",
+      referer: `${pageOrigin}/?admin=1`,
+    },
+  }, originlessSession);
+  assert.equal(originlessSession.statusCode, 200);
+  assert.equal(originlessSession.payload.authenticated, true);
+
+  for (const headers of [
+    { cookie },
+    { cookie, "sec-fetch-site": "same-origin" },
+    { cookie, "sec-fetch-site": "cross-site", referer: `${pageOrigin}/?admin=1` },
+    { cookie, "sec-fetch-site": "same-origin", referer: "https://unlisted.example.test/" },
+    { cookie, origin: "null", "sec-fetch-site": "same-origin", referer: `${pageOrigin}/?admin=1` },
+  ]) {
+    const rejected = createJsonResponse();
+    await handler({ method: "GET", headers }, rejected);
+    assert.equal(rejected.statusCode, 403);
+  }
+
+  const originlessPost = createJsonResponse();
+  await handler({
+    method: "POST",
+    headers: {
+      cookie,
+      "x-csrf-token": login.payload.csrfToken,
+      "sec-fetch-site": "same-origin",
+      referer: `${pageOrigin}/?admin=1`,
+    },
+    body: { action: "logout" },
+  }, originlessPost);
+  assert.equal(originlessPost.statusCode, 403);
 });
 
 test("admin login rate limit is enforced per origin and client, then expires", async () => {

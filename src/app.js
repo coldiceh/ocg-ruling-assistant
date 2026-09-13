@@ -104,6 +104,7 @@ const ui = {
 
 let appConfig = {
   deploymentLabel: "",
+  adminPageUrl: "",
   answerApiUrl: "",
   modelLabel: "",
   budgetApiUrl: "",
@@ -227,6 +228,7 @@ async function loadAppConfig() {
   const payload = (await readOptionalJson("config.json")) || {};
   appConfig = {
     deploymentLabel: String(payload.deploymentLabel || "").trim(),
+    adminPageUrl: String(payload.adminPageUrl || "").trim(),
     answerApiUrl: String(payload.answerApiUrl || "").trim(),
     budgetApiUrl: String(payload.budgetApiUrl || "").trim(),
     modelLabel: "",
@@ -2666,7 +2668,7 @@ async function requestAdminRiskControl(method = "GET") {
   if (response.status === 401) {
     stopFollowingAdminRun();
     setAdminAuthenticated(false);
-    setAdminLoginStatus("登录已过期，请重新登录。", "error");
+    setAdminLoginStatus(adminErrorMessage(createAdminRequestError(response.status, payload), "请重新登录。"), "error");
   }
   if (!response.ok || payload.ok === false) throw createAdminRequestError(response.status, payload);
   return normalizeAdminRiskControlStatus(payload.status);
@@ -4596,7 +4598,7 @@ async function requestAdminQuestionHistory() {
   if (response.status === 401) {
     stopFollowingAdminRun();
     setAdminAuthenticated(false);
-    setAdminLoginStatus("登录已过期，请重新登录。", "error");
+    setAdminLoginStatus(adminErrorMessage(createAdminRequestError(response.status, payload), "请重新登录。"), "error");
   }
   if (!response.ok || payload.ok === false) throw createAdminRequestError(response.status, payload);
   return payload.data ?? payload;
@@ -4894,7 +4896,7 @@ async function requestAdminLab({
   if (response.status === 401) {
     stopFollowingAdminRun();
     setAdminAuthenticated(false);
-    setAdminLoginStatus("登录已过期，请重新登录。", "error");
+    setAdminLoginStatus(adminErrorMessage(createAdminRequestError(response.status, payload), "请重新登录。"), "error");
   }
   if (!response.ok || payload.ok === false) throw createAdminRequestError(response.status, payload);
   return payload.data ?? payload;
@@ -4927,7 +4929,7 @@ function adminErrorMessage(error, fallback) {
   const messages = {
     admin_login_invalid: "管理员密码不正确。",
     admin_login_rate_limited: "登录尝试过多，请稍后再试。",
-    admin_session_required: "请先登录管理员实验室。",
+    admin_session_required: "未收到登录凭据，请重新登录。",
     admin_session_invalid: "登录已失效，请重新登录。",
     admin_session_expired: "登录已过期，请重新登录。",
     admin_csrf_invalid: "安全令牌已失效，请重新登录。",
@@ -6376,6 +6378,7 @@ async function init() {
   if (ui.adminLabPanel) ui.adminLabPanel.hidden = !adminUiEnabled;
   applyTheme(readInitialTheme());
   await loadAppConfig();
+  if (redirectToAdminPage()) return;
   await loadBackendModelInfo();
   await loadSyncedData();
   if (ui.pipelineDebugToggle) ui.pipelineDebugToggle.hidden = !debugUiEnabled;
@@ -6455,6 +6458,23 @@ function isDebugUiEnabled() {
   try {
     const params = new URLSearchParams(window.location.search);
     return params.get("debug") === "1";
+  } catch {
+    return false;
+  }
+}
+
+function redirectToAdminPage() {
+  if (!adminUiEnabled || !appConfig.adminPageUrl || !appConfig.answerApiUrl) return false;
+  try {
+    const target = new URL(appConfig.adminPageUrl, window.location.href);
+    const api = new URL(appConfig.answerApiUrl, window.location.href);
+    if (target.protocol !== "https:" || target.origin !== api.origin
+      || target.origin === window.location.origin) return false;
+    target.search = "";
+    target.hash = "";
+    target.searchParams.set("admin", "1");
+    window.location.replace(target.toString());
+    return true;
   } catch {
     return false;
   }

@@ -252,14 +252,6 @@ h3 {
   background: var(--glass-strong);
 }
 
-.has-deployment-label .topbar {
-  position: sticky;
-  top: 0;
-  z-index: 30;
-  background: var(--glass-strong);
-  backdrop-filter: blur(10px);
-}
-
 .theme-toggle:hover,
 .text-button:hover,
 .file-button:hover,
