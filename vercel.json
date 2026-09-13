@@ -4,6 +4,7 @@
   "outputDirectory": "public",
   "env": {
     "ADMIN_PAGE_ORIGIN": "https://ocg-ruling-assistant.vercel.app",
+    "QUERY_AUDIT_MAX_ENTRIES": "100",
     "PUBLIC_OPENAI_DAILY_LIMIT_USD": "5",
     "RELAY_STREAM_TIMEOUT_MS": "270000",
     "ADMIN_MODEL_LAB_SYNC_FINAL_TIMEOUT_MS": "290000",

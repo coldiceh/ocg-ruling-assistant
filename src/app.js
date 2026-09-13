@@ -158,7 +158,7 @@ const pendingStages = [
   { id: "extract_card_names", label: "提取卡名", body: "正在识别卡名候选，并准备查询卡片资料。" },
   { id: "retrieve_card_texts", label: "检索卡片文本", body: "正在匹配本地资料、百鸽卡片资料和用户提供文本。" },
   { id: "retrieve_rulings", label: "检索规则资料", body: "正在补充检索线索、查找相关 Q&A、FAQ 和规则资料，并整理证据。" },
-  { id: "generate_ruling", label: "核对资料并生成裁定", body: "正在核对资料是否适用于当前场面，并生成未确认裁定分析。" },
+  { id: "generate_ruling", label: "生成裁定", body: "正在根据已准备的资料生成裁定分析。" },
 ];
 let pendingStageIndex = -1;
 let pendingBrowserElapsedTimer = 0;
@@ -4587,7 +4587,7 @@ async function loadAdminQuestionHistory() {
 
 async function requestAdminQuestionHistory() {
   const url = new URL(getAdminEndpointUrl("/api/admin-queries"));
-  url.searchParams.set("limit", "30");
+  url.searchParams.set("limit", "100");
   const response = await fetch(url, {
     method: "GET",
     cache: "no-store",
@@ -4607,7 +4607,7 @@ async function requestAdminQuestionHistory() {
 function renderAdminQuestionHistory(entries) {
   clearElement(ui.adminQuestionHistoryList);
   ui.adminQuestionHistoryStatus.textContent = entries.length
-    ? `后台最近保存的 ${entries.length} 条提问（最多 30 条）。旧记录未保存的字段显示“未记录”。`
+    ? `后台最近保存的 ${entries.length} 条提问（最多 100 条）。旧记录未保存的字段显示“未记录”。`
     : "后台暂时没有已保存的提问。";
   for (const entry of entries) {
     const item = document.createElement("li");
@@ -6039,7 +6039,7 @@ function renderPendingStages(stages = getPendingStages()) {
     ui.verdictBody.textContent = "开始处理后，这里会显示当前进度。";
     return;
   }
-  ui.verdictTitle.textContent = stage.id === "generate_ruling" ? "正在核对资料并生成裁定" : `正在${stage.label}`;
+  ui.verdictTitle.textContent = stage.id === "generate_ruling" ? "正在生成裁定" : `正在${stage.label}`;
   ui.verdictBody.textContent = stage.body;
 }
 

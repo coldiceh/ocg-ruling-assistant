@@ -58,7 +58,7 @@ test("query_audit_persists_preparing_request_context_with_retention", async () =
   assert.equal(stored.profileId, "official-astra-low");
   assert.ok(!("headers" in stored));
   assert.ok(!("cookies" in stored));
-  assert.equal(commands[1][3], "29");
+  assert.equal(commands[1][3], "99");
   assert.equal(commands[2][2], String(30 * 86400));
 });
 
@@ -190,7 +190,7 @@ test("query audit update atomically finds the exact id and merges only allowed f
   assert.equal(commands[0][2], "1");
   assert.equal(commands[0][3], "rag-query-audit:v1");
   assert.equal(commands[0][4], original.id);
-  assert.match(commands[0][1], /LRANGE[\s\S]*0, 29/u);
+  assert.match(commands[0][1], /LRANGE[\s\S]*0, 99/u);
   assert.match(commands[0][1], /entry\.id == ARGV\[1\]/u);
   assert.match(commands[0][1], /LSET/u);
   assert.equal(commands[0][1].includes("LPUSH"), false);
@@ -223,7 +223,7 @@ test("query audit update leaves an evicted id absent and validates mechanical pa
   );
 });
 
-test("query audit retention and listing are capped at 30 questions", async () => {
+test("query audit retention and listing are capped at 100 questions", async () => {
   const appendCommands = [];
   await appendQueryAudit({
     question: "测试保留上限",
@@ -236,7 +236,7 @@ test("query audit retention and listing are capped at 30 questions", async () =>
       return jsonResponse(1);
     },
   });
-  assert.deepEqual(appendCommands[1], ["LTRIM", "rag-query-audit:v1", "0", "29"]);
+  assert.deepEqual(appendCommands[1], ["LTRIM", "rag-query-audit:v1", "0", "99"]);
 
   const lowerConfiguredCommands = [];
   await appendQueryAudit({
@@ -261,7 +261,7 @@ test("query audit retention and listing are capped at 30 questions", async () =>
       return jsonResponse([]);
     },
   });
-  assert.deepEqual(listCommands[0], ["LRANGE", "rag-query-audit:v1", "0", "29"]);
+  assert.deepEqual(listCommands[0], ["LRANGE", "rag-query-audit:v1", "0", "99"]);
 
   const defaultListCommands = [];
   await listQueryAudits({
@@ -271,7 +271,7 @@ test("query audit retention and listing are capped at 30 questions", async () =>
       return jsonResponse([]);
     },
   });
-  assert.deepEqual(defaultListCommands[0], ["LRANGE", "rag-query-audit:v1", "0", "29"]);
+  assert.deepEqual(defaultListCommands[0], ["LRANGE", "rag-query-audit:v1", "0", "99"]);
 });
 
 test("query audit timeout covers a stalled response body and aborts the request", async () => {
