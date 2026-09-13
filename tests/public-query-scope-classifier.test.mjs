@@ -115,6 +115,33 @@ test("classifier dispatches the B.AI DeepSeek 4.1 Flash non-thinking JSON wire",
   assert.equal(shouldTriggerPublicQueryRisk(result), true);
 });
 
+test("classifier exposes only a safe HTTP status for a B.AI HTTP failure", async () => {
+  const secret = "provider-secret-body-must-not-leak";
+  const result = await classifyPublicQueryScope({
+    question: "明确的非裁定请求",
+    env: CONFIGURED_ENV,
+    fetchImpl: async () => new Response(JSON.stringify({
+      error: { message: secret },
+    }), {
+      status: 400,
+      headers: { "content-type": "application/json" },
+    }),
+  });
+
+  assert.deepEqual({
+    scope: result.scope,
+    confidence: result.confidence,
+    reasonCode: result.reasonCode,
+  }, {
+    scope: "uncertain",
+    confidence: "low",
+    reasonCode: "classifier_bai_http_error_400",
+  });
+  assert.equal(result.classified, false);
+  assert.equal(shouldTriggerPublicQueryRisk(result), false);
+  assert.equal(JSON.stringify(result).includes(secret), false);
+});
+
 test("classifier failures and malformed decisions fail open as uncertain", async () => {
   const failed = await classifyPublicQueryScope({
     question: "任意输入",
