@@ -119,7 +119,7 @@ test('provider ignores a fourth-round QA search when the same response submits e
   const provider = createGeminiRuleQaEvidenceProvider({
     loadAssets: async () => ({ dataRevision: 'revision', rulesRecords: [],
       createQaTools: () => ({ qaRevision: 'qa-version',
-        search: () => { searches += 1; return { items: [] }; },
+        search: () => { searches += 1; return { items: [{ handle: 'submitted', record }] }; },
         readSelected: (handles) => handles.map((handle) => ({ handle, record })),
       }) }),
     clientFactory: () => ({ model: 'gemini-3.8-flash', getCache: async () => ({ reused: true }),

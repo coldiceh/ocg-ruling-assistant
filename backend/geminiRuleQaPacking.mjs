@@ -73,7 +73,7 @@ export function resolveGeminiSelection({ args, rules, qaTools }) {
 
 export function packGeminiSelection({ selection, userQuery, cardResolution, retrievedEvidence = {}, maxPromptChars = 36000 }) {
   const selectedBodies = [...selection.selectedRules, ...selection.selectedQa.map(({ handle, record }) => ({
-    id: handle, recordType: record.recordType, title: record.title,
+    id: handle, recordType: record.recordType, title: record.title ?? record.sourceQa?.title,
     source: record.sourceName || '', sourceUrl: selectedQaSourceUrl(record),
     ...Object.fromEntries(['sourceAuthority', 'sourceTier', 'official']
       .filter(key => Object.hasOwn(record, key)).map(key => [key, record[key]])),

@@ -8,7 +8,7 @@ import { createQaSnapshot } from "./geminiQaTools.mjs";
 
 export const GEMINI_RULE_QA_ASSET_DIRECTORY = "gemini-rule-qa-v1";
 export const GEMINI_RULE_QA_MANIFEST_FILE = "manifest.json";
-export const GEMINI_RULE_QA_ASSET_SCHEMA_VERSION = 1;
+export const GEMINI_RULE_QA_ASSET_SCHEMA_VERSION = 2;
 
 const FILES = Object.freeze({
   qaRecords: "qa-records.json.gz",
@@ -63,7 +63,10 @@ function validateManifest(manifest) {
   }
   const qaSourceDescriptors = [manifest.sources?.qaIndex, manifest.sources?.rulings]
     .map((source) => ({ file: source?.file, bytes: source?.bytes, sha256: source?.sha256 }));
-  if (sha256(stableJson(qaSourceDescriptors)) !== manifest.qaRevision
+  if (sha256(stableJson({
+    assetSchemaVersion: GEMINI_RULE_QA_ASSET_SCHEMA_VERSION,
+    sources: qaSourceDescriptors,
+  })) !== manifest.qaRevision
       || manifest.sources?.rules?.sha256 !== manifest.ruleRevision
       || manifest.sources?.ragDataRevision?.revision !== manifest.dataRevision
       || !SHA256.test(String(manifest.sources?.ragDataRevision?.sha256 || ""))) {
