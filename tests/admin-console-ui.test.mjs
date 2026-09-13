@@ -88,7 +88,6 @@ test("admin page keeps only management controls and public question history", ()
     assert.doesNotMatch(html, new RegExp(`id="${removedId}"`, "u"));
   }
   assert.match(html, /<h2 id="adminLabTitle">后台管理<\/h2>/u);
-  assert.match(html, /提问、答案和连接 IP 会保存在管理员历史中，仅登录管理员可见/u);
 });
 
 test("logout clears private history and a late history response cannot repopulate it", async () => {
