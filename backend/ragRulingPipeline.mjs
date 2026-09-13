@@ -6,6 +6,7 @@ import {
 } from "./ragEvidenceRetriever.mjs";
 import {
   callCardNameExtractionModel,
+  callCardIdentitySelectionModel,
   callRagModel,
   callRuleQueryExtractionModel,
   isServerOwnedPrivateEvaluationEnv,
@@ -706,6 +707,24 @@ async function answerRagRulingQuestionInternal({
       qaRecords: data.qaRecords,
       enableLiveOfficialQa: true,
       subsumptionCandidatePoolComplete: usesCompleteDefaultSnapshot,
+      cardIdentitySelectionProvider: async ({ candidateSets }) => {
+        const selectionModel = await callCardIdentitySelectionModel({
+          userQuery: query, candidateSets, dataRevision, env,
+          modelInvoker: cardModelInvoker, fetchImpl, dryRun, now, signal,
+        });
+        cardNameModel = {
+          ...cardNameModel,
+          dryRun: cardNameModel.dryRun === true && selectionModel.dryRun === true,
+          tokenUsage: sumUsageTelemetry([cardNameModel.tokenUsage, selectionModel.tokenUsage]),
+          estimatedCostCny: (cardNameModel.estimatedCostCny || 0) + (selectionModel.estimatedCostCny || 0),
+          estimatedCostUsd: (cardNameModel.estimatedCostUsd || 0) + (selectionModel.estimatedCostUsd || 0),
+          warnings: [...(cardNameModel.warnings || []), ...(selectionModel.warnings || [])],
+          cacheHit: cardNameModel.cacheHit === true && selectionModel.cacheHit === true,
+          singleflightHit: cardNameModel.singleflightHit === true && selectionModel.singleflightHit === true,
+          budgetStatus: selectionModel.budgetStatus || cardNameModel.budgetStatus,
+        };
+        return selectionModel.selections;
+      },
       preparedEvidenceProvider: geminiProvider
         ? async (preparedEvidence) => {
           const result = assertPreparedEvidenceResult(await geminiProvider.retrieve({
