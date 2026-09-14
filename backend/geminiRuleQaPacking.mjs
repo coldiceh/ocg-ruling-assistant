@@ -108,8 +108,8 @@ export function expandGeminiSelectionToSourceSections({ selection, rules }) {
   };
 }
 
-export function packGeminiSelection({ selection, userQuery, cardResolution, retrievedEvidence = {}, maxPromptChars = GEMINI_EVIDENCE_MAX_PROMPT_CHARS }) {
-  const selectedBodies = [...selection.selectedRules, ...selection.selectedQa.map(({ handle, record }) => ({
+function selectedBodiesForSelection(selection) {
+  return [...selection.selectedRules, ...selection.selectedQa.map(({ handle, record }) => ({
     id: handle, recordType: record.recordType, title: record.title,
     source: record.sourceName || (record.recordType === 'qa' && /^ygoresources-qa-\d+$/u.test(String(record.id || '')) ? 'YGOResources DB' : ''),
     sourceUrl: selectedQaSourceUrl(record),
@@ -117,6 +117,10 @@ export function packGeminiSelection({ selection, userQuery, cardResolution, retr
       .filter(key => Object.hasOwn(record, key)).map(key => [key, record[key]])),
     text: JSON.stringify(record),
   }))];
+}
+
+export function packGeminiSelection({ selection, userQuery, cardResolution, retrievedEvidence = {}, maxPromptChars = GEMINI_EVIDENCE_MAX_PROMPT_CHARS }) {
+  const selectedBodies = selectedBodiesForSelection(selection);
   const baseEvidence = { userProvidedCardTexts: retrievedEvidence.userProvidedCardTexts || [],
     cardTexts: retrievedEvidence.cardTexts || [] };
   const base = buildRagRulingPromptBundle({ userQuery, cardResolution, evidence: baseEvidence,
@@ -135,4 +139,65 @@ export function packGeminiSelection({ selection, userQuery, cardResolution, retr
     selectedEntryChars: selectedBodies.map(item => ({ id: item.id, chars: item.text.length })),
     capacityExceeded: prompt.length > maxPromptChars };
   return { packing, evidence: { ...payload.evidence, cardResolution } };
+}
+
+/**
+ * Estimate only the serialized prompt-character cost of adding each offered
+ * source. The estimate is mechanical bookkeeping; it does not assess
+ * relevance, completeness, authority, or evidence sufficiency.
+ *
+ * The canonical uncompressed selected body is an upper bound for the
+ * production renderer, whose source-map path only replaces repeated metadata
+ * with shorter references. Per-entry JSON plus two separators therefore bounds
+ * any multi-entry serialization, including shared source metadata.
+ */
+export function computeGeminiSelectionPackingBudget({
+  rules = [], qaItems = [], userQuery, cardResolution, retrievedEvidence = {},
+  maxPromptChars = GEMINI_EVIDENCE_MAX_PROMPT_CHARS,
+} = {}) {
+  if (!Array.isArray(rules)) throw new TypeError('gemini_selection_budget_rules_invalid');
+  if (!Array.isArray(qaItems)) throw new TypeError('gemini_selection_budget_qa_items_invalid');
+  if (!Number.isSafeInteger(maxPromptChars) || maxPromptChars < 0) {
+    throw new TypeError('gemini_selection_budget_limit_invalid');
+  }
+
+  const common = { userQuery, cardResolution, retrievedEvidence, maxPromptChars };
+  const emptySelection = { selectedRules: [], selectedQa: [] };
+  const base = packGeminiSelection({ ...common, selection: emptySelection });
+  const basePromptChars = base.packing.promptChars;
+  const ruleUnitChars = {};
+  const qaHandleChars = {};
+
+  const uniqueRules = new Map();
+  for (const rule of rules) {
+    if (!rule || typeof rule !== 'object' || typeof rule.id !== 'string') {
+      throw new TypeError('gemini_selection_budget_rule_invalid');
+    }
+    if (!uniqueRules.has(rule.id)) uniqueRules.set(rule.id, rule);
+  }
+  for (const [id, rule] of uniqueRules) {
+    const [body] = selectedBodiesForSelection({ selectedRules: [rule], selectedQa: [] });
+    ruleUnitChars[id] = JSON.stringify(body).length + JSON.stringify(body.id).length + 2;
+  }
+
+  const uniqueQa = new Map();
+  for (const item of qaItems) {
+    if (!item || typeof item !== 'object' || typeof item.handle !== 'string' || !item.record
+      || typeof item.record !== 'object') {
+      throw new TypeError('gemini_selection_budget_qa_item_invalid');
+    }
+    if (!uniqueQa.has(item.handle)) uniqueQa.set(item.handle, item);
+  }
+  for (const [handle, item] of uniqueQa) {
+    const [body] = selectedBodiesForSelection({ selectedRules: [], selectedQa: [item] });
+    qaHandleChars[handle] = JSON.stringify(body).length + JSON.stringify(body.id).length + 2;
+  }
+
+  return {
+    limitChars: maxPromptChars,
+    basePromptChars,
+    availableEvidenceChars: Math.max(0, maxPromptChars - basePromptChars),
+    ruleUnitChars,
+    qaHandleChars,
+  };
 }
