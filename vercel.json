@@ -37,12 +37,12 @@
     },
     "api/answer.js": {
       "maxDuration": 300,
-      "includeFiles": "{data/public-release.json,data/legacy-lua-semantic-cache-v2/**,data/qa-discovery-index.json,data/rag-data-revision-manifest.json,data/rag-runtime-v1/**,data/gemini-rule-qa-v1/**}",
+      "includeFiles": "{data/public-release.json,data/legacy-lua-semantic-cache-v2/**,data/qa-discovery-index.json,data/rag-data-revision-manifest.json,data/rag-runtime-v1/**,data/gemini-rule-qa-v1/**,data/rule-embedding-v1/**}",
       "excludeFiles": "{data/{cards,rulings,qa-index,evidence-index,ocg-rule-corpus,official-responses}.json,data/evidence-index.json.gz}"
     },
     "api/admin-model-lab.js": {
       "maxDuration": 300,
-      "includeFiles": "{data/legacy-lua-semantic-cache-v2/**,data/qa-discovery-index.json,data/rag-data-revision-manifest.json,data/rag-runtime-v1/**,data/gemini-rule-qa-v1/**}",
+      "includeFiles": "{data/legacy-lua-semantic-cache-v2/**,data/qa-discovery-index.json,data/rag-data-revision-manifest.json,data/rag-runtime-v1/**,data/gemini-rule-qa-v1/**,data/rule-embedding-v1/**}",
       "excludeFiles": "{data/{cards,rulings,qa-index,evidence-index,ocg-rule-corpus,official-responses}.json,data/evidence-index.json.gz}"
     }
   }

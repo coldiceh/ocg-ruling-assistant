@@ -8,6 +8,7 @@ const UNIT = 1_000_000_000;
 const GEMINI_INPUT_USD_PER_MTOK = 0.75;
 const GEMINI_CACHED_INPUT_USD_PER_MTOK = 0.075;
 const GEMINI_OUTPUT_USD_PER_MTOK = 3.75;
+const GEMINI_EMBEDDING_INPUT_USD_PER_MTOK = 0.20;
 const GEMINI_CACHE_STORAGE_USD_PER_MTOK_HOUR = 0.50;
 // Mechanical invariant: every actual dispatch holds a durable reservation in
 // both authorized currencies. Signals are amounts, limits, request IDs and
@@ -517,7 +518,7 @@ export function createCloudRequestBudget({env, fetchImpl = globalThis.fetch, com
     if (typeof invoke !== 'function') throw new Error('cloud_budget_gemini_invoke_required');
     const normalizedModel = String(model || '').trim();
     if (!normalizedModel) throw new Error('cloud_budget_model_required');
-    if (!['cached_contents_create', 'generate_content'].includes(operation)) {
+    if (!['cached_contents_create', 'generate_content', 'embed_content'].includes(operation)) {
       throw new Error('cloud_budget_gemini_operation_invalid');
     }
     const bodyBytes = Buffer.byteLength(JSON.stringify(body), 'utf8');
@@ -529,6 +530,9 @@ export function createCloudRequestBudget({env, fetchImpl = globalThis.fetch, com
         : geminiTokenCount(contentTokenEstimate, 'gemini_cache_token_estimate', { allowZero: false });
       reservedTheoreticalUsd = geminiCacheProvisionCost(estimatedTokens, cacheTtlSeconds);
       pricingBasis = 'google_list_theoretical_cache_create_input_provision_unknown';
+    } else if (operation === 'embed_content') {
+      reservedTheoreticalUsd = 8192 * GEMINI_EMBEDDING_INPUT_USD_PER_MTOK / 1_000_000;
+      pricingBasis = 'google_list_theoretical_embedding_input_bound';
     } else {
       const output = geminiTokenCount(
         body?.generationConfig?.maxOutputTokens,
@@ -562,7 +566,14 @@ export function createCloudRequestBudget({env, fetchImpl = globalThis.fetch, com
     try {
       const theoreticalUsd = operation === 'cached_contents_create'
         ? geminiCacheProvisionCost(cacheTokens, cacheTtlSeconds)
-        : geminiGenerateCost(usage);
+        : operation === 'embed_content'
+          ? geminiTokenCount(usage?.promptTokenCount ?? 0, 'gemini_prompt_tokens', { allowZero: false })
+            * GEMINI_EMBEDDING_INPUT_USD_PER_MTOK / 1_000_000
+          : geminiGenerateCost(usage);
+      if (operation === 'embed_content'
+          && (!usage || geminiTokenCount(usage.promptTokenCount ?? 0, 'gemini_prompt_tokens') === 0)) {
+        throw new Error('cloud_budget_gemini_usage_missing');
+      }
       if (operation === 'generate_content'
           && (!usage || geminiTokenCount(usage.totalTokenCount ?? 0, 'gemini_total_tokens') === 0)) {
         throw new Error('cloud_budget_gemini_usage_missing');

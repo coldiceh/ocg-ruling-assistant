@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { createGeminiBoundedEvidenceProvider, boundedSelectionBody } from '../backend/geminiBoundedEvidenceProvider.mjs';
+import { createGeminiBoundedEvidenceProvider, boundedSelectionBody, boundedPlanBody } from '../backend/geminiBoundedEvidenceProvider.mjs';
+import { buildRuleContext } from '../backend/geminiRuleContext.mjs';
 import { createQaTools } from '../backend/geminiQaTools.mjs';
 
 const rule = { id: 'rule', recordType: 'rule-doc', title: 'fixture source', text: 'paragraph one\n\nparagraph two',
@@ -10,9 +11,26 @@ const qa = { id: 'qa', recordType: 'qa', title: 'fixture QA', question: 'fixture
 const assets = { dataRevision: 'd', qaRevision: 'q', rulesRecords: [rule],
   createQaTools: options => createQaTools({ records: [qa], qaRevision: 'q', ...options }) };
 
+test('planning reads original retrieved paragraphs with canonical identities and source flags', () => {
+  const rules = buildRuleContext([rule]);
+  const unit = [...rules.units.values()][1];
+  const body = boundedPlanBody({question:'fixture'}, rules, [unit]);
+  const payload = JSON.parse(body.contents[0].parts[1].text);
+  assert.deepEqual(payload.ruleHits, [[unit.id, rules.unitSections.get(unit.id) ?? null, unit.text, unit.sourceAuthority, unit.official]]);
+});
+
+function createFixtureProvider(options) {
+  return createGeminiBoundedEvidenceProvider({ ...options,
+    loadDenseSearch: async ({rules}) => ({search: () => [...rules.units.values()]}),
+    fetchImpl: async (url, init) => url.endsWith(':embedContent')
+      ? Response.json({embedding:{values:Array(768).fill(1)},usageMetadata:{promptTokenCount:100}})
+      : options.fetchImpl(url, init),
+  });
+}
+
 function fixture({ unknown = false, excessive = false } = {}) {
   const requests = [];
-  const provider = createGeminiBoundedEvidenceProvider({ loadAssets: async () => assets,
+  const provider = createFixtureProvider({ loadAssets: async () => assets,
     budgetedRequest: request => request.invoke(), fetchImpl: async (url, init) => {
       const body = JSON.parse(init.body);
       assert.equal(body.generationConfig?.thinkingConfig?.thinkingLevel || 'low', 'low');
@@ -112,7 +130,7 @@ test('long rule groups use one source reference per identical source and section
       canonicalSha256: createHash('sha256').update(canonicalText).digest('hex'),
       sections: [{ id: 'shared', title: 'Shared section', start: 0, end: canonicalText.length }] } };
   const requests = [];
-  const provider = createGeminiBoundedEvidenceProvider({
+  const provider = createFixtureProvider({
     loadAssets: async () => ({ dataRevision: 'd', qaRevision: 'q', rulesRecords: [ruleRecord],
       createQaTools: options => createQaTools({ records: [], qaRevision: 'q', ...options }) }),
     budgetedRequest: request => request.invoke(),
@@ -146,7 +164,7 @@ test('a model-requested source section is read before a capacity-filling lexical
       { id: 'second', title: 'Requested section', start: first.length, end: text.length },
     ] } };
   const requests = [];
-  const provider = createGeminiBoundedEvidenceProvider({
+  const provider = createFixtureProvider({
     loadAssets: async () => ({ ...assets, rulesRecords: [record],
       createQaTools: options => createQaTools({ records: [], qaRevision: 'q', ...options }) }),
     budgetedRequest: request => request.invoke(),
