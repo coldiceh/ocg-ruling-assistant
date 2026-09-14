@@ -23,20 +23,34 @@ function createFixtureProvider(options) {
   return createGeminiBoundedEvidenceProvider({ ...options,
     loadDenseSearch: options.loadDenseSearch || (async ({rules}) => ({search: () => [...rules.units.values()]})),
     loadQaSearch: options.loadQaSearch || (async () => ({search: () => []})),
-    fetchImpl: async (url, init) => url.endsWith(':embedContent')
-      ? Response.json({embedding:{values:Array(768).fill(1)},usageMetadata:{promptTokenCount:100}})
-      : url.endsWith(':batchEmbedContents')
-        && options.batchEmbedResponse
-        ? options.batchEmbedResponse(url, init)
-        : url.endsWith(':batchEmbedContents')
-        ? Response.json({embeddings: Array.from({length: JSON.parse(init.body).requests.length},
-          () => ({values:Array(768).fill(1)})), usageMetadata:{promptTokenCount:100}})
-        : url.endsWith(':generateContent') && JSON.parse(init.body).contents?.[0]?.parts?.[1]?.text
-          && JSON.parse(JSON.parse(init.body).contents[0].parts[1].text).qaCandidates
-        ? Response.json({candidates:[{content:{parts:[{text:JSON.stringify({qaCandidateIds:
-          JSON.parse(JSON.parse(init.body).contents[0].parts[1].text).qaCandidates.map(row=>row[0])})}]}}],
-          usageMetadata:{promptTokenCount:500,candidatesTokenCount:20,totalTokenCount:520}})
-        : options.fetchImpl(url, init),
+    fetchImpl: async (url, init) => {
+      if (url.endsWith(':embedContent')) {
+        return Response.json({embedding:{values:Array(768).fill(1)},usageMetadata:{promptTokenCount:100}});
+      }
+      if (url.endsWith(':batchEmbedContents')) {
+        if (options.batchEmbedResponse) return options.batchEmbedResponse(url, init);
+        return Response.json({embeddings: Array.from({length: JSON.parse(init.body).requests.length},
+          () => ({values:Array(768).fill(1)})), usageMetadata:{promptTokenCount:100}});
+      }
+      if (!url.endsWith(':generateContent')) return options.fetchImpl(url, init);
+      const requestPayload = JSON.parse(init.body).contents?.[0]?.parts?.[1]?.text;
+      const payload = requestPayload ? JSON.parse(requestPayload) : null;
+      if (!payload?.qaCandidates) return options.fetchImpl(url, init);
+      // Keep each fixture's original plan response and add the mechanical
+      // temporary-ID selection required by the joint first-round contract.
+      const response = await options.fetchImpl(url, init);
+      const json = await response.json();
+      const candidate = json.candidates?.[0];
+      const partIndex = candidate?.content?.parts?.findIndex(part => typeof part.text === 'string') ?? -1;
+      if (!candidate || partIndex < 0) return Response.json(json);
+      const output = JSON.parse(candidate.content.parts[partIndex].text);
+      output.qaCandidateIds = payload.qaCandidates.map(row => row[0]);
+      const candidates = json.candidates.map((item, index) => index === 0
+        ? {...item, content: {...item.content, parts: item.content.parts.map((part, index) =>
+          index === partIndex ? {...part, text: JSON.stringify(output)} : part)}}
+        : item);
+      return Response.json({...json, candidates});
+    },
   });
 }
 
@@ -169,7 +183,7 @@ test('planned queries use one batch embedding and drive both dense lanes', async
   assert.deepEqual(observed.ruleVectors.map(vector => vector[0]), [1, 2]);
   assert.equal(result.telemetry.calls.filter(call => call.operation === 'embed_content').length, 2);
   assert.equal(result.telemetry.calls.find(call => call.stage === 'planned_query_embedding').queryCount, 1);
-  assert.equal(result.telemetry.rounds, 3);
+  assert.equal(result.telemetry.rounds, 2);
   assert.equal(observed.generationCalls, 2);
 });
 
