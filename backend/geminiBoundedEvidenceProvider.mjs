@@ -255,6 +255,30 @@ function splitRuleGroups(groups) {
   return result;
 }
 
+function admitReadingGroups(queue, input, queryPlan, revisions, packingBudget, maxChars) {
+  const groups = [];
+  const omittedGroupIds = [];
+  const readUnitIds = new Set();
+  for (const originalGroup of queue) {
+    // The exact same canonical unit can occur in a hit and in its parent
+    // section. Keep one complete copy; no cross-field text comparison.
+    const group = originalGroup.kind === 'rule' ? { ...originalGroup,
+      units: originalGroup.units.filter(unit => !readUnitIds.has(unit.id)) } : originalGroup;
+    if (group.kind === 'rule' && group.units.length === 0) continue;
+    const candidateGroups = [...groups, group];
+    const candidateChars = JSON.stringify(boundedSelectionBody(
+      input, queryPlan, candidateGroups, revisions, packingBudget,
+    )).length;
+    if (candidateChars > maxChars) {
+      omittedGroupIds.push(group.groupId);
+      continue;
+    }
+    groups.push(group);
+    for (const unit of group.units || []) readUnitIds.add(unit.id);
+  }
+  return { groups, omittedGroupIds };
+}
+
 function roundRobinQaItems(items) {
   const byParent = new Map();
   for (const item of items) {
@@ -566,28 +590,38 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
       const packingBudget = computeGeminiSelectionPackingBudget({ userQuery, cardResolution, retrievedEvidence,
         rules: [...new Map(queue.flatMap(group => group.units || []).map(unit => [unit.id, unit])).values()],
         qaItems: [...new Map(queue.flatMap(group => group.items || []).map(item => [item.handle, item])).values()] });
-      let groups = [];
-      const omittedGroupIds = [];
-      const readUnitIds = new Set();
-      for (const originalGroup of queue) {
-        // The exact same canonical unit can occur in a hit and in its parent
-        // section. Keep one complete copy; no cross-field text comparison.
-        const group = originalGroup.kind === 'rule' ? {...originalGroup,
-          units: originalGroup.units.filter(unit => !readUnitIds.has(unit.id))} : originalGroup;
-        if (group.kind === 'rule' && group.units.length === 0) continue;
-        const candidateGroups = [...groups, group];
-        const candidateChars = JSON.stringify(boundedSelectionBody(input, queryPlan, candidateGroups, revisions, packingBudget)).length;
-        if (candidateChars > INITIAL_READ_CHARS) { omittedGroupIds.push(group.groupId); continue; }
-        groups.push(group);
-        for (const unit of group.units || []) readUnitIds.add(unit.id);
-      }
+      let admitted = admitReadingGroups(
+        queue, input, queryPlan, revisions, packingBudget, INITIAL_READ_CHARS,
+      );
+      let groups = admitted.groups;
+      let omittedGroupIds = admitted.omittedGroupIds;
       timingsMs.search = performance.now() - at;
       let selectionBody = boundedSelectionBody(input, queryPlan, groups, revisions, packingBudget);
       let selectionTokens = await count(selectionBody, 'selection');
+      let baseSelectionBody = null;
+      let baseSelectionTokens = null;
       while (countedGenerationInputs + selectionTokens > MAX_INPUT_TOKENS && groups.length) {
-        const targetChars = JSON.stringify(selectionBody).length * (MAX_INPUT_TOKENS - countedGenerationInputs) / selectionTokens * 0.95;
-        do { omittedGroupIds.push(groups.pop().groupId); selectionBody = boundedSelectionBody(input, queryPlan, groups, revisions, packingBudget); }
-        while (groups.length && JSON.stringify(selectionBody).length > targetChars);
+        // Keep the fixed question/card/plan envelope out of the shrink ratio;
+        // only whole reading groups are rebuilt under the remaining evidence
+        // budget.
+        if (baseSelectionBody === null) {
+          baseSelectionBody = boundedSelectionBody(input, queryPlan, [], revisions, packingBudget);
+          baseSelectionTokens = await count(baseSelectionBody, 'selection_base');
+        }
+        const currentChars = JSON.stringify(selectionBody).length;
+        const baseChars = JSON.stringify(baseSelectionBody).length;
+        const currentEvidenceChars = Math.max(0, currentChars - baseChars);
+        const remainingTokens = MAX_INPUT_TOKENS - countedGenerationInputs;
+        const currentEvidenceTokens = Math.max(1, selectionTokens - baseSelectionTokens);
+        const availableEvidenceTokens = Math.max(0, remainingTokens - baseSelectionTokens);
+        const targetChars = baseChars + currentEvidenceChars
+          * availableEvidenceTokens / currentEvidenceTokens * 0.95;
+        admitted = admitReadingGroups(
+          queue, input, queryPlan, revisions, packingBudget, targetChars,
+        );
+        groups = admitted.groups;
+        omittedGroupIds = admitted.omittedGroupIds;
+        selectionBody = boundedSelectionBody(input, queryPlan, groups, revisions, packingBudget);
         selectionTokens = await count(selectionBody, 'selection');
       }
       const visibleRuleIds = new Set(groups.flatMap(group => group.units || []).map(unit => unit.id));

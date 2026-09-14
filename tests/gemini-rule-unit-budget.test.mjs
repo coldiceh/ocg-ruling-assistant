@@ -45,7 +45,7 @@ test('large rule section is budgeted by complete canonical units so the second Q
       }
       if (url.endsWith(':countTokens')) {
         countCalls += 1;
-        return Response.json({ totalTokens: [22_792, 15_851, 9_000][countCalls - 1] || 9_000 });
+        return Response.json({ totalTokens: [22_792, 15_851, 2_500, 9_000][countCalls - 1] || 9_000 });
       }
       requests.push(JSON.parse(init.body));
       const payload = JSON.parse(requests.at(-1).contents[0].parts[1].text);
