@@ -128,3 +128,38 @@ test('long rule groups use one source reference per identical source and section
   assert.ok(deliveredRuleGroup, 'compact rule group must remain offered within the reading budget');
   assert.ok(delivered.ruleSources && Object.keys(delivered.ruleSources).length === 1);
 });
+
+test('a model-requested source section is read before a capacity-filling lexical group', async () => {
+  const first = 'fixture search '.repeat(1500) + '\n\n';
+  const second = 'Canonical requested paragraph.\n\nRequested qualification.';
+  const text = first + second;
+  const record = { ...rule, text, structure: { schemaVersion: 1,
+    canonicalSha256: createHash('sha256').update(text).digest('hex'),
+    sections: [
+      { id: 'first', title: 'Lexical section', start: 0, end: first.length },
+      { id: 'second', title: 'Requested section', start: first.length, end: text.length },
+    ] } };
+  const requests = [];
+  const provider = createGeminiBoundedEvidenceProvider({
+    loadAssets: async () => ({ ...assets, rulesRecords: [record],
+      createQaTools: options => createQaTools({ records: [], qaRevision: 'q', ...options }) }),
+    budgetedRequest: request => request.invoke(),
+    fetchImpl: async (url, init) => {
+      const body = JSON.parse(init.body);
+      if (url.endsWith(':countTokens')) return Response.json({ totalTokens: 500 });
+      requests.push(body);
+      const output = requests.length === 1
+        ? { informationNeeds: ['fixture relation'], queries: ['fixture search'], ruleSectionIds: ['S1.2'] }
+        : { selectionNotes: '', ruleUnitIds: [], qaHandles: [] };
+      return Response.json({ candidates: [{ content: { parts: [{ text: JSON.stringify(output) }] } }],
+        usageMetadata: { promptTokenCount: 500, candidatesTokenCount: 80, thoughtsTokenCount: 20, totalTokenCount: 600 } });
+    },
+  });
+  await provider.retrieve({ ...input, userQuery: 'fixture search', cardResolution: { resolvedCards: [] }, retrievedEvidence: {} });
+  const delivered = JSON.parse(requests[1].contents[0].parts[1].text);
+  assert.equal(delivered.groups[0].groupId, 'S1.2');
+  assert.equal(delivered.groups[0].units.map(unit => unit.text).join(''), second);
+  assert.equal(requests.length, 2);
+  const planned = JSON.parse(requests[0].contents[0].parts[1].text);
+  assert.deepEqual(planned.ruleSections, [['S1.1', null, 'Lexical section'], ['S1.2', null, 'Requested section']]);
+});
