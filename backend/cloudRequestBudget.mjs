@@ -531,7 +531,9 @@ export function createCloudRequestBudget({env, fetchImpl = globalThis.fetch, com
       reservedTheoreticalUsd = geminiCacheProvisionCost(estimatedTokens, cacheTtlSeconds);
       pricingBasis = 'google_list_theoretical_cache_create_input_provision_unknown';
     } else if (operation === 'embed_content') {
-      reservedTheoreticalUsd = 8192 * GEMINI_EMBEDDING_INPUT_USD_PER_MTOK / 1_000_000;
+      const requestCount = Array.isArray(body?.requests) ? body.requests.length : 1;
+      if (requestCount < 1) throw new Error('cloud_budget_gemini_embedding_requests_required');
+      reservedTheoreticalUsd = requestCount * 8192 * GEMINI_EMBEDDING_INPUT_USD_PER_MTOK / 1_000_000;
       pricingBasis = 'google_list_theoretical_embedding_input_bound';
     } else {
       const output = geminiTokenCount(

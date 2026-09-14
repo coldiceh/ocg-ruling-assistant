@@ -22,9 +22,16 @@ test('planning reads original retrieved paragraphs with canonical identities and
 function createFixtureProvider(options) {
   return createGeminiBoundedEvidenceProvider({ ...options,
     loadDenseSearch: options.loadDenseSearch || (async ({rules}) => ({search: () => [...rules.units.values()]})),
+    loadQaSearch: options.loadQaSearch || (async () => ({search: () => []})),
     fetchImpl: async (url, init) => url.endsWith(':embedContent')
       ? Response.json({embedding:{values:Array(768).fill(1)},usageMetadata:{promptTokenCount:100}})
-      : options.fetchImpl(url, init),
+      : url.endsWith(':batchEmbedContents')
+        && options.batchEmbedResponse
+        ? options.batchEmbedResponse(url, init)
+        : url.endsWith(':batchEmbedContents')
+        ? Response.json({embeddings: Array.from({length: JSON.parse(init.body).requests.length},
+          () => ({values:Array(768).fill(1)})), usageMetadata:{promptTokenCount:100}})
+        : options.fetchImpl(url, init),
   });
 }
 
@@ -53,6 +60,113 @@ const input = { userQuery: 'original complete question and scene', dataRevision:
   cardResolution: { resolvedCards: [], unresolvedMentions: ['unresolved original'] },
   retrievedEvidence: { cardTexts: [{ id: 'card-text', text: 'complete canonical card text', source: 'fixture' }],
     userProvidedCardTexts: [{ name: 'user fixture', text: 'complete user-supplied text' }] } };
+
+test('QA dense-only candidate is offered and packed with original and planned embeddings', async () => {
+  const lexicalQa = { id: 'lexical-qa', recordType: 'qa', title: 'lexical fixture', question: 'lexical', answer: 'lexical answer', official: true };
+  const denseQa = { id: 'dense-qa', recordType: 'qa', title: 'dense fixture', question: 'dense', answer: 'dense answer', official: true };
+  const qaSnapshot = createQaTools({ records: [lexicalQa, denseQa], qaRevision: 'q' });
+  const snapshotItems = qaSnapshot.readSelected(qaSnapshot.snapshotHandles);
+  const denseItem = snapshotItems.find(item => item.record.id === denseQa.id);
+  const lexicalItem = snapshotItems.find(item => item.record.id === lexicalQa.id);
+  const requests = [];
+  let generationCalls = 0;
+  let denseLoadCalls = 0;
+  const provider = createFixtureProvider({
+    loadAssets: async () => ({ dataRevision: 'd', qaRevision: 'q', rulesRecords: [rule],
+      createQaTools: options => {
+        const tools = createQaTools({ records: [lexicalQa, denseQa], qaRevision: 'q', ...options });
+        return Object.freeze({ ...tools,
+          search: () => Object.freeze({ qaRevision: 'q', items: Object.freeze([lexicalItem]),
+            handles: Object.freeze([lexicalItem.handle]), cursor: null, nextCursor: null, hasMore: false, total: 1 }) });
+      } }),
+    loadDenseSearch: async () => ({ search: () => [] }),
+    loadQaSearch: async ({ items }) => {
+      denseLoadCalls += 1;
+      assert.ok(items.some(item => item.handle === denseItem.handle));
+      return { search: () => Object.freeze([denseItem]) };
+    },
+    budgetedRequest: request => request.invoke(),
+    fetchImpl: async (url, init) => {
+      const body = JSON.parse(init.body);
+      if (url.endsWith(':embedContent')) {
+        return Response.json({ embedding: { values: Array(768).fill(1) }, usageMetadata: { promptTokenCount: 100 } });
+      }
+      if (url.endsWith(':countTokens')) return Response.json({ totalTokens: 500 });
+      generationCalls += 1;
+      requests.push(body);
+      const output = generationCalls === 1
+        ? { informationNeeds: ['dense relation'], queries: ['no lexical match'] }
+        : { selectionNotes: '', ruleUnitIds: [], qaHandles: [denseItem.handle] };
+      return Response.json({ candidates: [{ content: { role: 'model', parts: [{ text: JSON.stringify(output) }] } }],
+        usageMetadata: { promptTokenCount: 500, candidatesTokenCount: 80, thoughtsTokenCount: 20, totalTokenCount: 600 } });
+    },
+  });
+  const result = await provider.retrieve({ ...input, cardResolution: { resolvedCards: [] }, retrievedEvidence: {} });
+  const selectionBody = JSON.parse(requests[1].contents[0].parts[1].text);
+  assert.ok(selectionBody.groups.flatMap(group => group.items || []).some(item => item.handle === denseItem.handle));
+  assert.equal(result.packing.modelEvidence.rawRelatedEvidence.find(item => item.id === denseItem.handle).text,
+    JSON.stringify(denseQa));
+  assert.equal(result.telemetry.calls.filter(call => call.operation === 'embed_content').length, 2);
+  assert.equal(result.telemetry.calls.find(call => call.stage === 'planned_query_embedding').queryCount, 1);
+  assert.equal(generationCalls, 2);
+  assert.equal(denseLoadCalls, 1);
+});
+
+test('planned queries use one batch embedding and drive both dense lanes', async () => {
+  const plannedQa = { id: 'planned-qa', recordType: 'qa', title: 'planned dense fixture', question: 'planned', answer: 'planned answer', official: true };
+  const qaSnapshot = createQaTools({ records: [plannedQa], qaRevision: 'q' });
+  const plannedQaItem = qaSnapshot.readSelected(qaSnapshot.snapshotHandles)[0];
+  const ruleUnit = [...buildRuleContext([rule]).units.values()][0];
+  const observed = { batchBodies: [], qaVectors: [], ruleVectors: [], generationCalls: 0 };
+  const provider = createFixtureProvider({
+    loadAssets: async () => ({ dataRevision: 'd', qaRevision: 'q', rulesRecords: [rule],
+      createQaTools: options => {
+        const tools = createQaTools({ records: [plannedQa], qaRevision: 'q', ...options });
+        return Object.freeze({ ...tools,
+          search: () => Object.freeze({ qaRevision: 'q', items: [], handles: [], cursor: null, nextCursor: null, hasMore: false, total: 0 }) });
+      } }),
+    loadDenseSearch: async () => ({ search: vector => {
+      observed.ruleVectors.push(vector);
+      return vector[0] === 2 ? [ruleUnit] : [];
+    } }),
+    loadQaSearch: async () => ({ search: vector => {
+      observed.qaVectors.push(vector);
+      return vector[0] === 2 ? [plannedQaItem] : [];
+    } }),
+    budgetedRequest: request => request.invoke(),
+    batchEmbedResponse: async (url, init) => {
+      const body = JSON.parse(init.body);
+      observed.batchBodies.push(body);
+      return Response.json({ embeddings: [{ values: [2, ...Array(767).fill(0)] }],
+        usageMetadata: { promptTokenCount: 12 } });
+    },
+    fetchImpl: async (url, init) => {
+      const body = JSON.parse(init.body);
+      if (url.endsWith(':embedContent')) {
+        return Response.json({ embedding: { values: [1, ...Array(767).fill(0)] }, usageMetadata: { promptTokenCount: 100 } });
+      }
+      if (url.endsWith(':countTokens')) return Response.json({ totalTokens: 500 });
+      observed.generationCalls += 1;
+      const output = observed.generationCalls === 1
+        ? { informationNeeds: ['planned relation'], queries: ['planned relation'] }
+        : { selectionNotes: '', ruleUnitIds: [ruleUnit.id], qaHandles: [plannedQaItem.handle] };
+      return Response.json({ candidates: [{ content: { role: 'model', parts: [{ text: JSON.stringify(output) }] } }],
+        usageMetadata: { promptTokenCount: 500, candidatesTokenCount: 80, thoughtsTokenCount: 20, totalTokenCount: 600 } });
+    },
+  });
+  const result = await provider.retrieve({ ...input, cardResolution: { resolvedCards: [] }, retrievedEvidence: {} });
+  assert.equal(observed.batchBodies.length, 1);
+  assert.equal(observed.batchBodies[0].requests.length, 1);
+  assert.equal(observed.batchBodies[0].requests[0].model, 'models/gemini-embedding-2');
+  assert.equal(observed.batchBodies[0].requests[0].content.parts[0].text,
+    'task: question answering | query: planned relation');
+  assert.deepEqual(observed.qaVectors.map(vector => vector[0]), [1, 2]);
+  assert.deepEqual(observed.ruleVectors.map(vector => vector[0]), [1, 2]);
+  assert.equal(result.telemetry.calls.filter(call => call.operation === 'embed_content').length, 2);
+  assert.equal(result.telemetry.calls.find(call => call.stage === 'planned_query_embedding').queryCount, 1);
+  assert.equal(result.telemetry.rounds, 2);
+  assert.equal(observed.generationCalls, 2);
+});
 
 test('both online model requests retain original question and independent complete card texts', async () => {
   const { provider, requests } = fixture();
