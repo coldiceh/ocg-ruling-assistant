@@ -7,6 +7,7 @@ import { createRuleCandidateSearch } from './geminiRuleCandidateSearch.mjs';
 import { loadQaDenseSearch } from './geminiQaDenseSearch.mjs';
 import { createFocusedQaView } from './geminiFocusedQaView.mjs';
 import { resolveGeminiSelection, packGeminiSelection, computeGeminiSelectionPackingBudget } from './geminiRuleQaPacking.mjs';
+import { summarizeCards } from './ragRulingPrompt.mjs';
 import { runCloudGeminiRequest } from './cloudRequestBudget.mjs';
 import { loadRuleDenseSearch, queryEmbeddingText, RULE_EMBEDDING_MODEL,
   RULE_EMBEDDING_DIMENSION } from './geminiRuleDenseSearch.mjs';
@@ -44,7 +45,15 @@ function parsedOutput(raw) {
 }
 
 function questionInput(userQuery, cardResolution, retrievedEvidence) {
-  return { question: userQuery, confirmedCards: cardResolution.resolvedCards || [],
+  const cards = cardResolution.resolvedCards || [];
+  const bindingFields = ['input', 'matchedQuery', 'cardId', 'cid', 'passcode',
+    'cnName', 'jaName', 'jpName', 'enName', 'sourceUrl', 'sourceLabel',
+    'official', 'sourceAuthority', 'relatedOnly', 'linkRating', 'linkArrows'];
+  const confirmedCards = summarizeCards(cards).map((card, index) => ({ ...card,
+    ...Object.fromEntries(bindingFields.filter(key => Object.hasOwn(cards[index], key))
+      .map(key => [key, cards[index][key]])),
+  }));
+  return { question: userQuery, confirmedCards,
     cardTexts: retrievedEvidence.cardTexts || [],
     userProvidedCardTexts: retrievedEvidence.userProvidedCardTexts || [],
     unresolvedMentions: cardResolution.unresolvedMentions || [],
@@ -489,9 +498,12 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
       const qaTools = assets.createQaTools({cardIds:(cardResolution.resolvedCards||[]).map(card=>card.id),pageSize:256});
       const originalLexicalQaItems=qaTools.search({queries:[userQuery]}).items;
       const qaCandidates=[];
-      const fullCardChars=JSON.stringify({confirmedCards:input.confirmedCards,cardTexts:input.cardTexts,
+      // Preserve the existing descriptor admission budget. Removing card display
+      // payload must free space for source reading, not grow the QA directory.
+      const rawCards=cardResolution.resolvedCards||[];
+      const fullCardChars=JSON.stringify({confirmedCards:rawCards,cardTexts:input.cardTexts,
         userProvidedCardTexts:input.userProvidedCardTexts}).length;
-      const cardRefChars=JSON.stringify({confirmedCardRefs:(input.confirmedCards||[]).map(({id,name,aliases})=>({id,name,aliases}))}).length;
+      const cardRefChars=JSON.stringify({confirmedCardRefs:rawCards.map(({id,name,aliases})=>({id,name,aliases}))}).length;
       const qaNavigationChars=24000-Math.max(0,fullCardChars-cardRefChars);
       for(const item of mergeRankedLanes([originalLexicalQaItems,denseQaItems],item=>item.handle,256)){
         if(JSON.stringify(qaCandidateRows([...qaCandidates,item])).length>qaNavigationChars)break;
