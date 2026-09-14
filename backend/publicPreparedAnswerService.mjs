@@ -43,6 +43,14 @@ export async function preparePublicAnswer({
         cloudCosts: result.answer.debug?.cloudCosts || null,
         retrieval: result.answer.continuation.evidence?.debug?.cloudEvidence || null,
         ruleHints: result.answer.continuation.ruleQueryModel || null,
+        cardLookup: {
+          baigeSearchCount: result.answer.continuation.evidence?.debug?.baigeSearchCount ?? null,
+          baigeCacheHitCount: result.answer.continuation.evidence?.debug?.baigeCacheHitCount ?? null,
+          baigeWarnings: result.answer.continuation.evidence?.debug?.baigeWarnings || [],
+          retrievalWarnings: result.answer.continuation.evidence?.retrievalWarnings || [],
+          timingsMs: result.answer.continuation.evidence?.debug?.timingsMs || null,
+          extraction: result.answer.continuation.cardNameModel || null,
+        },
       },
     } };
   } catch (error) {
