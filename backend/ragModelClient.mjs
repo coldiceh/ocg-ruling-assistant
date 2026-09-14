@@ -35,7 +35,7 @@ import {
 const DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com";
 const DEFAULT_DEEPSEEK_MODEL = DEFAULT_PUBLIC_DEEPSEEK_MODEL;
 const DEFAULT_DEEPSEEK_CARD_MODEL = DEFAULT_PUBLIC_DEEPSEEK_MODEL;
-const DEFAULT_BAI_CARD_MODEL = "deepseek-v4.1-flash";
+const DEFAULT_BAI_CARD_MODEL = "deepseek-v4-pro";
 const DEFAULT_RELAY_AUXILIARY_MODEL = "gpt-5.6-sol";
 const DEFAULT_RELAY_RULE_MODEL = "gpt-5.6-sol";
 const DEFAULT_GLM_BASE_URL = "https://open.bigmodel.cn/api/paas/v4";
