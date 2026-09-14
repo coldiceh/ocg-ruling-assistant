@@ -13,7 +13,9 @@ test('joint first round plans rule and QA navigation while preserving a late com
   const stages = [];
   const requests = [];
   const card = { id: 'fixture-card', name: 'fixture card', aliases: ['fixture alias'],
-    effectText: 'complete original effect text' };
+    effectText: 'complete original effect text', cardType: '', typeLine: '',
+    resolutionSource: '', attribute: '', race: '', atk: null, def: null,
+    level: null, rank: null, link: null, properties: [], monsterProperties: [], source: '' };
   const provider = createGeminiBoundedEvidenceProvider({
     loadAssets: async () => ({ dataRevision: 'd', qaRevision: 'q', rulesRecords: [
       { id: 'rule-fixture', recordType: 'rule-doc', title: 'fixture', text: 'rule body' },

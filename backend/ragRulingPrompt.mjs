@@ -1584,7 +1584,9 @@ function compactEvidenceTextFields(item = {}, textLimit, focusCardIds = []) {
     .filter(([, value]) => value));
 }
 
-function summarizeCards(cards) {
+// Canonical card fields for model input. Reuse this projection for retrieval
+// and final generation; display assets and adapter diagnostics stay upstream.
+export function summarizeCards(cards) {
   return cards.map((card) => ({
     id: card.id || card.cardId || "",
     name: card.name || card.cnName || card.jaName || card.enName || "",

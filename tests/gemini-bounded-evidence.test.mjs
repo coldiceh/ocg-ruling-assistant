@@ -236,6 +236,39 @@ test('both online model requests retain original question and independent comple
   assert.equal(result.telemetry.cacheProvisionUsd, 0);
 });
 
+test('both retrieval rounds use the complete canonical card projection delivered to the final prompt', async () => {
+  const effectText = 'complete canonical monster effect\nsecond condition';
+  const pendulumEffectText = 'independent complete pendulum effect';
+  const card = { id: 'fixture-card', name: 'fixture card', aliases: ['fixture alias'],
+    input: 'original mention', matchedQuery: 'source lookup', passcode: '12345678',
+    sourceUrl: 'https://example.invalid/card', linkArrows: [1, 2],
+    cardType: 'monster', typeLine: '[monster|pendulum|effect]', effectText, text: effectText,
+    pendulumEffectText, pendulumScale: 7, attribute: 'dark', race: 'Fiend',
+    atk: 1500, def: 1000, level: 4, rank: null, link: null,
+    properties: ['Pendulum', 'Effect'], monsterProperties: ['Pendulum', 'Effect'],
+    source: 'fixture source', resolutionSource: 'card_text_reference',
+    raw: { effectText, pendulumEffectText, name: 'display source object' },
+    imageUrl: 'https://example.invalid/card.png', imageCandidates: ['https://example.invalid/card.png'],
+    identityVerificationStatus: 'fixture diagnostic' };
+  const requestInput = { ...input, cardResolution: { ...input.cardResolution, resolvedCards: [card] } };
+  const { provider, requests } = fixture();
+  const result = await provider.retrieve(requestInput);
+  const marker = '本次用户问题、卡片原文与检索资料如下：\n';
+  const finalPayload = JSON.parse(result.packing.prompt.split(marker)[1]);
+  for (const body of requests) {
+    const delivered = JSON.parse(body.contents[0].parts[1].text);
+    assert.deepEqual(delivered.confirmedCards, [{ ...finalPayload.resolvedCards[0],
+      input: card.input, matchedQuery: card.matchedQuery, passcode: card.passcode,
+      sourceUrl: card.sourceUrl, linkArrows: card.linkArrows }]);
+    assert.equal(delivered.confirmedCards[0].effectText, effectText);
+    assert.equal(delivered.confirmedCards[0].pendulumEffectText, pendulumEffectText);
+    assert.equal(delivered.confirmedCards[0].pendulumScale, 7);
+    assert.equal(delivered.confirmedCards[0].resolutionSource, 'card_text_reference');
+    assert.deepEqual(delivered.cardTexts, requestInput.retrievedEvidence.cardTexts);
+    assert.deepEqual(delivered.userProvidedCardTexts, requestInput.retrievedEvidence.userProvidedCardTexts);
+  }
+});
+
 test('an explicitly requested section has reading priority when both it and an automatic hit cannot fit', async () => {
   const first = `${'fixture search '.repeat(1800)}\n\n`;
   const second = `${'canonical navigation text '.repeat(230)}\n\n`;
