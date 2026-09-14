@@ -102,13 +102,13 @@ function deepSeekBusyCost(usage={},env={}) {
     +output*rates.outputCnyPerMtok)/1_000_000;
 }
 function baiDeepSeekBusyCostUsd(usage={}) {
-  // B.AI published busy-period upper rates, checked 2026-09-14. This is a
+  // B.AI V4 Pro busy-period upper rates, checked 2026-09-14. This is a
   // token-based estimate, never a claim about the account's actual charge.
   const input=Math.max(0,Number(usage.prompt_tokens??usage.input_tokens??0));
   const cached=Math.min(input,Math.max(0,Number(usage.prompt_cache_hit_tokens
     ??usage.cached_input_tokens??usage.prompt_tokens_details?.cached_tokens??0)));
   const output=Math.max(0,Number(usage.completion_tokens??usage.output_tokens??0));
-  return ((input-cached)*0.30+cached*0.006+output*1.20)/1e6;
+  return ((input-cached)*1.32+cached*0.044+output*3.96)/1e6;
 }
 function dayKeyAt(now, timezone) {
   const day = Object.fromEntries(new Intl.DateTimeFormat('en-US', {
@@ -469,7 +469,7 @@ export function createCloudRequestBudget({env, fetchImpl = globalThis.fetch, com
     if(!Number.isSafeInteger(output)||output<=0) throw new Error('cloud_budget_explicit_output_limit_required');
     if(!['official','bai'].includes(channel)) throw new Error('cloud_budget_deepseek_channel_invalid');
     const bai=channel==='bai';
-    if(bai && model!=='deepseek-v4.1-flash') throw new Error('cloud_budget_model_price_missing');
+    if(bai && model!=='deepseek-v4-pro') throw new Error('cloud_budget_model_price_missing');
     const input=Buffer.byteLength(JSON.stringify(body),'utf8');
     const reserveUsage={prompt_tokens:input,prompt_cache_miss_tokens:input,completion_tokens:output};
     const ticket=await reserve({provider:bai?'bai':'deepseek',model,operation:'chat_completions',

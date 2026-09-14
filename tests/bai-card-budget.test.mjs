@@ -5,7 +5,7 @@ import { createCloudRequestBudget, CLOUD_BUDGET_RESERVE, runCloudBudgetedQuestio
 
 const env={CLOUD_BUDGET_RUN_ID:'bai-card-test',CLOUD_BUDGET_ACTUAL_LIMIT_CNY:'1',
   CLOUD_BUDGET_THEORETICAL_LIMIT_USD:'1'};
-const body={model:'deepseek-v4.1-flash',messages:[{role:'user',content:'synthetic card input'}],max_tokens:800};
+const body={model:'deepseek-v4-pro',messages:[{role:'user',content:'synthetic card input'}],max_tokens:800};
 function controller(block=false) {
   const commands=[];
   return {commands,budget:createCloudRequestBudget({env,command:async args=>{
@@ -27,7 +27,7 @@ test('B.AI card calls are preparation USD estimates and never official CNY or fi
   assert.equal(costs.calls[0].pricingBasis,'bai_deepseek_busy_list_upper_usd');
   assert.equal(costs.calls[0].actualCny,null);
   assert.equal(costs.actualCostKnown,false);
-  assert.ok(Math.abs(costs.theoreticalUsd-0.0003612)<1e-9);
+  assert.ok(Math.abs(costs.theoreticalUsd-0.0014608)<1e-9);
   assert.equal(costs.actualCny,0);
 });
 test('B.AI card failures retain USD reservations and exhausted budget prevents dispatch',async()=>{
@@ -41,7 +41,8 @@ test('B.AI card failures retain USD reservations and exhausted budget prevents d
 });
 test('default official DeepSeek accounting remains in its original CNY pool',async()=>{
   const {budget}=controller();
-  await budget.deepseek({body,invoke:async()=>({model:body.model,
+  const officialBody={...body,model:'deepseek-v4.1-flash'};
+  await budget.deepseek({body:officialBody,invoke:async()=>({model:officialBody.model,
     usage:{prompt_tokens:1000,prompt_cache_hit_tokens:200,completion_tokens:100,total_tokens:1100}})});
   assert.equal(budget.snapshot().calls[0].provider,'deepseek');
   assert.equal(budget.snapshot().theoreticalUsd,0);

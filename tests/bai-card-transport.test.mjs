@@ -25,7 +25,7 @@ function responseFor(body) {
     async json() {
       return {
         id: "bai-card-test",
-        model: "deepseek-v4.1-flash",
+        model: "deepseek-v4-pro",
         choices: [{
           index: 0,
           finish_reason: "stop",
@@ -54,7 +54,7 @@ test("b.ai card transport uses the dedicated DeepSeek model and disabled thinkin
   });
 
   assert.equal(result.providerUsed, "bai");
-  assert.equal(result.modelUsed, "deepseek-v4.1-flash");
+  assert.equal(result.modelUsed, "deepseek-v4-pro");
   assert.equal(result.costCurrency, "USD");
   assert.equal(result.costBasis, "provider_actual_unknown");
   assert.equal(result.actualCostKnown, false);
@@ -64,7 +64,7 @@ test("b.ai card transport uses the dedicated DeepSeek model and disabled thinkin
   assert.equal(requests.length, 1);
   assert.equal(requests[0].url, "https://card.example.test/v1/chat/completions");
   assert.equal(requests[0].authorization, "Bearer card-only-secret");
-  assert.equal(requests[0].body.model, "deepseek-v4.1-flash");
+  assert.equal(requests[0].body.model, "deepseek-v4-pro");
   assert.equal(requests[0].body.thinking.type, "disabled");
   assert.equal(requests[0].body.response_format.type, "json_object");
   assert.ok(result.warnings.includes("bai_transport_channel:bai"));
@@ -90,7 +90,7 @@ test("the same b.ai transport serves ambiguity identity selection without changi
   });
 
   assert.equal(result.providerUsed, "bai");
-  assert.equal(result.modelUsed, "deepseek-v4.1-flash");
+  assert.equal(result.modelUsed, "deepseek-v4-pro");
   assert.equal(result.costCurrency, "USD");
   assert.equal(result.costBasis, "provider_actual_unknown");
   assert.equal(result.actualCostKnown, false);
@@ -98,7 +98,7 @@ test("the same b.ai transport serves ambiguity identity selection without changi
   assert.equal(result.estimatedCostCny, null);
   assert.deepEqual(result.selections, [{ mentionId: "m1", candidateId: "c1" }]);
   assert.equal(requests.length, 1);
-  assert.equal(requests[0].body.model, "deepseek-v4.1-flash");
+  assert.equal(requests[0].body.model, "deepseek-v4-pro");
   assert.equal(requests[0].body.thinking.type, "disabled");
   assert.ok(result.warnings.includes("bai_transport_channel:bai"));
 });
@@ -117,7 +117,7 @@ test("public isolation keeps card-only b.ai settings while rule extraction stays
   assert.equal(env.RAG_CARD_MODEL_PROVIDER, "bai");
   assert.equal(env.RAG_RULE_MODEL_PROVIDER, "deepseek");
   assert.equal(env.BAI_CARD_API_KEY, "card-only-secret");
-  assert.equal(env.BAI_CARD_MODEL, "deepseek-v4.1-flash");
+  assert.equal(env.BAI_CARD_MODEL, "deepseek-v4-pro");
   assert.equal(env.BAI_CARD_THINKING_MODE, "disabled");
   assert.equal(env.BAI_API_KEY, undefined);
   assert.equal(env.DEEPSEEK_API_KEY, "deepseek-secret");
@@ -152,7 +152,7 @@ test("formal b.ai key can be reused by the explicit card branch", async () => {
   });
   assert.equal(result.providerUsed, "bai");
   assert.equal(requests[0].authorization, "Bearer final-bai-secret");
-  assert.equal(requests[0].body.model, "deepseek-v4.1-flash");
+  assert.equal(requests[0].body.model, "deepseek-v4-pro");
 });
 
 test("a final-provider b.ai setting alone does not enable card extraction", () => {
