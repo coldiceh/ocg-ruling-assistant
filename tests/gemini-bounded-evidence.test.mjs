@@ -206,7 +206,7 @@ test('both online model requests retain original question and independent comple
   assert.equal(result.telemetry.cacheProvisionUsd, 0);
 });
 
-test('a paragraph read during navigation remains offered when an expanded section fills reading capacity', async () => {
+test('an explicitly requested section has reading priority when both it and an automatic hit cannot fit', async () => {
   const first = `${'fixture search '.repeat(1800)}\n\n`;
   const second = `${'canonical navigation text '.repeat(230)}\n\n`;
   const text = first + second;
@@ -230,7 +230,9 @@ test('a paragraph read during navigation remains offered when an expanded sectio
   const planning=JSON.parse(requests[0].contents[0].parts[1].text);
   const selection=JSON.parse(requests[1].contents[0].parts[1].text);
   assert.deepEqual(planning.ruleHits, [], 'planning must use the rule directory without replaying navigation paragraphs');
-  assert.ok(selection.groups.flatMap(group=>group.units||[]).some(row=>row[0]==='R1.2'&&row[1]===second));
+  const offered = selection.groups.flatMap(group=>group.units||[]);
+  assert.ok(offered.some(row=>row[0]==='R1.1'&&row[1]===first));
+  assert.equal(offered.some(row=>row[0]==='R1.2'), false);
 });
 
 test('FAQ source units are independently budgeted while each canonical excerpt stays complete', async () => {
