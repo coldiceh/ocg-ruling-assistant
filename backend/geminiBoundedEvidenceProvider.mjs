@@ -191,11 +191,18 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
       const byHandle = new Map(visibleQaItems.map(item => [item.handle, item]));
       const selection = await generate(selectionBody, selectionTokens, 'selection');
       const args = { ...selection, ruleUnitIds: strings(selection.ruleUnitIds, 'rules'), qaHandles: strings(selection.qaHandles, 'qa') };
-      if (args.ruleUnitIds.some(id => !visibleRuleIds.has(id)) || args.qaHandles.some(id => !byHandle.has(id))) {
+      if (args.qaHandles.some(id => !byHandle.has(id))) {
         throw new Error('gemini_bounded_selected_identity_not_offered');
       }
       const resolved = resolveGeminiSelection({ args, rules, qaTools: { qaRevision: assets.qaRevision,
         readSelected: handles => handles.map(handle => byHandle.get(handle)) } });
+      // Invariant: selected canonical IDs were offered in this request. Exact
+      // map membership is mechanical; a false rejection blocks valid evidence.
+      // The existing snapshot resolver normalizes ID wrappers but cannot know
+      // which sources this request actually exposed, so check after resolving.
+      if (resolved.ruleUnitIds.some(id => !visibleRuleIds.has(id))) {
+        throw new Error('gemini_bounded_selected_identity_not_offered');
+      }
       at = performance.now();
       const result = packGeminiSelection({ selection: resolved, userQuery, cardResolution, retrievedEvidence });
       if (result.packing.capacityExceeded) throw Object.assign(new Error('gemini_bounded_pack_capacity_exceeded'), {

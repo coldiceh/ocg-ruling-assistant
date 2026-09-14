@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "node scripts/build-rag-data-revision-manifest.mjs --check && node scripts/build-rag-runtime-bundle.mjs && node scripts/check-rag-runtime-bundle.mjs && node scripts/build-gemini-rule-qa-assets.mjs && node scripts/build-public-release.mjs && node scripts/build-web-assets.mjs",
+  "buildCommand": "pnpm run build:vercel",
   "outputDirectory": "public",
   "env": {
     "ADMIN_PAGE_ORIGIN": "https://ocg-ruling-assistant.vercel.app",
