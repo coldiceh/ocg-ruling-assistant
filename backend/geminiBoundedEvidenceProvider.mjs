@@ -49,7 +49,7 @@ function questionInput(userQuery, cardResolution, retrievedEvidence) {
 export function boundedPlanBody(input) {
   return requestBody([
     '为游戏王OCG原题生成检索问题，不输出裁定答案。原题和确认卡文是完整输入，不以自己的改写替换它们。',
-    'informationNeeds列出各子问题需要查证的关系、时点、条件和相关例外；queries给出适合检索原文的中文或日文查询。不同查询覆盖不同待查关系，避免只是同一个问题的改写。',
+    'informationNeeds列出各子问题需要查证的关系、时点、条件和相关例外。规则资料主要为中文，QA主要为日文；queries为每个待查关系分别给出一条中文规则查询和一条日文QA查询，以便匹配不同语种的原文。每条查询聚焦一个关系，保留相关条件和时点，不把全部子问题堆进同一条查询。',
     '卡名只用于定位资料，不要把题面未给出的事实补进问题。输出JSON：{"informationNeeds":["待查问题"],"queries":["检索查询"]}。',
   ].join('\n'), input);
 }
