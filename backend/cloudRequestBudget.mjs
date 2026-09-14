@@ -100,6 +100,15 @@ function deepSeekBusyCost(usage={},env={}) {
   return (hit*rates.cacheHitCnyPerMtok+(miss+uncategorized)*rates.cacheMissCnyPerMtok
     +output*rates.outputCnyPerMtok)/1_000_000;
 }
+function baiDeepSeekBusyCostUsd(usage={}) {
+  // B.AI V4 Pro busy-period upper rates, checked 2026-09-14. This is a
+  // token-based estimate, never a claim about the account's actual charge.
+  const input=Math.max(0,Number(usage.prompt_tokens??usage.input_tokens??0));
+  const cached=Math.min(input,Math.max(0,Number(usage.prompt_cache_hit_tokens
+    ??usage.cached_input_tokens??usage.prompt_tokens_details?.cached_tokens??0)));
+  const output=Math.max(0,Number(usage.completion_tokens??usage.output_tokens??0));
+  return ((input-cached)*1.32+cached*0.044+output*3.96)/1e6;
+}
 function dayKeyAt(now, timezone) {
   const day = Object.fromEntries(new Intl.DateTimeFormat('en-US', {
     timeZone: timezone || 'Asia/Shanghai', year:'numeric',month:'2-digit',day:'2-digit',
@@ -452,21 +461,28 @@ export function createCloudRequestBudget({env, fetchImpl = globalThis.fetch, com
     } else ticket.uncertainty='provider_usage_missing_reservation_retained';
     return result;
   }
-  async function deepseek({body,invoke}) {
+  async function deepseek({body,invoke,channel='official'}) {
     const model=String(body?.model||'').trim();
     const output=body?.max_tokens;
     if(!model) throw new Error('cloud_budget_model_required');
     if(!Number.isSafeInteger(output)||output<=0) throw new Error('cloud_budget_explicit_output_limit_required');
+    if(!['official','bai'].includes(channel)) throw new Error('cloud_budget_deepseek_channel_invalid');
+    const bai=channel==='bai';
+    if(bai && model!=='deepseek-v4-pro') throw new Error('cloud_budget_model_price_missing');
     const input=Buffer.byteLength(JSON.stringify(body),'utf8');
     const reserveUsage={prompt_tokens:input,prompt_cache_miss_tokens:input,completion_tokens:output};
-    const ticket=await reserve({provider:'deepseek',model,operation:'chat_completions',
-      actualCny:deepSeekBusyCost(reserveUsage,env),theoreticalUsd:0,pricingBasis:'busy_rate_estimate'});
+    const ticket=await reserve({provider:bai?'bai':'deepseek',model,operation:'chat_completions',
+      actualCny:bai?0:deepSeekBusyCost(reserveUsage,env),
+      theoreticalUsd:bai?baiDeepSeekBusyCostUsd(reserveUsage):0,
+      pricingBasis:bai?'bai_deepseek_busy_list_upper_usd':'busy_rate_estimate'});
     let result;
     try { result=await invoke(); }
     catch(error) { ticket.uncertainty='request_or_settlement_failed_reservation_retained'; throw error; }
     if(usagePresent(result.usage)) {
       try { await settle(ticket,{usage:result.usage,returnedModel:result.model,
-        actualCny:deepSeekBusyCost(result.usage,env),actualUpperCny:deepSeekBusyCost(result.usage,env),theoreticalUsd:0}); }
+        actualCny:bai?0:deepSeekBusyCost(result.usage,env),
+        actualUpperCny:bai?0:deepSeekBusyCost(result.usage,env),
+        theoreticalUsd:bai?baiDeepSeekBusyCostUsd(result.usage):0}); }
       catch { ticket.uncertainty='provider_response_received_settlement_uncertain_reservation_retained'; }
     } else ticket.uncertainty='provider_usage_missing_reservation_retained';
     return result;
@@ -660,9 +676,9 @@ export function runCloudBaiRequest({body,invoke}) {
   const controller=scope.getStore();
   return controller?controller.bai({body,invoke}):invoke();
 }
-export function runCloudDeepSeekRequest({body,invoke}) {
+export function runCloudDeepSeekRequest({body,invoke,channel='official'}) {
   const controller=scope.getStore();
-  return controller?controller.deepseek({body,invoke}):invoke();
+  return controller?controller.deepseek({body,invoke,channel}):invoke();
 }
 export function runCloudGeminiRequest(request) {
   const controller=scope.getStore();
