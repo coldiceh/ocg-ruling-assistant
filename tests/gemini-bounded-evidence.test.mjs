@@ -96,8 +96,99 @@ test('a paragraph read during navigation remains offered when an expanded sectio
   await provider.retrieve({...input,retrievedEvidence:{},cardResolution:{resolvedCards:[]}});
   const planning=JSON.parse(requests[0].contents[0].parts[1].text);
   const selection=JSON.parse(requests[1].contents[0].parts[1].text);
-  assert.ok(planning.ruleHits.some(row=>row[0]==='R1.2'));
+  assert.deepEqual(planning.ruleHits, [], 'planning must use the rule directory without replaying navigation paragraphs');
   assert.ok(selection.groups.flatMap(group=>group.units||[]).some(row=>row[0]==='R1.2'&&row[1]===second));
+});
+
+test('FAQ source units are independently budgeted while each canonical excerpt stays complete', async () => {
+  const faq = { id: 'faq-parent', recordType: 'card-faq', title: 'fixture FAQ', cards: [], cardIds: [],
+    conclusion: `${'L'.repeat(15000)}\n\n${'R'.repeat(15000)}`, official: true };
+  const requests = [];
+  const provider = createFixtureProvider({
+    loadAssets: async () => ({ dataRevision: 'd', qaRevision: 'q', rulesRecords: [rule],
+      createQaTools: options => createQaTools({ records: [faq], qaRevision: 'q', ...options }) }),
+    loadDenseSearch: async () => ({ search: () => [] }),
+    budgetedRequest: request => request.invoke(),
+    fetchImpl: async (url, init) => {
+      const body = JSON.parse(init.body);
+      if (url.endsWith(':countTokens')) return Response.json({ totalTokens: 500 });
+      requests.push(body);
+      const output = requests.length === 1
+        ? { informationNeeds: ['fixture relation'], queries: ['qa-only'] }
+        : { selectionNotes: '', ruleUnitIds: [], qaHandles: [] };
+      return Response.json({ candidates: [{ content: { parts: [{ text: JSON.stringify(output) }] } }],
+        usageMetadata: { promptTokenCount: 500, candidatesTokenCount: 80, thoughtsTokenCount: 20, totalTokenCount: 600 } });
+    },
+  });
+  await provider.retrieve({ ...input, userQuery: 'qa-only', cardResolution: { resolvedCards: [] }, retrievedEvidence: {} });
+  const selected = JSON.parse(requests[1].contents[0].parts[1].text);
+  const qaItems = selected.groups.flatMap(group => group.items || []);
+  assert.ok(qaItems.length >= 1, 'at least one complete FAQ source unit must enter the reading set');
+  assert.ok(qaItems.every(item => item.record.sourceExcerpt && item.record.conclusion.length > 0));
+  assert.equal(new Set(qaItems.map(item => item.handle)).size, qaItems.length);
+});
+
+test('FAQ units rotate across parent records before taking a second unit from one parent', async () => {
+  const faqRecords = ['A', 'B'].map(letter => ({ id: `faq-${letter}`, recordType: 'card-faq',
+    title: `qa-only ${letter}`, cards: [], cardIds: [],
+    conclusion: `qa-only ${letter}1\n\nqa-only ${letter}2\n\nqa-only ${letter}3`, official: true }));
+  const requests = [];
+  const provider = createFixtureProvider({
+    loadAssets: async () => ({ dataRevision: 'd', qaRevision: 'q', rulesRecords: [rule],
+      createQaTools: options => createQaTools({ records: faqRecords, qaRevision: 'q', ...options }) }),
+    loadDenseSearch: async () => ({ search: () => [] }),
+    budgetedRequest: request => request.invoke(),
+    fetchImpl: async (url, init) => {
+      const body = JSON.parse(init.body);
+      if (url.endsWith(':countTokens')) return Response.json({ totalTokens: 500 });
+      requests.push(body);
+      const output = requests.length === 1
+        ? { informationNeeds: ['fixture relation'], queries: ['qa-only'] }
+        : { selectionNotes: '', ruleUnitIds: [], qaHandles: [] };
+      return Response.json({ candidates: [{ content: { parts: [{ text: JSON.stringify(output) }] } }],
+        usageMetadata: { promptTokenCount: 500, candidatesTokenCount: 80, thoughtsTokenCount: 20, totalTokenCount: 600 } });
+    },
+  });
+  await provider.retrieve({ ...input, userQuery: 'qa-only', cardResolution: { resolvedCards: [] }, retrievedEvidence: {} });
+  const selected = JSON.parse(requests[1].contents[0].parts[1].text);
+  const qaItems = selected.groups.flatMap(group => group.items || []);
+  const parents = qaItems.map(item => item.record.sourceExcerpt?.parentHandle || item.handle);
+  assert.equal(parents.length, 6);
+  assert.notEqual(parents[0], parents[1]);
+  assert.deepEqual(parents, [parents[0], parents[1], parents[0], parents[1], parents[0], parents[1]]);
+  assert.ok(selected.groups.filter(group => group.kind === 'qa').every(group => group.items.length === 1));
+});
+
+test('navigation and QA groups are interleaved before budget admission', async () => {
+  const first = 'navigation paragraph.';
+  const second = 'requested paragraph.';
+  const text = `${first}\n\n${second}`;
+  const record = { ...rule, text, structure: { schemaVersion: 1,
+    canonicalSha256: createHash('sha256').update(text).digest('hex'),
+    sections: [{ id: 'nav', title: 'Navigation', start: 0, end: first.length + 2 },
+      { id: 'requested', title: 'Requested', start: first.length + 2, end: text.length }] } };
+  const qaRecords = [1, 2].map(index => ({ id: `qa-${index}`, recordType: 'qa', title: `QA ${index}`,
+    question: `question ${index}`, answer: `answer ${index}`, official: true }));
+  const requests = [];
+  const provider = createFixtureProvider({
+    loadAssets: async () => ({ dataRevision: 'd', qaRevision: 'q', rulesRecords: [record],
+      createQaTools: options => createQaTools({ records: qaRecords, qaRevision: 'q', ...options }) }),
+    loadDenseSearch: async ({ rules }) => ({ search: () => [[...rules.units.values()][0]] }),
+    budgetedRequest: request => request.invoke(),
+    fetchImpl: async (url, init) => {
+      const body = JSON.parse(init.body);
+      if (url.endsWith(':countTokens')) return Response.json({ totalTokens: 500 });
+      requests.push(body);
+      const output = requests.length === 1
+        ? { informationNeeds: ['fixture relation'], queries: ['qa-only'], ruleSectionIds: ['S1.2'] }
+        : { selectionNotes: '', ruleUnitIds: [], qaHandles: [] };
+      return Response.json({ candidates: [{ content: { parts: [{ text: JSON.stringify(output) }] } }],
+        usageMetadata: { promptTokenCount: 500, candidatesTokenCount: 80, thoughtsTokenCount: 20, totalTokenCount: 600 } });
+    },
+  });
+  await provider.retrieve({ ...input, userQuery: 'qa-only', cardResolution: { resolvedCards: [] }, retrievedEvidence: {} });
+  const selected = JSON.parse(requests[1].contents[0].parts[1].text);
+  assert.deepEqual(selected.groups.slice(0, 4).map(group => group.kind), ['qa', 'rule', 'qa', 'rule']);
 });
 
 test('selection cannot refer to a source not offered to the selecting model', async () => {
