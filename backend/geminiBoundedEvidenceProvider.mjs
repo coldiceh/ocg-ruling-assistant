@@ -209,6 +209,22 @@ function mergeGroups(ruleGroups, qaGroups) {
   return result;
 }
 
+function splitRuleGroups(groups) {
+  const result = [];
+  for (const group of groups) {
+    if (group?.kind !== 'rule' || (group.units || []).length <= 1) {
+      result.push(group);
+      continue;
+    }
+    group.units.forEach((unit, index) => {
+      result.push({ ...group,
+        groupId: index === 0 ? group.groupId : `${group.groupId}:${unit.id}`,
+        units: [unit] });
+    });
+  }
+  return result;
+}
+
 function roundRobinQaItems(items) {
   const byParent = new Map();
   for (const item of items) {
@@ -497,12 +513,13 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
           fusedRuleUnits.push(unit);
         }
       }
-      const ruleGroups = ruleSearch.readParentGroups(fusedRuleUnits).map(group => ({ ...group, kind: 'rule' }));
-      const requestedGroups = queryPlan.ruleSectionIds.map(sectionId => {
+      const ruleGroups = splitRuleGroups(ruleSearch.readParentGroups(fusedRuleUnits)
+        .map(group => ({ ...group, kind: 'rule' })));
+      const requestedGroups = splitRuleGroups(queryPlan.ruleSectionIds.map(sectionId => {
         const context = readRuleContext(rules, { sectionIds: [sectionId] });
         const { ruleUnitIds: _ids, ...section } = context.sections[0];
         return { groupId: sectionId, kind: 'rule', section, units: context.items };
-      });
+      }));
       // Follow the model's explicit section-reading order, then offer automatic
       // navigation hits within the remaining whole-source reading capacity.
       const navigationGroups = fusedRuleUnits.map(unit => ({groupId: unit.id,
