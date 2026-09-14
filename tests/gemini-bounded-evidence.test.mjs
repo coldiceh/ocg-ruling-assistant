@@ -31,6 +31,11 @@ function createFixtureProvider(options) {
         : url.endsWith(':batchEmbedContents')
         ? Response.json({embeddings: Array.from({length: JSON.parse(init.body).requests.length},
           () => ({values:Array(768).fill(1)})), usageMetadata:{promptTokenCount:100}})
+        : url.endsWith(':generateContent') && JSON.parse(init.body).contents?.[0]?.parts?.[1]?.text
+          && JSON.parse(JSON.parse(init.body).contents[0].parts[1].text).qaCandidates
+        ? Response.json({candidates:[{content:{parts:[{text:JSON.stringify({qaCandidateIds:
+          JSON.parse(JSON.parse(init.body).contents[0].parts[1].text).qaCandidates.map(row=>row[0])})}]}}],
+          usageMetadata:{promptTokenCount:500,candidatesTokenCount:20,totalTokenCount:520}})
         : options.fetchImpl(url, init),
   });
 }
@@ -164,7 +169,7 @@ test('planned queries use one batch embedding and drive both dense lanes', async
   assert.deepEqual(observed.ruleVectors.map(vector => vector[0]), [1, 2]);
   assert.equal(result.telemetry.calls.filter(call => call.operation === 'embed_content').length, 2);
   assert.equal(result.telemetry.calls.find(call => call.stage === 'planned_query_embedding').queryCount, 1);
-  assert.equal(result.telemetry.rounds, 2);
+  assert.equal(result.telemetry.rounds, 3);
   assert.equal(observed.generationCalls, 2);
 });
 
