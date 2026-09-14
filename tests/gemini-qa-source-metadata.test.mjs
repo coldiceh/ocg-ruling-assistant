@@ -3,6 +3,18 @@ import assert from 'node:assert/strict';
 
 import { packGeminiSelection } from '../backend/geminiRuleQaPacking.mjs';
 
+test('synced QA namespace supplies a missing source URL without changing body or authority', () => {
+  const record={id:'ygoresources-qa-424242',recordType:'qa',title:'fixture',text:'complete canonical question and answer'};
+  const {packing}=packGeminiSelection({selection:{selectedRules:[],selectedQa:[{handle:'fixture-handle',record}]},
+    userQuery:'fixture question',cardResolution:{resolvedCards:[]}});
+  const item=packing.modelEvidence.rawRelatedEvidence[0];
+  assert.equal(item.sourceUrl,'https://db.ygoresources.com/data/qa/424242');
+  assert.equal(item.source,'YGOResources DB');
+  assert.equal(item.text,JSON.stringify(record));
+  assert.equal(Object.hasOwn(item,'official'),false);
+  assert.equal(Object.hasOwn(item,'sourceAuthority'),false);
+});
+
 test('selected QA source metadata preserves explicit URLs, synced details, and card FAQ CID links', () => {
   const records = [{
     id: 'faq-explicit',

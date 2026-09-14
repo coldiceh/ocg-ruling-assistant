@@ -47,6 +47,8 @@ function selectedQaSourceUrl(record = {}) {
     .map((source) => typeof source?.detail === 'string' ? source.detail.trim() : '')
     .find(Boolean);
   if (sourceDetail) return sourceDetail;
+  const qaId = record.recordType === 'qa' && /^ygoresources-qa-(\d+)$/u.exec(String(record.id || ''));
+  if (qaId) return `https://db.ygoresources.com/data/qa/${qaId[1]}`;
   const cardIds = Array.isArray(record.cardIds) ? record.cardIds : [];
   if (record.recordType !== 'card-faq' || cardIds.length !== 1 || !/^\d+$/u.test(String(cardIds[0]))) return '';
   return `https://db.ygoresources.com/data/card/${cardIds[0]}`;
@@ -109,7 +111,8 @@ export function expandGeminiSelectionToSourceSections({ selection, rules }) {
 export function packGeminiSelection({ selection, userQuery, cardResolution, retrievedEvidence = {}, maxPromptChars = GEMINI_EVIDENCE_MAX_PROMPT_CHARS }) {
   const selectedBodies = [...selection.selectedRules, ...selection.selectedQa.map(({ handle, record }) => ({
     id: handle, recordType: record.recordType, title: record.title,
-    source: record.sourceName || '', sourceUrl: selectedQaSourceUrl(record),
+    source: record.sourceName || (record.recordType === 'qa' && /^ygoresources-qa-\d+$/u.test(String(record.id || '')) ? 'YGOResources DB' : ''),
+    sourceUrl: selectedQaSourceUrl(record),
     ...Object.fromEntries(['sourceAuthority', 'sourceTier', 'official']
       .filter(key => Object.hasOwn(record, key)).map(key => [key, record[key]])),
     text: JSON.stringify(record),
