@@ -253,10 +253,12 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
         const { ruleUnitIds: _ids, ...section } = context.sections[0];
         return { groupId: sectionId, kind: 'rule', section, units: context.items };
       });
-      // The planning model chooses the reading order. Source ID deduplication
-      // preserves that order; lexical queues only fill the remaining capacity.
+      // Carry actual navigation paragraphs into selection before expanding
+      // sections, so a large parent cannot displace the hits already read.
+      const navigationGroups = navigationUnits.map(unit => ({groupId: unit.id,
+        kind: 'rule', section: null, units: [unit]}));
       const queue = [], seenGroupIds = new Set();
-      for (const group of [...requestedGroups, ...mergeGroups(ruleGroups, qaGroups)]) {
+      for (const group of [...navigationGroups, ...requestedGroups, ...mergeGroups(ruleGroups, qaGroups)]) {
         if (seenGroupIds.has(group.groupId)) continue;
         seenGroupIds.add(group.groupId);
         queue.push(group);
@@ -264,11 +266,18 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
       const revisions = { dataRevision, ruleRevision: rules.ruleRevision, qaRevision: assets.qaRevision };
       let groups = [];
       const omittedGroupIds = [];
-      for (const group of queue) {
+      const readUnitIds = new Set();
+      for (const originalGroup of queue) {
+        // The exact same canonical unit can occur in a hit and in its parent
+        // section. Keep one complete copy; no cross-field text comparison.
+        const group = originalGroup.kind === 'rule' ? {...originalGroup,
+          units: originalGroup.units.filter(unit => !readUnitIds.has(unit.id))} : originalGroup;
+        if (group.kind === 'rule' && group.units.length === 0) continue;
         const candidateGroups = [...groups, group];
         const candidateChars = JSON.stringify(boundedSelectionBody(input, queryPlan, candidateGroups, revisions)).length;
         if (candidateChars > INITIAL_READ_CHARS) { omittedGroupIds.push(group.groupId); continue; }
         groups.push(group);
+        for (const unit of group.units || []) readUnitIds.add(unit.id);
       }
       timingsMs.search = performance.now() - at;
       let selectionBody = boundedSelectionBody(input, queryPlan, groups, revisions);

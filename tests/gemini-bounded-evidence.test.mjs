@@ -21,7 +21,7 @@ test('planning reads original retrieved paragraphs with canonical identities and
 
 function createFixtureProvider(options) {
   return createGeminiBoundedEvidenceProvider({ ...options,
-    loadDenseSearch: async ({rules}) => ({search: () => [...rules.units.values()]}),
+    loadDenseSearch: options.loadDenseSearch || (async ({rules}) => ({search: () => [...rules.units.values()]})),
     fetchImpl: async (url, init) => url.endsWith(':embedContent')
       ? Response.json({embedding:{values:Array(768).fill(1)},usageMetadata:{promptTokenCount:100}})
       : options.fetchImpl(url, init),
@@ -71,6 +71,33 @@ test('both online model requests retain original question and independent comple
   assert.equal(packed.find(item => item.recordType === 'qa').text, JSON.stringify(qa));
   assert.ok(result.packing.promptChars <= 14000);
   assert.equal(result.telemetry.cacheProvisionUsd, 0);
+});
+
+test('a paragraph read during navigation remains offered when an expanded section fills reading capacity', async () => {
+  const first = `${'fixture search '.repeat(1800)}\n\n`;
+  const second = `${'canonical navigation text '.repeat(230)}\n\n`;
+  const text = first + second;
+  const record = {...rule, text, structure:{schemaVersion:1,
+    canonicalSha256:createHash('sha256').update(text).digest('hex'),
+    sections:[{id:'large',title:'Large section',start:0,end:first.length},
+      {id:'small',title:'Navigation section',start:first.length,end:text.length}]}};
+  const requests=[];
+  const provider=createFixtureProvider({loadAssets:async()=>({...assets,rulesRecords:[record]}),
+    loadDenseSearch:async({rules})=>({search:()=>[...rules.units.values()].reverse()}),
+    budgetedRequest:request=>request.invoke(),fetchImpl:async(url,init)=>{
+      const body=JSON.parse(init.body);
+      if(url.endsWith(':countTokens'))return Response.json({totalTokens:500});
+      requests.push(body);
+      const output=requests.length===1?{informationNeeds:[],queries:['fixture search'],ruleSectionIds:['S1.1']}
+        :{ruleUnitIds:[],qaHandles:[]};
+      return Response.json({candidates:[{content:{parts:[{text:JSON.stringify(output)}]}}],
+        usageMetadata:{promptTokenCount:500,candidatesTokenCount:80,thoughtsTokenCount:20,totalTokenCount:600}});
+    }});
+  await provider.retrieve({...input,retrievedEvidence:{},cardResolution:{resolvedCards:[]}});
+  const planning=JSON.parse(requests[0].contents[0].parts[1].text);
+  const selection=JSON.parse(requests[1].contents[0].parts[1].text);
+  assert.ok(planning.ruleHits.some(row=>row[0]==='R1.2'));
+  assert.ok(selection.groups.flatMap(group=>group.units||[]).some(row=>row[0]==='R1.2'&&row[1]===second));
 });
 
 test('selection cannot refer to a source not offered to the selecting model', async () => {
@@ -153,7 +180,7 @@ test('long rule groups use one source reference per identical source and section
   assert.ok(delivered.ruleSources && Object.keys(delivered.ruleSources).length === 1);
 });
 
-test('a model-requested source section is read before a capacity-filling lexical group', async () => {
+test('a requested section retains every original paragraph when navigation already supplied it', async () => {
   const first = 'fixture search '.repeat(1500) + '\n\n';
   const second = 'Canonical requested paragraph.\n\nRequested qualification.';
   const text = first + second;
@@ -181,8 +208,10 @@ test('a model-requested source section is read before a capacity-filling lexical
   });
   await provider.retrieve({ ...input, userQuery: 'fixture search', cardResolution: { resolvedCards: [] }, retrievedEvidence: {} });
   const delivered = JSON.parse(requests[1].contents[0].parts[1].text);
-  assert.equal(delivered.groups[0].groupId, 'S1.2');
-  assert.equal(delivered.groups[0].units.map(unit => unit[1]).join(''), second);
+  const deliveredUnits = delivered.groups.flatMap(group => group.units || []);
+  const requestedUnits = deliveredUnits.filter(unit => delivered.ruleSources[unit[3]].sourceSection?.sectionId === 'S1.2');
+  assert.equal(requestedUnits.map(unit => unit[1]).join(''), second);
+  assert.equal(new Set(deliveredUnits.map(unit => unit[0])).size, deliveredUnits.length);
   assert.equal(requests.length, 2);
   const planned = JSON.parse(requests[0].contents[0].parts[1].text);
   assert.deepEqual(planned.ruleSections, [['S1.1', null, 'Lexical section', first.length], ['S1.2', null, 'Requested section', second.length]]);
