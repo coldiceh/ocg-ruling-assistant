@@ -20,6 +20,10 @@ test('QA navigation can read a late candidate and final packing preserves its co
       let output;
       if(p.qaCandidates){
         stages.push('qa_navigation');
+        assert.equal(p.question,'fixture question');
+        assert.deepEqual(p.confirmedCardRefs,[{id:'fixture-card',name:'fixture card',aliases:['fixture alias']}]);
+        assert.equal(Object.hasOwn(p,'confirmedCards'),false);
+        assert.equal(Object.hasOwn(p,'cardTexts'),false);
         const row=p.qaCandidates.find(row=>row[1]===target.record.title);
         assert.ok(row,'late candidate title must be offered');
         output={qaCandidateIds:[row[0]]};
@@ -33,7 +37,10 @@ test('QA navigation can read a late candidate and final packing preserves its co
       return Response.json({candidates:[{content:{parts:[{text:JSON.stringify(output)}]}}],
         usageMetadata:{promptTokenCount:500,candidatesTokenCount:20,totalTokenCount:520}});
     }});
-  const result=await provider.retrieve({userQuery:'fixture question',cardResolution:{resolvedCards:[]},dataRevision:'d',env:{GEMINI_API_KEY:'fixture'}});
+  const result=await provider.retrieve({userQuery:'fixture question',cardResolution:{resolvedCards:[{
+    id:'fixture-card',name:'fixture card',aliases:['fixture alias'],effectText:'complete original effect text'}]},
+    retrievedEvidence:{cardTexts:[{id:'fixture-card',text:'independent complete source text'}]},
+    dataRevision:'d',env:{GEMINI_API_KEY:'fixture'}});
   assert.deepEqual(stages,['plan','qa_navigation','selection']);
   assert.equal(result.telemetry.rounds,3);
   assert.equal(result.packing.modelEvidence.rawRelatedEvidence[0].text,JSON.stringify(target.record));
