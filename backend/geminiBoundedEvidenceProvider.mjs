@@ -305,16 +305,38 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
       timingsMs.assets = performance.now() - started;
       const input = questionInput(userQuery, cardResolution, retrievedEvidence);
       const navigationAt = performance.now();
-      if (!snapshot.dense) snapshot.dense = loadDenseSearch({ rules,
-        dataDir: fileURLToPath(new URL('../data/rule-embedding-v1', import.meta.url)) });
+      if (!snapshot.dense) snapshot.dense = Promise.resolve().then(() => loadDenseSearch({ rules,
+        dataDir: fileURLToPath(new URL('../data/rule-embedding-v1', import.meta.url)) }));
       if (!snapshot.qaDense) {
-        const qaDenseTools = assets.createQaTools();
-        const qaDenseItems = qaDenseTools.readSelected(qaDenseTools.snapshotHandles);
-        snapshot.qaDense = loadQaSearch({ qaRevision: assets.qaRevision,
-          items: qaDenseItems, dataDir: fileURLToPath(new URL('../data/qa-embedding-v1', import.meta.url)) });
+        snapshot.qaDense = Promise.resolve().then(() => {
+          const qaDenseTools = assets.createQaTools();
+          const qaDenseItems = qaDenseTools.readSelected(qaDenseTools.snapshotHandles);
+          return loadQaSearch({ qaRevision: assets.qaRevision,
+            items: qaDenseItems, dataDir: fileURLToPath(new URL('../data/qa-embedding-v1', import.meta.url)) });
+        });
       }
-      const [dense, qaDense] = await Promise.all([snapshot.dense, snapshot.qaDense]);
-      const queryVector = await embedNavigation(userQuery);
+      // Planning depends only on the original question, cards and rule directory.
+      // Start it with dense initialization and the navigation embedding; settle
+      // every branch before inspecting any result so a sibling rejection cannot
+      // become an unhandled promise rejection.
+      const planBody = boundedPlanBody(input, rules);
+      const denseReady = Promise.resolve(snapshot.dense);
+      const qaDenseReady = Promise.resolve(snapshot.qaDense);
+      const queryVectorReady = embedNavigation(userQuery);
+      const planReady = (async () => {
+        const planTokens = await count(planBody, 'plan');
+        const plan = await generate(planBody, planTokens, 'plan');
+        return { planTokens, plan };
+      })();
+      const [denseResult, qaDenseResult, queryVectorResult, planResult] = await Promise.allSettled([
+        denseReady, qaDenseReady, queryVectorReady, planReady,
+      ]);
+      const parallelFailure = [denseResult, qaDenseResult, queryVectorResult, planResult]
+        .find(result => result.status === 'rejected');
+      if (parallelFailure) throw parallelFailure.reason;
+      const dense = denseResult.value;
+      const qaDense = qaDenseResult.value;
+      const queryVector = queryVectorResult.value;
       const denseUnits = dense.search(queryVector), lexicalUnits = ruleSearch.search([userQuery]);
       const denseQaItems = qaDense.search(queryVector);
       const navigationUnits = [], seenNavigationIds = new Set();
@@ -330,10 +352,8 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
           navigationUnits.push(unit);
         }
       }
-      const planBody = boundedPlanBody(input, rules);
       timingsMs.navigation = performance.now() - navigationAt;
-      const planTokens = await count(planBody, 'plan');
-      const plan = await generate(planBody, planTokens, 'plan');
+      const { planTokens, plan } = planResult.value;
       const queryPlan = { informationNeeds: strings(plan.informationNeeds, 'needs'), queries: strings(plan.queries, 'queries'),
         ruleSectionIds: strings(plan.ruleSectionIds ?? [], 'sections') };
       const plannedAt = performance.now();
