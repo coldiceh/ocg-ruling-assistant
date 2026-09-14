@@ -87,15 +87,21 @@ test('long rule groups use one source reference per identical source and section
   assert.ok(payload.ruleSources && typeof payload.ruleSources === 'object');
   const compactGroup = payload.groups[0];
   assert.equal(compactGroup.units.length, units.length);
-  assert.equal(new Set(compactGroup.units.map(unit => unit.sourceRef)).size, 1);
-  const source = payload.ruleSources[compactGroup.units[0].sourceRef];
-  const restored = compactGroup.units.map((unit) => ({ ...source,
+  assert.deepEqual(payload.ruleUnitFields, ['id', 'text', 'ruleUnitIndex', 'sourceRef']);
+  const decoded = compactGroup.units.map(row => Object.fromEntries(payload.ruleUnitFields.map((key, index) => [key, row[index]])));
+  assert.equal(new Set(decoded.map(unit => unit.sourceRef)).size, 1);
+  const source = payload.ruleSources[decoded[0].sourceRef];
+  const restored = decoded.map((unit) => ({ ...source,
     ...Object.fromEntries(Object.entries(unit).filter(([key]) => key !== 'sourceRef')) }));
   assert.deepEqual(restored, units);
   assert.deepEqual(compactGroup.section, sharedSection);
-  assert.deepEqual(compactGroup.units.map(unit => unit.id), units.map(unit => unit.id));
-  assert.deepEqual(compactGroup.units.map(unit => unit.ruleUnitIndex), units.map(unit => unit.ruleUnitIndex));
-  assert.equal(createHash('sha256').update(JSON.stringify(restored)).digest('hex'),
+  assert.deepEqual(decoded.map(unit => unit.id), units.map(unit => unit.id));
+  assert.deepEqual(decoded.map(unit => unit.ruleUnitIndex), units.map(unit => unit.ruleUnitIndex));
+  // Restore the original JSON key order before the byte hash; tuple columns
+  // change field order, while the deep equality above checks every field.
+  const restoredOriginalKeyOrder = restored.map((unit, index) =>
+    Object.fromEntries(Object.keys(units[index]).map(key => [key, unit[key]])));
+  assert.equal(createHash('sha256').update(JSON.stringify(restoredOriginalKeyOrder)).digest('hex'),
     createHash('sha256').update(JSON.stringify(units)).digest('hex'));
 
   const canonicalText = units.map(unit => unit.text).join('\n\n');
@@ -158,8 +164,8 @@ test('a model-requested source section is read before a capacity-filling lexical
   await provider.retrieve({ ...input, userQuery: 'fixture search', cardResolution: { resolvedCards: [] }, retrievedEvidence: {} });
   const delivered = JSON.parse(requests[1].contents[0].parts[1].text);
   assert.equal(delivered.groups[0].groupId, 'S1.2');
-  assert.equal(delivered.groups[0].units.map(unit => unit.text).join(''), second);
+  assert.equal(delivered.groups[0].units.map(unit => unit[1]).join(''), second);
   assert.equal(requests.length, 2);
   const planned = JSON.parse(requests[0].contents[0].parts[1].text);
-  assert.deepEqual(planned.ruleSections, [['S1.1', null, 'Lexical section'], ['S1.2', null, 'Requested section']]);
+  assert.deepEqual(planned.ruleSections, [['S1.1', null, 'Lexical section', first.length], ['S1.2', null, 'Requested section', second.length]]);
 });
