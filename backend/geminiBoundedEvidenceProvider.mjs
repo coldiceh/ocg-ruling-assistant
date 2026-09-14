@@ -6,7 +6,7 @@ import { buildRuleContext, readRuleContext, GEMINI_RULE_QA_MODEL } from './gemin
 import { createRuleCandidateSearch } from './geminiRuleCandidateSearch.mjs';
 import { loadQaDenseSearch } from './geminiQaDenseSearch.mjs';
 import { createFocusedQaView } from './geminiFocusedQaView.mjs';
-import { resolveGeminiSelection, packGeminiSelection } from './geminiRuleQaPacking.mjs';
+import { resolveGeminiSelection, packGeminiSelection, computeGeminiSelectionPackingBudget } from './geminiRuleQaPacking.mjs';
 import { runCloudGeminiRequest } from './cloudRequestBudget.mjs';
 import { loadRuleDenseSearch, queryEmbeddingText, RULE_EMBEDDING_MODEL,
   RULE_EMBEDDING_DIMENSION } from './geminiRuleDenseSearch.mjs';
@@ -71,7 +71,7 @@ export function boundedPlanBody(input, rules, navigationUnits = [], qaCandidates
     ...(qaCandidates.length ? {qaCandidates:qaCandidateRows(qaCandidates)} : {}) });
 }
 
-export function boundedSelectionBody(input, queryPlan, groups, revisions) {
+export function boundedSelectionBody(input, queryPlan, groups, revisions, packingBudget) {
   const ruleSources = {}, sourceRefs = new Map();
   const faqReading = compactFaqReadingItems(groups);
   const compactGroups = faqReading.groups.map((group) => {
@@ -91,6 +91,14 @@ export function boundedSelectionBody(input, queryPlan, groups, revisions) {
     return { ...group, units };
   });
   const selectionInput = { ...input, queryPlan, ...revisions, groups: compactGroups,
+    ...(packingBudget ? {packingBudget: {
+      limitChars: packingBudget.limitChars, basePromptChars: packingBudget.basePromptChars,
+      availableEvidenceChars: packingBudget.availableEvidenceChars,
+      ruleUnitChars: Object.fromEntries(groups.flatMap(group => group.units || [])
+        .map(unit => [unit.id, packingBudget.ruleUnitChars[unit.id]])),
+      qaHandleChars: Object.fromEntries(groups.flatMap(group => group.items || [])
+        .map(item => [item.handle, packingBudget.qaHandleChars[item.handle]])),
+    }} : {}),
     ...(sourceRefs.size ? { ruleUnitFields: RULE_UNIT_FIELDS, ruleSources } : {}),
     ...(Object.keys(faqReading.qaSources).length ? { qaSources: faqReading.qaSources } : {}) };
   const sourceInstructions = [
@@ -105,6 +113,7 @@ export function boundedSelectionBody(input, queryPlan, groups, revisions) {
     '普通QA保留整条问答；FAQ可选提供的真实来源单元。sourceAuthority与official按提供值保留，社区资料不能当官方直接裁定。',
     ...sourceInstructions,
     '最终包包含题面、完整卡文、来源和包装，上限14000字符。只选需要的证据，不填充背景；不得截断或改写原文。缺失的依据不能编造。',
+    ...(packingBudget ? ['packingBudget给出真实序列化计算的保守字数：basePromptChars已经包含题面和卡文，availableEvidenceChars是可用于证据的余额。所选ruleUnitChars和qaHandleChars的数值总和应不超过此余额，不要用阅读正文的长度猜装包大小。保留不同必要关系及相关限定；当多条资料重复说明同一关系时，选择能保留所需条件的完整原文组合。'] : []),
     '输出JSON，selectionNotes仅简短列出所选原文分别涉及的条件、需要对照的限定及仍缺的资料，不推导原题结论：{"selectionNotes":"原文覆盖的条件与待对照边界","ruleUnitIds":["R1.1"],"qaHandles":["已提供的完整句柄"]}。',
   ].join('\n'), selectionInput);
 }
@@ -552,6 +561,11 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
         queue.push(group);
       }
       const revisions = { dataRevision, ruleRevision: rules.ruleRevision, qaRevision: assets.qaRevision };
+      // These are serialization measurements for the model, not evidence
+      // relevance scores. Only the model chooses the final evidence set.
+      const packingBudget = computeGeminiSelectionPackingBudget({ userQuery, cardResolution, retrievedEvidence,
+        rules: [...new Map(queue.flatMap(group => group.units || []).map(unit => [unit.id, unit])).values()],
+        qaItems: [...new Map(queue.flatMap(group => group.items || []).map(item => [item.handle, item])).values()] });
       let groups = [];
       const omittedGroupIds = [];
       const readUnitIds = new Set();
@@ -562,17 +576,17 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
           units: originalGroup.units.filter(unit => !readUnitIds.has(unit.id))} : originalGroup;
         if (group.kind === 'rule' && group.units.length === 0) continue;
         const candidateGroups = [...groups, group];
-        const candidateChars = JSON.stringify(boundedSelectionBody(input, queryPlan, candidateGroups, revisions)).length;
+        const candidateChars = JSON.stringify(boundedSelectionBody(input, queryPlan, candidateGroups, revisions, packingBudget)).length;
         if (candidateChars > INITIAL_READ_CHARS) { omittedGroupIds.push(group.groupId); continue; }
         groups.push(group);
         for (const unit of group.units || []) readUnitIds.add(unit.id);
       }
       timingsMs.search = performance.now() - at;
-      let selectionBody = boundedSelectionBody(input, queryPlan, groups, revisions);
+      let selectionBody = boundedSelectionBody(input, queryPlan, groups, revisions, packingBudget);
       let selectionTokens = await count(selectionBody, 'selection');
       while (countedGenerationInputs + selectionTokens > MAX_INPUT_TOKENS && groups.length) {
         const targetChars = JSON.stringify(selectionBody).length * (MAX_INPUT_TOKENS - countedGenerationInputs) / selectionTokens * 0.95;
-        do { omittedGroupIds.push(groups.pop().groupId); selectionBody = boundedSelectionBody(input, queryPlan, groups, revisions); }
+        do { omittedGroupIds.push(groups.pop().groupId); selectionBody = boundedSelectionBody(input, queryPlan, groups, revisions, packingBudget); }
         while (groups.length && JSON.stringify(selectionBody).length > targetChars);
         selectionTokens = await count(selectionBody, 'selection');
       }
@@ -621,7 +635,10 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
     } catch (error) {
       error.boundedRetrieval = { calls, tokenCounts: counts, estimatedCostUsd: spentUsd,
         elapsedMs: performance.now() - started, finalModelCalls: 0,
-        completedPlan,qaNavigationSelectedHandles:completedQaHandles };
+        completedPlan,qaNavigationSelectedHandles:completedQaHandles,
+        ...(error.packing ? {packingFailure: {actualPromptChars: error.packing.promptChars,
+          prompt: error.packing.prompt, allowedEvidenceIds: error.packing.allowedEvidenceIds,
+          selectedEntryChars: error.packing.selectedEntryChars}} : {}) };
       throw error;
     }
   } };

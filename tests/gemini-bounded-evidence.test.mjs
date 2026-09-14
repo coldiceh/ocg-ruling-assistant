@@ -54,9 +54,10 @@ function createFixtureProvider(options) {
   });
 }
 
-function fixture({ unknown = false, excessive = false } = {}) {
+function fixture({ unknown = false, excessive = false, oversized = false } = {}) {
   const requests = [];
-  const provider = createFixtureProvider({ loadAssets: async () => assets,
+  const provider = createFixtureProvider({ loadAssets: async () => oversized ? {...assets,
+    createQaTools: options => createQaTools({records:[{...qa, answer:'complete fixture body '.repeat(720)}],qaRevision:'q',...options})} : assets,
     budgetedRequest: request => request.invoke(), fetchImpl: async (url, init) => {
       const body = JSON.parse(init.body);
       assert.equal(body.generationConfig?.thinkingConfig?.thinkingLevel || 'low', 'low');
@@ -79,6 +80,35 @@ const input = { userQuery: 'original complete question and scene', dataRevision:
   cardResolution: { resolvedCards: [], unresolvedMentions: ['unresolved original'] },
   retrievedEvidence: { cardTexts: [{ id: 'card-text', text: 'complete canonical card text', source: 'fixture' }],
     userProvidedCardTexts: [{ name: 'user fixture', text: 'complete user-supplied text' }] } };
+
+test('selection receives serialization size costs only for currently offered evidence', async () => {
+  const {provider, requests} = fixture();
+  await provider.retrieve(input);
+  const payload = JSON.parse(requests[1].contents[0].parts[1].text);
+  assert.equal(payload.packingBudget?.limitChars, 14000);
+  assert.ok(payload.packingBudget.basePromptChars > input.userQuery.length);
+  assert.equal(payload.packingBudget.availableEvidenceChars, 14000 - payload.packingBudget.basePromptChars);
+  const rules = payload.groups.flatMap(group => group.units || []).map(unit => unit[0]);
+  const handles = payload.groups.flatMap(group => group.items || []).map(item => item.handle);
+  assert.deepEqual(Object.keys(payload.packingBudget.ruleUnitChars).sort(), [...new Set(rules)].sort());
+  assert.deepEqual(Object.keys(payload.packingBudget.qaHandleChars).sort(), [...new Set(handles)].sort());
+  assert.ok(Object.values(payload.packingBudget.ruleUnitChars).every(Number.isSafeInteger));
+  assert.ok(Object.values(payload.packingBudget.qaHandleChars).every(Number.isSafeInteger));
+});
+
+test('an oversized selection preserves its serialized diagnostic without issuing another model request', async () => {
+  const {provider, requests} = fixture({oversized:true});
+  await assert.rejects(provider.retrieve(input), error => {
+    assert.equal(error.message, 'gemini_bounded_pack_capacity_exceeded');
+    const captured = error.boundedRetrieval.packingFailure;
+    assert.equal(captured.prompt, error.packing.prompt);
+    assert.equal(captured.actualPromptChars, captured.prompt.length);
+    assert.ok(captured.actualPromptChars > 14000);
+    assert.deepEqual(captured.allowedEvidenceIds, error.packing.allowedEvidenceIds);
+    return true;
+  });
+  assert.equal(requests.length, 2);
+});
 
 test('QA dense-only candidate is offered and packed with original and planned embeddings', async () => {
   const lexicalQa = { id: 'lexical-qa', recordType: 'qa', title: 'lexical fixture', question: 'lexical', answer: 'lexical answer', official: true };
