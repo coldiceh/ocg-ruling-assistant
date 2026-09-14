@@ -14,7 +14,7 @@ import {
 import { buildRagRulingPromptBundle } from "./ragRulingPrompt.mjs";
 import { createCloudEvidenceProvider } from './cloudEvidenceProvider.mjs';
 import { generateCloudEvidencePlan } from './cloudEvidencePlan.mjs';
-import { createGeminiRuleQaEvidenceProvider } from './geminiRuleQaEvidenceProvider.mjs';
+import { createGeminiBoundedEvidenceProvider as createGeminiRuleQaEvidenceProvider } from './geminiBoundedEvidenceProvider.mjs';
 import { loadGeminiRuleQaAssets } from './geminiRuleQaAssets.mjs';
 import { fileURLToPath } from 'node:url';
 import { runCloudBudgetedQuestion, cloudSiliconFlowCallbacks } from './cloudRequestBudget.mjs';

@@ -1,5 +1,10 @@
 import { buildRagRulingPromptBundle } from './ragRulingPrompt.mjs';
 
+// Latest user limit for the complete prompt, in UTF-16 characters, including
+// the question, cards, evidence, sources and envelope. This supersedes the
+// earlier empirical calibration of 9448 * 1.5; it does not prove sufficiency.
+export const GEMINI_EVIDENCE_MAX_PROMPT_CHARS = 14000;
+
 const RULE_SOURCE_FIELDS = [
   'recordType', 'title', 'sourceUrl', 'source', 'sourceAuthority', 'official', 'parentSourceId',
 ];
@@ -71,7 +76,37 @@ export function resolveGeminiSelection({ args, rules, qaTools }) {
     ruleUnitIds: selectedRules.map(item => item.id), ruleRevision: rules.ruleRevision, qaRevision: qaTools.qaRevision };
 }
 
-export function packGeminiSelection({ selection, userQuery, cardResolution, retrievedEvidence = {}, maxPromptChars = 36000 }) {
+/**
+ * Expand selected rule units to the complete canonical source section they
+ * already belong to. This is mechanical provenance expansion only: section
+ * membership comes from unitSections and sections[*].ruleUnitIds, while text
+ * comes from the canonical rules.units map. A bad binding can carry the wrong
+ * source, so missing canonical members fail closed through the existing identity
+ * structure rather than any semantic judgment.
+ */
+export function expandGeminiSelectionToSourceSections({ selection, rules }) {
+  const selectedRules = [];
+  const seen = new Set();
+  for (const unit of selection?.selectedRules || []) {
+    const sectionId = rules.unitSections.get(unit.id);
+    const section = sectionId ? rules.sections.get(sectionId) : null;
+    const ids = section?.ruleUnitIds || [unit.id];
+    for (const id of ids) {
+      if (seen.has(id)) continue;
+      const canonical = rules.units.get(id);
+      if (!canonical) throw new Error('gemini_rule_section_unit_binding_invalid');
+      seen.add(id);
+      selectedRules.push(canonical);
+    }
+  }
+  return {
+    ...selection,
+    selectedRules,
+    ruleUnitIds: selectedRules.map(unit => unit.id),
+  };
+}
+
+export function packGeminiSelection({ selection, userQuery, cardResolution, retrievedEvidence = {}, maxPromptChars = GEMINI_EVIDENCE_MAX_PROMPT_CHARS }) {
   const selectedBodies = [...selection.selectedRules, ...selection.selectedQa.map(({ handle, record }) => ({
     id: handle, recordType: record.recordType, title: record.title,
     source: record.sourceName || '', sourceUrl: selectedQaSourceUrl(record),

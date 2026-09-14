@@ -3,12 +3,12 @@
   "kind": "rag-data-revision-manifest",
   "compilerAbi": "rag-data-revision-compiler/v1",
   "canonicalizationAbi": "rag-data-revision-canonical-json-lf/v2",
-  "revision": "cef4de450fe962d469b3055bc7e8e2ec9874dcc1c438031ce2c03558acdc24db",
-  "canonicalCorpusDigest": "cef4de450fe962d469b3055bc7e8e2ec9874dcc1c438031ce2c03558acdc24db",
-  "sourceSetDigest": "4415945ff1e0bfe5cfb63640440b8fed7db99c51fb4be73b9646173c66b6eddf",
+  "revision": "8d5e44e926e1be97b425f7fd736a73201c8f965e896cb39c43a1e859b850140f",
+  "canonicalCorpusDigest": "8d5e44e926e1be97b425f7fd736a73201c8f965e896cb39c43a1e859b850140f",
+  "sourceSetDigest": "500a212a37440e26fbbf6f7151e2c7c12e44c15cb6aa0e6a0b48d5804beb4cee",
   "counts": {
     "cards": 14379,
-    "records": 104951,
+    "records": 104953,
     "qaRecords": 27715
   },
   "sources": [
@@ -34,8 +34,8 @@
     },
     {
       "path": "ocg-rule-corpus.json",
-      "bytes": 1378892,
-      "sha256": "1b5aceaf275c334cdc1458bfcaed81a4daa259a04026d42fe6fd45d4fc09ce3a"
+      "bytes": 1476362,
+      "sha256": "fbbaceeed0a68cd776ced3eb20d11b022d7f795b147e6fc726c9db0c4fd41097"
     },
     {
       "path": "official-responses.json",
