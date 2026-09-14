@@ -40,6 +40,7 @@ export async function preparePublicAnswer({
     evidencePackage: { text: result.answer.continuation.promptBundle.prompt, filename: 'ocg-evidence.txt',
       diagnostics: {
         request: result.answer.debug?.requestDiagnostics || null,
+        cloudCosts: result.answer.debug?.cloudCosts || null,
         retrieval: result.answer.continuation.evidence?.debug?.cloudEvidence || null,
         ruleHints: result.answer.continuation.ruleQueryModel || null,
       },

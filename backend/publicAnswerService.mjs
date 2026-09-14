@@ -405,9 +405,10 @@ export function publicAnswerHttpError(error) {
       error: publicMessage || (error instanceof Error ? error.message : String(error)),
       code: error?.code || "answer_failed",
       ...(officialQaBodyDetails ? { details: officialQaBodyDetails } : {}),
-      ...((error?.cloudCosts || error?.requestDiagnostics) ? {debug:{
+      ...((error?.cloudCosts || error?.requestDiagnostics || error?.boundedRetrieval) ? {debug:{
         ...(error.cloudCosts ? {cloudCosts:error.cloudCosts} : {}),
         ...(error.requestDiagnostics ? {requestDiagnostics:error.requestDiagnostics} : {}),
+        ...(error.boundedRetrieval ? {boundedRetrieval:error.boundedRetrieval} : {}),
       }} : {}),
     },
   };
