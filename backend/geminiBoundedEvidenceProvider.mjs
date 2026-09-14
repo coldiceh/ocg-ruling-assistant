@@ -209,6 +209,26 @@ function mergeGroups(ruleGroups, qaGroups) {
   return result;
 }
 
+function requestedSectionsForReading(ids, rules) {
+  const ordered = [], emitted = new Set();
+  const isDescendant = (id, ancestor) => {
+    for (let parent = rules.sections.get(id)?.parentSectionId; parent; parent = rules.sections.get(parent)?.parentSectionId) {
+      if (parent === ancestor) return true;
+    }
+    return false;
+  };
+  function emit(id) {
+    if (emitted.has(id)) return;
+    // Source-tree ancestry is a mechanical relation. Reading the explicitly
+    // requested child first preserves its position inside a requested parent;
+    // the parent's remaining canonical units are still offered afterwards.
+    for (const child of ids) if (isDescendant(child, id)) emit(child);
+    emitted.add(id); ordered.push(id);
+  }
+  ids.forEach(emit);
+  return ordered;
+}
+
 function splitRuleGroups(groups) {
   const result = [];
   for (const group of groups) {
@@ -515,7 +535,7 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
       }
       const ruleGroups = splitRuleGroups(ruleSearch.readParentGroups(fusedRuleUnits)
         .map(group => ({ ...group, kind: 'rule' })));
-      const requestedGroups = splitRuleGroups(queryPlan.ruleSectionIds.map(sectionId => {
+      const requestedGroups = splitRuleGroups(requestedSectionsForReading(queryPlan.ruleSectionIds, rules).map(sectionId => {
         const context = readRuleContext(rules, { sectionIds: [sectionId] });
         const { ruleUnitIds: _ids, ...section } = context.sections[0];
         return { groupId: sectionId, kind: 'rule', section, units: context.items };
