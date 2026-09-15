@@ -58,12 +58,11 @@ jobs:
       - name: Run static and data checks
         run: pnpm run check
 
-      - name: Run the complete test suite serially
+      - name: Run the complete free test suite with file isolation
         shell: bash
         run: |
           set +e
-          node --test --test-force-exit --test-concurrency=1 \
-            --test-isolation=none --test-reporter=spec \
+          node scripts/run-free-tests.mjs \
             2>&1 | tee "$RUNNER_TEMP/complete-tests.log"
           test_status="${PIPESTATUS[0]}"
           set -e

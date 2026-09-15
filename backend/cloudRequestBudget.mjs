@@ -6,6 +6,7 @@ import {
   assertGenerationCapacity,
   estimateGenerationUpperBoundUsd,
   generationContractSha256,
+  normalizeEvidenceGenerationUsage,
   normalizeGeminiGenerationUsage,
 } from './evidenceGenerationContract.mjs';
 
@@ -535,6 +536,51 @@ export function createCloudRequestBudget({env, fetchImpl = globalThis.fetch, com
     } else ticket.uncertainty='provider_usage_missing_reservation_retained';
     return result;
   }
+  async function baiGeneration({body, invoke, operation, model, measurement, generationContract}) {
+    if (operation !== 'generate_content' || generationContract?.providerId !== 'bai') {
+      throw new Error('cloud_budget_bai_generation_contract_required');
+    }
+    if (model !== generationContract.modelId) throw new Error('cloud_budget_bai_generation_model_mismatch');
+    assertGenerationCapacity({body, contract:generationContract, measurement});
+    const upper = estimateGenerationUpperBoundUsd({measurement, contract:generationContract});
+    const ticket = await reserve({provider:'bai', model, operation, stage:'evidence_preparation',
+      actualCny:0, theoreticalUsd:upper.amountUsd,
+      pricingBasis:`${upper.basis}:${generationContract.priceVersion}`,
+      reservationMetadata:{
+        generationContractSha256:generationContractSha256(generationContract),
+        requestSha256:measurement.requestSha256,
+        requestBodyBytes:measurement.requestBodyBytes,
+        inputTokensUpperBound:measurement.inputTokensUpperBound,
+        contextInputTokensUpperBound:measurement.contextInputTokensUpperBound,
+        countingContractVersion:measurement.countingContractVersion,
+        contextCountingContractVersion:measurement.contextCountingContractVersion,
+        measurementBasis:measurement.basis,
+        measurementExact:measurement.exact,
+        maxBillableOutputTokens:generationContract.maxBillableOutputTokens,
+      }});
+    let result;
+    try { result=await invoke(); }
+    catch(error) { ticket.uncertainty='request_or_settlement_failed_reservation_retained'; throw error; }
+    if (result?.model && result.model !== generationContract.modelId) {
+      ticket.uncertainty='provider_model_binding_mismatch_reservation_retained';
+      throw new Error('cloud_budget_bai_returned_model_mismatch');
+    }
+    try {
+      const normalized=normalizeEvidenceGenerationUsage(result?.usage, generationContract);
+      if (normalized.billableCost.status !== 'known') throw new Error('cloud_budget_bai_usage_missing');
+      Object.assign(ticket,{usage:result.usage,rawUsage:normalized.rawUsage,
+        billableUsage:normalized.billableUsage,usageNormalization:normalized.usageNormalization,
+        billableCost:normalized.billableCost,returnedModel:result?.model||model,
+        providerResponseReceivedAtUtc:new Date().toISOString()});
+      await settle(ticket,{usage:result.usage,returnedModel:result?.model||model,
+        actualCny:0,actualUpperCny:0,theoreticalUsd:normalized.billableCost.amountUsd,
+        billableUsage:normalized.billableUsage,usageNormalization:normalized.usageNormalization,
+        billableCost:normalized.billableCost});
+    } catch {
+      ticket.uncertainty='provider_usage_missing_or_settlement_uncertain_reservation_retained';
+    }
+    return result;
+  }
   async function gemini({
     body,
     invoke,
@@ -747,7 +793,8 @@ export function createCloudRequestBudget({env, fetchImpl = globalThis.fetch, com
         accountedActualUpperCny:['bai','gemini'].includes(r.provider)?null:r.actualNano/UNIT,
         theoreticalUsd:r.theoreticalNano/UNIT}))};
   }
-  return {relay,deepseek,openai,bai:request=>openai({...request,provider:'bai'}),gemini,
+  return {relay,deepseek,openai,bai:request=>request?.generationContract?.providerId === 'bai'
+    ? baiGeneration(request) : openai({...request,provider:'bai'}),gemini,
     beforeSend,onResponse,remainingPreparationUsd,snapshot};
 }
 
@@ -797,9 +844,9 @@ export async function runOfficialOpenAIRequest({env,body,invoke,fetchImpl=global
     throw error;
   }
 }
-export function runCloudBaiRequest({body,invoke}) {
+export function runCloudBaiRequest(request) {
   const controller=scope.getStore();
-  return controller?controller.bai({body,invoke}):invoke();
+  return controller?controller.bai(request):request.invoke();
 }
 export function runCloudDeepSeekRequest({body,invoke,channel='official'}) {
   const controller=scope.getStore();

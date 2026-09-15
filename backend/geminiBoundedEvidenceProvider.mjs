@@ -5,21 +5,23 @@ import { loadGeminiRuleQaAssets } from './geminiRuleQaAssets.mjs';
 import { buildRuleContext } from './geminiRuleContext.mjs';
 import { createRuleCandidateSearch } from './geminiRuleCandidateSearch.mjs';
 import { loadQaDenseSearch } from './geminiQaDenseSearch.mjs';
-import { resolveGeminiSelection, packGeminiSelection, computeGeminiSelectionPackingBudget } from './geminiRuleQaPacking.mjs';
+import { GEMINI_EVIDENCE_MAX_PROMPT_CHARS, resolveGeminiSelection, packGeminiSelection, computeGeminiSelectionPackingBudget } from './geminiRuleQaPacking.mjs';
 import { summarizeCards } from './ragRulingPrompt.mjs';
-import { runCloudGeminiRequest, currentCloudPreparationRemainingUsd } from './cloudRequestBudget.mjs';
+import { runCloudBaiRequest, runCloudGeminiRequest, currentCloudPreparationRemainingUsd } from './cloudRequestBudget.mjs';
 import { loadRuleDenseSearch, queryEmbeddingText, RULE_EMBEDDING_MODEL,
   RULE_EMBEDDING_DIMENSION } from './geminiRuleDenseSearch.mjs';
 import { admitWholeReadingUnits, mapRankedUnits, READING_SCHEDULER_CONTRACT } from './evidenceReadingScheduler.mjs';
 import { createNavigationSearch } from './evidenceNavigationSearch.mjs';
-import { loadEvidenceGenerationContract, generationContractSha256, buildGeminiInputMeasurement,
-  normalizeGeminiGenerationUsage, estimateGenerationUpperBoundUsd, assertGenerationCapacity } from './evidenceGenerationContract.mjs';
+import { loadEvidenceGenerationContract, generationContractSha256, buildEvidenceInputMeasurement,
+  normalizeEvidenceGenerationUsage, estimateGenerationUpperBoundUsd, assertGenerationCapacity } from './evidenceGenerationContract.mjs';
+import { createEvidenceGenerationTransport } from './evidenceGenerationTransport.mjs';
 
 const snapshots = new WeakMap();
 const BASE = 'https://generativelanguage.googleapis.com/v1beta';
 const INITIAL_READ_CHARS = 32000;
 const MAX_OUTPUT_TOKENS = 2048;
-const DEADLINE_MS = 26000;
+const DEADLINE_MS = 30000;
+const MAX_PROMPT_CHARS = 15000;
 const hash = text => createHash('sha256').update(text).digest('hex');
 const uniq = values => [...new Set(values)];
 const RULE_READING_SOURCE_FIELDS = Object.freeze([
@@ -37,11 +39,10 @@ function strings(value, field) {
   return uniq(values.map(item => item.trim()).filter(Boolean));
 }
 
-function parsedOutput(raw) {
-  const content = raw?.candidates?.[0]?.content;
-  const text = (content?.parts || []).filter(part => !part.thought && typeof part.text === 'string')
-    .map(part => part.text).join('\n').trim();
-  if (!text) throw new Error('gemini_bounded_output_absent');
+function parsedOutput(raw, transport) {
+  const text = transport.extractText(raw).trim();
+  if (!text) throw new Error(transport.providerId === 'gemini'
+    ? 'gemini_bounded_output_absent' : 'evidence_generation_output_absent');
   return JSON.parse(text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, ''));
 }
 
@@ -71,6 +72,7 @@ export function boundedPlanBody(input) {
 }
 
 export function boundedSelectionBody(input, queryPlan, groups, revisions, packingBudget) {
+  const maxPromptChars = packingBudget?.limitChars ?? GEMINI_EVIDENCE_MAX_PROMPT_CHARS;
   const ruleSources = {}, sourceRefs = new Map();
   const faqReading = compactFaqReadingItems(groups);
   const compactGroups = faqReading.groups.map((group) => {
@@ -109,9 +111,11 @@ export function boundedSelectionBody(input, queryPlan, groups, revisions, packin
     '逐个阅读原题、完整卡文和待查问题，以原题明确事实为准；queryPlan只是检索线索，其改写不一定准确。来源小节提供指代、范围与前后条件；阅读整小节不等于整小节入包。',
     '这是为下一位裁定者收集材料的任务，不是先解题再选支持自己答案的证据。逐项阅读原文约束的事实前提，与题面比对；卡名相同或措辞相似不代表条件相同。不要把某一分支的结论扩大到其他分支，也不要自行排除还需解释的限定。',
     '同一待查关系的一般原则、范围限定、可能相关的例外和必要引用应一起交付。若尚不能确定本题适用一般原则还是限定，选择两者的完整原文供最终裁定者判断，不要根据你预想的答案删除其中一方。条件不同但可帮助辨明适用边界的QA可以保留，并同时选入解释该边界所需的规则。只排除明确无关的其他场景背景，不按证据是否支持某个答案筛选。',
+    '最终裁定者只会看到你选中的片段，不会看到本轮未选的上下文。所选句子若依赖前文限定的阶段、对象、情形或后续步骤，必须同时选入说明该限定或步骤的原文；不能把片段中的“这时”“上述”等当作已经交付的条件。',
+    '返回前逐一核对原题的每个子问题：所选材料应实际解释该子问题要求的关系或时点。只有相关主题、同类例子或一半处理过程，不等于已经交付另一子问题的依据；继续从本轮已读原文中选择所需部分。',
     '普通QA保留整条问答；FAQ可选提供的真实来源单元。sourceAuthority与official按提供值保留，社区资料不能当官方直接裁定。',
     ...sourceInstructions,
-    '最终包包含题面、完整卡文、来源和包装，上限14000字符。只选需要的证据，不填充背景；不得截断或改写原文。缺失的依据不能编造。',
+    `最终包包含题面、完整卡文、来源和包装，上限${maxPromptChars}字符。只选需要的证据，不填充背景；不得截断或改写原文。缺失的依据不能编造。`,
     ...(packingBudget ? ['packingBudget给出真实序列化计算的保守字数：basePromptChars已经包含题面和卡文，availableEvidenceChars是可用于证据的余额。所选ruleUnitChars和qaHandleChars的数值总和应不超过此余额，不要用阅读正文的长度猜装包大小。保留不同必要关系及相关限定；当多条资料重复说明同一关系时，选择能保留所需条件的完整原文组合。'] : []),
     'unread只列未交付的候选标题、类型和长度；未读不能当作不存在，不能选择未读编号。结构上下文只代表来源关系，不强制全组选择。表格的tableLayout保存原文单元内UTF-16区间与行列关系。',
     '只输出JSON：{"selectedIds":["已实际提供的原文编号"],"unableToSelect":false,"note":"可为空"}。若无法完成选择，返回unableToSelect:true和简短原因，不声称已经找全。',
@@ -223,6 +227,26 @@ function positiveConfig(env, key, fallback, ceiling = Infinity) {
   if (!Number.isFinite(value) || value <= 0 || value > ceiling) throw new Error(`evidence_config_invalid_${key}`);
   return value;
 }
+function positiveIntegerConfig(env, key, fallback, ceiling = Infinity) {
+  const value = positiveConfig(env, key, fallback, ceiling);
+  if (!Number.isSafeInteger(value)) throw new Error(`evidence_config_invalid_${key}`);
+  return value;
+}
+function normalizeOfflineEvaluationLimits(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('evidence_offline_evaluation_limits_invalid');
+  }
+  const deadlineMs = Number(value.deadlineMs);
+  const perQuestionMaxUsd = Number(value.perQuestionMaxUsd);
+  const maxPromptChars = value.maxPromptChars === undefined
+    ? GEMINI_EVIDENCE_MAX_PROMPT_CHARS : Number(value.maxPromptChars);
+  if (!Number.isFinite(deadlineMs) || deadlineMs <= 0
+    || !Number.isFinite(perQuestionMaxUsd) || perQuestionMaxUsd <= 0
+    || !Number.isSafeInteger(maxPromptChars) || maxPromptChars <= 0) {
+    throw new Error('evidence_offline_evaluation_limits_invalid');
+  }
+  return Object.freeze({ deadlineMs, perQuestionMaxUsd, maxPromptChars });
+}
 function sourceMap(value) {
   if (value instanceof Map) return value;
   if (Array.isArray(value)) return new Map(value.map(item => [item.unitKey || item.id, item]));
@@ -238,7 +262,29 @@ function waitForShared(promise, signal) {
     }, error => { signal.removeEventListener('abort', abort); reject(error); });
   });
 }
-function getSnapshot(assets) {
+
+function applyGenerationContract(body, contract) {
+  if (contract.providerId !== 'gemini') return body;
+  return { ...body, generationConfig: {
+    ...body.generationConfig,
+    thinkingConfig: cloneValue(contract.reasoningConfig.thinkingConfig),
+    maxOutputTokens: contract.outputLimitConfig.maxOutputTokens,
+    responseMimeType: contract.responseFormatConfig.responseMimeType,
+  } };
+}
+
+function generationReasoningEffort(contract) {
+  return contract.reasoningConfig?.responses?.effort
+    ?? contract.reasoningConfig?.thinkingConfig?.thinkingLevel
+    ?? null;
+}
+
+function generationStageTelemetry(contract) {
+  return { provider: contract.providerId, model: contract.modelId,
+    reasoningEffort: generationReasoningEffort(contract) };
+}
+
+export function prepareBoundedEvidenceSnapshot(assets) {
   let snapshot = snapshots.get(assets);
   if (snapshot) return { snapshot, cacheHit: true };
   if (assets.schemaVersion !== 3 && assets.manifest?.schemaVersion !== 3) throw new Error('evidence_schema3_release_required');
@@ -260,23 +306,41 @@ function getSnapshot(assets) {
 }
 
 export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fetch,
-  loadAssets = loadGeminiRuleQaAssets, budgetedRequest = runCloudGeminiRequest,
+  loadAssets = loadGeminiRuleQaAssets, budgetedRequest,
   loadDenseSearch = loadRuleDenseSearch, loadQaSearch = loadQaDenseSearch,
   loadGenerationContract = loadEvidenceGenerationContract,
-  onEvent = async () => {} } = {}) {
+  remainingBudget = currentCloudPreparationRemainingUsd,
+  onEvent = async () => {}, offlineEvaluationLimits } = {}) {
+  const offlineLimits = offlineEvaluationLimits === undefined
+    ? null : normalizeOfflineEvaluationLimits(offlineEvaluationLimits);
+  const reserveGenerationRequest = budgetedRequest || (request => (
+    request.generationContract?.providerId === 'bai'
+      ? runCloudBaiRequest(request)
+      : runCloudGeminiRequest(request)
+  ));
   return { async retrieve({ userQuery, cardResolution, retrievedEvidence = {}, dataRevision,
     env = {}, signal: outerSignal, assetsPromise, elapsedBeforeRetrievalMs = 0 }) {
     const started = performance.now();
-    const deadlineMs = positiveConfig(env, 'GEMINI_EVIDENCE_DEADLINE_MS', DEADLINE_MS, DEADLINE_MS);
+    const deadlineMs = offlineLimits?.deadlineMs
+      ?? positiveConfig(env, 'GEMINI_EVIDENCE_DEADLINE_MS', DEADLINE_MS, DEADLINE_MS);
     const remainingMs = Math.floor(deadlineMs - elapsedBeforeRetrievalMs);
     if (remainingMs <= 0) throw new Error('evidence_deadline_exceeded');
     const signal = outerSignal ? AbortSignal.any([outerSignal, AbortSignal.timeout(remainingMs)]) : AbortSignal.timeout(remainingMs);
     const fx = positiveConfig(env, 'GEMINI_EVIDENCE_FX_CNY_PER_USD', 7);
-    const perQuestionMaxUsd = positiveConfig(env, 'GEMINI_EVIDENCE_MAX_CNY', 0.30, 0.30) / fx;
-    const sharedBalanceReady = currentCloudPreparationRemainingUsd();
+    const perQuestionMaxUsd = offlineLimits?.perQuestionMaxUsd
+      ?? positiveConfig(env, 'GEMINI_EVIDENCE_MAX_CNY', 0.30, 0.30) / fx;
+    const maxPromptChars = offlineLimits?.maxPromptChars
+      ?? positiveIntegerConfig(env, 'GEMINI_EVIDENCE_MAX_PROMPT_CHARS', GEMINI_EVIDENCE_MAX_PROMPT_CHARS, MAX_PROMPT_CHARS);
     let maxUsd = perQuestionMaxUsd;
     const readChars = positiveConfig(env, 'GEMINI_EVIDENCE_READING_TARGET_CHARS', INITIAL_READ_CHARS);
-    const contracts = Object.freeze({ plan: loadGenerationContract('planning'), selection: loadGenerationContract('selection') });
+    const contracts = Object.freeze({
+      plan: loadGenerationContract('planning', { env }),
+      selection: loadGenerationContract('selection', { env }),
+    });
+    const transports = Object.freeze({
+      plan: createEvidenceGenerationTransport({ contract: contracts.plan, env, fetchImpl }),
+      selection: createEvidenceGenerationTransport({ contract: contracts.selection, env, fetchImpl }),
+    });
     const profileHash = hash(JSON.stringify(contracts));
     const timingsMs = {}, calls = [], counts = [], denseSkipped = [];
     let spentUsd = 0, completedPlan = null, completedReading = null;
@@ -292,24 +356,28 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
     }
     const measuredBodies = new Map();
     async function measure(body, stage, label = stage) {
-      const contract = contracts[stage], key = `${generationContractSha256(contract)}:${hash(JSON.stringify(body))}`;
+      const contract = contracts[stage], transport = transports[stage];
+      const wireBody = transport.prepareRequest(applyGenerationContract(body, contract));
+      const key = `${generationContractSha256(contract)}:${hash(JSON.stringify(wireBody))}`;
       const checkCapacity = !['selection', 'selection_resized'].includes(label);
       if (measuredBodies.has(key)) {
         const measurement = measuredBodies.get(key);
-        if (checkCapacity) assertGenerationCapacity({ body, contract, measurement });
+        if (checkCapacity) assertGenerationCapacity({ body: wireBody, contract, measurement });
         return measurement;
       }
       const at = performance.now();
-      const measurement = await buildGeminiInputMeasurement({ body, contract, checkCapacity,
-        countTokens: request => api('countTokens', request, contract.modelId) });
+      const measurement = await buildEvidenceInputMeasurement({ body: wireBody, contract, checkCapacity,
+        countTokens: contract.providerId === 'gemini'
+          ? request => api('countTokens', request, contract.modelId) : undefined });
       counts.push({ stage: label, ...measurement, tokens: measurement.inputTokensUpperBound, elapsedMs: performance.now() - at });
       measuredBodies.set(key, measurement);
       return measurement;
     }
     async function generate(body, measurement, stage, normalize, retry = false) {
-      maxUsd = Math.min(perQuestionMaxUsd, await sharedBalanceReady);
-      const contract = contracts[stage];
-      assertGenerationCapacity({ body, contract, measurement });
+      const contract = contracts[stage], transport = transports[stage];
+      maxUsd = Math.min(perQuestionMaxUsd, await remainingBudget({provider:contract.providerId}));
+      const wireBody = transport.prepareRequest(applyGenerationContract(body, contract));
+      assertGenerationCapacity({ body: wireBody, contract, measurement });
       const reserve = estimateGenerationUpperBoundUsd({ measurement, contract }).amountUsd;
       const futureOutput = stage === 'plan'
         ? contracts.selection.maxBillableOutputTokens * contracts.selection.pricingContract.outputUsdPerMillion / 1e6 : 0;
@@ -320,25 +388,31 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
         countedInputTokens: measurement.inputTokensUpperBound, reservedUsd: reserve, accountedUsd: reserve,
         requestSha256: measurement.requestSha256, status: 'pending', retry };
       calls.push(row); spentUsd += reserve;
-      await onEvent({ type: 'request', stage, body, measurement, contract });
+      await onEvent({ type: 'request', stage, body: wireBody, measurement, contract });
       const at = performance.now();
       let submitted = false;
       try {
-        const raw = await budgetedRequest({ body, model: contract.modelId, operation: 'generate_content',
+        const raw = await reserveGenerationRequest({ body: wireBody, model: contract.modelId, operation: 'generate_content',
           measurement, generationContract: contract, cachedTokenCount: 0,
-          invoke: () => { submitted = true; return api('generateContent', body, contract.modelId); } });
-        row.usage = raw.usageMetadata ?? null;
-        Object.assign(row, normalizeGeminiGenerationUsage(row.usage, contract));
+          invoke: () => {
+            submitted = true;
+            return contract.providerId === 'gemini'
+              ? api('generateContent', wireBody, contract.modelId)
+              : transport.invoke(wireBody, { measurement, signal });
+          } });
+        await onEvent({ type: 'response', stage, raw });
+        transport.validateResponse(raw);
+        row.usage = transport.rawUsage(raw);
+        Object.assign(row, normalizeEvidenceGenerationUsage(row.usage, contract));
         if (row.billableCost.amountUsd !== null) {
           spentUsd += row.billableCost.amountUsd - reserve; row.accountedUsd = row.billableCost.amountUsd;
         }
         row.status = 'success'; row.elapsedMs = performance.now() - at;
-        await onEvent({ type: 'response', stage, raw });
-        return normalize(parsedOutput(raw));
+        return normalize(parsedOutput(raw, transport));
       } catch (error) {
         if (!submitted) { spentUsd -= row.accountedUsd; row.accountedUsd = 0; row.submitted = false; }
         row.elapsedMs = performance.now() - at; row.status = 'failed'; row.error = error.message;
-        const protocol = error instanceof SyntaxError || /^evidence_plan_.*_absent$|^gemini_bounded_output_absent$|^evidence_selection_fields_absent$/.test(error.message);
+        const protocol = error instanceof SyntaxError || /^evidence_plan_.*_absent$|^gemini_bounded_output_absent$|^evidence_generation_output_absent$|^evidence_selection_fields_absent$/.test(error.message);
         const transient = [502,503,504,520,521,522,523,524].includes(error.status);
         if (!retry && (protocol || transient)) {
           const nextBody = protocol ? { ...body, contents: [...body.contents,
@@ -353,7 +427,7 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
     }
     const queryVectors = new Map();
     async function embedBatch(queries, original = false) {
-      maxUsd = Math.min(perQuestionMaxUsd, await sharedBalanceReady);
+      maxUsd = Math.min(perQuestionMaxUsd, await remainingBudget({provider:'gemini'}));
       const queue = uniq(queries).filter(query => !queryVectors.has(query));
       while (queue.length) {
         signal.throwIfAborted();
@@ -380,7 +454,7 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
         const at = performance.now();
         let submitted = false;
         try {
-          const raw = await budgetedRequest({ body, model: RULE_EMBEDDING_MODEL, operation: 'embed_content',
+          const raw = await reserveGenerationRequest({ body, model: RULE_EMBEDDING_MODEL, operation: 'embed_content',
             invoke: () => { submitted = true; return api(single ? 'embedContent' : 'batchEmbedContents', body, RULE_EMBEDDING_MODEL); } });
           row.usage = raw.usageMetadata ?? null; row.status = 'success';
           const tokens = row.usage?.promptTokenCount;
@@ -411,7 +485,7 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
         const at = performance.now();
         const assets = await waitForShared(assetsPromise || loadAssets({ dataDir: env.GEMINI_RULE_QA_DATA_DIR || fileURLToPath(new URL('../data', import.meta.url)) }), signal);
         if (assets.dataRevision !== dataRevision) throw new Error('gemini_rule_qa_asset_revision_mismatch');
-        const { snapshot, cacheHit } = getSnapshot(assets);
+        const { snapshot, cacheHit } = prepareBoundedEvidenceSnapshot(assets);
         if (!snapshot.dense) snapshot.dense = loadDenseSearch({ rules: snapshot.rules, denseRevision: assets.ruleDenseRevision,
           mapping: assets.structureMapping, dataDir: fileURLToPath(new URL('../data/rule-embedding-v1', import.meta.url)) })
           .catch(error => { delete snapshot.dense; throw error; });
@@ -510,6 +584,7 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
       }
       for (const key of allKeys) for (const ref of getReferences(key)) for (const target of ref.targetReadingUnitKeys || []) materialize(target);
       const packCosts = computeGeminiSelectionPackingBudget({ userQuery, cardResolution, retrievedEvidence,
+        maxPromptChars,
         rules: [...entries.values()].filter(entry => entry.kind === 'rule').map(entry => entry.body),
         qaItems: [...entries.values()].filter(entry => entry.kind === 'qa').map(entry => entry.body) });
       const aliasCosts = { ...packCosts, ruleUnitChars: {}, qaHandleChars: {} };
@@ -585,14 +660,18 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
         qaHandles: [...selectedQa.keys()] }, rules: canonicalRules, qaTools: { qaRevision: assets.qaRevision,
         readSelected: ids => ids.map(id => selectedQa.get(id)) } });
       at = performance.now();
-      const result = packGeminiSelection({ selection: resolved, userQuery, cardResolution, retrievedEvidence });
+      const result = packGeminiSelection({ selection: resolved, userQuery, cardResolution, retrievedEvidence, maxPromptChars });
       if (result.packing.capacityExceeded) throw Object.assign(new Error('gemini_bounded_pack_capacity_exceeded'), { packing: result.packing });
       timingsMs.packing = performance.now() - at; signal.throwIfAborted();
       timingsMs.total = performance.now() - started;
-      const tokenUsage = { prompt_tokens: calls.reduce((sum, row) => sum + (row.usage?.promptTokenCount || 0), 0),
-        completion_tokens: calls.reduce((sum, row) => sum + (row.billableUsage?.billableOutputTokens || 0), 0), cached_input_tokens: 0 };
+      const tokenUsage = { prompt_tokens: calls.reduce((sum, row) => sum + (row.billableUsage?.inputTokens || 0), 0),
+        completion_tokens: calls.reduce((sum, row) => sum + (row.billableUsage?.billableOutputTokens || 0), 0),
+        cached_input_tokens: calls.reduce((sum, row) => sum + (row.billableUsage?.cachedInputTokens || 0), 0) };
       const telemetry = { provider: contracts.plan.providerId, model: contracts.plan.modelId,
-        providerUsed: contracts.plan.providerId, modelUsed: contracts.plan.modelId, reasoningEffort: 'low',
+        providerUsed: contracts.plan.providerId, modelUsed: contracts.plan.modelId,
+        reasoningEffort: generationReasoningEffort(contracts.plan),
+        stageTelemetry: { planning: generationStageTelemetry(contracts.plan),
+          selection: generationStageTelemetry(contracts.selection) },
         generationProfileHash: profileHash, generationContracts: contracts, strategy: 'source_preprocessed_v1',
         dryRun: false, warnings: [], ...revisions, assetsCacheHit: cacheHit,
         elapsedBeforeRetrievalMs, elapsedMs: timingsMs.total, timingsMs, tokenUsage,
@@ -603,7 +682,8 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
           schedulerContract: READING_SCHEDULER_CONTRACT, coverageScope: assets.coverageScope,
           readGroupIds: admitted.offered.map(bundle => bundle.unitKey), selectedIds: selection.selectedIds,
           omittedGroupIds: admitted.omitted.map(unit => unit.unitKey), estimatedCostUsd: spentUsd,
-          maxPromptChars: 14000, deadlineMs, fx, fxVersion: 'trial-fixed-7-cny-per-usd' } };
+          maxPromptChars, deadlineMs, readTargetChars: readChars, perQuestionMaxUsd, maxUsd,
+          fx, fxVersion: 'trial-fixed-7-cny-per-usd' } };
       await onEvent({ type: 'packed', selection: resolved, ...result });
       return { ...result, telemetry };
     } catch (error) {

@@ -13,9 +13,16 @@ const contract = {
   modelId: "gpt-5.6-luna",
   maxBillableOutputTokens: 1024,
   reasoningConfig: { responses: { effort: "low" } },
+  responseFormatConfig: { responses: { type: "json_object" } },
   transportContract: { protocol: "responses", endpoint: "/v1/responses" },
   countingContractVersion: "fixture-count-v1",
   capacityContract: { contextCountingContractVersion: "fixture-context-count-v1" },
+  measurementContract: {
+    status: "user_authorized_theoretical",
+    basis: "user_authorized_theoretical",
+    exact: false,
+    estimator: { version: "fixture-estimator-v1" },
+  },
 };
 
 function semanticBody() {
@@ -38,7 +45,10 @@ function measurement(body) {
     contextInputTokensUpperBound: 100,
     countingContractVersion: contract.countingContractVersion,
     contextCountingContractVersion: contract.capacityContract.contextCountingContractVersion,
-    basis: "provider_count",
+    exact: false,
+    basis: "user_authorized_theoretical",
+    inputTokenAllocationKind: "theoretical_estimate",
+    estimatorVersion: contract.measurementContract.estimator.version,
   };
 }
 
@@ -53,11 +63,42 @@ test("B.AI conversion preserves system/user text and freezes the Responses outpu
   assert.deepEqual(body, {
     model: "gpt-5.6-luna",
     instructions: "system",
-    input: [{ role: "user", content: "first\n\nsecond" }],
+    input: [
+      { role: "system", content: "Return the response as JSON." },
+      { role: "user", content: "first\n\nsecond" },
+    ],
     stream: false,
     max_output_tokens: 1024,
     reasoning: { effort: "low" },
+    text: { format: { type: "json_object" } },
   });
+});
+
+test("B.AI json_object wire includes the required JSON instruction in input messages", () => {
+  const body = convertEvidenceGenerationRequest(semanticBody(), contract);
+  assert.equal(body.text.format.type, "json_object");
+  assert.ok(body.input.some((message) => /json/iu.test(message.content)));
+  assert.equal(body.instructions, "system");
+  assert.equal(body.input.at(-1).content, "first\n\nsecond");
+});
+
+test("Gemini text extraction excludes thought parts and preserves visible-part separators", () => {
+  const transport = createEvidenceGenerationTransport({
+    contract: { status: "ready", providerId: "gemini", modelId: "gemini-fixture" },
+    env: {},
+  });
+  assert.equal(transport.extractText({
+    candidates: [{
+      content: {
+        parts: [
+          { thought: true, text: "hidden reasoning" },
+          { text: "first visible part" },
+          { thought: false, text: "second visible part" },
+          { inlineData: { mimeType: "text/plain" } },
+        ],
+      },
+    }],
+  }), "first visible part\nsecond visible part");
 });
 
 test("B.AI transport remains unavailable while its measurement profile is incomplete", () => {
@@ -116,4 +157,34 @@ test("B.AI transport sends one measured Responses request and never substitutes 
   assert.deepEqual(transport.rawUsage(raw), raw.usage);
   assert.equal(transport.validateResponse(raw), true);
   assert.throws(() => transport.validateResponse({ ...raw, model: "another-model" }), /response_model_mismatch/u);
+  await assert.rejects(
+    transport.invoke({ ...body, instructions: "changed after measurement" }, {
+      measurement: measurement(body),
+    }),
+    /unmeasured_request_blocked/u,
+  );
+  assert.equal(calls.length, 1);
+});
+
+test("B.AI evidence transport accepts its dedicated production credential namespace", async () => {
+  const calls = [];
+  const transport = createEvidenceGenerationTransport({
+    contract,
+    env: {
+      RAG_EVIDENCE_BAI_API_KEY: "evidence-only-key",
+      RAG_EVIDENCE_BAI_BASE_URL: "https://evidence.b.ai/v1",
+    },
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ status: "completed", model: contract.modelId, output: [], usage: {} }),
+      };
+    },
+  });
+  const body = transport.prepareRequest(semanticBody());
+  await transport.invoke(body, { measurement: measurement(body) });
+  assert.equal(calls[0].url, "https://evidence.b.ai/v1/responses");
+  assert.equal(calls[0].options.headers.authorization, "Bearer evidence-only-key");
 });

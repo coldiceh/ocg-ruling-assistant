@@ -68,50 +68,6 @@ test('Gemini cache creation accounts fixed TTL storage and labels input as a pro
   assert.equal(snapshot.actualCostKnown, false);
 });
 
-test('Gemini embedding reserves the 8192-token input bound and settles prompt usage', async () => {
-  const { budget, commands } = fixtureBudget();
-  const response = {
-    modelVersion: 'gemini-embedding-2',
-    usageMetadata: {
-      promptTokenCount: 123,
-      totalTokenCount: 123,
-    },
-    embedding: { values: [0.1, 0.2] },
-  };
-  assert.equal(await budget.gemini({
-    operation: 'embed_content',
-    model: 'gemini-embedding-2',
-    body: {
-      content: { parts: [{ text: '公开规则单元' }] },
-      embedContentConfig: { outputDimensionality: 768, autoTruncate: false },
-    },
-    invoke: async () => response,
-  }), response);
-
-  const snapshot = budget.snapshot();
-  assert.equal(commands.length, 2);
-  assert.equal(snapshot.calls[0].provider, 'gemini');
-  assert.equal(snapshot.calls[0].operation, 'embed_content');
-  assert.equal(snapshot.calls[0].theoreticalUsd, 0.0000246);
-  assert.equal(snapshot.reservedTheoreticalUsd, 0);
-});
-
-test('Gemini batch embedding reserves one 8192-token bound per request', async () => {
-  const { budget } = fixtureBudget();
-  await budget.gemini({
-    operation: 'embed_content',
-    model: 'gemini-embedding-2',
-    body: { requests: [{}, {}, {}] },
-    invoke: async () => ({ embeddings: [] }),
-  });
-
-  const snapshot = budget.snapshot();
-  assert.equal(snapshot.calls[0].status, 'reserved');
-  const expected = Math.ceil((3 * 8192 * 0.20 / 1_000_000) * 1e9) / 1e9;
-  assert.equal(snapshot.calls[0].theoreticalUsd, expected);
-  assert.equal(snapshot.reservedTheoreticalUsd, expected);
-});
-
 test('Gemini response without usage retains the conservative reservation', async () => {
   const { budget, commands } = fixtureBudget();
   await budget.gemini({

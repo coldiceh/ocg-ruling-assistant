@@ -1,5 +1,6 @@
 {
-  "budgetApiUrl": "/api/budget",
-  "deploymentLabel": "取证预览 · 尚未通过质量验收",
-  "answerApiUrl": "/api/answer"
+  "deploymentLabel": "试用版 · 复杂裁定请核对依据",
+  "adminPageUrl": "https://ocg-ruling-assistant.vercel.app/?admin=1",
+  "budgetApiUrl": "https://ocg-ruling-assistant.vercel.app/api/budget",
+  "answerApiUrl": "https://ocg-ruling-assistant.vercel.app/api/answer"
 }

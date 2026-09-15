@@ -14,6 +14,10 @@
     "RAG_RUNTIME_BUNDLE_REQUIRED": "true",
     "GEMINI_RULE_QA_ENABLED": "true",
     "RAG_EVIDENCE_PIPELINE": "cloud_evidence_v1",
+    "GEMINI_EVIDENCE_DEADLINE_MS": "30000",
+    "GEMINI_EVIDENCE_MAX_CNY": "0.30",
+    "GEMINI_EVIDENCE_MAX_PROMPT_CHARS": "15000",
+    "GEMINI_EVIDENCE_READING_TARGET_CHARS": "64000",
     "QUERY_AUDIT_ENABLED": "false"
   },
   "functions": {
@@ -37,12 +41,12 @@
     },
     "api/answer.js": {
       "maxDuration": 300,
-      "includeFiles": "{config/evidence-generation/gemini-3.8-flash-low.json,data/{public-release.json,legacy-lua-semantic-cache-v2/**,qa-discovery-index.json,rag-data-revision-manifest.json,rag-runtime-v1/**,gemini-rule-qa-v1/**,{rule,qa}-embedding-v1/**}}",
+      "includeFiles": "{config/evidence-generation/*.json,data/{public-release.json,legacy-lua-semantic-cache-v2/**,qa-discovery-index.json,rag-data-revision-manifest.json,rag-runtime-v1/**,gemini-rule-qa-v1/**,{rule,qa}-embedding-v1/**}}",
       "excludeFiles": "{data/{cards,rulings,qa-index,evidence-index,ocg-rule-corpus,official-responses}.json,data/evidence-index.json.gz,data/gemini-rule-qa-v1/{canonical-manifest.json,navigation-inputs.json.gz,dense-inputs.json.gz,structure-mapping.json.gz}}"
     },
     "api/admin-model-lab.js": {
       "maxDuration": 300,
-      "includeFiles": "{config/evidence-generation/gemini-3.8-flash-low.json,data/{legacy-lua-semantic-cache-v2/**,qa-discovery-index.json,rag-data-revision-manifest.json,rag-runtime-v1/**,gemini-rule-qa-v1/**,{rule,qa}-embedding-v1/**}}",
+      "includeFiles": "{config/evidence-generation/*.json,data/{legacy-lua-semantic-cache-v2/**,qa-discovery-index.json,rag-data-revision-manifest.json,rag-runtime-v1/**,gemini-rule-qa-v1/**,{rule,qa}-embedding-v1/**}}",
       "excludeFiles": "{data/{cards,rulings,qa-index,evidence-index,ocg-rule-corpus,official-responses}.json,data/evidence-index.json.gz,data/gemini-rule-qa-v1/{canonical-manifest.json,navigation-inputs.json.gz,dense-inputs.json.gz,structure-mapping.json.gz}}"
     }
   }

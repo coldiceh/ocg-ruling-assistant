@@ -113,9 +113,16 @@ function ruleNavInput(unit, source, byKey, refsByKey) {
     explicitRefs: unit.explicitRefs, input, contextInputSha256: sha256(stableJson(input)) };
 }
 async function canonicalStage(sourceDir, destination) {
-  const names = ["rulings.json", "qa-index.json", "ocg-rule-corpus.json", "rag-data-revision-manifest.json"];
+  const names = ["rulings.json", "qa-index.json", "ocg-rule-corpus.json", "rag-data-revision-manifest.json", "cards.json"];
   const bytes = await Promise.all(names.map(name => readFile(join(sourceDir, name))));
   const qaRecords = selectQa(parseRecords(bytes[1], "qa_index"), parseRecords(bytes[0], "rulings"));
+  // The catalog's id and each QA's cardIds use the same upstream card identity.
+  // Supply explicit names as navigation context; do not rewrite the canonical QA
+  // or its existing embedding input, and do not infer names from placeholder text.
+  const referenceCardById = new Map(parseRecords(bytes[4], "cards").map(card => [String(card.id), {
+    cardId: String(card.id), cnName: String(card.cnName || ""), jaName: String(card.jaName || ""),
+    enName: String(card.enName || ""), sourceUrl: String(card.sourceUrl || ""),
+  }]));
   const ruleRecords = parseRecords(bytes[2], "rules").filter(record => record?.recordType === "rule-doc"
     && !EXCLUDED_RULE_ROLES.has(String(record.sourceRole || "")));
   const qaContentRevision = sha256(stableJson(qaRecords));
@@ -137,8 +144,12 @@ async function canonicalStage(sourceDir, destination) {
     ...structureMapping.sources.flatMap(source => source.readingUnits
       .map(unit => ruleNavInput(unit, source, readingByKey, refsByKey))),
     ...qaUnits.map(unit => {
+      const record = JSON.parse(unit.text);
+      const referenceIds = [...new Set((Array.isArray(record.cardIds) ? record.cardIds : []).map(String))];
       const input = { sourceKind: unit.recordType === "card-faq" ? "faq" : "qa",
         titlePath: unit.titlePath, unitText: unit.text, unitStructure: { encodingVersion: 1, tables: [] },
+        referenceCards: referenceIds.flatMap(id => referenceCardById.has(id) ? [referenceCardById.get(id)] : []),
+        unresolvedReferenceCardIds: referenceIds.filter(id => !referenceCardById.has(id)),
         structuralContextTexts: [], structuralContextStructures: [], explicitLinkedTitles: [] };
       return { unitKey: unit.unitKey, sourceId: unit.sourceId,
         canonicalBodySha256: unit.canonicalBodySha256, contextRefs: [], explicitRefs: [],
@@ -171,7 +182,7 @@ async function canonicalStage(sourceDir, destination) {
   const assetKeys = ["qaRecords", "ruleRecords", "qaLexicalIndex", "structureMapping", "navigationInputs", "denseInputs"];
   const assets = Object.fromEntries(assetKeys.map((key, index) => [key, built[index]]));
   const sourceDescriptors = Object.fromEntries(names.map((file, index) => [
-    ["rulings", "qaIndex", "rules", "ragDataRevision"][index],
+    ["rulings", "qaIndex", "rules", "ragDataRevision", "cards"][index],
     { file, bytes: bytes[index].byteLength, sha256: sha256(bytes[index]),
       ...(index === 3 ? { revision: dataRevision } : {}) },
   ]));

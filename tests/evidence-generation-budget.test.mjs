@@ -8,11 +8,13 @@ import {
 } from '../backend/cloudRequestBudget.mjs';
 import {
   assertGenerationCapacity,
+  buildEvidenceInputMeasurement,
   buildGeminiInputMeasurement,
   estimateGenerationUpperBoundUsd,
   loadEvidenceGenerationContract,
   normalizeGeminiGenerationUsage,
 } from '../backend/evidenceGenerationContract.mjs';
+import { convertEvidenceGenerationRequest } from '../backend/evidenceGenerationTransport.mjs';
 
 function bodyFor(contract, text = 'public fixture') {
   return {
@@ -83,6 +85,19 @@ test('Gemini measurement counts the complete generateContent request and binds i
     }),
     /evidence_generation_measurement_binding_error/,
   );
+});
+
+test('provider-neutral measurement keeps Gemini on its exact provider count path', async () => {
+  const contract = loadEvidenceGenerationContract('navigation');
+  const body = bodyFor(contract);
+  const measurement = await buildEvidenceInputMeasurement({
+    body,
+    contract,
+    countTokens: async () => ({ totalTokens: 321 }),
+  });
+  assert.equal(measurement.inputTokensUpperBound, 321);
+  assert.equal(measurement.basis, 'provider_count');
+  assert.equal(measurement.exact, true);
 });
 
 test('capacity checks reject a measured shared-window overflow before generation', async () => {
@@ -167,6 +182,30 @@ test('budget.gemini reserves from measured input and stores normalized billable 
   assert.equal(call.billableUsage.billableOutputTokens, 100);
   assert.equal(call.billableUsage.status, 'known');
   assert.equal(call.billableCost.amountUsd, (1_000 * 0.75 + 100 * 3.75) / 1_000_000);
+});
+
+test('budget.bai reserves measured two-round generation as evidence preparation', async () => {
+  const contract = loadEvidenceGenerationContract('selection', {profileUrl:new URL(
+    '../config/evidence-generation/bai-gpt-5.6-luna-low-theoretical.json', import.meta.url,
+  )});
+  const source = {
+    systemInstruction:{parts:[{text:'return json'}]},
+    contents:[{role:'user',parts:[{text:'fixture'}]}],
+  };
+  const body = convertEvidenceGenerationRequest(source, contract);
+  const measurement = await buildEvidenceInputMeasurement({body, contract});
+  const {budget, commands} = fixtureBudget();
+  await budget.bai({operation:'generate_content',model:contract.modelId,body,measurement,
+    generationContract:contract,invoke:async()=>({status:'completed',model:contract.modelId,
+      usage:{input_tokens:500,output_tokens:70,total_tokens:570}})});
+  assert.equal(commands.length, 2);
+  const call = budget.snapshot().calls[0];
+  assert.equal(call.provider, 'bai');
+  assert.equal(call.operation, 'generate_content');
+  assert.equal(call.stage, 'evidence_preparation');
+  assert.equal(call.status, 'usage_settled');
+  assert.equal(call.reservationMetadata.requestSha256, measurement.requestSha256);
+  assert.equal(call.billableUsage.billableOutputTokens, 70);
 });
 
 test('budget.gemini rejects stale measurement before reserve and invoke', async () => {

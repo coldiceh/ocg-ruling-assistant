@@ -77,7 +77,22 @@ jobs:
         run: pnpm build:rag-revision
 
       - name: Build versioned Gemini rule and QA assets
-        run: pnpm build:gemini-rule-qa
+        run: |
+          node scripts/build-gemini-rule-qa-assets.mjs \
+            --stage canonical \
+            --data-dir data \
+            --output-dir data/gemini-rule-qa-v1
+          node scripts/build-gemini-rule-qa-assets.mjs \
+            --stage release \
+            --data-dir data \
+            --output-dir data/gemini-rule-qa-v1 \
+            --navigation data/gemini-rule-qa-v1/navigation-records.json.gz \
+            --rule-dense-dir data/rule-embedding-v1 \
+            --qa-dense-dir data/qa-embedding-v1
+          node scripts/build-gemini-rule-qa-assets.mjs \
+            --stage verify \
+            --data-dir data \
+            --output-dir data/gemini-rule-qa-v1
 
       - name: Build and verify versioned RAG runtime bundle
         id: runtime_validation

@@ -7,10 +7,15 @@ on:
   workflow_dispatch:
     inputs:
       execute_preprocessing:
-        description: Reserved for a future persistent authorized-ledger integration; currently fails closed
+        description: Execute only with the existing cumulative authorization migrated to the persistent ledger
         required: true
         default: false
         type: boolean
+      navigation_resume_cursor:
+        description: Opaque cursor from the preceding partial navigation report; leave empty for the first run
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: read
@@ -28,7 +33,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     env:
-      GENERATION_PROFILE: config/evidence-generation/gemini-3.8-flash-low.json
+      EVIDENCE_PREPROCESS_GENERATION_PROFILE: ${{ vars.EVIDENCE_PREPROCESS_GENERATION_PROFILE }}
+      GENERATION_PROFILE: ${{ vars.EVIDENCE_PREPROCESS_GENERATION_PROFILE || 'config/evidence-generation/gemini-3.8-flash-low.json' }}
+      RULE_GENERATION_PROFILE: ${{ vars.EVIDENCE_PREPROCESS_RULE_GENERATION_PROFILE }}
+      EVIDENCE_PREPROCESS_AUTHORIZATION_ID: ${{ vars.EVIDENCE_PREPROCESS_AUTHORIZATION_ID }}
+      EVIDENCE_PREPROCESS_LEDGER_KEY: ${{ vars.EVIDENCE_PREPROCESS_LEDGER_KEY }}
+      EVIDENCE_PREPROCESS_CACHE_NAMESPACE: ${{ vars.EVIDENCE_PREPROCESS_CACHE_NAMESPACE }}
+      EVIDENCE_PREPROCESS_MAX_USD: ${{ vars.EVIDENCE_PREPROCESS_MAX_USD }}
     steps:
       - name: Checkout the authorized preview branch
         uses: actions/checkout@v6
@@ -62,13 +73,37 @@ jobs:
           restore-keys: |
             bounded-evidence-preprocess-v1-${{ runner.os }}-
 
-      - name: Refuse paid execution without the existing shared authorized ledger
+      - name: Verify explicit cloud preprocessing authorization configuration
         if: inputs.execute_preprocessing
         shell: bash
+        env:
+          GEMINI_RULE_QA_API_KEY: ${{ secrets.GEMINI_RULE_QA_API_KEY }}
+          RAG_EVIDENCE_BAI_API_KEY: ${{ secrets.RAG_EVIDENCE_BAI_API_KEY }}
+          BAI_API_KEY: ${{ secrets.BAI_API_KEY }}
+          UPSTASH_BUDGET_KV_REST_API_URL: ${{ secrets.UPSTASH_BUDGET_KV_REST_API_URL }}
+          UPSTASH_BUDGET_KV_REST_API_TOKEN: ${{ secrets.UPSTASH_BUDGET_KV_REST_API_TOKEN }}
         run: |
           set -euo pipefail
-          echo "existing_authorized_preprocessing_ledger_not_configured" >&2
-          exit 1
+          test -n "$GEMINI_RULE_QA_API_KEY"
+          test -n "$UPSTASH_BUDGET_KV_REST_API_URL"
+          test -n "$UPSTASH_BUDGET_KV_REST_API_TOKEN"
+          test -n "$EVIDENCE_PREPROCESS_AUTHORIZATION_ID"
+          test -n "$EVIDENCE_PREPROCESS_LEDGER_KEY"
+          test -n "$EVIDENCE_PREPROCESS_CACHE_NAMESPACE"
+          test -n "$EVIDENCE_PREPROCESS_MAX_USD"
+          test -n "$EVIDENCE_PREPROCESS_GENERATION_PROFILE"
+          test -f "$GENERATION_PROFILE"
+          if [[ -n "$RULE_GENERATION_PROFILE" ]]; then test -f "$RULE_GENERATION_PROFILE"; fi
+          PROFILES=("$GENERATION_PROFILE")
+          if [[ -n "$RULE_GENERATION_PROFILE" ]]; then PROFILES+=("$RULE_GENERATION_PROFILE"); fi
+          for PROFILE in "${PROFILES[@]}"; do
+            PROVIDER_ID=$(node -e 'const fs=require("node:fs");const profile=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));if(!["gemini","bai"].includes(profile.providerId))process.exit(2);process.stdout.write(profile.providerId)' "$PROFILE")
+            case "$PROVIDER_ID" in
+              gemini) ;;
+              bai) test -n "${RAG_EVIDENCE_BAI_API_KEY:-${BAI_API_KEY:-}}" ;;
+              *) exit 2 ;;
+            esac
+          done
 
       - name: Build deterministic canonical preprocessing inputs
         shell: bash
@@ -81,14 +116,20 @@ jobs:
             --output-dir "$EVIDENCE_STAGING/gemini-rule-qa-v1"
 
       - name: Dry-run navigation and embedding work without external calls
+        if: ${{ !inputs.execute_preprocessing }}
         shell: bash
         run: |
           set -euo pipefail
+          RULE_PROFILE_ARGS=()
+          if [[ -n "$RULE_GENERATION_PROFILE" ]]; then
+            RULE_PROFILE_ARGS=(--rule-generation-profile "$RULE_GENERATION_PROFILE")
+          fi
           node scripts/prepare-evidence-navigation.mjs \
             --data-dir data \
             --cache-dir "$EVIDENCE_CACHE" \
             --out-dir "$EVIDENCE_STAGING/gemini-rule-qa-v1" \
             --generation-profile "$GENERATION_PROFILE" \
+            "${RULE_PROFILE_ARGS[@]}" \
             --dry-run
           node scripts/refresh-gemini-source-embeddings.mjs \
             --data-dir data \
@@ -97,13 +138,87 @@ jobs:
             --inputs "$EVIDENCE_STAGING/gemini-rule-qa-v1/dense-inputs.json.gz" \
             --dry-run
 
-      - name: Upload dry-run reports
+      - name: Execute authorized cloud navigation batch
+        id: navigation
+        if: inputs.execute_preprocessing
+        shell: bash
+        env:
+          GEMINI_RULE_QA_API_KEY: ${{ secrets.GEMINI_RULE_QA_API_KEY }}
+          RAG_EVIDENCE_BAI_API_KEY: ${{ secrets.RAG_EVIDENCE_BAI_API_KEY }}
+          BAI_API_KEY: ${{ secrets.BAI_API_KEY }}
+          UPSTASH_BUDGET_KV_REST_API_URL: ${{ secrets.UPSTASH_BUDGET_KV_REST_API_URL }}
+          UPSTASH_BUDGET_KV_REST_API_TOKEN: ${{ secrets.UPSTASH_BUDGET_KV_REST_API_TOKEN }}
+          NAVIGATION_RESUME_CURSOR: ${{ inputs.navigation_resume_cursor }}
+        run: |
+          set -euo pipefail
+          CURSOR_ARGS=()
+          RULE_PROFILE_ARGS=()
+          if [[ -n "$NAVIGATION_RESUME_CURSOR" ]]; then
+            CURSOR_ARGS=(--resume-cursor "$NAVIGATION_RESUME_CURSOR")
+          fi
+          if [[ -n "$RULE_GENERATION_PROFILE" ]]; then
+            RULE_PROFILE_ARGS=(--rule-generation-profile "$RULE_GENERATION_PROFILE")
+          fi
+          node scripts/prepare-evidence-navigation.mjs \
+            --data-dir data \
+            --cache-dir "$EVIDENCE_CACHE" \
+            --out-dir "$EVIDENCE_STAGING/gemini-rule-qa-v1" \
+            --generation-profile "$GENERATION_PROFILE" \
+            --max-usd "$EVIDENCE_PREPROCESS_MAX_USD" \
+            --job-runtime-ms 3600000 \
+            --request-timeout-ms 300000 \
+            "${RULE_PROFILE_ARGS[@]}" \
+            --cloud \
+            --all-inputs \
+            --execute \
+            "${CURSOR_ARGS[@]}"
+          node -e 'const fs=require("node:fs");const p=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));process.stdout.write(`complete=${p.complete === true}\nnext_cursor=${p.nextCursor || ""}\n`)' \
+            "$EVIDENCE_STAGING/gemini-rule-qa-v1/navigation-preprocess-report.json" >> "$GITHUB_OUTPUT"
+
+      - name: Build and verify complete preprocessing release
+        if: ${{ inputs.execute_preprocessing && steps.navigation.outputs.complete == 'true' }}
+        shell: bash
+        env:
+          GEMINI_RULE_QA_API_KEY: ${{ secrets.GEMINI_RULE_QA_API_KEY }}
+          UPSTASH_BUDGET_KV_REST_API_URL: ${{ secrets.UPSTASH_BUDGET_KV_REST_API_URL }}
+          UPSTASH_BUDGET_KV_REST_API_TOKEN: ${{ secrets.UPSTASH_BUDGET_KV_REST_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          node scripts/refresh-gemini-source-embeddings.mjs \
+            --data-dir data \
+            --cache-dir "$EVIDENCE_CACHE" \
+            --out-dir "$EVIDENCE_STAGING" \
+            --inputs "$EVIDENCE_STAGING/gemini-rule-qa-v1/dense-inputs.json.gz" \
+            --max-usd "$EVIDENCE_PREPROCESS_MAX_USD" \
+            --cloud \
+            --execute
+          node scripts/build-gemini-rule-qa-assets.mjs \
+            --stage release \
+            --data-dir data \
+            --output-dir "$EVIDENCE_STAGING/gemini-rule-qa-v1" \
+            --navigation "$EVIDENCE_STAGING/gemini-rule-qa-v1/navigation-records.json.gz" \
+            --rule-dense-dir "$EVIDENCE_STAGING/rule-embedding-v1" \
+            --qa-dense-dir "$EVIDENCE_STAGING/qa-embedding-v1"
+          node scripts/build-gemini-rule-qa-assets.mjs \
+            --stage verify \
+            --data-dir data \
+            --output-dir "$EVIDENCE_STAGING/gemini-rule-qa-v1"
+      - name: Upload verified preprocessing release assets
+        if: ${{ inputs.execute_preprocessing && steps.navigation.outputs.complete == 'true' && success() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: bounded-evidence-release-assets-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.EVIDENCE_STAGING }}/**
+          if-no-files-found: error
+          retention-days: 3
+      - name: Upload preprocessing reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: bounded-evidence-preprocessing-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             ${{ runner.temp }}/bounded-evidence-release/gemini-rule-qa-v1/navigation-preprocess-report.json
+            ${{ runner.temp }}/bounded-evidence-release/gemini-rule-qa-v1/navigation-records.partial.json.gz
             ${{ runner.temp }}/bounded-evidence-release/embedding-refresh-report.json
           if-no-files-found: warn
           retention-days: 1
