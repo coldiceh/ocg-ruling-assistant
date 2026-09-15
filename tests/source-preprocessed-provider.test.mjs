@@ -180,6 +180,44 @@ test('selection above input capacity is measured and rebuilt once before generat
   assert.equal(result.telemetry.rounds,2);
 });
 
+test('nonlinear selection count trims whole offered bundles after the ratio resize', async () => {
+  const records = [
+    { ...record, id: 'rule-one', text: 'x' },
+    { ...record, id: 'rule-two', text: 'y' },
+  ];
+  const { structureMappingRevision: _old, ...base } = buildRuleStructureMapping(records);
+  const mapping = { ...base, qaUnits: [] };
+  const structureMapping = { ...mapping, structureMappingRevision: sourceSha256(stableJson(mapping)) };
+  const loadAssets = async () => ({ schemaVersion: 3, dataRevision: 'd', qaRevision: 'q',
+    bundleRevision: 'bundle', ruleContentRevision: 'rule-content',
+    structureMappingRevision: structureMapping.structureMappingRevision,
+    navigationRevision: 'navigation', rulesRecords: records, structureMapping,
+    navigationRecords: [], createQaTools: options => createQaTools({ records: [], qaRevision: 'q', ...options }) });
+  const { provider, requests, counts } = fixture({ loadAssets, selectionInputLimit: 1500,
+    selectionTokens: payload => payload.groups.length === 0 ? 500
+      : payload.groups.length === 1 ? 1700 : 1800 });
+  const result = await provider.retrieve(input);
+  const selectionRequest = requests.find(body => JSON.parse(body.contents[0].parts[1].text).queryPlan);
+  const selectionPayload = JSON.parse(selectionRequest.contents[0].parts[1].text);
+  assert.equal(requests.length, 2);
+  assert.equal(result.telemetry.rounds, 2);
+  assert.deepEqual(selectionPayload.groups, []);
+  assert.ok(result.telemetry.bounded.omittedGroupIds.length >= 2);
+  assert.equal(JSON.parse(counts.at(-1).generateContentRequest.contents[0].parts[1].text).groups.length, 0);
+  for (const call of result.telemetry.bounded.calls.filter(row => row.operation === 'generate_content')) {
+    const contract = result.telemetry.generationContracts[call.stage];
+    const measurement = call.measurement;
+    const capacity = contract.capacityContract;
+    assert.ok(capacity.maxInputTokens === null || measurement.inputTokensUpperBound <= capacity.maxInputTokens);
+    assert.ok(capacity.maxRequestBodyBytes === null || measurement.requestBodyBytes <= capacity.maxRequestBodyBytes);
+    if (capacity.sharedContextRuleId === 'input_plus_max_billable_output_lte_shared_context') {
+      assert.ok(measurement.contextInputTokensUpperBound + contract.maxBillableOutputTokens
+        <= capacity.maxSharedContextTokens);
+    }
+    if (call.stage === 'selection') assert.ok(measurement.inputTokensUpperBound <= 1500);
+  }
+});
+
 test('aborting a request stops waiting for shared assets and leaves their promise reusable',async()=>{
   let resolveAssets;
   const shared=new Promise(resolve=>{resolveAssets=resolve;});
@@ -250,6 +288,57 @@ test('B.AI profiles bind both generation stages to measured Responses wires and 
     assert.ok(result.packing.prompt.includes('complete synthetic source paragraph'));
     assert.ok(result.packing.promptChars<=14000);
   }
+});
+
+test('B.AI automatic-cache reading budget matches the generation reservation rate', async () => {
+  const largeRecord = { ...record, id: 'large-synthetic-rule', text: 'complete synthetic source paragraph '.repeat(450) };
+  const { structureMappingRevision: _old, ...base } = buildRuleStructureMapping([largeRecord]);
+  const mapping = { ...base, qaUnits: [] };
+  const structureMapping = { ...mapping, structureMappingRevision: sourceSha256(stableJson(mapping)) };
+  const largeAssets = {
+    schemaVersion: 3, dataRevision: 'd', qaRevision: 'q', bundleRevision: 'bundle',
+    ruleContentRevision: 'rule-content', structureMappingRevision: structureMapping.structureMappingRevision,
+    navigationRevision: 'navigation', rulesRecords: [largeRecord], structureMapping,
+    navigationRecords: [],
+    createQaTools: options => createQaTools({ records: [], qaRevision: 'q', ...options }),
+  };
+  const profileUrl = new URL('../config/evidence-generation/bai-gpt-5.6-luna-low-theoretical.json', import.meta.url);
+  const requests = [];
+  const provider = createGeminiBoundedEvidenceProvider({
+    loadAssets: async () => largeAssets,
+    loadDenseSearch: async ({ rules }) => ({ search: () => [...rules.units.values()] }),
+    loadQaSearch: async () => ({ search: () => [] }),
+    loadGenerationContract: stage => loadEvidenceGenerationContract(stage, { profileUrl }),
+    remainingBudget: async () => 1,
+    offlineEvaluationLimits: { deadlineMs: 300000, perQuestionMaxUsd: 0.0117, maxPromptChars: 25000 },
+    budgetedRequest: request => request.invoke(),
+    fetchImpl: async (url, init) => {
+      const body = JSON.parse(init.body);
+      if (url.endsWith(':embedContent')) {
+        return Response.json({ embedding: { values: Array(768).fill(1) }, usageMetadata: { promptTokenCount: 10 } });
+      }
+      if (url.endsWith(':batchEmbedContents')) {
+        return Response.json({ embeddings: body.requests.map(() => ({ values: Array(768).fill(1) })),
+          usageMetadata: { promptTokenCount: 10 } });
+      }
+      assert.equal(url, 'https://api.b.ai/v1/responses');
+      requests.push(body);
+      const first = body.input.find(item => item.role === 'user').content;
+      const payload = JSON.parse(first.slice(first.lastIndexOf('\n\n') + 2));
+      const selectedIds = payload.groups?.flatMap(group => group.units || []).map(row => row[0]);
+      const output = payload.queryPlan
+        ? { selectedIds, unableToSelect: false, note: '' }
+        : { needs: [{ id: 'n1', question: 'synthetic relation', ruleQuery: 'synthetic rule query', qaQuery: 'synthetic QA query' }] };
+      return Response.json({ status: 'completed', model: 'gpt-5.6-luna',
+        output: [{ type: 'message', content: [{ type: 'output_text', text: JSON.stringify(output) }] }],
+        usage: payload.queryPlan ? { input_tokens: 500, output_tokens: 70, total_tokens: 570 } : {} });
+    },
+  });
+  const result = await provider.retrieve({ ...input,
+    env: { ...input.env, BAI_API_KEY: 'fixture' },
+  });
+  assert.equal(requests.length, 2);
+  assert.equal(result.telemetry.rounds, 2);
 });
 
 test('production mixed-stage profiles use the matching provider in the durable request scope', async () => {

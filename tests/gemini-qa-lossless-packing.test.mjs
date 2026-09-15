@@ -48,6 +48,31 @@ test('an overflowing QA pack fits by lossless encoding and restores every source
   assert.deepEqual(encoded.packing.allowedEvidenceIds, uncompressed.packing.allowedEvidenceIds);
 });
 
+test('an overflowing card FAQ pack uses the same lossless encoding without changing source records', () => {
+  const input = fixture();
+  const repeated = '完整 FAQ 原文、来源身份与限定条件。'.repeat(28);
+  input.selection.selectedQa = ['first', 'second'].map((suffix, index) => ({ handle: `faq-${suffix}`, record: {
+    id: `card-faq-7-0-${index + 1}`, recordType: 'card-faq', title: repeated,
+    cards: ['测试卡'], cardIds: ['7'], status: 'confirmed', updatedAt: '2026-09-15',
+    conclusion: `${repeated}\n${repeated}`, sourceUrl: 'https://example.test/card/7',
+    sourceAuthority: 'official_database', sourceTier: 'S0_OFFICIAL_DB', official: true,
+    sources: [{ label: 'FAQ source', detail: 'https://example.test/card/7' }],
+  } }));
+  const originals = structuredClone(input.selection.selectedQa.map(item => item.record));
+  const uncompressed = packGeminiSelection({ ...input, maxPromptChars: 100000 });
+  const encoded = packGeminiSelection({ ...input, maxPromptChars: uncompressed.packing.promptChars - 1500 });
+  assert.equal(encoded.packing.capacityExceeded, false);
+  const visible = payload(encoded.packing.prompt);
+  assert.ok(visible.qaTextLines.length);
+  const restored = visible.evidence.rawRelatedEvidence.map(item => decode(item, visible.qaTextLines));
+  assert.deepEqual(restored.map(item => item.id), ['faq-first', 'faq-second']);
+  assert.deepEqual(restored.map(item => item.sourceAuthority), ['official_database', 'official_database']);
+  assert.deepEqual(restored.map(item => item.official), [true, true]);
+  assert.deepEqual(restored.map(item => JSON.stringify(item.sourceRecord)), originals.map(JSON.stringify));
+  assert.deepEqual(encoded.packing.modelEvidence.rawRelatedEvidence.map(item => item.text), originals.map(JSON.stringify));
+  assert.deepEqual(input.selection.selectedQa.map(item => item.record), originals);
+});
+
 test('an already fitting prompt keeps its exact previous representation', () => {
   const input = fixture();
   const first = packGeminiSelection({ ...input, maxPromptChars: 100000 });

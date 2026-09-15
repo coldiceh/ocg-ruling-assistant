@@ -1,13 +1,13 @@
 {
   "schemaVersion": 3,
   "kind": "gemini-rule-qa-assets",
-  "dataRevision": "353f7a190f169d599ae273c68e28b094fdbaeceff953afcc4da086b5b6df5ca2",
+  "dataRevision": "96ca0fb43466666eef3f6110faa4dbbe3c8f4b13141a4215d612071b1fa022df",
   "qaRevision": "5fa1ff1c5705781f8954c433d7d00430b5e80fd7ed14b3ba7d2e1b9cc27ad49e",
   "ruleRevision": "b195a335a37c80761f858349f82e9e42dd6206f891f8321f81a8d672a16fd241",
   "qaContentRevision": "5fa1ff1c5705781f8954c433d7d00430b5e80fd7ed14b3ba7d2e1b9cc27ad49e",
   "ruleContentRevision": "b195a335a37c80761f858349f82e9e42dd6206f891f8321f81a8d672a16fd241",
   "structureMappingRevision": "bc91119d8adbb953dd16cba6ac93508bafbf12bada41faa5fa2878c045ba309e",
-  "navigationRevision": "c9507278d30c8ecc28832687f0fdb1116ed56564404ba61908427a22bd6d3cb6",
+  "navigationRevision": "9f7d0b21f96685f2a851ff72cecccf092c481b19f23371122a631182319f233c",
   "qaDenseRevision": "29dbd028a108a7961fe518f6d8aa6ac3d3a5bc836e7d1076d1dfa3d66ed5263d",
   "ruleDenseRevision": "eda13885637832c0b74b832dce105dc1e9e3c3240ab2ad7b991422204d7b2f78",
   "contracts": {
@@ -20,7 +20,7 @@
     "qaContent": "5fa1ff1c5705781f8954c433d7d00430b5e80fd7ed14b3ba7d2e1b9cc27ad49e",
     "ruleContent": "b195a335a37c80761f858349f82e9e42dd6206f891f8321f81a8d672a16fd241",
     "structureMapping": "bc91119d8adbb953dd16cba6ac93508bafbf12bada41faa5fa2878c045ba309e",
-    "navigation": "c9507278d30c8ecc28832687f0fdb1116ed56564404ba61908427a22bd6d3cb6",
+    "navigation": "9f7d0b21f96685f2a851ff72cecccf092c481b19f23371122a631182319f233c",
     "qaDense": "29dbd028a108a7961fe518f6d8aa6ac3d3a5bc836e7d1076d1dfa3d66ed5263d",
     "ruleDense": "eda13885637832c0b74b832dce105dc1e9e3c3240ab2ad7b991422204d7b2f78"
   },
@@ -43,13 +43,13 @@
     "ragDataRevision": {
       "file": "rag-data-revision-manifest.json",
       "bytes": 1479,
-      "sha256": "8d64b895096b60cd3f6447f37634cda824626f42efbe8d5f5598c8573a7226af",
-      "revision": "353f7a190f169d599ae273c68e28b094fdbaeceff953afcc4da086b5b6df5ca2"
+      "sha256": "e540e27f85aa2ef060e6dd3568d1096a964190c5d8cb3507b94159310923c64e",
+      "revision": "96ca0fb43466666eef3f6110faa4dbbe3c8f4b13141a4215d612071b1fa022df"
     },
     "cards": {
       "file": "cards.json",
-      "bytes": 16989396,
-      "sha256": "4ca7e104ad006d5f511a02d06727b33cb6d5d8c30d5d701a6ad2630e4eb8f2b2"
+      "bytes": 24004531,
+      "sha256": "23aa7d1a01ba64dd29f2803eec69d9c7c81e7e9dc88d71f9119eff27082522b2"
     }
   },
   "counts": {
@@ -98,10 +98,10 @@
     "navigationInputs": {
       "file": "navigation-inputs.json.gz",
       "encoding": "gzip",
-      "bytes": 22402274,
-      "sha256": "f3de49688e2a95a3711a8f60fc5b99277edc61531e3d847b9d474ede0a91762c",
-      "canonicalBytes": 200250262,
-      "canonicalSha256": "9c77b34717d2f6b15f8da2472c34f59049b2a820ff522d90c7bf5646c0392697"
+      "bytes": 22630829,
+      "sha256": "d92a62823404d9d3932e6cc333f3a02860bd8289027e801fd14d5e37866b70fb",
+      "canonicalBytes": 201028672,
+      "canonicalSha256": "5857c7a24c98bc2837d7fcf0fa840c7e5dd55d6750d3ed1780f7e95cd2156227"
     },
     "denseInputs": {
       "file": "dense-inputs.json.gz",
@@ -114,19 +114,19 @@
     "navigationRecords": {
       "file": "navigation-records.json.gz",
       "encoding": "gzip",
-      "bytes": 9146949,
-      "sha256": "fd76dea39d5c6f65788ddc37fced2af179978dfc33f10066b6e798864780215e",
+      "bytes": 9146697,
+      "sha256": "63f2878acf19e423e5cb8838d2dcb31f233446a4814dbab7e947c5bc64e5b00a",
       "canonicalBytes": 49913884,
-      "canonicalSha256": "4c0620408ae92f3c3e0550aecced9680ac9be3ecc95357846e8ae33319c3f9f2"
+      "canonicalSha256": "3fb59d259cee879a820c2485c65bee4da67c963167accb6af3702bf51e0326d8"
     },
     "navigationLexicalIndex": {
       "file": "navigation-lexical-index.bm25.gz",
       "encoding": "gzip",
-      "bytes": 6472890,
-      "sha256": "06e0d6e2691e079393039893a022ce8b47043d7023fa4f5b835f6f157331fedb",
+      "bytes": 6472881,
+      "sha256": "fa0c44656c008cccd1ea3d13455f4299f5b3c48f8e3f07a10d18c046255ccff2",
       "canonicalBytes": 31453128,
-      "canonicalSha256": "5b7a90d96a11f90c1b19690e4484f60db07c2fe2d330a2d310291f6d863a7ff9"
+      "canonicalSha256": "fc6543b34288a26fe069954c129c55709a92be5db3fe56d5904f7f8f76653528"
     }
   },
-  "bundleRevision": "f8cd43ce0a173f925956ccf15a928a71c4e07aea4aade176f92eb45d732aae64"
+  "bundleRevision": "64198715d3c7819a53a7128bba8998eac5915ab33ee82874148fefec16591d1c"
 }

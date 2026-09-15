@@ -1,7 +1,7 @@
 {
   "schemaVersion": 3,
   "kind": "gemini-rule-qa-canonical-stage",
-  "dataRevision": "353f7a190f169d599ae273c68e28b094fdbaeceff953afcc4da086b5b6df5ca2",
+  "dataRevision": "96ca0fb43466666eef3f6110faa4dbbe3c8f4b13141a4215d612071b1fa022df",
   "qaRevision": "5fa1ff1c5705781f8954c433d7d00430b5e80fd7ed14b3ba7d2e1b9cc27ad49e",
   "qaContentRevision": "5fa1ff1c5705781f8954c433d7d00430b5e80fd7ed14b3ba7d2e1b9cc27ad49e",
   "ruleContentRevision": "b195a335a37c80761f858349f82e9e42dd6206f891f8321f81a8d672a16fd241",
@@ -25,13 +25,13 @@
     "ragDataRevision": {
       "file": "rag-data-revision-manifest.json",
       "bytes": 1479,
-      "sha256": "8d64b895096b60cd3f6447f37634cda824626f42efbe8d5f5598c8573a7226af",
-      "revision": "353f7a190f169d599ae273c68e28b094fdbaeceff953afcc4da086b5b6df5ca2"
+      "sha256": "e540e27f85aa2ef060e6dd3568d1096a964190c5d8cb3507b94159310923c64e",
+      "revision": "96ca0fb43466666eef3f6110faa4dbbe3c8f4b13141a4215d612071b1fa022df"
     },
     "cards": {
       "file": "cards.json",
-      "bytes": 16989396,
-      "sha256": "4ca7e104ad006d5f511a02d06727b33cb6d5d8c30d5d701a6ad2630e4eb8f2b2"
+      "bytes": 24004531,
+      "sha256": "23aa7d1a01ba64dd29f2803eec69d9c7c81e7e9dc88d71f9119eff27082522b2"
     }
   },
   "counts": {
@@ -79,10 +79,10 @@
     "navigationInputs": {
       "file": "navigation-inputs.json.gz",
       "encoding": "gzip",
-      "bytes": 22402274,
-      "sha256": "f3de49688e2a95a3711a8f60fc5b99277edc61531e3d847b9d474ede0a91762c",
-      "canonicalBytes": 200250262,
-      "canonicalSha256": "9c77b34717d2f6b15f8da2472c34f59049b2a820ff522d90c7bf5646c0392697"
+      "bytes": 22630829,
+      "sha256": "d92a62823404d9d3932e6cc333f3a02860bd8289027e801fd14d5e37866b70fb",
+      "canonicalBytes": 201028672,
+      "canonicalSha256": "5857c7a24c98bc2837d7fcf0fa840c7e5dd55d6750d3ed1780f7e95cd2156227"
     },
     "denseInputs": {
       "file": "dense-inputs.json.gz",
@@ -93,5 +93,5 @@
       "canonicalSha256": "5243c185413e41047e3e86fc5434649acfe24e4ab2e55c41002ec4799babf3fc"
     }
   },
-  "canonicalRevision": "e6883145bc0710fba9ee6788d29d6e453d740d83d7d95563dfd3e80adbe27dc0"
+  "canonicalRevision": "e2cbc3e0b64ab4f42db7f19031558bf966ba771d437481139e25e9c4e2de6555"
 }

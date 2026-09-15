@@ -12,9 +12,11 @@ test('sync persists unfinished changes and advances only the captured manifest b
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'qa-sync-cursor-'));
   context.after(() => fs.rm(root, {recursive:true, force:true}));
   await fs.mkdir(path.join(root, 'scripts'));
+  await fs.mkdir(path.join(root, 'scripts', 'lib'));
   await fs.mkdir(path.join(root, 'data'));
   await fs.cp(new URL('../backend/', import.meta.url), path.join(root, 'backend'), {recursive:true});
   await fs.copyFile(new URL('../scripts/sync-ygoresources.mjs', import.meta.url), path.join(root, 'scripts/sync-ygoresources.mjs'));
+  await fs.copyFile(new URL('../scripts/lib/baige-chinese-name-backfill.mjs', import.meta.url), path.join(root, 'scripts/lib/baige-chinese-name-backfill.mjs'));
   await fs.writeFile(path.join(root, 'data/snapshot-meta.json'), JSON.stringify({sourceRevision:'10'}));
   const mock = path.join(root, 'mock-http.mjs');
   await fs.writeFile(mock, `
