@@ -338,25 +338,6 @@ export async function retrieveRagEvidence({
   if (fuzzyCards.length) retrievalWarnings.push(`unresolved_mentions_fuzzy_matched:${fuzzyCards.map((card) => card.name).join(",")}`);
   if (baigeResolvedCards.length) retrievalWarnings.push(`unresolved_mentions_baige_matched:${baigeResolvedCards.map((card) => card.name).join(",")}`);
   if (providedTexts.length) retrievalWarnings.push("user_provided_text_not_official");
-  const recordBuckets = evidenceRecordBuckets(data);
-  const allEvidenceRecords = recordBuckets.all;
-  const scopedRecordBuckets = scopeRecordBuckets(
-    recordBuckets,
-    effectiveQaIdentityCards,
-    {
-      includeDiscovery: true,
-      allowUnscoped: retrievalCards.length === 0 && !hasPendingCardIdentity,
-    },
-  );
-  const authorityScopedRecordBuckets = scopeRecordBuckets(
-    recordBuckets,
-    effectiveQaIdentityCards,
-    {
-      includeDiscovery: false,
-      allowUnscoped: retrievalCards.length === 0 && !hasPendingCardIdentity,
-    },
-  );
-
   const cardTextPreparationStartedAt = Date.now();
   let preparedCardMetadata = {
     cardMetadata: [],
@@ -427,6 +408,24 @@ export async function retrieveRagEvidence({
         baigeWarnings:baigeDebug.warnings, cardMetadataHydration: preparedCardMetadata.debug, timingsMs},
     });
   }
+  const recordBuckets = evidenceRecordBuckets(data);
+  const allEvidenceRecords = recordBuckets.all;
+  const scopedRecordBuckets = scopeRecordBuckets(
+    recordBuckets,
+    effectiveQaIdentityCards,
+    {
+      includeDiscovery: true,
+      allowUnscoped: retrievalCards.length === 0 && !hasPendingCardIdentity,
+    },
+  );
+  const authorityScopedRecordBuckets = scopeRecordBuckets(
+    recordBuckets,
+    effectiveQaIdentityCards,
+    {
+      includeDiscovery: false,
+      allowUnscoped: retrievalCards.length === 0 && !hasPendingCardIdentity,
+    },
+  );
   onProgressStage?.("retrieve_rulings");
   // Card text is already available before the auxiliary query planner runs.
   // Fold its deterministic operation clauses into the first discovery pass so
