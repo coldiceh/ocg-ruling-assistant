@@ -398,10 +398,10 @@ export function createCloudRequestBudget({env, fetchImpl = globalThis.fetch, com
   const siteDollarCnyValue = env.RELAY_SITE_DOLLAR_CNY;
   const records=[];
   const redis = command ? null : redisConfig(env);
-  const send = command || (async (args) => {
+  const send = command || (async (args, {signal} = {}) => {
     const response = await fetchImpl(redis.url, {
       method:'POST',headers:{authorization:`Bearer ${redis.token}`,'content-type':'application/json'},
-      body:JSON.stringify(args), signal:AbortSignal.timeout(5000),
+      body:JSON.stringify(args), signal:signal || AbortSignal.timeout(5000),
     });
     if (!response.ok) throw new Error(`cloud_budget_store_http_${response.status}`);
     const payload = await response.json();
@@ -409,7 +409,7 @@ export function createCloudRequestBudget({env, fetchImpl = globalThis.fetch, com
     return payload.result;
   });
   async function reserve({provider,model,operation,actualCny,theoreticalUsd,pricingBasis,
-    reservationMetadata,stage='evidence_preparation'}) {
+    reservationMetadata,stage='evidence_preparation',signal}) {
     amount(actualCny,'reservation_actual',true);
     amount(theoreticalUsd,'reservation_theoretical',true);
     const ticket={id:randomUUID(),provider,model,operation,stage,status:'reserved',startedAtUtc:new Date().toISOString(),
@@ -423,7 +423,7 @@ export function createCloudRequestBudget({env, fetchImpl = globalThis.fetch, com
       ? publicFinalBudgetCommand(key, 'reserve', [provider, JSON.stringify(ticket), String(nano(limits.theoreticalUsd))])
       : ['EVAL',CLOUD_BUDGET_RESERVE,officialDailyMigration?'2':'1',key,
       ...(officialDailyMigration?[officialDailyMigration.legacyKey]:[]),ticket.id,String(ticket.actualNano),String(ticket.theoreticalNano),
-      String(nano(limits.actualCny)),String(nano(limits.theoreticalUsd)),String(nano(initial.actualCny)),String(nano(initial.theoreticalUsd)),JSON.stringify(ticket),...migrationArgs]);
+      String(nano(limits.actualCny)),String(nano(limits.theoreticalUsd)),String(nano(initial.actualCny)),String(nano(initial.theoreticalUsd)),JSON.stringify(ticket),...migrationArgs], {signal});
     if(result[0]!=='reserved') throw new Error(result[0]==='blocked'?'cloud_budget_total_exceeded':'cloud_budget_reservation_uncertain');
     records.push(ticket);
     return ticket;
@@ -536,14 +536,14 @@ export function createCloudRequestBudget({env, fetchImpl = globalThis.fetch, com
     } else ticket.uncertainty='provider_usage_missing_reservation_retained';
     return result;
   }
-  async function baiGeneration({body, invoke, operation, model, measurement, generationContract}) {
+  async function baiGeneration({body, invoke, operation, model, measurement, generationContract, signal}) {
     if (operation !== 'generate_content' || generationContract?.providerId !== 'bai') {
       throw new Error('cloud_budget_bai_generation_contract_required');
     }
     if (model !== generationContract.modelId) throw new Error('cloud_budget_bai_generation_model_mismatch');
     assertGenerationCapacity({body, contract:generationContract, measurement});
     const upper = estimateGenerationUpperBoundUsd({measurement, contract:generationContract});
-    const ticket = await reserve({provider:'bai', model, operation, stage:'evidence_preparation',
+    const ticket = await reserve({provider:'bai', model, operation, stage:'evidence_preparation', signal,
       actualCny:0, theoreticalUsd:upper.amountUsd,
       pricingBasis:`${upper.basis}:${generationContract.priceVersion}`,
       reservationMetadata:{
@@ -591,6 +591,7 @@ export function createCloudRequestBudget({env, fetchImpl = globalThis.fetch, com
     contentTokenEstimate,
     measurement,
     generationContract,
+    signal,
   }) {
     if (typeof invoke !== 'function') throw new Error('cloud_budget_gemini_invoke_required');
     const normalizedModel = String(model || '').trim();
@@ -653,6 +654,7 @@ export function createCloudRequestBudget({env, fetchImpl = globalThis.fetch, com
     }
     const ticket = await reserve({
       provider: 'gemini',
+      signal,
       model: normalizedModel,
       operation,
       actualCny: 0,
@@ -749,32 +751,45 @@ export function createCloudRequestBudget({env, fetchImpl = globalThis.fetch, com
     await settle(ticket,{usage:payload.usage,returnedModel:payload.model,
       actualCny:tokens*(ticket.operation==='embeddings'?0.07:0.28)/1e6,theoreticalUsd:0});
   }
-  async function remainingPreparationUsd({provider='gemini'}={}) {
+  let preparationSnapshotPromise;
+  function readPreparationSnapshot(signal) {
+    if (!preparationSnapshotPromise) {
+      preparationSnapshotPromise = (async () => {
+        const fields = parseHashResult(await send(['HGETALL', key], {signal}));
+        const accountedNano = Number(fields.get('theoreticalNano')
+          ?? nano(initial.theoreticalUsd));
+        if (!Number.isSafeInteger(accountedNano) || accountedNano < 0) {
+          throw new Error('cloud_budget_total_invalid');
+        }
+        let geminiTheoreticalNano = 0;
+        if (separatePublicFinal) {
+          for (const [id, value] of fields) {
+            if (['actualNano', 'theoreticalNano'].includes(id)) continue;
+            let prior;
+            try { prior = JSON.parse(value); } catch { throw new Error('cloud_budget_ticket_invalid'); }
+            if (prior.provider === 'gemini') {
+              if (!Number.isSafeInteger(prior.theoreticalNano) || prior.theoreticalNano < 0) {
+                throw new Error('cloud_budget_ticket_invalid');
+              }
+              geminiTheoreticalNano += prior.theoreticalNano;
+            }
+          }
+        }
+        return Object.freeze({accountedNano, geminiTheoreticalNano});
+      })();
+    }
+    return preparationSnapshotPromise;
+  }
+  async function remainingPreparationUsd({provider='gemini',signal}={}) {
     if (!['gemini','bai','relay'].includes(provider)) {
       throw new Error('cloud_budget_usd_preparation_provider_unsupported');
     }
     // This mirrors the amount checked by CLOUD_BUDGET_RESERVE. It is only an
     // assembly hint; the later atomic reservation remains authoritative.
     if (separatePublicFinal && provider === 'gemini') return Number.POSITIVE_INFINITY;
-    const fields = parseHashResult(await send(['HGETALL', key]));
-    let accountedNano = Number(fields.get('theoreticalNano')
-      ?? nano(initial.theoreticalUsd));
-    if (!Number.isSafeInteger(accountedNano) || accountedNano < 0) {
-      throw new Error('cloud_budget_total_invalid');
-    }
-    if (separatePublicFinal) {
-      for (const [id, value] of fields) {
-        if (['actualNano','theoreticalNano'].includes(id)) continue;
-        let prior;
-        try { prior = JSON.parse(value); } catch { throw new Error('cloud_budget_ticket_invalid'); }
-        if (prior.provider === 'gemini') {
-          if (!Number.isSafeInteger(prior.theoreticalNano) || prior.theoreticalNano < 0) {
-            throw new Error('cloud_budget_ticket_invalid');
-          }
-          accountedNano -= prior.theoreticalNano;
-        }
-      }
-    }
+    const snapshot = await readPreparationSnapshot(signal);
+    const accountedNano = snapshot.accountedNano
+      - (separatePublicFinal ? snapshot.geminiTheoreticalNano : 0);
     return Math.max(0, limits.theoreticalUsd - accountedNano / UNIT);
   }
   function snapshot() {

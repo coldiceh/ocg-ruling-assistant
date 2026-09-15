@@ -307,6 +307,32 @@ export function prepareBoundedEvidenceSnapshot(assets) {
   return { snapshot, cacheHit: false };
 }
 
+// Consume only a globally ordered QA parent prefix when the first 32 mapped
+// units of both source lanes are already fixed. If a lane needs later mapping
+// ordinals, exhaust the finite stream so future ordinal-zero parents cannot
+// change the legacy mapRankedUnits order.
+export function mapBoundedQaLexicalLanes({ qaTools, queries, mapResult,
+  sourceKindForUnit, limit = 32 } = {}) {
+  if (!qaTools || typeof qaTools.searchBounded !== 'function'
+      || typeof mapResult !== 'function' || typeof sourceKindForUnit !== 'function'
+      || !Number.isSafeInteger(limit) || limit <= 0) {
+    throw new TypeError('gemini_bounded_qa_lexical_input_invalid');
+  }
+  const rows = [], firstUnits = { qa: new Set(), faq: new Set() };
+  for (const row of qaTools.searchBounded({ queries })) {
+    const keys = { qa: [], faq: [] };
+    for (const key of mapResult(row) || []) {
+      const kind = sourceKindForUnit(key);
+      if (kind === 'qa' || kind === 'faq') keys[kind].push(key);
+    }
+    rows.push(keys);
+    for (const kind of ['qa', 'faq']) if (keys[kind][0]) firstUnits[kind].add(keys[kind][0]);
+    if (firstUnits.qa.size >= limit && firstUnits.faq.size >= limit) break;
+  }
+  return Object.fromEntries(['qa', 'faq'].map(kind => [kind,
+    mapRankedUnits(rows, item => item[kind], limit)]));
+}
+
 export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fetch,
   loadAssets = loadGeminiRuleQaAssets, budgetedRequest,
   loadDenseSearch = loadRuleDenseSearch, loadQaSearch = loadQaDenseSearch,
@@ -377,7 +403,7 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
     }
     async function generate(body, measurement, stage, normalize, retry = false) {
       const contract = contracts[stage], transport = transports[stage];
-      maxUsd = Math.min(perQuestionMaxUsd, await remainingBudget({provider:contract.providerId}));
+      maxUsd = Math.min(perQuestionMaxUsd, await remainingBudget({provider:contract.providerId,signal}));
       const wireBody = transport.prepareRequest(applyGenerationContract(body, contract));
       assertGenerationCapacity({ body: wireBody, contract, measurement });
       const reserve = estimateGenerationUpperBoundUsd({ measurement, contract }).amountUsd;
@@ -395,7 +421,7 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
       let submitted = false;
       try {
         const raw = await reserveGenerationRequest({ body: wireBody, model: contract.modelId, operation: 'generate_content',
-          measurement, generationContract: contract, cachedTokenCount: 0,
+          measurement, generationContract: contract, cachedTokenCount: 0, signal,
           invoke: () => {
             submitted = true;
             return contract.providerId === 'gemini'
@@ -429,7 +455,7 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
     }
     const queryVectors = new Map();
     async function embedBatch(queries, original = false) {
-      maxUsd = Math.min(perQuestionMaxUsd, await remainingBudget({provider:'gemini'}));
+      maxUsd = Math.min(perQuestionMaxUsd, await remainingBudget({provider:'gemini',signal}));
       const queue = uniq(queries).filter(query => !queryVectors.has(query));
       while (queue.length) {
         signal.throwIfAborted();
@@ -457,6 +483,7 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
         let submitted = false;
         try {
           const raw = await reserveGenerationRequest({ body, model: RULE_EMBEDDING_MODEL, operation: 'embed_content',
+            signal,
             invoke: () => { submitted = true; return api(single ? 'embedContent' : 'batchEmbedContents', body, RULE_EMBEDDING_MODEL); } });
           row.usage = raw.usageMetadata ?? null; row.status = 'success';
           const tokens = row.usage?.promptTokenCount;
@@ -534,11 +561,9 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
           channels.push(['qa', 'original_dense', mapRankedUnits(await searchDense(qaDense, vector), qaKeys)]);
         }
         channels.push(['rule', 'original_lexical', mapRankedUnits(snapshot.ruleSearch.search([query.text]), ruleKeys)]);
-        // Read the finite ordered original QA results until mapped unique source
-        // units reach each lane's limit; parent FAQ rows may map to many units.
-        const qaRows = qaTools.searchAll({ queries: [query.text] });
-        for (const kind of ['qa','faq']) channels.push([kind, 'original_lexical',
-          mapRankedUnits(qaRows, item => qaKeys(item).filter(key => units.get(key)?.sourceKind === kind))]);
+        const qaLexical = mapBoundedQaLexicalLanes({ qaTools, queries: [query.text],
+          mapResult: qaKeys, sourceKindForUnit: key => units.get(key)?.sourceKind });
+        for (const kind of ['qa','faq']) channels.push([kind, 'original_lexical', qaLexical[kind]]);
         const navigation = snapshot.navigationSearch.searchBySourceKind(query.text, {
           sourceKinds: ['rule','qa','faq'], limit: 32,
           sourceKindForUnit: unitKey => units.get(unitKey)?.sourceKind,

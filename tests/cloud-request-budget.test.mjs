@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createCloudRequestBudget,CLOUD_BUDGET_RESERVE,CLOUD_BUDGET_SETTLE,runCloudBudgetedQuestion,
   runCloudRelayRequest,runCloudBaiRequest,cloudSiliconFlowCallbacks,runOfficialOpenAIRequest,
-  getOfficialOpenAIBudgetStatus,getCloudEvidenceBudgetStatus} from '../backend/cloudRequestBudget.mjs';
+  getOfficialOpenAIBudgetStatus,getCloudEvidenceBudgetStatus,currentCloudPreparationRemainingUsd}
+  from '../backend/cloudRequestBudget.mjs';
 import {callSiliconFlowEmbeddings} from '../backend/siliconFlowEvidenceClient.mjs';
 import {createPublicAnswerModelEnv} from '../backend/ragModelClient.mjs';
 
@@ -140,6 +141,73 @@ test('exhausted dual-currency reservation prevents the actual model transport',a
   assert.equal(redis.calls[0][7],'10000000000');
   assert.equal(redis.calls[0][8],'5000000000');
   assert.equal(redis.calls[0][9],'626220');
+});
+
+test('preparation budget snapshot is shared per controller, projected by provider, and remains fail-closed', async () => {
+  const env = {
+    CLOUD_BUDGET_RUN_ID: 'preparation-snapshot',
+    CLOUD_BUDGET_ACTUAL_LIMIT_CNY: '10',
+    CLOUD_BUDGET_THEORETICAL_LIMIT_USD: '6',
+    RAG_EVIDENCE_PIPELINE: 'cloud_evidence_v1',
+    CLOUD_BUDGET_PERIOD: 'daily',
+  };
+  const hash = [
+    'actualNano', '0',
+    'theoreticalNano', '2000000000',
+    'gemini-settled', JSON.stringify({
+      provider: 'gemini', status: 'usage_settled', theoreticalNano: 500000000,
+    }),
+  ];
+  const makeBudget = ({ fail = false } = {}) => {
+    const commands = [];
+    const budget = createCloudRequestBudget({
+      env,
+      command: async (args) => {
+        commands.push(args);
+        if (args[0] === 'HGETALL') {
+          if (fail) throw new Error('preparation_snapshot_store_failed');
+          return hash;
+        }
+        if (args[1] === CLOUD_BUDGET_RESERVE) return ['reserved'];
+        if (args[1] === CLOUD_BUDGET_SETTLE) return ['settled'];
+        throw new Error('unexpected_preparation_snapshot_command');
+      },
+    });
+    return { budget, commands };
+  };
+
+  const first = makeBudget();
+  const projected = await runCloudBudgetedQuestion({ env, budget: first.budget }, async () => ({ values: await Promise.all([
+    currentCloudPreparationRemainingUsd({ provider: 'gemini' }),
+    currentCloudPreparationRemainingUsd({ provider: 'bai' }),
+    currentCloudPreparationRemainingUsd({ provider: 'relay' }),
+    currentCloudPreparationRemainingUsd({ provider: 'bai' }),
+  ]) }));
+  assert.deepEqual(projected.values, [Number.POSITIVE_INFINITY, 4.5, 4.5, 4.5]);
+  assert.equal(first.commands.filter(args => args[0] === 'HGETALL').length, 1);
+
+  const second = makeBudget();
+  const isolated = await Promise.all([
+    runCloudBudgetedQuestion({ env, budget: second.budget }, async () => ({
+      remaining: await currentCloudPreparationRemainingUsd({ provider: 'bai' }),
+    })),
+    runCloudBudgetedQuestion({ env, budget: first.budget }, async () => ({
+      remaining: await currentCloudPreparationRemainingUsd({ provider: 'relay' }),
+    })),
+  ]);
+  assert.deepEqual(isolated.map(result => result.remaining), [4.5, 4.5]);
+  assert.equal(second.commands.filter(args => args[0] === 'HGETALL').length, 1);
+  assert.equal(first.commands.filter(args => args[0] === 'HGETALL').length, 1);
+
+  const failed = makeBudget({ fail: true });
+  await assert.rejects(
+    () => runCloudBudgetedQuestion({ env, budget: failed.budget }, () => Promise.all([
+      currentCloudPreparationRemainingUsd({ provider: 'bai' }),
+      currentCloudPreparationRemainingUsd({ provider: 'relay' }),
+    ])),
+    /preparation_snapshot_store_failed/,
+  );
+  assert.equal(failed.commands.filter(args => args[0] === 'HGETALL').length, 1);
 });
 
 test('real relay callback settles output including reasoning once and retains a vendor price upper bound',async()=>{

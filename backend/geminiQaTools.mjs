@@ -3,6 +3,7 @@ import crypto from "node:crypto";
 import {
   buildManualCaptureCompleteLexicalQueryQueue,
   installManualCaptureLexicalIndex,
+  iterateManualCaptureCompleteLexicalQueryQueue,
   serializeManualCaptureLexicalIndex,
 } from "../scripts/lib/manual-capture-evidence-selection.mjs";
 
@@ -179,12 +180,45 @@ function mergeQueues(queues, byHandle) {
   return Object.freeze(ordered);
 }
 
+function* mergeQueueIterables(queues, byHandle) {
+  const iterators = queues.map(queue => queue[Symbol.iterator]());
+  const exhausted = iterators.map(() => false);
+  const seen = new Set();
+  while (true) {
+    let advanced = false;
+    for (let queueIndex = 0; queueIndex < iterators.length; queueIndex += 1) {
+      if (exhausted[queueIndex]) continue;
+      const step = iterators[queueIndex].next();
+      if (step.done) {
+        exhausted[queueIndex] = true;
+        continue;
+      }
+      advanced = true;
+      const candidate = step.value;
+      if (seen.has(candidate.handle)) continue;
+      const stableCandidate = byHandle.get(candidate.handle);
+      if (!stableCandidate) throw new Error("gemini_qa_candidate_binding_invalid");
+      seen.add(candidate.handle);
+      yield stableCandidate;
+    }
+    if (!advanced) break;
+  }
+}
+
 function rankLexicalUnion(compiled, queries) {
   const queues = queries.map((query) => buildManualCaptureCompleteLexicalQueryQueue({
     query,
     candidates: compiled.candidates,
   }));
   return mergeQueues(queues, compiled.byHandle);
+}
+
+function iterateLexicalUnion(compiled, queries) {
+  const queues = queries.map(query => iterateManualCaptureCompleteLexicalQueryQueue({
+    query,
+    candidates: compiled.candidates,
+  }));
+  return mergeQueueIterables(queues, compiled.byHandle);
 }
 
 function explicitRecordCardIds(record) {
@@ -248,6 +282,16 @@ function buildRequestTools(compiled, { pageSize = 4, cardIds = [] } = {}) {
     return Object.freeze(mergeQueues([cardLinkedQueue, lexical], compiled.byHandle).map(publicItem));
   }
 
+  function* searchBounded({ queries } = {}) {
+    const normalizedQueries = normalizeQueries(queries);
+    const lexical = compiled.candidates.length
+      ? iterateLexicalUnion(compiled, normalizedQueries)
+      : Object.freeze([]);
+    for (const candidate of mergeQueueIterables([cardLinkedQueue, lexical], compiled.byHandle)) {
+      yield publicItem(candidate);
+    }
+  }
+
   function readSelected(handles = []) {
     if (!Array.isArray(handles)) throw new TypeError("gemini_qa_handles_invalid");
     const seen = new Set();
@@ -272,6 +316,7 @@ function buildRequestTools(compiled, { pageSize = 4, cardIds = [] } = {}) {
     snapshotHandles: compiled.snapshotHandles,
     search,
     searchAll,
+    searchBounded,
     searchOrdered: searchAll,
     readSelected,
   });
