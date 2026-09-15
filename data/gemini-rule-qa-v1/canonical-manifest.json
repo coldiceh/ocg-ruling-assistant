@@ -43,7 +43,7 @@
       "file": "qa-records.json.gz",
       "encoding": "gzip",
       "bytes": 5776837,
-      "sha256": "396987ff5189e567745ca1a45e76192eb3cc6fcc92b932dc712eb66f732fa27b",
+      "sha256": "15caca52312882e0033bbacfd07b211973d6749e8256c48bafa4e91843aa66f8",
       "canonicalBytes": 57490318,
       "canonicalSha256": "b360cc78b17321aebeb6b3831cdfc34bd238914ce3cea0a93c184bc0521ee2fb"
     },
@@ -51,7 +51,7 @@
       "file": "rule-records.json.gz",
       "encoding": "gzip",
       "bytes": 305672,
-      "sha256": "30dc87b22d5701c763dfcee618b46fcacc4ee1d00166c386255e6c8208a6cdd0",
+      "sha256": "f04a23f593583d47e392cf55ac0a803c655635aaf635157debf6afa67c5f1797",
       "canonicalBytes": 1240271,
       "canonicalSha256": "4b45f989f0fc144aae15f353f2c08771d93ae6e240984e2e4828212727c8b568"
     },
@@ -59,7 +59,7 @@
       "file": "qa-lexical-index.bm25.gz",
       "encoding": "gzip",
       "bytes": 40703635,
-      "sha256": "6071b5f3a22af88b5a79ebec07c056c1f544442fa9aa7982a05d931de8684db2",
+      "sha256": "3b4fe7857cb34d8204341e36c863382990253ae9bcf219efdda36364666dcf61",
       "canonicalBytes": 163138528,
       "canonicalSha256": "22ed2da1598a766415ec43699b53c357facb14806298ea03d966d711e5712dc7"
     },
@@ -67,7 +67,7 @@
       "file": "structure-mapping.json.gz",
       "encoding": "gzip",
       "bytes": 12529188,
-      "sha256": "2d315e1db81ae6370090fa9314189e99b96e6e68ae55f123d6c8bc494dc5c064",
+      "sha256": "2798bed1cad61b82895c093d40e8a2f5e0969642aca479e2129b345b86fd9acf",
       "canonicalBytes": 66428921,
       "canonicalSha256": "7a40bc1f2e71ab06d26c05db61cbc004098bec32d073adf8f906ec61dd243791"
     },
@@ -75,7 +75,7 @@
       "file": "navigation-inputs.json.gz",
       "encoding": "gzip",
       "bytes": 19841536,
-      "sha256": "183ade35a405aa9cce849bd3baa106f2ec3f3a6ffe283676b97214b75da78060",
+      "sha256": "5f351eedbbb9f74fdbb9de79675198b7a382091a3fc3aa31ef822e23033f3e7b",
       "canonicalBytes": 172962270,
       "canonicalSha256": "3dee132141273e3a51ed51047234b89c13d19b7df6c9d7a7c07c1eea3d721828"
     },
@@ -83,10 +83,10 @@
       "file": "dense-inputs.json.gz",
       "encoding": "gzip",
       "bytes": 5196804,
-      "sha256": "8b5b07b91cbde253ce8e888a4fbf8e27637255c2313b86477b2fc96d58ac752b",
+      "sha256": "223ecb4de352ae95aec9910b9dbb7e4ba11bc9ebd288d1e9a5066960d04d043e",
       "canonicalBytes": 47299803,
       "canonicalSha256": "64335eb66e2d196f2ea02f0c62086e9c5a7a81d8eed5b156abc695226bdb2837"
     }
   },
-  "canonicalRevision": "35c1a9666536892506288d95e71dcfa68e21e0c055c3b57266ff3e4139629411"
+  "canonicalRevision": "b5c7f7b03f17a6b032e4d3374c0e96ddd6ffcabdf3791278feec4e84586c50e6"
 }

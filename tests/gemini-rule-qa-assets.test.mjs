@@ -83,6 +83,11 @@ test("builder emits compressed byte-bound assets and loader reuses one immutable
   clearGeminiRuleQaAssetsCacheForTests();
   const dataDir = await fixture();
   const firstBuild = await buildAll(dataDir);
+  for (const descriptor of Object.values(firstBuild.manifest.assets)) {
+    if (descriptor.encoding !== "gzip") continue;
+    const compressed = await readFile(join(dataDir, "gemini-rule-qa-v1", descriptor.file));
+    assert.equal(compressed[9], 255, `${descriptor.file} must use the portable gzip OS header`);
+  }
   const firstManifest = JSON.stringify(firstBuild.manifest);
   const canonicalMappingPath = join(dataDir, "gemini-rule-qa-v1", "structure-mapping.json.gz");
   const canonicalMappingBeforeReplay = await readFile(canonicalMappingPath);
