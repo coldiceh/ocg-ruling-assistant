@@ -237,6 +237,10 @@ async function loadAppConfig() {
     defaultRulingModelProfile: DEFAULT_RULING_MODEL_PROFILE,
     rulingModelProfiles: fallbackRulingModelProfiles(),
   };
+  // Resolve deployment-local routes for the existing absolute-URL consumers.
+  for (const key of ["answerApiUrl", "budgetApiUrl", "adminPageUrl"]) {
+    if (appConfig[key].startsWith("/")) appConfig[key] = new URL(appConfig[key], window.location.href).href;
+  }
   if (!appConfig.budgetApiUrl) appConfig.budgetApiUrl = getBudgetApiUrl();
   if (ui.deploymentLabel) {
     ui.deploymentLabel.textContent = appConfig.deploymentLabel;
