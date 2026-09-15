@@ -246,7 +246,7 @@ export async function answerPublicRulingQuestion({
   const startAssetPreload = () => {
     if (preloadStarted) return;
     preloadStarted = true;
-    preloadedAssets = preloadAssets({ env });
+    preloadedAssets = preloadAssets({ env, officialQaExactAlreadyChecked: true });
   };
 
   try {

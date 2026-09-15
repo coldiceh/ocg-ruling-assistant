@@ -35,13 +35,34 @@ test('request asset preload starts both loaders immediately and preserves their 
   await Promise.all([preloaded.data, preloaded.geminiAssets]);
 });
 
+test('prepared route preloads the explicit card-only snapshot while other routes keep the full loader', async () => {
+  const calls = [];
+  const common = {
+    env: { RAG_EVIDENCE_PIPELINE: 'cloud_evidence_v1', GEMINI_RULE_QA_ENABLED: 'true' },
+    dataDir: 'fixture-rag-data',
+    loadData: () => { calls.push('full'); return Promise.resolve({ scope: 'complete' }); },
+    loadPreparedData: () => { calls.push('prepared'); return Promise.resolve({ scope: 'prepared_cards_only' }); },
+    loadGeminiAssets: () => Promise.resolve({ kind: 'gemini-assets' }),
+  };
+
+  const prepared = preloadRagRequestAssets({ ...common, officialQaExactAlreadyChecked: true });
+  assert.equal((await prepared.data).scope, 'prepared_cards_only');
+  const full = preloadRagRequestAssets(common);
+  assert.equal((await full.data).scope, 'complete');
+  assert.deepEqual(calls, ['prepared', 'full']);
+});
+
 test('public request starts one local preload after inactive lock and before classification', async () => {
   const calls = [];
   const preloadedAssets = { data: Promise.resolve({}), geminiAssets: Promise.resolve({}) };
   await answerPublicRulingQuestion({ payload: { question: 'fixture' }, env,
     appendAudit: async () => null,
     readRiskControl: async () => { calls.push('lock'); return { ok: true, active: false }; },
-    preloadAssets: () => { calls.push('preload'); return preloadedAssets; },
+    preloadAssets: (options) => {
+      calls.push('preload');
+      assert.equal(options.officialQaExactAlreadyChecked, true);
+      return preloadedAssets;
+    },
     classifyScope: async () => { calls.push('classify'); return { scope: 'in_scope' }; },
     answerRuling: async (options) => {
       calls.push('pipeline');

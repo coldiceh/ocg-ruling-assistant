@@ -27,7 +27,7 @@ import {
   RAG_DATA_REVISION_MANIFEST_FILE,
   validateRagDataRevisionManifest,
 } from "./ragDataRevisionManifest.mjs";
-import { loadRagRuntimeBundle } from "./ragRuntimeBundle.mjs";
+import { loadPreparedRagCardRuntimeBundle, loadRagRuntimeBundle } from "./ragRuntimeBundle.mjs";
 import { readRagDataSourceBytes } from "./ragDataSourceFile.mjs";
 import { isExcludedSourceRole } from "../scripts/lib/ocg-rule-source-policy.mjs";
 import {
@@ -1526,6 +1526,34 @@ export async function loadRagData(dataDir = defaultDataDir, {
     return data;
   } catch (error) {
     if (dataCache.get(key) === pending) dataCache.delete(key);
+    throw error;
+  }
+}
+
+const preparedCardDataCache = new Map();
+
+export async function loadPreparedRagCardData(dataDir = defaultDataDir) {
+  const key = String(dataDir);
+  if (preparedCardDataCache.has(key)) return await preparedCardDataCache.get(key);
+  const pending = (async () => {
+    const runtimeBundle = await loadPreparedRagCardRuntimeBundle({ dataDir });
+    if (!runtimeBundle.ok) {
+      throw unavailableRagDataError({
+        phase: "prepared_card_runtime_bundle",
+        reason: "prepared_card_runtime_bundle_required",
+        bundleReason: runtimeBundle.reason,
+        bundleReasons: runtimeBundle.reasons,
+      });
+    }
+    return runtimeBundle.data;
+  })();
+  preparedCardDataCache.set(key, pending);
+  try {
+    const data = await pending;
+    preparedCardDataCache.set(key, data);
+    return data;
+  } catch (error) {
+    if (preparedCardDataCache.get(key) === pending) preparedCardDataCache.delete(key);
     throw error;
   }
 }

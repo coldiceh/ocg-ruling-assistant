@@ -11,6 +11,7 @@ import {
 } from "../backend/ragRuntimeBundleCompiler.mjs";
 import {
   canonicalJsonBytes,
+  loadPreparedRagCardRuntimeBundle,
   loadRagRuntimeBundle,
   recomputeBundleRevision,
   RAG_RUNTIME_AUXILIARY_ARTIFACTS,
@@ -24,6 +25,76 @@ test("runtime loader reports a missing data directory without evaluating an inva
   assert.equal(loaded.ok, false);
   assert.equal(loaded.reason, "data_dir_missing");
   assert.equal(loaded.data, null);
+});
+
+test("prepared card runtime loader validates only cards and aliases while the full loader stays complete", async () => {
+  const fixture = await createFixture();
+  try {
+    const outputDir = join(fixture.dataDir, "runtime-prepared-card-only");
+    const built = await buildRagRuntimeBundle({
+      dataDir: fixture.dataDir,
+      outputDir,
+      loadNormalizedData: loadRagData,
+    });
+    await Promise.all([
+      rm(join(outputDir, RAG_RUNTIME_CORPORA[1].file)),
+      rm(join(outputDir, RAG_RUNTIME_CORPORA[2].file)),
+    ]);
+
+    const prepared = await loadPreparedRagCardRuntimeBundle({
+      dataDir: fixture.dataDir,
+      bundleDir: outputDir,
+      sourceRevisionManifest: built.revisionManifest,
+    });
+    assert.equal(prepared.ok, true);
+    assert.equal(prepared.source, "rag_runtime_bundle_prepared_cards");
+    assert.equal(prepared.scope, "prepared_cards_only");
+    assert.equal(prepared.completeEvidenceCorpus, false);
+    assert.equal(prepared.data.scope, "prepared_cards_only");
+    assert.equal(prepared.data.completeEvidenceCorpus, false);
+    assert.equal(prepared.data.cards.length, 2);
+    assert.deepEqual(prepared.data.records, []);
+    assert.deepEqual(prepared.data.qaRecords, []);
+    assert.equal(prepared.dataRevision, built.manifest.dataRevision);
+
+    const full = await loadRagRuntimeBundle({
+      dataDir: fixture.dataDir,
+      bundleDir: outputDir,
+      sourceRevisionManifest: built.revisionManifest,
+    });
+    assert.equal(full.ok, false);
+    assert.equal(full.reason, "corpus_records_missing");
+  } finally {
+    await rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test("prepared card runtime loader keeps the existing card hash failure", async () => {
+  const fixture = await createFixture();
+  try {
+    const outputDir = join(fixture.dataDir, "runtime-prepared-card-bad-hash");
+    const built = await buildRagRuntimeBundle({
+      dataDir: fixture.dataDir,
+      outputDir,
+      loadNormalizedData: loadRagData,
+    });
+    const cardPath = join(outputDir, RAG_RUNTIME_CORPORA[0].file);
+    const bytes = await readFile(cardPath);
+    bytes[Math.floor(bytes.length / 2)] ^= 1;
+    await writeFile(cardPath, bytes);
+
+    const prepared = await loadPreparedRagCardRuntimeBundle({
+      dataDir: fixture.dataDir,
+      bundleDir: outputDir,
+      sourceRevisionManifest: built.revisionManifest,
+    });
+    assert.equal(prepared.ok, false);
+    assert.equal(prepared.reason, "corpus_compressed_hash_mismatch");
+    assert.deepEqual(prepared.reasons, ["cards"]);
+    assert.equal(prepared.data, null);
+  } finally {
+    await rm(fixture.root, { recursive: true, force: true });
+  }
 });
 
 test("runtime bundle is byte-exact deterministic and preserves all legacy normalized corpora", async () => {
