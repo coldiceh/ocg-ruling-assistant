@@ -3,6 +3,7 @@
   "buildCommand": "pnpm run build:vercel",
   "outputDirectory": "public",
   "env": {
+    "NODE_OPTIONS": "--max-old-space-size=1152",
     "ADMIN_PAGE_ORIGIN": "https://ocg-ruling-assistant.vercel.app",
     "QUERY_AUDIT_MAX_ENTRIES": "100",
     "PUBLIC_OPENAI_DAILY_LIMIT_USD": "5",
