@@ -44,6 +44,7 @@ async function atomicWrite(file, bytes) {
 async function writeAsset(dir, file, value, binary = false) {
   const canonical = binary ? Buffer.from(value) : Buffer.from(JSON.stringify(value), "utf8");
   const compressed = await gz(canonical, { level: 9, mtime: 0 });
+  compressed[9] = 255;
   await atomicWrite(join(dir, file), compressed);
   return descriptor(file, compressed, canonical);
 }
