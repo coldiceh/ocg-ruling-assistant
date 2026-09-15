@@ -4,6 +4,7 @@ import { createGeminiBoundedEvidenceProvider, boundedPlanBody } from '../backend
 import { buildRuleStructureMapping, sourceSha256, stableJson } from '../backend/evidenceSourceStructure.mjs';
 import { createQaTools } from '../backend/geminiQaTools.mjs';
 import { loadEvidenceGenerationContract } from '../backend/evidenceGenerationContract.mjs';
+import { runCloudBudgetedQuestion } from '../backend/cloudRequestBudget.mjs';
 
 const record = { id: 'synthetic-rule', recordType: 'rule-doc', title: 'Synthetic source',
   text: 'complete synthetic source paragraph\n\nanother complete paragraph', official: false, sourceAuthority: 'community_reference' };
@@ -19,13 +20,14 @@ function assets() {
 const input = { userQuery:'complete synthetic original question', dataRevision:'d', env:{ GEMINI_API_KEY:'fixture' },
   cardResolution:{resolvedCards:[],unresolvedMentions:[],ambiguousMentions:[]},
   retrievedEvidence:{cardTexts:[{id:'fixture-card',text:'entire confirmed card text'}]} };
-function fixture({unknown=false, planTokens=500, selectionTokens, selectionInputLimit, loadAssets=async()=>assets()}={}) {
+function fixture({unknown=false, planTokens=500, selectionTokens, selectionInputLimit,
+  offlineEvaluationLimits, loadAssets=async()=>assets(), generationContract}={}) {
   const requests=[], reservations=[], counts=[];
-  const provider=createGeminiBoundedEvidenceProvider({loadAssets,
+  const provider=createGeminiBoundedEvidenceProvider({loadAssets, offlineEvaluationLimits,
     loadGenerationContract:stage=>{
       const contract=structuredClone(loadEvidenceGenerationContract(stage));
       if(stage==='selection' && selectionInputLimit) contract.capacityContract.maxInputTokens=selectionInputLimit;
-      return contract;
+      return generationContract ? generationContract(stage, contract) : contract;
     },
     loadDenseSearch:async({rules})=>({search:()=>[...rules.units.values()]}),
     loadQaSearch:async()=>({search:()=>[]}),
@@ -66,8 +68,10 @@ test('production provider uses two counted generations, original query lane and 
     assert.equal(request.measurement.modelId,request.generationContract.modelId);
   }
   assert.equal(result.telemetry.strategy,'source_preprocessed_v1');
+  assert.equal(result.telemetry.bounded.perQuestionMaxUsd, 0.30 / 7);
   assert.ok(result.telemetry.bounded.reading.lanes.some(lane=>lane.needId==='original'));
   assert.ok(result.packing.promptChars<=14000);
+  assert.equal(result.telemetry.bounded.maxPromptChars, 14000);
   assert.ok(result.packing.prompt.includes('complete synthetic source paragraph'));
   assert.equal(result.telemetry.rounds,2);
 });
@@ -81,6 +85,88 @@ test('unknown selected ID stops before packing and does not trigger protocol ret
   const {provider,requests}=fixture({unknown:true});
   await assert.rejects(provider.retrieve(input),/selected_identity_not_offered/);
   assert.equal(requests.length,2);
+});
+
+test('default deadline keeps the existing online cap when the environment asks for an offline-sized limit', async () => {
+  const {provider} = fixture();
+  await assert.rejects(provider.retrieve({ ...input,
+    env: { ...input.env, GEMINI_EVIDENCE_DEADLINE_MS: '300000' },
+    elapsedBeforeRetrievalMs: 26001,
+  }), /evidence_config_invalid_GEMINI_EVIDENCE_DEADLINE_MS/);
+});
+
+test('constructor-only offline evaluation limits accept elapsed time beyond the online deadline and report the effective limits', async () => {
+  const {provider} = fixture({ offlineEvaluationLimits: { deadlineMs: 300000, perQuestionMaxUsd: 0.20 } });
+  const result = await provider.retrieve({ ...input,
+    env: { ...input.env, GEMINI_EVIDENCE_DEADLINE_MS: '300000', GEMINI_EVIDENCE_MAX_CNY: '9' },
+    elapsedBeforeRetrievalMs: 26001,
+  });
+  assert.equal(result.telemetry.bounded.deadlineMs, 300000);
+  assert.equal(result.telemetry.bounded.perQuestionMaxUsd, 0.20);
+  assert.equal(result.telemetry.bounded.maxUsd, 0.20);
+});
+
+test('constructor-only offline prompt limit binds selection budget, final serialization, and telemetry', async () => {
+  const {provider, requests} = fixture({ offlineEvaluationLimits: {
+    deadlineMs: 300000, perQuestionMaxUsd: 0.20, maxPromptChars: 15000,
+  } });
+  const result = await provider.retrieve({ ...input, elapsedBeforeRetrievalMs: 26001 });
+  const selectionRequest = requests.find(request => {
+    const payload = JSON.parse(request.contents[0].parts[1].text);
+    return payload.queryPlan;
+  });
+  const selectionPayload = JSON.parse(selectionRequest.contents[0].parts[1].text);
+  assert.equal(selectionPayload.packingBudget.limitChars, 15000);
+  assert.match(selectionRequest.contents[0].parts[0].text, /上限15000字符/u);
+  assert.ok(result.packing.promptChars <= 15000);
+  assert.equal(result.telemetry.bounded.maxPromptChars, 15000);
+});
+
+test('production environment binds the 30 second, 15000 character and 64000 reading contracts', async () => {
+  const {provider, requests} = fixture();
+  const result = await provider.retrieve({ ...input, env: {
+    ...input.env,
+    GEMINI_EVIDENCE_DEADLINE_MS: '30000',
+    GEMINI_EVIDENCE_MAX_PROMPT_CHARS: '15000',
+    GEMINI_EVIDENCE_READING_TARGET_CHARS: '64000',
+  }});
+  const selectionRequest = requests.find(request => {
+    const payload = JSON.parse(request.contents[0].parts[1].text);
+    return payload.queryPlan;
+  });
+  const selectionPayload = JSON.parse(selectionRequest.contents[0].parts[1].text);
+  assert.equal(selectionPayload.packingBudget.limitChars, 15000);
+  assert.ok(result.packing.promptChars <= 15000);
+  assert.equal(result.telemetry.bounded.deadlineMs, 30000);
+  assert.equal(result.telemetry.bounded.maxPromptChars, 15000);
+});
+
+test('production prompt limit rejects values above the authorized serialized cap', async () => {
+  const {provider} = fixture();
+  await assert.rejects(provider.retrieve({ ...input, env: {
+    ...input.env, GEMINI_EVIDENCE_MAX_PROMPT_CHARS: '15001',
+  }}), /evidence_config_invalid_GEMINI_EVIDENCE_MAX_PROMPT_CHARS/);
+});
+
+test('stage telemetry reports independent generation contracts while preserving top-level compatibility fields', async () => {
+  const {provider} = fixture({ generationContract: (stage, contract) => {
+    if (stage === 'planning') {
+      contract.modelId = 'planning-fixture-model';
+      contract.reasoningConfig = { thinkingConfig: { thinkingLevel: 'medium' } };
+    } else if (stage === 'selection') {
+      contract.modelId = 'selection-fixture-model';
+      contract.reasoningConfig = { thinkingConfig: { thinkingLevel: 'high' } };
+    }
+    return contract;
+  } });
+  const result = await provider.retrieve(input);
+  assert.deepEqual(result.telemetry.stageTelemetry, {
+    planning: { provider: 'gemini', model: 'planning-fixture-model', reasoningEffort: 'medium' },
+    selection: { provider: 'gemini', model: 'selection-fixture-model', reasoningEffort: 'high' },
+  });
+  assert.equal(result.telemetry.provider, 'gemini');
+  assert.equal(result.telemetry.model, 'planning-fixture-model');
+  assert.equal(result.telemetry.reasoningEffort, 'medium');
 });
 
 test('selection above input capacity is measured and rebuilt once before generation',async()=>{
@@ -109,4 +195,100 @@ test('aborting a request stops waiting for shared assets and leaves their promis
     const result=await provider.retrieve(input);
     assert.equal(result.telemetry.rounds,2);
   } finally {clearTimeout(timeout);resolveAssets(assets());}
+});
+
+test('B.AI profiles bind both generation stages to measured Responses wires and produce a final pack',async()=>{
+  const profiles=[
+    ['deepseek-v4.1-flash','../config/evidence-generation/bai-deepseek-v4.1-flash-low-theoretical.json'],
+    ['gpt-5.6-luna','../config/evidence-generation/bai-gpt-5.6-luna-low-theoretical.json'],
+  ];
+  for(const [model,relativeProfile] of profiles){
+    const generationRequests=[],events=[];
+    const provider=createGeminiBoundedEvidenceProvider({
+      loadAssets:async()=>assets(),
+      loadDenseSearch:async({rules})=>({search:()=>[...rules.units.values()]}),
+      loadQaSearch:async()=>({search:()=>[]}),
+      loadGenerationContract:stage=>loadEvidenceGenerationContract(stage,{profileUrl:new URL(relativeProfile,import.meta.url)}),
+      remainingBudget:async()=>1,
+      budgetedRequest:request=>request.invoke(),
+      onEvent:async event=>events.push(event),
+      fetchImpl:async(url,init)=>{
+        const body=JSON.parse(init.body);
+        if(url.endsWith(':embedContent'))return Response.json({embedding:{values:Array(768).fill(1)},usageMetadata:{promptTokenCount:10}});
+        if(url.endsWith(':batchEmbedContents'))return Response.json({embeddings:body.requests.map(()=>({values:Array(768).fill(1)})),usageMetadata:{promptTokenCount:10}});
+        assert.equal(url,'https://api.b.ai/v1/responses');
+        generationRequests.push(body);
+        const first=body.input.find(item=>item.role==='user').content;
+        const payload=JSON.parse(first.slice(first.lastIndexOf('\n\n')+2));
+        const selectedIds=payload.groups?.flatMap(group=>group.units||[]).map(row=>row[0]);
+        const output=payload.queryPlan
+          ? {selectedIds,unableToSelect:false,note:''}
+          : {needs:[{id:'n1',question:'synthetic relation',ruleQuery:'synthetic rule query',qaQuery:'synthetic QA query'}]};
+        return Response.json({status:'completed',model,
+          output:[{type:'message',content:[{type:'output_text',text:JSON.stringify(output)}]}],
+          usage:{input_tokens:500,output_tokens:70,output_tokens_details:{reasoning_tokens:10},total_tokens:570}});
+      },
+    });
+    const result=await provider.retrieve({...input,env:{GEMINI_API_KEY:'fixture',BAI_API_KEY:'fixture'}});
+    assert.equal(generationRequests.length,2);
+    assert.ok(generationRequests.every(body=>body.model===model&&body.max_output_tokens===4096&&body.stream===false));
+    const requestEvents=events.filter(event=>event.type==='request');
+    assert.equal(requestEvents.length,2);
+    assert.ok(requestEvents.every(event=>event.body.model===model
+      &&event.measurement.requestBodyBytes===Buffer.byteLength(JSON.stringify(event.body))
+      &&event.measurement.basis==='user_authorized_theoretical'
+      &&event.measurement.exact===false));
+    assert.equal(result.telemetry.providerUsed,'bai');
+    assert.equal(result.telemetry.modelUsed,model);
+    assert.equal(result.telemetry.reasoningEffort,'low');
+    assert.equal(result.telemetry.tokenUsage.prompt_tokens,1000);
+    assert.ok(result.packing.prompt.includes('complete synthetic source paragraph'));
+    assert.ok(result.packing.promptChars<=14000);
+  }
+});
+
+test('production mixed-stage profiles use the matching provider in the durable request scope', async () => {
+  const routed = [];
+  const controller = {
+    gemini: async request => { routed.push(['gemini', request.operation]); return request.invoke(); },
+    bai: async request => { routed.push(['bai', request.operation]); return request.invoke(); },
+    remainingPreparationUsd: async () => 1,
+    snapshot: () => ({ calls: routed }),
+  };
+  const provider = createGeminiBoundedEvidenceProvider({
+    loadAssets: async () => assets(),
+    loadDenseSearch: async ({rules}) => ({search: () => [...rules.units.values()]}),
+    loadQaSearch: async () => ({search: () => []}),
+    fetchImpl: async (url, init) => {
+      const body = JSON.parse(init.body);
+      if (url.endsWith(':countTokens')) return Response.json({totalTokens: 500});
+      if (url.endsWith(':embedContent')) return Response.json({embedding:{values:Array(768).fill(1)},usageMetadata:{promptTokenCount:10}});
+      if (url.endsWith(':batchEmbedContents')) return Response.json({embeddings:body.requests.map(()=>({values:Array(768).fill(1)})),usageMetadata:{promptTokenCount:10}});
+      if (url.endsWith(':generateContent')) {
+        return Response.json({candidates:[{content:{parts:[{text:JSON.stringify({needs:[{
+          id:'n1',question:'synthetic relation',ruleQuery:'synthetic rule query',qaQuery:'synthetic QA query',
+        }]})}]}}],usageMetadata:{promptTokenCount:500,candidatesTokenCount:60,totalTokenCount:560}});
+      }
+      assert.equal(url, 'https://evidence.b.ai/v1/responses');
+      const first = body.input.find(item => item.role === 'user').content;
+      const payload = JSON.parse(first.slice(first.lastIndexOf('\n\n') + 2));
+      const selectedIds = payload.groups.flatMap(group => group.units || []).map(row => row[0]);
+      return Response.json({status:'completed',model:'gpt-5.6-luna',
+        output:[{type:'message',content:[{type:'output_text',text:JSON.stringify({selectedIds,unableToSelect:false,note:''})}]}],
+        usage:{input_tokens:500,output_tokens:70,total_tokens:570}});
+    },
+  });
+  const env = {
+    ...input.env,
+    EVIDENCE_PLANNING_PROFILE: 'gemini-3.8-flash-low',
+    EVIDENCE_SELECTION_PROFILE: 'bai-gpt-5.6-luna-low-theoretical',
+    RAG_EVIDENCE_BAI_API_KEY: 'fixture',
+    RAG_EVIDENCE_BAI_BASE_URL: 'https://evidence.b.ai/v1',
+  };
+  const result = await runCloudBudgetedQuestion({env, budget:controller}, () => provider.retrieve({...input, env}));
+  assert.equal(result.telemetry.stageTelemetry.planning.provider, 'gemini');
+  assert.equal(result.telemetry.stageTelemetry.selection.provider, 'bai');
+  assert.ok(routed.some(([providerId, operation]) => providerId === 'gemini' && operation === 'generate_content'));
+  assert.ok(routed.some(([providerId, operation]) => providerId === 'bai' && operation === 'generate_content'));
+  assert.ok(routed.some(([providerId, operation]) => providerId === 'gemini' && operation === 'embed_content'));
 });

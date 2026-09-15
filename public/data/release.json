@@ -1,0 +1,16 @@
+{
+  "commit": "92b9a6656ffee2073db0fc089755e0e097ceef86",
+  "dataRevision": "353f7a190f169d599ae273c68e28b094fdbaeceff953afcc4da086b5b6df5ca2",
+  "builtAt": "2026-09-15T14:57:13.654Z",
+  "evidenceAssets": {
+    "expected": {
+      "assetSchemaVersion": 3,
+      "bundleRevision": "dbf5246ea94fa6ae647793bde6c7293070e64c4f5008f510c744611bcedbc982",
+      "dataRevision": "353f7a190f169d599ae273c68e28b094fdbaeceff953afcc4da086b5b6df5ca2",
+      "navigationRevision": "2a9bc2bd31a92f069c75da9709be62adb3305ebbff60937417319ba5baf43c5d",
+      "structureMappingRevision": "bc91119d8adbb953dd16cba6ac93508bafbf12bada41faa5fa2878c045ba309e",
+      "ruleDenseRevision": "eda13885637832c0b74b832dce105dc1e9e3c3240ab2ad7b991422204d7b2f78",
+      "qaDenseRevision": "29dbd028a108a7961fe518f6d8aa6ac3d3a5bc836e7d1076d1dfa3d66ed5263d"
+    }
+  }
+}

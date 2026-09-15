@@ -893,7 +893,6 @@ export async function retrieveRagEvidence({
   const officialQaDirectSource = officialMatches.exact
     .filter((match) => (
       isOfficialQaRecord(match.record)
-      && match.rawSceneMatch === true
       && !hasSevereQuestionIdentityMismatch(match, effectiveQaIdentityCards.length)
     ))
     .map((match) => evidenceFromOfficialMatch(match, "official_qa", limits.maxEvidenceTextChars, retrievalWarnings));

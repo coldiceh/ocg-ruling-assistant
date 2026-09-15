@@ -4,13 +4,13 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { gunzipSync } from "node:zlib";
 import {
+  createLocalEvidencePreprocessBudget,
   createLocalEvidencePreprocessCache,
   denseCacheKey,
-  reserveLocalPreprocessBudget,
-  settleLocalPreprocessBudget,
   sha256,
   stableJson,
 } from "./lib/evidence-preprocess-cache.mjs";
+import { createCloudEvidencePreprocessResources } from "./lib/evidence-preprocess-cloud.mjs";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const rootDir = join(scriptDir, "..");
@@ -103,10 +103,14 @@ export async function runEmbeddingRefresh({
   execute = false,
   maxUsd = null,
   ledgerPath = null,
+  budget = null,
   embedBatch,
   batchSize = 100,
 } = {}) {
   const plans = await planEmbeddingRefresh({ denseInputs, dataDir, cache });
+  const resolvedBudget = budget || (ledgerPath
+    ? createLocalEvidencePreprocessBudget({ ledgerPath, maxUsd: maxUsd > 0 ? maxUsd : Number.MAX_VALUE })
+    : null);
   const report = {
     schemaVersion: 1,
     mode: execute ? "execute" : "dry-run",
@@ -134,21 +138,23 @@ export async function runEmbeddingRefresh({
   if (!execute) return { report, plans };
   if (!outDir) throw codedError("embedding_output_dir_required", 2);
   const totalMisses = Object.values(plans).reduce((sum, plan) => sum + plan.rows.filter((row) => row.state === "generation_miss").length, 0);
-  if (totalMisses && (typeof embedBatch !== "function" || !ledgerPath || !(maxUsd > 0))) {
+  const reusableRaw = Object.values(plans).some((plan) => plan.rows.some((row) => row.state === "raw_reusable"));
+  if ((totalMisses && (typeof embedBatch !== "function" || !(maxUsd > 0)))
+      || ((totalMisses || reusableRaw) && !resolvedBudget)) {
     throw codedError("embedding_execute_configuration_incomplete", 2);
   }
 
   for (const kind of ["rule", "qa"]) {
     for (const row of plans[kind].rows.filter((candidate) => candidate.state === "raw_reusable")) {
-      await materializeDenseRaw({ row, cache, ledgerPath });
+      await materializeDenseRaw({ row, cache, budget: resolvedBudget });
     }
-    await fillEmbeddingMisses({ plan: plans[kind], cache, embedBatch, ledgerPath, maxUsd, batchSize });
+    await fillEmbeddingMisses({ plan: plans[kind], cache, embedBatch, budget: resolvedBudget, batchSize });
     await assembleEmbeddingIndex({ plan: plans[kind], destination: join(outDir, `${kind}-embedding-v1`) });
   }
   return { report, plans, exitCode: 0 };
 }
 
-async function fillEmbeddingMisses({ plan, cache, embedBatch, ledgerPath, maxUsd, batchSize }) {
+async function fillEmbeddingMisses({ plan, cache, embedBatch, budget, batchSize }) {
   const misses = plan.rows.filter((row) => row.state === "generation_miss");
   for (let offset = 0; offset < misses.length; offset += batchSize) {
     const candidates = misses.slice(offset, offset + batchSize);
@@ -174,7 +180,19 @@ async function fillEmbeddingMisses({ plan, cache, embedBatch, ledgerPath, maxUsd
         row.cached = completed;
         row.state = "cache_hit";
       } else {
-        unresolved.push(row);
+        unresolved.push({ row, claim });
+      }
+    }
+    let batchRaw = await cache.readResult("dense-batch", requestKey, "raw");
+    if (batchRaw && unresolved.length && typeof cache.adoptClaim === "function") {
+      for (let index = unresolved.length - 1; index >= 0; index -= 1) {
+        const pending = unresolved[index];
+        if (pending.claim?.claim?.ticket !== requestTicket) continue;
+        const adopted = await cache.adoptClaim("dense", pending.row.key, requestTicket, pending.claim.claim);
+        if (adopted.status === "adopted") {
+          claimed.push(pending.row);
+          unresolved.splice(index, 1);
+        }
       }
     }
     if (unresolved.length) {
@@ -182,7 +200,6 @@ async function fillEmbeddingMisses({ plan, cache, embedBatch, ledgerPath, maxUsd
       throw codedError(`embedding_cache_claim_busy:${unresolved.length}`, 3);
     }
     if (!claimed.length) continue;
-    let batchRaw = await cache.readResult("dense-batch", requestKey, "raw");
     let batchClaimOwned = false;
     if (!batchRaw) {
       const batchClaim = await cache.claim("dense-batch", requestKey, requestTicket);
@@ -203,13 +220,13 @@ async function fillEmbeddingMisses({ plan, cache, embedBatch, ledgerPath, maxUsd
         await cache.writeRaw("dense", row.key, { ticket: requestTicket, value: makeDenseRawPointer(row, batchRaw, vectorIndex) });
         row.rawPointer = await cache.readResult("dense", row.key, "raw");
         row.state = "raw_reusable";
-        await materializeDenseRaw({ row, cache, ledgerPath });
+        await materializeDenseRaw({ row, cache, budget });
       }
       continue;
     }
     const reserve = claimed.length * EMBEDDING_MAX_INPUT_TOKENS * EMBEDDING_PRICE_USD_PER_MILLION / 1_000_000;
     try {
-      await reserveLocalPreprocessBudget({ ledgerPath, ticket: requestTicket, amountUsd: reserve, maxUsd });
+      await budget.reserve({ ticket: requestTicket, amountUsd: reserve });
     } catch (error) {
       for (const row of claimed) await cache.releaseClaim("dense", row.key, requestTicket);
       if (batchClaimOwned) await cache.releaseClaim("dense-batch", requestKey, requestTicket);
@@ -259,7 +276,7 @@ async function fillEmbeddingMisses({ plan, cache, embedBatch, ledgerPath, maxUsd
       row.cached = value;
       row.state = "cache_hit";
     }
-    if (spentUsd !== null) await settleLocalPreprocessBudget({ ledgerPath, ticket: requestTicket, spentUsd });
+    if (spentUsd !== null) await budget.settle({ ticket: requestTicket, spentUsd });
   }
 }
 
@@ -275,7 +292,7 @@ function makeDenseRawPointer(row, batchRaw, vectorIndex) {
   };
 }
 
-async function materializeDenseRaw({ row, cache, ledgerPath }) {
+async function materializeDenseRaw({ row, cache, budget }) {
   const pointer = row.rawPointer;
   if (pointer?.kind !== "dense-raw-pointer" || pointer.key !== row.key
       || pointer.inputKey !== row.item.embeddingInputSha256
@@ -297,8 +314,8 @@ async function materializeDenseRaw({ row, cache, ledgerPath }) {
   const vector = vectors[pointer.vectorIndex];
   validateVector(vector);
   if (batch.spentUsd !== null) {
-    if (!ledgerPath) throw codedError("embedding_raw_replay_ledger_required", 2);
-    await settleLocalPreprocessBudget({ ledgerPath, ticket: batch.requestTicket, spentUsd: batch.spentUsd });
+    if (!budget) throw codedError("embedding_raw_replay_ledger_required", 2);
+    await budget.settle({ ticket: batch.requestTicket, spentUsd: batch.spentUsd });
   }
   const value = {
     schemaVersion: 1,
@@ -492,6 +509,7 @@ function parseArguments(argv) {
     else if (arg === "--inputs") options.inputs = resolve(take(index++));
     else if (arg === "--ledger") options.ledger = resolve(take(index++));
     else if (arg === "--max-usd") options.maxUsd = Number(take(index++));
+    else if (arg === "--cloud") options.cloud = true;
     else if (arg === "--batch-size") options.batchSize = Number(take(index++));
     else if (arg === "--dry-run") options.mode = "dry-run";
     else if (arg === "--execute") options.mode = "execute";
@@ -501,6 +519,8 @@ function parseArguments(argv) {
     throw codedError("embedding_arguments_invalid", 2);
   }
   if (resolve(options.dataDir) === resolve(options.outDir)) throw codedError("embedding_staging_must_not_overwrite_data_dir", 2);
+  if (options.mode === "execute" && (!(options.maxUsd > 0) || (!options.ledger && !options.cloud)
+      || (options.ledger && options.cloud))) throw codedError("execute_budget_arguments_missing", 2);
   options.inputs ||= join(options.outDir, "dense-inputs.json.gz");
   return options;
 }
@@ -529,8 +549,11 @@ function createGeminiEmbeddingTransport({ apiKey, fetchImpl = globalThis.fetch }
 async function main(argv = process.argv.slice(2)) {
   const options = parseArguments(argv);
   const denseInputs = await readDenseInputs(options.inputs);
-  const cache = createLocalEvidencePreprocessCache({ cacheDir: options.cacheDir });
   const execute = options.mode === "execute";
+  const cloud = execute && options.cloud
+    ? await createCloudEvidencePreprocessResources({ env: { ...process.env, EVIDENCE_PREPROCESS_MAX_USD: String(options.maxUsd) } })
+    : null;
+  const cache = cloud?.cache || createLocalEvidencePreprocessCache({ cacheDir: options.cacheDir });
   let transport;
   const embedBatch = execute ? (...args) => {
     transport ||= createGeminiEmbeddingTransport({ apiKey: process.env.GEMINI_RULE_QA_API_KEY || process.env.GEMINI_API_KEY });
@@ -544,6 +567,7 @@ async function main(argv = process.argv.slice(2)) {
     execute,
     maxUsd: options.maxUsd,
     ledgerPath: options.ledger,
+    budget: cloud?.budget,
     embedBatch,
     batchSize: options.batchSize,
   });

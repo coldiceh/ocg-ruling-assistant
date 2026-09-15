@@ -48,6 +48,12 @@ async function fixture() {
     writeFile(join(dataDir, "qa-index.json"), JSON.stringify(qaIndex)),
     writeFile(join(dataDir, "ocg-rule-corpus.json"), JSON.stringify(rules)),
     writeFile(join(dataDir, "rag-data-revision-manifest.json"), JSON.stringify({ revision: DATA_REVISION })),
+    writeFile(join(dataDir, "cards.json"), JSON.stringify({ records: [
+      { id: "17", cnName: "测试卡甲", jaName: "テストカード甲", enName: "Fixture card A",
+        sourceUrl: "https://example.test/card/17" },
+      { id: "29", cnName: "测试卡乙", jaName: "テストカード乙", enName: "Fixture card B",
+        sourceUrl: "https://example.test/card/29" },
+    ] })),
   ]);
   for (const directory of ["rule-embedding-v1", "qa-embedding-v1"]) {
     await mkdir(join(dataDir, directory));
@@ -137,6 +143,55 @@ test("builder emits compressed byte-bound assets and loader reuses one immutable
   assert.doesNotMatch(manifestText, /evidence-vectors|\.f32/u);
 });
 
+test("navigation receives exact card reference names without changing canonical or dense QA text", async () => {
+  const dataDir = await fixture();
+  const rulings = JSON.parse(await readFile(join(dataDir, "rulings.json"), "utf8"));
+  rulings.records[0].text = "<<17>> alpha";
+  rulings.records[0].cardIds = ["17", "999"];
+  await writeFile(join(dataDir, "rulings.json"), JSON.stringify(rulings));
+  const first = await buildGeminiRuleQaAssets({ dataDir, stage: "canonical" });
+  const readAsset = async name => JSON.parse((await ungzip(await readFile(join(dataDir,
+    "gemini-rule-qa-v1", name)))).toString("utf8"));
+  const navigation = await readAsset("navigation-inputs.json.gz");
+  const row = navigation.find(value => value.unitKey === "qa:qa:qa-1");
+  assert.deepEqual(row.input.referenceCards, [{ cardId: "17", cnName: "测试卡甲",
+    jaName: "テストカード甲", enName: "Fixture card A", sourceUrl: "https://example.test/card/17" }]);
+  assert.deepEqual(row.input.unresolvedReferenceCardIds, ["999"]);
+  assert.equal(row.input.unitText, JSON.stringify(rulings.records[0]));
+  const denseBefore = (await readAsset("dense-inputs.json.gz")).qa;
+  assert.equal(denseBefore.find(value => value.sourceId === "qa:qa-1").embeddingInput,
+    ruleEmbeddingText({ title: rulings.records[0].title, text: JSON.stringify(rulings.records[0]) }));
+  const cardsPath = join(dataDir, "cards.json");
+  const cards = JSON.parse(await readFile(cardsPath, "utf8"));
+  cards.records[0].jaName = "テストカード甲改訂";
+  await writeFile(cardsPath, JSON.stringify(cards));
+  const second = await buildGeminiRuleQaAssets({ dataDir, stage: "canonical" });
+  const changed = (await readAsset("navigation-inputs.json.gz")).find(value => value.unitKey === row.unitKey);
+  assert.notEqual(changed.contextInputSha256, row.contextInputSha256);
+  assert.notEqual(first.manifest.sources.cards.sha256, second.manifest.sources.cards.sha256);
+  assert.equal(changed.input.unitText, row.input.unitText);
+  assert.deepEqual((await readAsset("dense-inputs.json.gz")).qa, denseBefore);
+});
+
+test("missing optional reference-card names survive canonical release verify roundtrip", async () => {
+  clearGeminiRuleQaAssetsCacheForTests();
+  const dataDir = await fixture();
+  const cardsPath = join(dataDir, "cards.json");
+  const cards = JSON.parse(await readFile(cardsPath, "utf8"));
+  delete cards.records[0].cnName;
+  await writeFile(cardsPath, JSON.stringify(cards));
+
+  await buildAll(dataDir);
+  const verified = await buildGeminiRuleQaAssets({ dataDir, stage: "verify" });
+  const navigationInputs = JSON.parse((await ungzip(await readFile(join(dataDir,
+    "gemini-rule-qa-v1", "navigation-inputs.json.gz")))).toString("utf8"));
+  const row = navigationInputs.find(value => value.unitKey === "qa:qa:qa-1");
+
+  assert.equal(verified.indexSource, "verified");
+  assert.deepEqual(row.input.referenceCards, [{ cardId: "17", cnName: "",
+    jaName: "テストカード甲", enName: "Fixture card A", sourceUrl: "https://example.test/card/17" }]);
+});
+
 test("runtime loader does not require canonical-stage navigation or dense inputs", async () => {
   clearGeminiRuleQaAssetsCacheForTests();
   const dataDir = await fixture();
@@ -187,7 +242,15 @@ test("release build and sync workflow verify and include only the same-version r
     readFile(new URL("../vercel.json", import.meta.url), "utf8"),
     readFile(new URL("../package.json", import.meta.url), "utf8"),
   ]);
-  assert.match(workflow, /pnpm build:gemini-rule-qa/u);
+  const canonical = workflow.indexOf("--stage canonical");
+  const release = workflow.indexOf("--stage release");
+  const verify = workflow.indexOf("--stage verify");
+  assert.ok(canonical >= 0 && canonical < release && release < verify,
+    "data sync must build canonical, release, and verify stages in order");
+  const releaseStep = workflow.slice(release, verify);
+  assert.match(releaseStep, /--navigation data\/gemini-rule-qa-v1\/navigation-records\.json\.gz/u);
+  assert.match(releaseStep, /--rule-dense-dir data\/rule-embedding-v1/u);
+  assert.match(releaseStep, /--qa-dense-dir data\/qa-embedding-v1/u);
   assert.match(workflow, /tests\/gemini-rule-qa-assets\.test\.mjs/u);
   assert.match(vercel, /pnpm run build:vercel/u);
   assert.match(vercel, /gemini-rule-qa-v1\/\*\*/u);

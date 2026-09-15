@@ -7,9 +7,9 @@
       "sha256": "5a553d1f39bd3a595fd18a5f56158d0170316cbd6f8b8aba77cd1aea351f967d"
     },
     {
-      "sourceId": "konami:ocg-rulebook-20200401:printed-74-76",
-      "file": "konami-ocg-rulebook-20200401-printed-74-76.json",
-      "sha256": "adbaff58e07a94a86bade9368dcc54238d13dcaeaa1b41798bda6d5caaa80969"
+      "sourceId": "konami:ocg-rulebook-20200401",
+      "file": "konami-ocg-rulebook-20200401.json",
+      "sha256": "46ef5538cc65266aae6a8bf047379da21ebce43ffabcd35c1bf8f07529830fea"
     }
   ]
 }

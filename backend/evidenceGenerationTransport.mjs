@@ -31,13 +31,18 @@ export function convertEvidenceGenerationRequest(body, contract) {
   if (!reasoning || typeof reasoning !== "object" || Array.isArray(reasoning) || !Object.keys(reasoning).length) {
     throw new TypeError("evidence_generation_reasoning_mapping_missing");
   }
+  const responseFormat = contract.responseFormatConfig?.responses;
+  const wireInput = responseFormat?.type === "json_object"
+    ? [{ role: "system", content: "Return the response as JSON." }, ...input]
+    : input;
   const wire = {
     model: contract.modelId,
     ...(instructions ? { instructions } : {}),
-    input,
+    input: wireInput,
     stream: false,
     max_output_tokens: contract.maxBillableOutputTokens,
     reasoning: structuredClone(reasoning),
+    text: { format: structuredClone(responseFormat) },
   };
   return wire;
 }
@@ -70,7 +75,7 @@ function createGeminiTransport({ contract, env, fetchImpl }) {
 }
 
 function createBaiResponsesTransport({ contract, env, fetchImpl }) {
-  const endpoint = `${normalizeBaiBaseUrl(env.BAI_BASE_URL)}/responses`;
+  const endpoint = `${normalizeBaiBaseUrl(env.RAG_EVIDENCE_BAI_BASE_URL || env.BAI_BASE_URL)}/responses`;
   return Object.freeze({
     providerId: "bai",
     protocol: "responses",
@@ -81,7 +86,10 @@ function createBaiResponsesTransport({ contract, env, fetchImpl }) {
       const response = await fetchImpl(endpoint, {
         method: "POST",
         headers: {
-          authorization: `Bearer ${requiredSecret(env.BAI_API_KEY, "bai_navigation_api_key_required")}`,
+          authorization: `Bearer ${requiredSecret(
+            env.RAG_EVIDENCE_BAI_API_KEY || env.BAI_API_KEY,
+            "bai_navigation_api_key_required",
+          )}`,
           "content-type": "application/json",
         },
         body: JSON.stringify(body),
@@ -107,9 +115,23 @@ function assertMeasuredWireRequest(body, contract, measurement) {
       || !Number.isSafeInteger(measurement.inputTokensUpperBound) || measurement.inputTokensUpperBound <= 0
       || (measurement.contextInputTokensUpperBound !== null
         && (!Number.isSafeInteger(measurement.contextInputTokensUpperBound) || measurement.contextInputTokensUpperBound <= 0))
-      || !["provider_count", "verified_tokenizer", "documented_upper_bound"].includes(measurement.basis)) {
+      || !measurementBasisAllowed(contract, measurement)) {
     throw new Error("evidence_generation_unmeasured_request_blocked");
   }
+}
+
+function measurementBasisAllowed(contract, measurement) {
+  if (contract.providerId === "gemini") {
+    return measurement.basis === "provider_count" && measurement.exact === true;
+  }
+  return contract.providerId === "bai"
+    && contract.measurementContract?.status === "user_authorized_theoretical"
+    && contract.measurementContract?.basis === "user_authorized_theoretical"
+    && contract.measurementContract?.exact === false
+    && measurement.basis === "user_authorized_theoretical"
+    && measurement.exact === false
+    && measurement.inputTokenAllocationKind === "theoretical_estimate"
+    && measurement.estimatorVersion === contract.measurementContract?.estimator?.version;
 }
 
 function validateBaiResponse(raw, contract) {
@@ -123,7 +145,12 @@ function validateBaiResponse(raw, contract) {
 }
 
 function extractGeminiText(raw) {
-  return raw?.candidates?.[0]?.content?.parts?.map((part) => part?.text || "").join("") || "";
+  return (Array.isArray(raw?.candidates?.[0]?.content?.parts)
+    ? raw.candidates[0].content.parts
+    : [])
+    .filter((part) => !part?.thought && typeof part?.text === "string")
+    .map((part) => part.text)
+    .join("\n");
 }
 
 function extractBaiResponsesText(raw) {

@@ -290,6 +290,76 @@ test("a saved batch response is replayed per input after interruption without an
   assert.deepEqual(manifest.orderedContentHashes, [a.embeddingInputSha256, c.embeddingInputSha256]);
 });
 
+test("a saved batch response can adopt its interrupted row claim before raw pointers exist", async (t) => {
+  const { directory, dataDir, outDir, cache: backing } = await fixture(t);
+  const a = rule("a");
+  const c = rule("c");
+  const q = qa("q");
+  await writeIndex(dataDir, "rule", [a], [vector(1)]);
+  await writeIndex(dataDir, "qa", [q], [vector(3)]);
+  const denseInputs = validateDenseInputs({ schemaVersion: 1, rule: [a, c], qa: [q] });
+  const ledgerPath = join(directory, "ledger.json");
+  await writeFile(ledgerPath, JSON.stringify({
+    schemaVersion: 1,
+    authorizationId: "fixture-only",
+    limitUsd: 6,
+    spentUsd: 4.3439,
+    reservedUsd: 0,
+    tickets: {},
+  }));
+  let interruptOnce = true;
+  const interruptedCache = {
+    ...backing,
+    writeRaw: async (kind, key, value) => {
+      const saved = await backing.writeRaw(kind, key, value);
+      if (kind === "dense-batch" && interruptOnce) {
+        interruptOnce = false;
+        throw new Error("fixture_interruption_after_batch_raw");
+      }
+      return saved;
+    },
+  };
+  let calls = 0;
+  await assert.rejects(runEmbeddingRefresh({
+    denseInputs,
+    dataDir,
+    outDir,
+    cache: interruptedCache,
+    execute: true,
+    maxUsd: 0.01,
+    ledgerPath,
+    embedBatch: async () => {
+      calls += 1;
+      return { embeddings: [{ values: vector(4) }], usageMetadata: { promptTokenCount: 7 } };
+    },
+  }), /fixture_interruption_after_batch_raw/u);
+
+  let adoptions = 0;
+  const recoveryCache = {
+    ...backing,
+    adoptClaim: async (_kind, _key, ticket, expectedClaim) => {
+      assert.equal(expectedClaim.ticket, ticket);
+      adoptions += 1;
+      return { status: "adopted" };
+    },
+  };
+  await runEmbeddingRefresh({
+    denseInputs,
+    dataDir,
+    outDir,
+    cache: recoveryCache,
+    execute: true,
+    maxUsd: 0.01,
+    ledgerPath,
+    embedBatch: async () => { throw new Error("provider_must_not_repeat"); },
+  });
+  assert.equal(calls, 1);
+  assert.equal(adoptions, 1);
+  const settledLedger = JSON.parse(await readFile(ledgerPath, "utf8"));
+  assert.equal(settledLedger.reservedUsd, 0);
+  assert.ok(settledLedger.spentUsd > 4.3439);
+});
+
 test("missing embedding usage keeps the reservation while the saved vector remains reusable", async (t) => {
   const { directory, dataDir, outDir, cache } = await fixture(t);
   const a = rule("a");
