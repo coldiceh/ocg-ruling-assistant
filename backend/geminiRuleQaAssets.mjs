@@ -6,6 +6,7 @@ import { join, resolve } from "node:path";
 
 import { createQaSnapshot } from "./geminiQaTools.mjs";
 import { createFocusedQaView } from "./geminiFocusedQaView.mjs";
+import { createNavigationSearch } from "./evidenceNavigationSearch.mjs";
 
 export const GEMINI_RULE_QA_ASSET_DIRECTORY = "gemini-rule-qa-v1";
 export const GEMINI_RULE_QA_MANIFEST_FILE = "manifest.json";
@@ -19,6 +20,7 @@ const FILES = Object.freeze({
   navigationInputs: "navigation-inputs.json.gz",
   denseInputs: "dense-inputs.json.gz",
   navigationRecords: "navigation-records.json.gz",
+  navigationLexicalIndex: "navigation-lexical-index.bm25.gz",
 });
 const SHA256 = /^[a-f0-9]{64}$/u;
 const decompressGzip = promisify(gunzip);
@@ -96,6 +98,9 @@ function validateManifest(manifest) {
   validateDescriptor(manifest.assets?.navigationInputs, FILES.navigationInputs);
   validateDescriptor(manifest.assets?.denseInputs, FILES.denseInputs);
   validateDescriptor(manifest.assets?.navigationRecords, FILES.navigationRecords);
+  if (Object.hasOwn(manifest.assets || {}, "navigationLexicalIndex")) {
+    validateDescriptor(manifest.assets.navigationLexicalIndex, FILES.navigationLexicalIndex);
+  }
   return manifest;
 }
 
@@ -138,6 +143,9 @@ async function loadUncached(assetDir) {
   const structureMapping = await readBoundJson(assetDir, manifest.assets.structureMapping);
   const navigationRecords = await readBoundJson(assetDir, manifest.assets.navigationRecords);
   const lexicalIndexBytes = await readBoundAsset(assetDir, manifest.assets.qaLexicalIndex);
+  const navigationLexicalIndexBytes = manifest.assets.navigationLexicalIndex
+    ? await readBoundAsset(assetDir, manifest.assets.navigationLexicalIndex)
+    : undefined;
   if (!Array.isArray(qaRecords) || qaRecords.length !== manifest.counts.qaRecords
       || !Array.isArray(ruleRecords) || ruleRecords.length !== manifest.counts.ruleRecords
       || !Array.isArray(navigationRecords) || navigationRecords.length !== manifest.counts.navigationRecords
@@ -177,6 +185,12 @@ async function loadUncached(assetDir) {
     items: [...qaSnapshot.qaUnitsByKey.values()] });
   const focusedByHandle = new Map(focusedQa.items.map((item) => [item.handle, item]));
   const frozenNavigationRecords = freezeTree(navigationRecords);
+  const navigationSearch = navigationLexicalIndexBytes === undefined ? null
+    : createNavigationSearch(frozenNavigationRecords, {
+      navigationRevision: manifest.navigationRevision,
+      lexicalIndexBytes: navigationLexicalIndexBytes,
+      lexicalIndexBytesOwned: true,
+    });
   const navigationByUnit = new Map(frozenNavigationRecords.map((record) => [record.unitKey, record]));
   const qaUnits = freezeTree((structureMapping.qaUnits || []).map((unit) => {
     const item = focusedByHandle.get(unit.handle || unit.parentHandle);
@@ -210,6 +224,7 @@ async function loadUncached(assetDir) {
     ruleRecords: frozenRuleRecords,
     navigationRecords: frozenNavigationRecords,
     navigationRecordsByUnit: navigationByUnit,
+    ...(navigationSearch ? { navigationSearch } : {}),
     structureMapping: frozenMapping,
     qaUnits,
     qaUnitsByKey: new Map(qaUnits.map((unit) => [unit.unitKey, unit])),
@@ -234,8 +249,8 @@ export async function loadGeminiRuleQaAssets({ dataDir, assetDir } = {}) {
       if (assets.bundleRevision !== manifestPreview.bundleRevision) {
         throw new Error("gemini_rule_qa_manifest_changed_during_load");
       }
-      const descriptors = ["qaRecords", "ruleRecords", "qaLexicalIndex", "structureMapping", "navigationRecords"]
-        .map(key => assets.manifest.assets[key]);
+      const descriptors = ["qaRecords", "ruleRecords", "qaLexicalIndex", "structureMapping", "navigationRecords",
+        "navigationLexicalIndex"].map(key => assets.manifest.assets[key]).filter(Boolean);
       lastLoadedRelease = Object.freeze({ assetSchemaVersion: assets.manifest.schemaVersion,
         bundleRevision: assets.bundleRevision, dataRevision: assets.dataRevision,
         navigationRevision: assets.navigationRevision,

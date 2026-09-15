@@ -40,3 +40,27 @@ test('bounded navigation queues preserve the exact legacy top candidates for eac
   assert.deepEqual(bounded, expected);
   assert.ok(Object.values(bounded).every((hits) => hits.length === 32));
 });
+
+test('prebuilt navigation lexical index preserves full and per-kind candidate order', () => {
+  const sourceKinds = ['rule', 'qa', 'faq'];
+  const records = Object.freeze(Array.from({ length: 180 }, (_, index) => (
+    navigationRecord(index, sourceKinds[index % sourceKinds.length])
+  )));
+  const navigationRevision = 'a'.repeat(64);
+  const query = '伤害步骤 发动 无效';
+  const fallback = createNavigationSearch(records, { navigationRevision });
+  const expectedFull = fallback.search(query);
+  const expectedByKind = fallback.searchBySourceKind(query, { sourceKinds, limit: 32 });
+  const bytes = fallback.buildLexicalIndex();
+  const installed = createNavigationSearch(records, { navigationRevision, lexicalIndexBytes: bytes });
+
+  assert.deepEqual(installed.search(query), expectedFull);
+  assert.deepEqual(installed.searchBySourceKind(query, { sourceKinds, limit: 32 }), expectedByKind);
+  assert.throws(
+    () => createNavigationSearch(records, {
+      navigationRevision: 'b'.repeat(64),
+      lexicalIndexBytes: bytes,
+    }),
+    /manual_capture_lexical_index_binding_invalid/u,
+  );
+});

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -16,9 +16,18 @@ import {
 import { buildGeminiRuleQaAssets } from "../scripts/build-gemini-rule-qa-assets.mjs";
 import { buildRuleContext } from "../backend/geminiRuleContext.mjs";
 import { ruleEmbeddingText } from "../backend/geminiRuleDenseSearch.mjs";
+import { createNavigationSearch } from "../backend/evidenceNavigationSearch.mjs";
 
 const DATA_REVISION = "d".repeat(64);
 const ungzip = promisify(gunzip);
+
+function stableJson(value) {
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
+  return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stableJson(value[key])}`).join(",")}}`;
+}
+
+function sha256(value) { return createHash("sha256").update(value).digest("hex"); }
 
 async function fixture() {
   const dataDir = await mkdtemp(join(tmpdir(), "gemini-rule-qa-"));
@@ -122,6 +131,13 @@ test("builder emits compressed byte-bound assets and loader reuses one immutable
   assert.equal(linked.items[0].record.id, "faq-1");
   assert.equal(linked.items[0].sourceTier, "S0");
   assert.equal(first.manifest.schemaVersion, 3);
+  assert.equal(first.manifest.assets.navigationLexicalIndex.file, "navigation-lexical-index.bm25.gz");
+  const fallbackNavigation = createNavigationSearch(first.navigationRecords, {
+    navigationRevision: first.navigationRevision,
+  });
+  assert.deepEqual(first.navigationSearch.search("alpha"), fallbackNavigation.search("alpha"));
+  assert.deepEqual(first.navigationSearch.searchBySourceKind("alpha"),
+    fallbackNavigation.searchBySourceKind("alpha"));
   assert.equal(first.navigationRecords.every(record => record.navigationStatus === "not_generated_in_scope"), true);
   assert.notStrictEqual(first.qaUnits, first.structureMapping.qaUnits);
   assert.equal(Object.hasOwn(first.structureMapping.qaUnits[0], "item"), false);
@@ -129,7 +145,14 @@ test("builder emits compressed byte-bound assets and loader reuses one immutable
   assert.equal(first.handleUnitKeys.get(linked.items[0].handle).length, 2);
   assert.ok(first.handleUnitKeys.get(linked.items[0].handle)
     .every(unitKey => first.qaUnitsByKey.get(unitKey).item.record.sourceExcerpt.parentHandle === linked.items[0].handle));
-  assert.equal(getLoadedGeminiEvidenceReleaseInfo().bundleRevision, first.bundleRevision);
+  const releaseInfo = getLoadedGeminiEvidenceReleaseInfo();
+  assert.equal(releaseInfo.bundleRevision, first.bundleRevision);
+  const loadedDescriptors = ["qaRecords", "ruleRecords", "qaLexicalIndex", "structureMapping",
+    "navigationRecords", "navigationLexicalIndex"].map(key => first.manifest.assets[key]);
+  assert.equal(releaseInfo.compressedBytes,
+    loadedDescriptors.reduce((sum, descriptor) => sum + descriptor.bytes, 0));
+  assert.equal(releaseInfo.canonicalBytes,
+    loadedDescriptors.reduce((sum, descriptor) => sum + descriptor.canonicalBytes, 0));
 
   const navigationInputs = JSON.parse((await ungzip(await readFile(join(dataDir,
     "gemini-rule-qa-v1", "navigation-inputs.json.gz")))).toString("utf8"));
@@ -141,6 +164,44 @@ test("builder emits compressed byte-bound assets and loader reuses one immutable
   const manifestText = await readFile(join(dataDir, "gemini-rule-qa-v1", "manifest.json"), "utf8");
   assert.match(manifestText, /"encoding": "gzip"/u);
   assert.doesNotMatch(manifestText, /evidence-vectors|\.f32/u);
+});
+
+test("navigation-index stage adds only the bound navigation index and manifest update", async () => {
+  clearGeminiRuleQaAssetsCacheForTests();
+  const dataDir = await fixture();
+  await buildAll(dataDir);
+  const assetDir = join(dataDir, "gemini-rule-qa-v1");
+  const manifestPath = join(assetDir, "manifest.json");
+  const current = JSON.parse(await readFile(manifestPath, "utf8"));
+  const { navigationLexicalIndex: removed, ...oldAssets } = current.assets;
+  assert.ok(removed);
+  const { bundleRevision: _oldRevision, ...oldBody } = { ...current, assets: oldAssets };
+  const oldManifest = { ...oldBody, bundleRevision: sha256(stableJson(oldBody)) };
+  await Promise.all([
+    writeFile(manifestPath, `${JSON.stringify(oldManifest, null, 2)}\n`),
+    rm(join(assetDir, removed.file)),
+  ]);
+  const before = new Map(await Promise.all((await readdir(assetDir)).filter(file => file !== "manifest.json")
+    .map(async file => [file, sha256(await readFile(join(assetDir, file)))])));
+
+  const result = await buildGeminiRuleQaAssets({ dataDir, stage: "navigation-index" });
+  const after = new Map(await Promise.all((await readdir(assetDir))
+    .filter(file => !["manifest.json", "navigation-lexical-index.bm25.gz"].includes(file))
+    .map(async file => [file, sha256(await readFile(join(assetDir, file)))])));
+
+  assert.equal(result.stage, "navigation-index");
+  assert.equal(result.indexSource, "navigation_records");
+  assert.deepEqual(after, before);
+  assert.equal(result.manifest.assets.navigationLexicalIndex.file, "navigation-lexical-index.bm25.gz");
+  assert.notEqual(result.manifest.bundleRevision, oldManifest.bundleRevision);
+  clearGeminiRuleQaAssetsCacheForTests();
+  const loaded = await loadGeminiRuleQaAssets({ dataDir });
+  const fallback = createNavigationSearch(loaded.navigationRecords, {
+    navigationRevision: loaded.navigationRevision,
+  });
+  assert.deepEqual(loaded.navigationSearch.search("alpha"), fallback.search("alpha"));
+  assert.deepEqual(loaded.navigationSearch.searchBySourceKind("alpha"),
+    fallback.searchBySourceKind("alpha"));
 });
 
 test("navigation receives exact card reference names without changing canonical or dense QA text", async () => {
@@ -204,11 +265,12 @@ test("runtime loader does not require canonical-stage navigation or dense inputs
   assert.equal(assets.structureMappingRevision, release.manifest.structureMappingRevision);
 });
 
-test("loader rejects a mechanically changed compressed asset", async () => {
+for (const assetFile of ["qa-records.json.gz", "navigation-lexical-index.bm25.gz"]) {
+test(`loader rejects a mechanically changed compressed asset: ${assetFile}`, async () => {
   clearGeminiRuleQaAssetsCacheForTests();
   const dataDir = await fixture();
   await buildAll(dataDir);
-  const file = join(dataDir, "gemini-rule-qa-v1", "qa-records.json.gz");
+  const file = join(dataDir, "gemini-rule-qa-v1", assetFile);
   const bytes = await readFile(file);
   bytes[bytes.length - 1] ^= 1;
   await writeFile(file, bytes);
@@ -217,6 +279,7 @@ test("loader rejects a mechanically changed compressed asset", async () => {
     /asset_compressed_binding_invalid/u,
   );
 });
+}
 
 test("built production asset contains every current formal QA and FAQ source id", async () => {
   clearGeminiRuleQaAssetsCacheForTests();

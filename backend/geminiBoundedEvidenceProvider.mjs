@@ -299,7 +299,9 @@ export function prepareBoundedEvidenceSnapshot(assets) {
     qaByParent.get(parentHandle).push(key);
   }
   snapshot = { rules, units, qaByParent, ruleSearch: createRuleCandidateSearch(rules),
-    navigationSearch: createNavigationSearch(assets.navigationRecords),
+    navigationSearch: assets.navigationSearch || createNavigationSearch(assets.navigationRecords, {
+      navigationRevision: assets.navigationRevision,
+    }),
     qaTools: assets.createQaTools({ pageSize: 256 }) };
   snapshots.set(assets, snapshot);
   return { snapshot, cacheHit: false };

@@ -3,6 +3,12 @@ import path from "node:path";
 import process from "node:process";
 import { run } from "node:test";
 import { spec } from "node:test/reporters";
+import { isolateFreeTestEnvironment } from "./lib/free-test-environment.mjs";
+
+// node:test runs test files in child processes. Remove inherited real Relay
+// transport settings before the runner creates those children; test-local
+// env objects remain available because they are explicit function inputs.
+isolateFreeTestEnvironment(process.env);
 
 const testRoot = path.resolve("tests");
 

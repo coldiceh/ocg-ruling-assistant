@@ -2,12 +2,18 @@ import { createHash } from 'node:crypto';
 import {
   buildManualCaptureBoundedLexicalQueryPartitions,
   buildManualCaptureCompleteLexicalQueryQueue,
+  installManualCaptureLexicalIndex,
+  serializeManualCaptureLexicalIndex,
 } from '../scripts/lib/manual-capture-evidence-selection.mjs';
 
 export const NAVIGATION_LEXICAL_CONTRACT = 'context-navigation-lexical-v1';
 
 // Navigation is a separate search channel. Its text is never an evidence DTO.
-export function createNavigationSearch(records = []) {
+export function createNavigationSearch(records = [], {
+  lexicalIndexBytes,
+  lexicalIndexBytesOwned = false,
+  navigationRevision,
+} = {}) {
   const candidates = records.map(record => Object.freeze({
     binding: createHash('sha256').update(`navigation\0${record.unitKey}`).digest('hex'),
     unitKey: record.unitKey,
@@ -19,6 +25,14 @@ export function createNavigationSearch(records = []) {
     throw new Error('evidence_navigation_unit_identity_duplicate');
   }
   Object.freeze(candidates);
+  if (lexicalIndexBytes !== undefined) {
+    installManualCaptureLexicalIndex({
+      candidates,
+      dataRevision: navigationRevision,
+      bytes: lexicalIndexBytes,
+      takeOwnership: lexicalIndexBytesOwned,
+    });
+  }
   const byBinding = new Map(candidates.map(item => [item.binding, item]));
   function hit(candidate) {
     const record = byBinding.get(candidate.binding);
@@ -52,5 +66,8 @@ export function createNavigationSearch(records = []) {
       Object.freeze(partitioned[sourceKind].map(hit)),
     ])));
   }
-  return { search, searchBySourceKind };
+  function buildLexicalIndex() {
+    return serializeManualCaptureLexicalIndex({ candidates, dataRevision: navigationRevision });
+  }
+  return { search, searchBySourceKind, buildLexicalIndex };
 }
