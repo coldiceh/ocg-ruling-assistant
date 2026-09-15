@@ -8,10 +8,11 @@ import { buildRuleContext } from "../backend/geminiRuleContext.mjs";
 import { ruleEmbeddingText } from "../backend/geminiRuleDenseSearch.mjs";
 import { createQaSnapshot } from "../backend/geminiQaTools.mjs";
 import { createFocusedQaView } from "../backend/geminiFocusedQaView.mjs";
+import { createNavigationSearch } from "../backend/evidenceNavigationSearch.mjs";
 import { buildRuleStructureMapping, makeQaSourceUnits, sourceSha256, stableJson,
   SOURCE_STRUCTURE_MAPPING_CONTRACT } from "../backend/evidenceSourceStructure.mjs";
 import { GEMINI_RULE_QA_ASSET_DIRECTORY, GEMINI_RULE_QA_ASSET_SCHEMA_VERSION,
-  GEMINI_RULE_QA_MANIFEST_FILE } from "../backend/geminiRuleQaAssets.mjs";
+  GEMINI_RULE_QA_MANIFEST_FILE, loadGeminiRuleQaAssets } from "../backend/geminiRuleQaAssets.mjs";
 
 const gz = promisify(gzip), ungz = promisify(gunzip);
 const QA_TYPES = new Set(["qa", "card-faq"]);
@@ -21,7 +22,8 @@ const FILES = { qaRecords: "qa-records.json.gz", ruleRecords: "rule-records.json
   qaLexicalIndex: "qa-lexical-index.bm25.gz", structureMapping: "structure-mapping.json.gz",
   releaseStructureMapping: "structure-mapping.release.json.gz",
   navigationInputs: "navigation-inputs.json.gz", denseInputs: "dense-inputs.json.gz",
-  navigationRecords: "navigation-records.json.gz" };
+  navigationRecords: "navigation-records.json.gz",
+  navigationLexicalIndex: "navigation-lexical-index.bm25.gz" };
 const sha256 = value => createHash("sha256").update(value).digest("hex");
 
 function parseRecords(bytes, name) {
@@ -243,7 +245,11 @@ async function releaseStage(sourceDir, destination, navigationPath, ruleDenseDir
     throw new Error("gemini_rule_qa_navigation_order_invalid");
   }
   const navigationRevision = sha256(stableJson(navigation));
-  const navAsset = await writeAsset(destination, FILES.navigationRecords, navigation);
+  const navigationSearch = createNavigationSearch(navigation, { navigationRevision });
+  const [navAsset, navigationLexicalAsset] = await Promise.all([
+    writeAsset(destination, FILES.navigationRecords, navigation),
+    writeAsset(destination, FILES.navigationLexicalIndex, navigationSearch.buildLexicalIndex(), true),
+  ]);
   const [ruleDense, qaDense] = await Promise.all([
     denseManifest(resolve(ruleDenseDir || join(sourceDir, "rule-embedding-v1"))),
     denseManifest(resolve(qaDenseDir || join(sourceDir, "qa-embedding-v1"))),
@@ -283,10 +289,26 @@ async function releaseStage(sourceDir, destination, navigationPath, ruleDenseDir
       navigationPrompt: "navigation-v1", lexicalIndex: "context-navigation-v1" },
     revisions, sources: canonical.sources,
     counts: { ...canonical.counts, navigationRecords: navigation.length },
-    assets: { ...canonical.assets, structureMapping: mappingAsset, navigationRecords: navAsset } };
+    assets: { ...canonical.assets, structureMapping: mappingAsset, navigationRecords: navAsset,
+      navigationLexicalIndex: navigationLexicalAsset } };
   const manifest = { ...body, bundleRevision: sha256(stableJson(body)) };
   await atomicWrite(join(destination, GEMINI_RULE_QA_MANIFEST_FILE), Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`));
   return { outputDir: destination, manifest, stage: "release", indexSource: "canonical_stage" };
+}
+async function navigationIndexStage(destination) {
+  const assets = await loadGeminiRuleQaAssets({ assetDir: destination });
+  const navigationSearch = assets.navigationSearch || createNavigationSearch(assets.navigationRecords, {
+    navigationRevision: assets.navigationRevision,
+  });
+  const navigationLexicalAsset = await writeAsset(destination, FILES.navigationLexicalIndex,
+    navigationSearch.buildLexicalIndex(), true);
+  const { bundleRevision: _oldBundleRevision, ...currentBody } = assets.manifest;
+  const body = { ...currentBody, assets: { ...currentBody.assets,
+    navigationLexicalIndex: navigationLexicalAsset } };
+  const manifest = { ...body, bundleRevision: sha256(stableJson(body)) };
+  await atomicWrite(join(destination, GEMINI_RULE_QA_MANIFEST_FILE),
+    Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`));
+  return { outputDir: destination, manifest, stage: "navigation-index", indexSource: "navigation_records" };
 }
 async function verifyStage(sourceDir, destination) {
   const module = await import("../backend/geminiRuleQaAssets.mjs");
@@ -325,6 +347,7 @@ export async function buildGeminiRuleQaAssets({ dataDir, outputDir, stage = "rel
   const destination = resolve(outputDir || join(sourceDir, GEMINI_RULE_QA_ASSET_DIRECTORY));
   if (stage === "canonical") return canonicalStage(sourceDir, destination);
   if (stage === "release") return releaseStage(sourceDir, destination, navigationPath, ruleDenseDir, qaDenseDir);
+  if (stage === "navigation-index") return navigationIndexStage(destination);
   if (stage === "verify") return verifyStage(sourceDir, destination);
   throw new Error("gemini_rule_qa_stage_invalid");
 }

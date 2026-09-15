@@ -118,7 +118,15 @@
       "sha256": "fd76dea39d5c6f65788ddc37fced2af179978dfc33f10066b6e798864780215e",
       "canonicalBytes": 49913884,
       "canonicalSha256": "4c0620408ae92f3c3e0550aecced9680ac9be3ecc95357846e8ae33319c3f9f2"
+    },
+    "navigationLexicalIndex": {
+      "file": "navigation-lexical-index.bm25.gz",
+      "encoding": "gzip",
+      "bytes": 6472890,
+      "sha256": "06e0d6e2691e079393039893a022ce8b47043d7023fa4f5b835f6f157331fedb",
+      "canonicalBytes": 31453128,
+      "canonicalSha256": "5b7a90d96a11f90c1b19690e4484f60db07c2fe2d330a2d310291f6d863a7ff9"
     }
   },
-  "bundleRevision": "b0caccd00a3eaf9f0b1dce08ae8e1409ac0c74bdde04a8652446deee1183f5c5"
+  "bundleRevision": "f8cd43ce0a173f925956ccf15a928a71c4e07aea4aade176f92eb45d732aae64"
 }
