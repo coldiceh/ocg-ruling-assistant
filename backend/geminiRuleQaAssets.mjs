@@ -138,14 +138,22 @@ async function loadUncached(assetDir) {
     if (String(error?.message || "").startsWith("gemini_rule_qa_")) throw error;
     throw new Error("gemini_rule_qa_manifest_invalid", { cause: error });
   }
-  const qaRecords = await readBoundJson(assetDir, manifest.assets.qaRecords);
-  const ruleRecords = await readBoundJson(assetDir, manifest.assets.ruleRecords);
-  const structureMapping = await readBoundJson(assetDir, manifest.assets.structureMapping);
-  const navigationRecords = await readBoundJson(assetDir, manifest.assets.navigationRecords);
-  const lexicalIndexBytes = await readBoundAsset(assetDir, manifest.assets.qaLexicalIndex);
-  const navigationLexicalIndexBytes = manifest.assets.navigationLexicalIndex
-    ? await readBoundAsset(assetDir, manifest.assets.navigationLexicalIndex)
-    : undefined;
+  // These files are independently bound by the already verified manifest.
+  // Overlap their reads/decompression; validation below still consumes them
+  // in the same order and retains every compressed/canonical hash check.
+  const reads = await Promise.allSettled([
+    readBoundJson(assetDir, manifest.assets.qaRecords),
+    readBoundJson(assetDir, manifest.assets.ruleRecords),
+    readBoundJson(assetDir, manifest.assets.structureMapping),
+    readBoundJson(assetDir, manifest.assets.navigationRecords),
+    readBoundAsset(assetDir, manifest.assets.qaLexicalIndex),
+    manifest.assets.navigationLexicalIndex
+      ? readBoundAsset(assetDir, manifest.assets.navigationLexicalIndex)
+      : Promise.resolve(undefined),
+  ]);
+  for (const result of reads) if (result.status === 'rejected') throw result.reason;
+  const [qaRecords, ruleRecords, structureMapping, navigationRecords,
+    lexicalIndexBytes, navigationLexicalIndexBytes] = reads.map(result => result.value);
   if (!Array.isArray(qaRecords) || qaRecords.length !== manifest.counts.qaRecords
       || !Array.isArray(ruleRecords) || ruleRecords.length !== manifest.counts.ruleRecords
       || !Array.isArray(navigationRecords) || navigationRecords.length !== manifest.counts.navigationRecords

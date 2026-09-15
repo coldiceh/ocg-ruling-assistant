@@ -2,12 +2,39 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { answerPublicRulingQuestion } from '../backend/publicAnswerService.mjs';
 import { createGeminiRuleQaEvidenceProvider } from '../backend/geminiRuleQaEvidenceProvider.mjs';
+import { preloadRagRequestAssets } from '../backend/ragRulingPipeline.mjs';
 
 // Claim: local snapshot work overlaps classification only after the active
 // lock is checked, and the exact promise is passed forward. A failure means
 // the scheduling change must not ship; this makes no semantic evidence claim.
 const env = { MODEL_PROVIDER: 'mock', UPSTASH_REDIS_REST_URL: 'https://redis.example.test',
   UPSTASH_REDIS_REST_TOKEN: 'test-token' };
+
+test('request asset preload starts both loaders immediately and preserves their promises', async () => {
+  let resolveData;
+  const dataPromise = new Promise((resolve) => { resolveData = resolve; });
+  const geminiPromise = Promise.resolve({ kind: 'gemini-assets' });
+  const calls = [];
+  const preloaded = preloadRagRequestAssets({
+    env: { RAG_EVIDENCE_PIPELINE: 'cloud_evidence_v1', GEMINI_RULE_QA_ENABLED: 'true' },
+    dataDir: 'fixture-rag-data',
+    loadData: (dataDir) => {
+      calls.push(['data', dataDir]);
+      return dataPromise;
+    },
+    loadGeminiAssets: ({ dataDir }) => {
+      calls.push(['gemini', dataDir]);
+      return geminiPromise;
+    },
+  });
+
+  assert.deepEqual(calls.map(([name]) => name), ['data', 'gemini']);
+  assert.equal(preloaded.data, dataPromise);
+  assert.equal(preloaded.geminiAssets, geminiPromise);
+  resolveData({ kind: 'rag-data' });
+  await Promise.all([preloaded.data, preloaded.geminiAssets]);
+});
+
 test('public request starts one local preload after inactive lock and before classification', async () => {
   const calls = [];
   const preloadedAssets = { data: Promise.resolve({}), geminiAssets: Promise.resolve({}) };

@@ -34,7 +34,12 @@ const defaultSnapshotRevisionCache = new WeakMap();
 
 // This only starts local, version-bound snapshot work. No network cache or
 // model request is created until the ordinary retrieval stage consumes it.
-export function preloadRagRequestAssets({ env = {}, dataDir } = {}) {
+export function preloadRagRequestAssets({
+  env = {},
+  dataDir,
+  loadData = loadRagData,
+  loadGeminiAssets = loadGeminiRuleQaAssets,
+} = {}) {
   if (env.RAG_EVIDENCE_PIPELINE !== 'cloud_evidence_v1'
       || !/^(?:1|true|yes|on)$/iu.test(String(env.GEMINI_RULE_QA_ENABLED || '').trim())) return undefined;
   const observe = (promise) => {
@@ -43,14 +48,12 @@ export function preloadRagRequestAssets({ env = {}, dataDir } = {}) {
     promise.catch(() => {});
     return promise;
   };
-  const data = observe(loadRagData(dataDir));
+  const data = observe(loadData(dataDir));
   return {
     data,
-    // Stagger the two large snapshots to avoid overlapping their temporary
-    // decompression buffers, while both still run during upstream waiting.
-    geminiAssets: observe(data.then(() => loadGeminiRuleQaAssets({
+    geminiAssets: observe(loadGeminiAssets({
       dataDir: env.GEMINI_RULE_QA_DATA_DIR || fileURLToPath(new URL('../data', import.meta.url)),
-    }))),
+    })),
   };
 }
 const TRUSTED_FROZEN_IDENTITY_RESOLUTION_SOURCES = new Set([

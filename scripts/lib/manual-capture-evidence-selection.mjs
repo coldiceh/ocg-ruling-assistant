@@ -1191,12 +1191,12 @@ function completeLexicalRankingContext(candidates) {
   if (!Array.isArray(candidates) || candidates.length === 0) {
     throw new TypeError("manual_capture_complete_lexical_candidates_invalid");
   }
-  // The cache is only eligible for immutable arrays of immutable primitive
-  // binding/text fields. Mutable callers are recomputed, so a body-text update
-  // cannot reuse statistics merely because an old binding was retained.
-  const cacheable = completeLexicalCandidatesAreImmutable(candidates);
-  const cachedCorpus = cacheable && completeLexicalCorpusCache.get(candidates);
+  // Both cache writers admit only frozen arrays with frozen primitive data
+  // properties. Their descriptors cannot change after admission, so a hit
+  // needs no further full-corpus walk. Mutable callers are never cached.
+  const cachedCorpus = completeLexicalCorpusCache.get(candidates);
   if (cachedCorpus) return cachedCorpus;
+  const cacheable = completeLexicalCandidatesAreImmutable(candidates);
   const stableCandidates = stableCompleteLexicalCandidates(candidates);
   const preparedCorpus = prepareBm25Corpus(stableCandidates.length,
     index => localSearchTerms(stableCandidates[index].text));
