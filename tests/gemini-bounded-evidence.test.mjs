@@ -175,6 +175,24 @@ test("two-round retrieval keeps the original question and complete independent c
   assert.ok(result.telemetry.bounded.calls.some(call => call.stage === "planned_query_embedding"));
 });
 
+test("bounded provider uses the lazy QA lexical path without legacy searchAll", async () => {
+  const base = schema3Assets();
+  let boundedSearches = 0;
+  const assets = { ...base, createQaTools: options => {
+    const tools = base.createQaTools(options);
+    return { ...tools,
+      searchAll() { throw new Error("legacy_search_all_called"); },
+      *searchBounded(args) {
+        boundedSearches += 1;
+        yield* tools.searchBounded(args);
+      },
+    };
+  } };
+  const { provider } = fixture({ assets });
+  await provider.retrieve(input);
+  assert.equal(boundedSearches, 3);
+});
+
 test("both rounds preserve the complete confirmed-card identity and source projection", async () => {
   const effectText = "complete canonical monster effect\nsecond condition";
   const pendulumEffectText = "independent complete pendulum effect";

@@ -1219,6 +1219,50 @@ export function buildManualCaptureCompleteLexicalQueryQueue({
     context.preparedCorpus);
 }
 
+// Score the same complete corpus once, then expose its exact total order one
+// candidate at a time. The heap stores only candidate indices, avoiding the
+// full ranked-object array when a bounded caller needs an early prefix.
+export function* iterateManualCaptureCompleteLexicalQueryQueue({
+  query,
+  candidates,
+  onScores,
+} = {}) {
+  const context = completeLexicalRankingContext(candidates);
+  const scores = scoreCompleteLocalQuerySurface(query, context.stableCandidates, undefined, onScores,
+    context.preparedCorpus);
+  const heap = new Uint32Array(context.stableCandidates.length);
+  for (let index = 0; index < heap.length; index += 1) heap[index] = index;
+  let heapSize = heap.length;
+  const compareIndices = (leftIndex, rightIndex) => (
+    scores[rightIndex] - scores[leftIndex]
+      || compareStableText(context.stableCandidates[leftIndex].binding,
+        context.stableCandidates[rightIndex].binding)
+  );
+  function siftDown(start) {
+    let parent = start;
+    while (true) {
+      const left = parent * 2 + 1;
+      if (left >= heapSize) return;
+      const right = left + 1;
+      let best = left;
+      if (right < heapSize && compareIndices(heap[right], heap[left]) < 0) best = right;
+      if (compareIndices(heap[best], heap[parent]) >= 0) return;
+      [heap[parent], heap[best]] = [heap[best], heap[parent]];
+      parent = best;
+    }
+  }
+  for (let index = (heapSize >>> 1) - 1; index >= 0; index -= 1) siftDown(index);
+  while (heapSize) {
+    const best = heap[0];
+    heapSize -= 1;
+    if (heapSize) {
+      heap[0] = heap[heapSize];
+      siftDown(0);
+    }
+    yield context.stableCandidates[best];
+  }
+}
+
 // Score the same complete immutable corpus and preserve the same stable ordering,
 // while retaining only the requested prefix inside each mechanically supplied
 // partition. This avoids allocating a complete ranked result when the caller

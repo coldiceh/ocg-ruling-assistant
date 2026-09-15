@@ -63,12 +63,12 @@ function renderRepeatedQaText(prefix, marker, payload, original) {
   return compact.length < original.length ? compact : original;
 }
 
-function renderSelectedPrompt(prefix, marker, payload, maxPromptChars) {
+function renderRuleSources(prefix, marker, payload, fields = RULE_SOURCE_FIELDS) {
   const original = prefix + marker + JSON.stringify(payload);
   const ruleSources = {}, sourceRefs = new Map();
   const selectedBodies = payload.evidence.rawRelatedEvidence.map((item) => {
     if (item.recordType !== 'rule-doc') return item;
-    const source = Object.fromEntries(RULE_SOURCE_FIELDS
+    const source = Object.fromEntries(fields
       .filter(key => Object.hasOwn(item, key)).map(key => [key, item[key]]));
     // Only identical serialized source fields share an entry. Text, identity,
     // order and authority values are preserved without interpreting meaning.
@@ -80,7 +80,7 @@ function renderSelectedPrompt(prefix, marker, payload, maxPromptChars) {
       ruleSources[sourceRef] = source;
     }
     return {
-      ...Object.fromEntries(Object.entries(item).filter(([key]) => !RULE_SOURCE_FIELDS.includes(key))),
+      ...Object.fromEntries(Object.entries(item).filter(([key]) => !fields.includes(key))),
       sourceRef,
     };
   });
@@ -90,11 +90,26 @@ function renderSelectedPrompt(prefix, marker, payload, maxPromptChars) {
   const compactPrefix = prefix + RULE_SOURCE_INSTRUCTION + '\n';
   const compact = compactPrefix + marker + JSON.stringify(compactPayload);
   const useRuleSources = sourceRefs.size && compact.length < original.length;
-  const chosen = useRuleSources ? compact : original;
+  return useRuleSources ? { prompt: compact, prefix: compactPrefix, payload: compactPayload }
+    : { prompt: original, prefix, payload };
+}
+
+function renderSelectedPrompt(prefix, marker, payload, maxPromptChars) {
+  const chosen = renderRuleSources(prefix, marker, payload);
   // Already fitting prompts keep exactly the existing representation and pay
   // no text-table work. Overflow gets one local, reversible encoding attempt.
-  return chosen.length <= maxPromptChars ? chosen
-    : renderRepeatedQaText(useRuleSources ? compactPrefix : prefix, marker, useRuleSources ? compactPayload : payload, chosen);
+  if (chosen.prompt.length <= maxPromptChars) return chosen.prompt;
+  const qaEncoded = renderRepeatedQaText(chosen.prefix, marker, chosen.payload, chosen.prompt);
+  if (qaEncoded.length <= maxPromptChars) return qaEncoded;
+  // Exact serialized equality alone shares section metadata. Decoding sourceRef
+  // restores every field, authority value and body; no evidence is removed or
+  // judged. Incorrect binding would lose provenance, so round-trip equality is
+  // tested directly. The prior source-only encoding still exceeds the real cap.
+  const sections = renderRuleSources(prefix, marker, payload,
+    [...RULE_SOURCE_FIELDS, 'sourceId', 'sourceSectionKey', 'sourceSection']);
+  const sectionEncoded = sections.prompt.length <= maxPromptChars ? sections.prompt
+    : renderRepeatedQaText(sections.prefix, marker, sections.payload, sections.prompt);
+  return sectionEncoded.length < qaEncoded.length ? sectionEncoded : qaEncoded;
 }
 
 function selectedQaSourceUrl(record = {}) {

@@ -64,3 +64,31 @@ test('a source record containing the display marker remains an untouched canonic
   assert.equal(item.text, JSON.stringify(input.selection.selectedQa[0].record));
   assert.equal(result.packing.capacityExceeded, true);
 });
+
+test('overflow shares exact rule section metadata without removing any source field or body', () => {
+  const selectedRules = Array.from({ length: 18 }, (_, index) => ({
+    id: `rule-${index}`, atomKey: `rule-${index}`, recordType: 'rule-doc',
+    title: 'Synthetic rule source', sourceUrl: 'https://example.test/rules',
+    source: 'Test publisher', sourceAuthority: 'official_reference', official: true,
+    parentSourceId: 'source-one', sourceId: 'source-one', sourceSectionKey: 'section-one',
+    sourceSection: { sectionKey: 'section-one', title: 'Exact section heading '.repeat(6),
+      titlePath: ['Original parent heading', 'Exact section heading '.repeat(6)] },
+    sourceStart: index * 50, sourceEnd: index * 50 + 49,
+    text: `Unique original body ${index}: \"quoted\" 原文。\n\n`,
+  }));
+  const input = { userQuery: 'Synthetic metadata preservation question',
+    cardResolution: { resolvedCards: [] }, selection: { selectedRules, selectedQa: [] } };
+  const initial = packGeminiSelection({ ...input, maxPromptChars: 100000 });
+  const limit = initial.packing.promptChars - 1200;
+  const packed = packGeminiSelection({ ...input, maxPromptChars: limit });
+  assert.equal(packed.packing.capacityExceeded, false);
+  const visible = payload(packed.packing.prompt);
+  const restored = visible.evidence.rawRelatedEvidence.map(({ sourceRef, ...item }) => ({
+    ...visible.ruleSources[sourceRef], ...item,
+  }));
+  assert.deepEqual(restored, selectedRules);
+  assert.deepEqual(packed.packing.modelEvidence.rawRelatedEvidence, selectedRules);
+  assert.deepEqual(packed.packing.allowedEvidenceIds, initial.packing.allowedEvidenceIds);
+  assert.equal(packGeminiSelection({ ...input, maxPromptChars: initial.packing.promptChars }).packing.prompt,
+    initial.packing.prompt);
+});
