@@ -8,6 +8,26 @@ import {
 
 const candidate = (digit, text) => ({binding:digit.repeat(64),text});
 
+test("a cached immutable pool does not repeat per-record descriptor checks", () => {
+  const candidates = Object.freeze([
+    Object.freeze(candidate("a", "alpha")),
+    Object.freeze(candidate("b", "beta")),
+  ]);
+  buildManualCaptureCompleteLexicalQueryQueue({ query: "alpha", candidates });
+  const watched = new Set([candidates, ...candidates]);
+  const original = Object.getOwnPropertyDescriptor;
+  let checks = 0;
+  Object.getOwnPropertyDescriptor = function(value, key) {
+    if (watched.has(value)) checks += 1;
+    return original(value, key);
+  };
+  try {
+    const queue = buildManualCaptureCompleteLexicalQueryQueue({ query: "beta", candidates });
+    assert.equal(queue[0].binding, "b".repeat(64));
+    assert.equal(checks, 0);
+  } finally { Object.getOwnPropertyDescriptor = original; }
+});
+
 test("an immutable canonical pool normalizes each body once across query surfaces", () => {
   const candidates=Object.freeze([
     Object.freeze(candidate("a","unique synthetic body alpha")),

@@ -88,7 +88,7 @@ function copyDefined(record, target, keys) {
   for (const key of keys) if (Object.hasOwn(record, key)) target[key] = clone(record[key]);
 }
 
-function makeExcerpt(parent, parentHandle, qaRevision, source, start, end, heading) {
+function makeExcerpt(parent, parentHandle, qaRevision, source, bodySha256, start, end, heading) {
   const excerpt = {
     id: `${parent.id}-${start}-${end}`,
     recordType: "card-faq",
@@ -104,7 +104,7 @@ function makeExcerpt(parent, parentHandle, qaRevision, source, start, end, headi
       bodyField: "conclusion",
       start,
       end,
-      bodySha256: sha256(source),
+      bodySha256,
       ...(heading ? { heading: clone(heading) } : {}),
     },
   };
@@ -117,6 +117,7 @@ function makeExcerpt(parent, parentHandle, qaRevision, source, start, end, headi
 function expandFaq(item, qaRevision) {
   const parent = item.record;
   const source = parent.conclusion;
+  const bodySha256 = sha256(source);
   const starts = segmentStarts(source);
   const segments = [];
   let heading = null;
@@ -126,7 +127,8 @@ function expandFaq(item, qaRevision) {
     if (end <= start) continue;
     const ownHeading = headingForSegment(source, start);
     if (ownHeading) heading = ownHeading;
-    const record = makeExcerpt(parent, item.handle, qaRevision, source, start, end, ownHeading ? null : heading);
+    const record = makeExcerpt(parent, item.handle, qaRevision, source, bodySha256,
+      start, end, ownHeading ? null : heading);
     const handle = sha256(canonicalJson({ parentHandle: item.handle, qaRevision, start, end }));
     segments.push({ handle, record });
   }
