@@ -28,8 +28,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     env:
-      EVIDENCE_STAGING: ${{ runner.temp }}/bounded-evidence-release
-      EVIDENCE_CACHE: ${{ runner.temp }}/bounded-evidence-cache
       GENERATION_PROFILE: config/evidence-generation/gemini-3.8-flash-low.json
     steps:
       - name: Checkout the authorized preview branch
@@ -49,6 +47,12 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Resolve runner-local preprocessing directories
+        shell: bash
+        run: |
+          printf 'EVIDENCE_STAGING=%s/bounded-evidence-release\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
+          printf 'EVIDENCE_CACHE=%s/bounded-evidence-cache\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
 
       - name: Restore preprocessing cache by exact input contracts
         uses: actions/cache@v5

@@ -1,11 +1,71 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import test from "node:test";
 
 const readWorkflow = (name) =>
   readFile(new URL(`../.github/workflows/${name}`, import.meta.url), "utf8");
 const readPublication = () =>
   readFile(new URL("../scripts/publish-synced-snapshot.sh", import.meta.url), "utf8");
+
+function expandBraces(pattern) {
+  const start = pattern.indexOf("{");
+  if (start < 0) return [pattern];
+  let depth = 0;
+  let end = -1;
+  for (let index = start; index < pattern.length; index += 1) {
+    if (pattern[index] === "{") depth += 1;
+    if (pattern[index] === "}") depth -= 1;
+    if (depth === 0) {
+      end = index;
+      break;
+    }
+  }
+  assert.ok(end > start, `unclosed brace glob: ${pattern}`);
+  const choices = [];
+  let choiceStart = start + 1;
+  depth = 0;
+  for (let index = choiceStart; index < end; index += 1) {
+    if (pattern[index] === "{") depth += 1;
+    if (pattern[index] === "}") depth -= 1;
+    if (pattern[index] === "," && depth === 0) {
+      choices.push(pattern.slice(choiceStart, index));
+      choiceStart = index + 1;
+    }
+  }
+  choices.push(pattern.slice(choiceStart, end));
+  return choices.flatMap((choice) => expandBraces(
+    `${pattern.slice(0, start)}${choice}${pattern.slice(end + 1)}`,
+  ));
+}
+
+function globMatches(file, pattern) {
+  const expression = pattern.replace(/[.+^$()|[\]\\]/gu, "\\$&")
+    .replaceAll("**", "\0")
+    .replaceAll("*", "[^/]*")
+    .replaceAll("\0", ".*");
+  return new RegExp(`^${expression}$`, "u").test(file);
+}
+
+async function listFiles(relativeDirectory) {
+  const root = new URL(`../${relativeDirectory}/`, import.meta.url);
+  const files = [];
+  async function visit(directory, prefix = relativeDirectory) {
+    for (const entry of await readdir(directory, { withFileTypes: true })) {
+      const relative = `${prefix}/${entry.name}`;
+      if (entry.isDirectory()) await visit(new URL(`${entry.name}/`, directory), relative);
+      else files.push(relative);
+    }
+  }
+  await visit(root);
+  return files;
+}
+
+function matchedFiles(files, includeGlob, excludeGlob) {
+  const includes = expandBraces(includeGlob);
+  const excludes = expandBraces(excludeGlob);
+  return files.filter((file) => includes.some((pattern) => globMatches(file, pattern))
+    && !excludes.some((pattern) => globMatches(file, pattern))).sort();
+}
 
 test("pages workflow is reusable and can publish an explicit ref", async () => {
   const workflow = await readWorkflow("deploy-pages.yml");
@@ -175,21 +235,50 @@ test("Vercel verifies the source, runtime, and enabled Gemini asset bindings bef
     (await readFile(new URL("../public/.gitkeep", import.meta.url), "utf8")).replaceAll("\r\n", "\n"),
     "\n",
   );
+  for (const [route, functionConfig] of Object.entries(config.functions || {})) {
+    for (const field of ["includeFiles", "excludeFiles"]) {
+      if (functionConfig[field] !== undefined) {
+        assert.ok(
+          String(functionConfig[field]).length <= 256,
+          `${route}.${field} exceeds Vercel's 256-character schema limit`,
+        );
+      }
+    }
+  }
+  const boundedAssetFiles = (await Promise.all([
+    listFiles("data/gemini-rule-qa-v1"),
+    listFiles("data/rule-embedding-v1"),
+    listFiles("data/qa-embedding-v1"),
+  ])).flat();
+  const expectedBoundedAssets = [
+    "data/gemini-rule-qa-v1/manifest.json",
+    "data/gemini-rule-qa-v1/navigation-records.json.gz",
+    "data/gemini-rule-qa-v1/qa-lexical-index.bm25.gz",
+    "data/gemini-rule-qa-v1/qa-records.json.gz",
+    "data/gemini-rule-qa-v1/rule-records.json.gz",
+    "data/gemini-rule-qa-v1/structure-mapping.release.json.gz",
+    "data/qa-embedding-v1/evidence-vector-index.json",
+    "data/qa-embedding-v1/evidence-vectors-000.f32",
+    "data/rule-embedding-v1/evidence-vector-index.json",
+    "data/rule-embedding-v1/evidence-vectors-000.f32",
+  ].sort();
   for (const route of ["api/answer.js", "api/admin-model-lab.js"]) {
     const included = String(config.functions?.[route]?.includeFiles || "");
     const excluded = String(config.functions?.[route]?.excludeFiles || "");
     assert.match(included, /config\/evidence-generation\/gemini-3\.8-flash-low\.json/u);
-    for (const asset of [
-      "data/gemini-rule-qa-v1/{manifest.json,qa-records.json.gz,rule-records.json.gz,qa-lexical-index.bm25.gz,structure-mapping.release.json.gz,navigation-records.json.gz}",
-      "data/rule-embedding-v1/{evidence-vector-index.json,evidence-vectors-*.f32}",
-      "data/qa-embedding-v1/{evidence-vector-index.json,evidence-vectors-*.f32}",
-    ]) {
-      assert.ok(included.includes(asset), `${route} must include ${asset}`);
-    }
-    assert.doesNotMatch(included, /gemini-rule-qa-v1\/\*\*|navigation-inputs|dense-inputs|canonical-manifest|structure-mapping\.json\.gz/u);
-    assert.doesNotMatch(included, /(?:rule|qa)-embedding-v1\/\*\*/u);
+    assert.match(included, /gemini-rule-qa-v1\/\*\*/u);
+    assert.match(included, /\{rule,qa\}-embedding-v1\/\*\*/u);
+    assert.deepEqual(
+      matchedFiles(boundedAssetFiles, included, excluded),
+      expectedBoundedAssets,
+      `${route} must package exactly the six Gemini runtime files and two files per dense index`,
+    );
     assert.match(excluded, /data\/\{cards,rulings,qa-index,evidence-index,ocg-rule-corpus,official-responses\}\.json/u);
     assert.match(excluded, /data\/evidence-index\.json\.gz/u);
+    assert.match(excluded, /canonical-manifest\.json/u);
+    assert.match(excluded, /navigation-inputs\.json\.gz/u);
+    assert.match(excluded, /dense-inputs\.json\.gz/u);
+    assert.match(excluded, /structure-mapping\.json\.gz/u);
     assert.doesNotMatch(excluded, /rag-data-revision-manifest|rag-runtime-v1|legacy-lua-semantic-cache-v2/u);
   }
 });

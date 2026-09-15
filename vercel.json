@@ -37,13 +37,13 @@
     },
     "api/answer.js": {
       "maxDuration": 300,
-      "includeFiles": "{config/evidence-generation/gemini-3.8-flash-low.json,data/public-release.json,data/legacy-lua-semantic-cache-v2/**,data/qa-discovery-index.json,data/rag-data-revision-manifest.json,data/rag-runtime-v1/**,data/gemini-rule-qa-v1/{manifest.json,qa-records.json.gz,rule-records.json.gz,qa-lexical-index.bm25.gz,structure-mapping.release.json.gz,navigation-records.json.gz},data/rule-embedding-v1/{evidence-vector-index.json,evidence-vectors-*.f32},data/qa-embedding-v1/{evidence-vector-index.json,evidence-vectors-*.f32}}",
-      "excludeFiles": "{data/{cards,rulings,qa-index,evidence-index,ocg-rule-corpus,official-responses}.json,data/evidence-index.json.gz}"
+      "includeFiles": "{config/evidence-generation/gemini-3.8-flash-low.json,data/{public-release.json,legacy-lua-semantic-cache-v2/**,qa-discovery-index.json,rag-data-revision-manifest.json,rag-runtime-v1/**,gemini-rule-qa-v1/**,{rule,qa}-embedding-v1/**}}",
+      "excludeFiles": "{data/{cards,rulings,qa-index,evidence-index,ocg-rule-corpus,official-responses}.json,data/evidence-index.json.gz,data/gemini-rule-qa-v1/{canonical-manifest.json,navigation-inputs.json.gz,dense-inputs.json.gz,structure-mapping.json.gz}}"
     },
     "api/admin-model-lab.js": {
       "maxDuration": 300,
-      "includeFiles": "{config/evidence-generation/gemini-3.8-flash-low.json,data/legacy-lua-semantic-cache-v2/**,data/qa-discovery-index.json,data/rag-data-revision-manifest.json,data/rag-runtime-v1/**,data/gemini-rule-qa-v1/{manifest.json,qa-records.json.gz,rule-records.json.gz,qa-lexical-index.bm25.gz,structure-mapping.release.json.gz,navigation-records.json.gz},data/rule-embedding-v1/{evidence-vector-index.json,evidence-vectors-*.f32},data/qa-embedding-v1/{evidence-vector-index.json,evidence-vectors-*.f32}}",
-      "excludeFiles": "{data/{cards,rulings,qa-index,evidence-index,ocg-rule-corpus,official-responses}.json,data/evidence-index.json.gz}"
+      "includeFiles": "{config/evidence-generation/gemini-3.8-flash-low.json,data/{legacy-lua-semantic-cache-v2/**,qa-discovery-index.json,rag-data-revision-manifest.json,rag-runtime-v1/**,gemini-rule-qa-v1/**,{rule,qa}-embedding-v1/**}}",
+      "excludeFiles": "{data/{cards,rulings,qa-index,evidence-index,ocg-rule-corpus,official-responses}.json,data/evidence-index.json.gz,data/gemini-rule-qa-v1/{canonical-manifest.json,navigation-inputs.json.gz,dense-inputs.json.gz,structure-mapping.json.gz}}"
     }
   }
 }
