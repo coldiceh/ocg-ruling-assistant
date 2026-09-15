@@ -1258,7 +1258,7 @@ export function serializeManualCaptureLexicalIndex({ candidates, dataRevision })
   return bytes;
 }
 
-export function installManualCaptureLexicalIndex({ candidates, dataRevision, bytes }) {
+export function installManualCaptureLexicalIndex({ candidates, dataRevision, bytes, takeOwnership = false }) {
   // These checks establish byte layout, numeric ranges and exact text/identity
   // binding only. A corrupt index must not silently change ranking or authority.
   if (!Array.isArray(candidates) || !candidates.length || !completeLexicalCandidatesAreImmutable(candidates)) {
@@ -1285,8 +1285,9 @@ export function installManualCaptureLexicalIndex({ candidates, dataRevision, byt
   }
   const words = header.postingLengths.reduce((sum, length) => sum + length, 0);
   if (offset + header.documentCount * 8 + words * 4 !== bytes.length) throw new Error("manual_capture_lexical_index_length_invalid");
-  // Own the backing bytes so callers cannot mutate the live cached index.
-  const owned = Buffer.from(bytes);
+  // Ordinary callers keep copy isolation. A loader may explicitly transfer a
+  // freshly allocated, unexposed buffer to avoid retaining two full indexes.
+  const owned = takeOwnership ? bytes : Buffer.from(bytes);
   const lengthNormalizations = new Float64Array(owned.buffer, owned.byteOffset + offset, header.documentCount);
   if (lengthNormalizations.some(value => !Number.isFinite(value) || value <= 0)) throw new Error("manual_capture_lexical_index_normalization_invalid");
   const postings = new Map();
@@ -1305,7 +1306,8 @@ export function installManualCaptureLexicalIndex({ candidates, dataRevision, byt
   }
   completeLexicalCorpusCache.set(candidates, { stableCandidates,
     preparedCorpus: { documentCount: header.documentCount, postings, lengthNormalizations } });
-  return { documentCount: header.documentCount, termCount: postings.size, byteLength: bytes.length };
+  return { documentCount: header.documentCount, termCount: postings.size, byteLength: bytes.length,
+    inputBytesAdopted: owned === bytes };
 }
 
 // Phase-B offline-only seam. It consumes the already ordered observations emitted

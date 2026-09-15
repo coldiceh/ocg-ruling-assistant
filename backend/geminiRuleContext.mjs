@@ -1,5 +1,7 @@
 import { createHash } from 'node:crypto';
 import { GEMINI_EVIDENCE_MAX_PROMPT_CHARS } from './geminiRuleQaPacking.mjs';
+import { buildRuleStructureMapping, mapDenseLocatorsToReadingUnits,
+  sourceSha256, stableJson } from './evidenceSourceStructure.mjs';
 
 export const sha256 = value => createHash('sha256').update(value).digest('hex');
 export const GEMINI_RULE_QA_MODEL = 'gemini-3.8-flash';
@@ -28,30 +30,32 @@ const instructions = [
   `完整证据包上限为 ${GEMINI_EVIDENCE_MAX_PROMPT_CHARS} 字符，计入题面、卡文、来源与包装。只选必要原文，保留适用条件及例外，不能截断或改写。超限时程序会反馈实际长度，供重新选择完整原文。`,
 ].join('\n');
 
-export function buildRuleContext(records) {
+export function buildRuleContext(records, { ruleContentRevision, structureMapping } = {}) {
   const docs = records.filter(record => record.recordType === 'rule-doc');
   const units = new Map(), sections = new Map(), unitSections = new Map(), context = [instructions];
+  const denseLocators = new Map();
   let canonicalChars = 0;
   docs.forEach((doc, docIndex) => {
     if (typeof doc.text !== 'string') throw new Error('gemini_rule_canonical_text_absent');
     canonicalChars += doc.text.length;
     const source = { sourceUrl: doc.sourceUrl, source: doc.sourceName,
-      sourceAuthority: doc.sourceAuthority || 'community_reference', official: doc.official ?? false };
+      ...(Object.hasOwn(doc, 'sourceAuthority') ? { sourceAuthority: doc.sourceAuthority } : {}),
+      ...(Object.hasOwn(doc, 'official') ? { official: doc.official } : {}) };
     const sourceSections = doc.structure?.sections || [];
     // Invariant: source offsets refer to this exact canonical string. The hash,
     // ranges and source IDs are mechanical facts only; no text is judged for
     // relevance or sufficiency. A false rejection would block malformed metadata
     // until repaired. Existing paragraph IDs contain no heading-offset binding.
-    if (doc.structure && (doc.structure.schemaVersion !== 1
+    if (doc.structure && (![1, 2].includes(doc.structure.schemaVersion)
       || doc.structure.canonicalSha256 !== sha256(doc.text)
       || !Array.isArray(sourceSections))) throw new Error('gemini_rule_structure_binding_invalid');
-    const sourceIds = new Map(sourceSections.map((section, index) => [section.id, `S${docIndex + 1}.${index + 1}`]));
-    const sectionsById = new Map(sourceSections.map(section => [section.id, section]));
+    const sourceIds = new Map(sourceSections.map((section, index) => [section.sectionKey || section.id, `S${docIndex + 1}.${index + 1}`]));
+    const sectionsById = new Map(sourceSections.map(section => [section.sectionKey || section.id, section]));
     if (sourceIds.size !== sourceSections.length) throw new Error('gemini_rule_structure_identity_invalid');
     for (const section of sourceSections) {
       if (!Number.isSafeInteger(section.start) || !Number.isSafeInteger(section.end)
         || section.start < 0 || section.end > doc.text.length || section.start >= section.end
-        || (section.parentId && !sourceIds.has(section.parentId))) throw new Error('gemini_rule_structure_range_invalid');
+        || ((section.parentKey || section.parentId) && !sourceIds.has(section.parentKey || section.parentId))) throw new Error('gemini_rule_structure_range_invalid');
     }
     // Exact source-string segmentation, not a cross-field semantic comparison.
     const paragraphs = Array.from(doc.text.matchAll(/[\s\S]+?(?:\n{2,}|$)/g), match => match[0]);
@@ -65,28 +69,34 @@ export function buildRuleContext(records) {
       const end = offsets[index + 1], text = doc.text.slice(start, end);
       const id = `R${docIndex + 1}.${index + 1}`;
       units.set(id, { id, recordType: 'rule-doc', title: doc.title, ...source, text,
-        parentSourceId: doc.id, ruleUnitIndex: index });
+        parentSourceId: doc.id, sourceId: doc.id, sourceCanonicalSha256: sha256(doc.text),
+        sourceStart: start, sourceEnd: end, ruleUnitIndex: index });
       docUnits.push({ id, start, end });
       const containing = sourceSections.filter(section => section.start <= start && section.end >= end)
         .sort((a, b) => (a.end - a.start) - (b.end - b.start));
       const sourceSection = containing[0];
       if (sourceSection) {
-        unitSections.set(id, sourceIds.get(sourceSection.id));
+        unitSections.set(id, sourceIds.get(sourceSection.sectionKey || sourceSection.id));
         const titlePath = [];
-        for (let section = sourceSection; section; section = sectionsById.get(section.parentId)) {
+        for (let section = sourceSection; section; section = sectionsById.get(section.parentKey || section.parentId)) {
           titlePath.unshift(section.title);
         }
         const sourceSectionMeta = {
-          sectionId: sourceIds.get(sourceSection.id), title: sourceSection.title,
-          parentSectionId: sourceIds.get(sourceSection.parentId) || null, titlePath,
+          sectionId: sourceIds.get(sourceSection.sectionKey || sourceSection.id), title: sourceSection.title,
+          parentSectionId: sourceIds.get(sourceSection.parentKey || sourceSection.parentId) || null, titlePath,
+          sourceSectionKey: sourceSection.sectionKey || sourceSection.id,
         };
         units.get(id).sourceSection = sourceSectionMeta;
       }
+      denseLocators.set(id, Object.freeze({ denseUnitId: id, sourceId: doc.id,
+        sourceCanonicalSha256: sha256(doc.text), offsetEncoding: 'utf16', start, end,
+        ...(units.get(id).sourceSection?.sourceSectionKey
+          ? { sectionKey: units.get(id).sourceSection.sourceSectionKey } : {}) }));
     });
     const ruleSections = sourceSections.map(section => {
       const unitIds = docUnits.filter(unit => unit.start >= section.start && unit.end <= section.end).map(unit => unit.id);
-      const item = { sectionId: sourceIds.get(section.id), title: section.title,
-        parentSectionId: sourceIds.get(section.parentId) || null, ruleDocumentId: doc.id,
+      const item = { sectionId: sourceIds.get(section.sectionKey || section.id), title: section.title,
+        parentSectionId: sourceIds.get(section.parentKey || section.parentId) || null, ruleDocumentId: doc.id,
         ...(section.sourceFragment ? { sourceFragment: section.sourceFragment } : {}),
         firstRuleUnitId: unitIds[0] || null, lastRuleUnitId: unitIds.at(-1) || null, ruleUnitIds: unitIds };
       sections.set(item.sectionId, item);
@@ -96,7 +106,60 @@ export function buildRuleContext(records) {
     for (const unit of docUnits) context.push(`${unit.id}\n${units.get(unit.id).text}`);
   });
   const prefix = context.join('\n');
-  return { prefix, units, sections, unitSections, ruleRevision: sha256(prefix), documentCount: docs.length, canonicalChars };
+  const mapping = structureMapping || buildRuleStructureMapping(docs);
+  const { structureMappingRevision, ...mappingBody } = mapping;
+  if (structureMappingRevision !== sourceSha256(stableJson(mappingBody))) {
+    throw new Error('gemini_rule_structure_mapping_revision_invalid');
+  }
+  const sourceAtoms = new Map(), readingUnits = new Map(), contextRefs = new Map(), explicitRefs = new Map();
+  for (const sourceMapping of mapping.sources || []) {
+    const doc = docs.find(item => item.id === sourceMapping.sourceId);
+    if (!doc || sha256(doc.text) !== sourceMapping.sourceCanonicalSha256) {
+      throw new Error('gemini_rule_structure_mapping_source_binding_invalid');
+    }
+    const atomSource = { sourceUrl: doc.sourceUrl, source: doc.sourceName,
+      ...(Object.hasOwn(doc, 'sourceAuthority') ? { sourceAuthority: doc.sourceAuthority } : {}),
+      ...(Object.hasOwn(doc, 'official') ? { official: doc.official } : {}) };
+    for (const [atomIndex, atom] of (sourceMapping.atoms || []).entries()) {
+      if (sourceAtoms.has(atom.atomKey) || doc.text.slice(atom.start, atom.end) !== atom.text) {
+        throw new Error('gemini_rule_source_atom_binding_invalid');
+      }
+      const owner = (sourceMapping.readingUnits || []).find(unit => unit.atomIds.includes(atom.atomKey));
+      const tableLayout = atom.tableLayout ? { rowCount: atom.tableLayout.rowCount,
+        columnCount: atom.tableLayout.columnCount,
+        cells: atom.tableLayout.cells.map(cell => ({ ...cell,
+          start: cell.start - atom.start, end: cell.end - atom.start })) } : undefined;
+      sourceAtoms.set(atom.atomKey, Object.freeze({ id: atom.atomKey, atomKey: atom.atomKey,
+        recordType: 'rule-doc',
+        title: doc.title, ...atomSource,
+        text: atom.text, parentSourceId: doc.id, sourceId: doc.id, sourceStart: atom.start,
+        sourceEnd: atom.end, sourceSectionKey: atom.sectionKey, kind: atom.kind,
+        ruleUnitIndex: atomIndex,
+        sourceSection: owner ? { sectionKey: atom.sectionKey, title: owner.title,
+          titlePath: owner.titlePath } : { sectionKey: atom.sectionKey, title: '', titlePath: [] },
+        ...(tableLayout ? { tableLayout, tableLayoutCoordinate: 'atomTextUtf16' } : {}) }));
+    }
+    for (const readingUnit of sourceMapping.readingUnits || []) {
+      if (readingUnits.has(readingUnit.unitKey)
+          || doc.text.slice(readingUnit.start, readingUnit.end) !== readingUnit.text) {
+        throw new Error('gemini_rule_reading_unit_binding_invalid');
+      }
+      const stable = Object.freeze(structuredClone(readingUnit));
+      readingUnits.set(stable.unitKey, stable);
+      contextRefs.set(stable.unitKey, Object.freeze([...(stable.contextRefs || [])]));
+      explicitRefs.set(stable.unitKey, Object.freeze([...(stable.explicitRefs || [])]));
+    }
+  }
+  const denseMapping = new Map();
+  for (const item of mapDenseLocatorsToReadingUnits([...denseLocators.values()], [...readingUnits.values()])) {
+    denseMapping.set(item.denseUnitId, item.readingUnitKeys);
+  }
+  return { prefix, units, sections, unitSections, denseLocators, denseMapping,
+    sourceAtoms, readingUnits, contextRefs, explicitRefs,
+    explicitReferenceMap: new Map((mapping.explicitReferences || []).map(ref => [ref.refKey, Object.freeze(ref)])),
+    structureMapping: mapping, structureMappingRevision: mapping.structureMappingRevision,
+    ruleRevision: ruleContentRevision || sha256(prefix), ruleContentRevision: ruleContentRevision || sha256(prefix),
+    documentCount: docs.length, canonicalChars };
 }
 
 export function readRuleContext(rules, { sectionIds = [], ruleUnitIds = [] } = {}) {

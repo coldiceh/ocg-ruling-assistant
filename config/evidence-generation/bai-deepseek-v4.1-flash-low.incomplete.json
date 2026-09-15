@@ -1,0 +1,51 @@
+{
+  "profileId": "evidence-bai-deepseek-v4.1-flash-low-20260914",
+  "status": "incomplete",
+  "providerId": "bai",
+  "modelId": "deepseek-v4.1-flash",
+  "apiContractVersion": "bai-v1-responses-20260914",
+  "transportContract": {
+    "protocol": "responses",
+    "endpoint": "/v1/responses",
+    "inputField": "input",
+    "outputLimitField": "max_output_tokens",
+    "usageInputField": "usage.input_tokens",
+    "usageOutputField": "usage.output_tokens",
+    "usageReasoningField": "usage.output_tokens_details.reasoning_tokens"
+  },
+  "reasoningConfig": {
+    "responses": {
+      "effort": "low"
+    }
+  },
+  "capacityContract": {
+    "contextWindowTokens": 1000000,
+    "maxOutputTokens": 384000,
+    "sharedContextRuleId": null
+  },
+  "pricingContract": {
+    "currency": "USD",
+    "billingMode": "busy_upper_bound",
+    "inputUsdPerMillion": 0.3,
+    "cacheWriteUsdPerMillion": 0.3,
+    "cachedInputUsdPerMillion": 0.006,
+    "outputUsdPerMillion": 1.2,
+    "outputIncludesThinking": true
+  },
+  "measurementContract": {
+    "status": "unavailable",
+    "attemptedEndpoint": "/v1/responses/input_tokens",
+    "observedHttpStatus": 403,
+    "observedAtUtcDate": "2026-09-14",
+    "blockingRequirements": [
+      "bai_complete_responses_request_input_counter",
+      "bai_binding_to_upstream_tokenizer_and_prompt_renderer",
+      "bai_shared_context_accounting_rule"
+    ]
+  },
+  "sources": {
+    "api": "https://docs.b.ai/llmservice/api/",
+    "model": "https://docs.b.ai/llmservice/models/deepseek-v4-1-flash/",
+    "upstreamTokenizer": "https://github.com/deepseek-ai/deepseek-recipe/blob/main/docs/tokenizer.md"
+  }
+}

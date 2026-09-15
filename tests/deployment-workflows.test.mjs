@@ -151,27 +151,63 @@ test("the ordinary repository check rejects stale revision and runtime artifacts
   assert.ok(check.indexOf("check:rag-runtime") < check.indexOf("node --check"));
 });
 
-test("Vercel verifies source, runtime, and cloud asset bindings before deployment", async () => {
+test("Vercel verifies the source, runtime, and enabled Gemini asset bindings before deployment", async () => {
   const config = JSON.parse(await readFile(new URL("../vercel.json", import.meta.url), "utf8"));
   const packageJson = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
+  const syncWorkflow = await readWorkflow("sync-data.yml");
+  const publication = await readPublication();
   assert.ok(config.buildCommand.length <= 256, "Vercel schema limits buildCommand to 256 characters");
   assert.equal(config.buildCommand, "pnpm run build:vercel");
 
   assert.equal(
     packageJson.scripts["build:vercel"],
-    "pnpm run check:rag-revision && pnpm run check:rag-runtime && pnpm run build:gemini-rule-qa && node scripts/sync-cloud-evidence-assets.mjs --data-dir data --cloud-dir data/cloud-evidence-v1 --check-only && node scripts/build-public-release.mjs && node scripts/build-web-assets.mjs",
+    "pnpm run check:rag-revision && pnpm run check:rag-runtime && pnpm run verify:gemini-rule-qa && node scripts/build-public-release.mjs && node scripts/build-web-assets.mjs",
   );
+  assert.doesNotMatch(packageJson.scripts["build:vercel"], /cloud-evidence-v1/u);
+  assert.match(syncWorkflow,
+    /node scripts\/sync-cloud-evidence-assets\.mjs[\s\S]*?--cloud-dir data\/cloud-evidence-v1/u);
+  assert.match(publication,
+    /node scripts\/sync-cloud-evidence-assets\.mjs --data-dir data --cloud-dir data\/cloud-evidence-v1 --check-only/u);
+  assert.equal(packageJson.scripts["verify:gemini-rule-qa"],
+    "node scripts/build-gemini-rule-qa-assets.mjs --stage verify --data-dir data --output-dir data/gemini-rule-qa-v1");
   assert.equal(config.outputDirectory, "public");
   assert.equal(
     (await readFile(new URL("../public/.gitkeep", import.meta.url), "utf8")).replaceAll("\r\n", "\n"),
     "\n",
   );
   for (const route of ["api/answer.js", "api/admin-model-lab.js"]) {
+    const included = String(config.functions?.[route]?.includeFiles || "");
     const excluded = String(config.functions?.[route]?.excludeFiles || "");
+    assert.match(included, /config\/evidence-generation\/gemini-3\.8-flash-low\.json/u);
+    for (const asset of [
+      "data/gemini-rule-qa-v1/{manifest.json,qa-records.json.gz,rule-records.json.gz,qa-lexical-index.bm25.gz,structure-mapping.release.json.gz,navigation-records.json.gz}",
+      "data/rule-embedding-v1/{evidence-vector-index.json,evidence-vectors-*.f32}",
+      "data/qa-embedding-v1/{evidence-vector-index.json,evidence-vectors-*.f32}",
+    ]) {
+      assert.ok(included.includes(asset), `${route} must include ${asset}`);
+    }
+    assert.doesNotMatch(included, /gemini-rule-qa-v1\/\*\*|navigation-inputs|dense-inputs|canonical-manifest|structure-mapping\.json\.gz/u);
+    assert.doesNotMatch(included, /(?:rule|qa)-embedding-v1\/\*\*/u);
     assert.match(excluded, /data\/\{cards,rulings,qa-index,evidence-index,ocg-rule-corpus,official-responses\}\.json/u);
     assert.match(excluded, /data\/evidence-index\.json\.gz/u);
     assert.doesNotMatch(excluded, /rag-data-revision-manifest|rag-runtime-v1|legacy-lua-semantic-cache-v2/u);
   }
+});
+
+test("bounded preview asset refresh is dry-run only and fails closed before paid preprocessing", async () => {
+  const workflow = await readWorkflow("refresh-bounded-evidence-preview.yml");
+  assert.match(workflow, /^      execute_preprocessing:\s*$/mu);
+  assert.match(workflow, /^        default: false\s*$/mu);
+  assert.match(workflow, /^  contents: read\s*$/mu);
+  assert.match(workflow, /github\.ref == 'refs\/heads\/codex\/bounded-evidence-preview-20260914'/u);
+  assert.match(workflow, /github\.actor == github\.repository_owner/u);
+  assert.match(workflow, /--stage canonical/u);
+  const blocker = workflow.indexOf("existing_authorized_preprocessing_ledger_not_configured");
+  assert.ok(blocker >= 0 && blocker < workflow.indexOf("--stage canonical"));
+  assert.ok(workflow.indexOf("--stage canonical") < workflow.indexOf("--dry-run"));
+  assert.match(workflow, /if: inputs\.execute_preprocessing[\s\S]*exit 1/u);
+  assert.doesNotMatch(workflow, /authorizationId|spentUsd|reservedUsd|EVIDENCE_LEDGER/u);
+  assert.doesNotMatch(workflow, /secrets\.GEMINI_API_KEY|--execute|--ledger|git push/u);
 });
 
 test("RAG source snapshots are checked out with stable LF line endings", async () => {

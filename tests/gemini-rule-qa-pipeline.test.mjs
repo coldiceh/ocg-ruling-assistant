@@ -34,6 +34,10 @@ test('Gemini rule and QA provider preserves its exact packing in the prepared co
     modelUsed: 'gemini-2.5-flash',
     tokenUsage: { promptTokenCount: 12, candidatesTokenCount: 3, totalTokenCount: 15 },
     informationNeeds: ['mechanical fixture'],
+    generationProfileHash: 'frozen-profile-hash',
+    generationContracts: { planning: { modelId: 'fixture' }, selection: { modelId: 'fixture' } },
+    bundleRevision: 'frozen-bundle',
+    timingsMs: { plan: 1, selection: 2 },
   };
   const prepared = await answerRagRulingQuestion({
     question: 'Synthetic integration question',
@@ -41,6 +45,7 @@ test('Gemini rule and QA provider preserves its exact packing in the prepared co
     records: [],
     qaRecords: [],
     prepareForContinuation: true,
+    nonCardElapsedBeforePipelineMs: 100,
     cardModelInvoker: async () => JSON.stringify({
       cardNames: [{ name: 'unbound model value' }],
       groupMentions: [],
@@ -61,6 +66,7 @@ test('Gemini rule and QA provider preserves its exact packing in the prepared co
   });
 
   assert.equal(calls.length, 1);
+  assert.ok(calls[0].elapsedBeforeRetrievalMs >= 100);
   assert.equal(calls[0].userQuery, 'Synthetic integration question');
   assert.equal(typeof calls[0].packEvidence, 'function');
   assert.equal(
@@ -78,6 +84,12 @@ test('Gemini rule and QA provider preserves its exact packing in the prepared co
     calls[0].cardResolution.unresolvedMentions,
   );
   assert.deepEqual(prepared.continuation.ruleQueryModel.tokenUsage, telemetry.tokenUsage);
+  assert.deepEqual(prepared.continuation.ruleQueryModel.generationContracts, telemetry.generationContracts);
+  assert.equal(prepared.continuation.ruleQueryModel.generationProfileHash, telemetry.generationProfileHash);
+  assert.equal(prepared.continuation.ruleQueryModel.bundleRevision, telemetry.bundleRevision);
+  assert.ok(prepared.continuation.timingsMs.nonCardPreparation >= 100);
+  assert.equal(typeof prepared.continuation.evidence.debug.timingsMs.cardTextPreparation, 'number');
+  assert.deepEqual(prepared.continuation.evidence.debug.geminiRuleQa, evidence.debug.geminiRuleQa);
 
   let finalPrompt;
   const final = await finalizePreparedRagRulingQuestion({

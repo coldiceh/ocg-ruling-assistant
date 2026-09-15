@@ -9,7 +9,7 @@ function qaItems(items) {
   return items.filter(item => item?.record?.recordType === 'qa');
 }
 
-export function buildQaDenseContext({ qaRevision, items } = {}) {
+export function buildQaDenseContext({ qaRevision, items, denseRevision } = {}) {
   check(typeof qaRevision === 'string' && qaRevision.length > 0,
     'gemini_qa_dense_revision_invalid');
   const units = new Map();
@@ -25,14 +25,14 @@ export function buildQaDenseContext({ qaRevision, items } = {}) {
       text,
     }));
   }
-  return Object.freeze({ ruleRevision: qaRevision, units });
+  return Object.freeze({ ruleRevision: denseRevision || qaRevision, qaRevision, units });
 }
 
-export async function loadQaDenseSearch({ qaRevision, items, dataDir } = {}) {
+export async function loadQaDenseSearch({ qaRevision, items, dataDir, denseRevision } = {}) {
   const selected = qaItems(items);
-  const rules = buildQaDenseContext({ qaRevision, items: selected });
+  const rules = buildQaDenseContext({ qaRevision, items: selected, denseRevision });
   const byHandle = new Map(selected.map(item => [item.handle, item]));
-  const dense = await loadRuleDenseSearch({ rules, dataDir });
+  const dense = await loadRuleDenseSearch({ rules, dataDir, denseRevision: denseRevision || qaRevision });
 
   function search(queryVector) {
     return Object.freeze(dense.search(queryVector).map((unit) => {
@@ -42,5 +42,13 @@ export async function loadQaDenseSearch({ qaRevision, items, dataDir } = {}) {
     }));
   }
 
-  return Object.freeze({ search });
+  async function searchAsync(queryVector, options) {
+    return Object.freeze((await dense.searchAsync(queryVector, options)).map((unit) => {
+      const item = byHandle.get(unit.id);
+      check(item, 'gemini_qa_dense_handle_binding_changed');
+      return item;
+    }));
+  }
+
+  return Object.freeze({ denseRevision: denseRevision || qaRevision, search, searchAsync });
 }

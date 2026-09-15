@@ -73,3 +73,16 @@ test("installed index preserves ordering and cursors bind request card ids and r
     /lexical_index_binding_invalid/u,
   );
 });
+
+test("snapshot copies ordinary caller records but freezes explicitly transferred loader records", () => {
+  const ordinary = record("qa-copy", { extra: { raw: { value: "original" } } });
+  const copied = createQaSnapshot({ records: [ordinary], qaRevision: "qa-copy" });
+  ordinary.raw.value = "mutated";
+  assert.equal(copied.records[0].raw.value, "original");
+
+  const transferred = record("qa-owned", { extra: { raw: { value: "owned" } } });
+  const owned = createQaSnapshot({ records: [transferred], qaRevision: "qa-owned", recordsOwned: true });
+  assert.strictEqual(owned.records[0], transferred);
+  assert.equal(Object.isFrozen(transferred), true);
+  assert.equal(Object.isFrozen(transferred.raw), true);
+});

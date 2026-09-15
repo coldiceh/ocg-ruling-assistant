@@ -26,7 +26,7 @@ function canonicalJson(value) {
   return JSON.stringify(value);
 }
 
-function writeIndex(root, rules, vectors, texts = [...rules.units.values()].map(ruleEmbeddingText)) {
+function writeIndex(root, rules, vectors, texts = [...rules.units.values()].map(ruleEmbeddingText), dataRevision = rules.ruleRevision) {
   const uniqueRows = [];
   const seen = new Set();
   texts.forEach((text, position) => {
@@ -52,7 +52,7 @@ function writeIndex(root, rules, vectors, texts = [...rules.units.values()].map(
     encoding: 'raw-little-endian-float32',
     model: { id: RULE_EMBEDDING_MODEL, revision: RULE_EMBEDDING_MODEL },
     inputContractSha256: hash(canonicalJson(RULE_EMBEDDING_CONTRACT)),
-    dataRevision: rules.ruleRevision,
+    dataRevision,
     dimension: RULE_EMBEDDING_DIMENSION,
     uniqueContentCount: hashes.length,
     orderedContentHashes: hashes,
@@ -142,4 +142,18 @@ test('reuses one exact input vector for duplicate canonical unit bodies', async 
   const dense = await loadRuleDenseSearch({ rules, dataDir: root });
   assert.deepEqual(dense.search(vector(1, 0)).map(unit => unit.id),
     ['unit-a', 'unit-b', 'unit-c']);
+});
+
+test('binds an explicit dense revision and asynchronously preserves complete stable order', async (context) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'gemini-rule-dense-revision-'));
+  context.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const rules = fixtureRules();
+  writeIndex(root, rules, [vector(0, 2), vector(1, 0), vector(1, 0)],
+    [...rules.units.values()].map(ruleEmbeddingText), 'dense-release-7');
+  const dense = await loadRuleDenseSearch({ rules, dataDir: root,
+    denseRevision: 'dense-release-7', scanBatchSize: 1 });
+  assert.deepEqual((await dense.searchAsync(vector(3, 0))).map(unit => unit.id),
+    ['unit-2', 'unit-3', 'unit-1']);
+  await assert.rejects(loadRuleDenseSearch({ rules, dataDir: root,
+    denseRevision: 'wrong-release' }), /evidence_vector_data_revision_changed/u);
 });

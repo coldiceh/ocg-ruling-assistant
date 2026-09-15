@@ -1,0 +1,105 @@
+name: Refresh bounded evidence preview assets
+
+on:
+  push:
+    branches:
+      - codex/bounded-evidence-preview-20260914
+  workflow_dispatch:
+    inputs:
+      execute_preprocessing:
+        description: Reserved for a future persistent authorized-ledger integration; currently fails closed
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bounded-evidence-preview-assets
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    if: >-
+      github.ref == 'refs/heads/codex/bounded-evidence-preview-20260914'
+      && github.actor == github.repository_owner
+      && github.triggering_actor == github.repository_owner
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      EVIDENCE_STAGING: ${{ runner.temp }}/bounded-evidence-release
+      EVIDENCE_CACHE: ${{ runner.temp }}/bounded-evidence-cache
+      GENERATION_PROFILE: config/evidence-generation/gemini-3.8-flash-low.json
+    steps:
+      - name: Checkout the authorized preview branch
+        uses: actions/checkout@v6
+        with:
+          ref: codex/bounded-evidence-preview-20260914
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Restore preprocessing cache by exact input contracts
+        uses: actions/cache@v5
+        with:
+          path: ${{ runner.temp }}/bounded-evidence-cache
+          key: bounded-evidence-preprocess-v1-${{ runner.os }}-${{ github.sha }}-${{ github.run_id }}
+          restore-keys: |
+            bounded-evidence-preprocess-v1-${{ runner.os }}-
+
+      - name: Refuse paid execution without the existing shared authorized ledger
+        if: inputs.execute_preprocessing
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "existing_authorized_preprocessing_ledger_not_configured" >&2
+          exit 1
+
+      - name: Build deterministic canonical preprocessing inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$EVIDENCE_STAGING"
+          node scripts/build-gemini-rule-qa-assets.mjs \
+            --stage canonical \
+            --data-dir data \
+            --output-dir "$EVIDENCE_STAGING/gemini-rule-qa-v1"
+
+      - name: Dry-run navigation and embedding work without external calls
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/prepare-evidence-navigation.mjs \
+            --data-dir data \
+            --cache-dir "$EVIDENCE_CACHE" \
+            --out-dir "$EVIDENCE_STAGING/gemini-rule-qa-v1" \
+            --generation-profile "$GENERATION_PROFILE" \
+            --dry-run
+          node scripts/refresh-gemini-source-embeddings.mjs \
+            --data-dir data \
+            --cache-dir "$EVIDENCE_CACHE" \
+            --out-dir "$EVIDENCE_STAGING" \
+            --inputs "$EVIDENCE_STAGING/gemini-rule-qa-v1/dense-inputs.json.gz" \
+            --dry-run
+
+      - name: Upload dry-run reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bounded-evidence-preprocessing-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/bounded-evidence-release/gemini-rule-qa-v1/navigation-preprocess-report.json
+            ${{ runner.temp }}/bounded-evidence-release/embedding-refresh-report.json
+          if-no-files-found: warn
+          retention-days: 1

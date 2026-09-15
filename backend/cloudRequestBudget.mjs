@@ -2,6 +2,12 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
 import { estimateOpenAIModelCost, estimateRelayModelCost, getModelPricingConfig } from './modelPricing.mjs';
 import { publicFinalBudgetEnabled, publicFinalBudgetKeys, publicFinalBudgetCommand, publicFinalPoolStatus } from './cloudFinalBudget.mjs';
+import {
+  assertGenerationCapacity,
+  estimateGenerationUpperBoundUsd,
+  generationContractSha256,
+  normalizeGeminiGenerationUsage,
+} from './evidenceGenerationContract.mjs';
 
 const scope = new AsyncLocalStorage();
 const UNIT = 1_000_000_000;
@@ -401,11 +407,13 @@ export function createCloudRequestBudget({env, fetchImpl = globalThis.fetch, com
     if (payload.error || !Array.isArray(payload.result)) throw new Error('cloud_budget_store_invalid_response');
     return payload.result;
   });
-  async function reserve({provider,model,operation,actualCny,theoreticalUsd,pricingBasis,stage='evidence_preparation'}) {
+  async function reserve({provider,model,operation,actualCny,theoreticalUsd,pricingBasis,
+    reservationMetadata,stage='evidence_preparation'}) {
     amount(actualCny,'reservation_actual',true);
     amount(theoreticalUsd,'reservation_theoretical',true);
     const ticket={id:randomUUID(),provider,model,operation,stage,status:'reserved',startedAtUtc:new Date().toISOString(),
       ...(pricingBasis?{pricingBasis}:{}),
+      ...(reservationMetadata?{reservationMetadata}:{}),
       actualNano:nano(actualCny),theoreticalNano:nano(theoreticalUsd),started:performance.now()};
     const migrationArgs=officialDailyMigration?['official_daily_v1',officialDailyMigration.startUtc,officialDailyMigration.endUtc]
       :separatePublicFinal?['public_gemini_uncapped_v1']:[];
@@ -419,9 +427,14 @@ export function createCloudRequestBudget({env, fetchImpl = globalThis.fetch, com
     records.push(ticket);
     return ticket;
   }
-  async function settle(ticket,{actualCny,actualUpperCny=actualCny,theoreticalUsd,usage,returnedModel}) {
+  async function settle(ticket,{actualCny,actualUpperCny=actualCny,theoreticalUsd,usage,returnedModel,
+    billableUsage,usageNormalization,billableCost}) {
     // Provider usage is observed before persistence; keep it if Redis fails.
-    Object.assign(ticket,{usage,returnedModel:returnedModel||null,providerResponseReceivedAtUtc:new Date().toISOString()});
+    Object.assign(ticket,{usage,returnedModel:returnedModel||null,
+      ...(billableUsage?{billableUsage}:{}),
+      ...(usageNormalization?{usageNormalization}:{}),
+      ...(billableCost?{billableCost}:{}),
+      providerResponseReceivedAtUtc:new Date().toISOString()});
     amount(actualCny,'settled_actual',true);
     amount(actualUpperCny,'settled_actual_upper',true);
     amount(theoreticalUsd,'settled_theoretical',true);
@@ -530,6 +543,8 @@ export function createCloudRequestBudget({env, fetchImpl = globalThis.fetch, com
     cachedTokenCount = 0,
     cacheTtlSeconds = 180,
     contentTokenEstimate,
+    measurement,
+    generationContract,
   }) {
     if (typeof invoke !== 'function') throw new Error('cloud_budget_gemini_invoke_required');
     const normalizedModel = String(model || '').trim();
@@ -538,6 +553,25 @@ export function createCloudRequestBudget({env, fetchImpl = globalThis.fetch, com
       throw new Error('cloud_budget_gemini_operation_invalid');
     }
     const bodyBytes = Buffer.byteLength(JSON.stringify(body), 'utf8');
+    const measuredGeneration = operation === 'generate_content'
+      && (measurement !== undefined || generationContract !== undefined);
+    if (measuredGeneration && (!measurement || !generationContract)) {
+      throw new Error('cloud_budget_gemini_generation_measurement_contract_required');
+    }
+    let generationUpperBound = null;
+    if (measuredGeneration) {
+      if (normalizedModel !== generationContract.modelId) {
+        throw new Error('cloud_budget_gemini_generation_model_mismatch');
+      }
+      if (cachedTokenCount !== 0) {
+        throw new Error('cloud_budget_gemini_generation_cache_contract_mismatch');
+      }
+      assertGenerationCapacity({ body, contract: generationContract, measurement });
+      generationUpperBound = estimateGenerationUpperBoundUsd({
+        measurement,
+        contract: generationContract,
+      });
+    }
     let reservedTheoreticalUsd;
     let pricingBasis;
     if (operation === 'cached_contents_create') {
@@ -557,11 +591,19 @@ export function createCloudRequestBudget({env, fetchImpl = globalThis.fetch, com
         'gemini_output_limit',
         { allowZero: false },
       );
-      const cached = geminiTokenCount(cachedTokenCount, 'gemini_cached_token_estimate');
-      reservedTheoreticalUsd = (bodyBytes * GEMINI_INPUT_USD_PER_MTOK
-        + cached * GEMINI_CACHED_INPUT_USD_PER_MTOK
-        + output * GEMINI_OUTPUT_USD_PER_MTOK) / 1_000_000;
-      pricingBasis = 'google_list_theoretical';
+      if (measuredGeneration) {
+        if (output !== generationContract.maxBillableOutputTokens) {
+          throw new Error('cloud_budget_gemini_generation_output_limit_mismatch');
+        }
+        reservedTheoreticalUsd = generationUpperBound.amountUsd;
+        pricingBasis = `${generationUpperBound.basis}:${generationContract.priceVersion}`;
+      } else {
+        const cached = geminiTokenCount(cachedTokenCount, 'gemini_cached_token_estimate');
+        reservedTheoreticalUsd = (bodyBytes * GEMINI_INPUT_USD_PER_MTOK
+          + cached * GEMINI_CACHED_INPUT_USD_PER_MTOK
+          + output * GEMINI_OUTPUT_USD_PER_MTOK) / 1_000_000;
+        pricingBasis = 'google_list_theoretical_legacy_unmeasured';
+      }
     }
     const ticket = await reserve({
       provider: 'gemini',
@@ -570,6 +612,18 @@ export function createCloudRequestBudget({env, fetchImpl = globalThis.fetch, com
       actualCny: 0,
       theoreticalUsd: reservedTheoreticalUsd,
       pricingBasis,
+      ...(measuredGeneration ? { reservationMetadata: {
+        generationContractSha256: generationContractSha256(generationContract),
+        requestSha256: measurement.requestSha256,
+        requestBodyBytes: measurement.requestBodyBytes,
+        inputTokensUpperBound: measurement.inputTokensUpperBound,
+        contextInputTokensUpperBound: measurement.contextInputTokensUpperBound,
+        countingContractVersion: measurement.countingContractVersion,
+        contextCountingContractVersion: measurement.contextCountingContractVersion,
+        measurementBasis: measurement.basis,
+        measurementExact: measurement.exact,
+        maxBillableOutputTokens: generationContract.maxBillableOutputTokens,
+      } } : {}),
     });
     let result;
     try { result = await invoke(); }
@@ -578,30 +632,59 @@ export function createCloudRequestBudget({env, fetchImpl = globalThis.fetch, com
       throw error;
     }
     const usage = result?.usageMetadata || null;
+    const returnedGeminiModel = result?.modelVersion || result?.model || null;
+    if (measuredGeneration && returnedGeminiModel
+        && String(returnedGeminiModel).replace(/^models\//u, '') !== generationContract.modelId) {
+      ticket.uncertainty = 'provider_model_binding_mismatch_reservation_retained';
+      throw new Error('cloud_budget_gemini_returned_model_mismatch');
+    }
     const cacheTokens = operation === 'cached_contents_create'
       ? usage?.totalTokenCount ?? result?.totalTokenCount
       : null;
     try {
+      const normalizedGenerationUsage = measuredGeneration
+        ? normalizeGeminiGenerationUsage(usage, generationContract)
+        : null;
+      if (normalizedGenerationUsage) {
+        Object.assign(ticket, {
+          usage,
+          rawUsage: normalizedGenerationUsage.rawUsage,
+          billableUsage: normalizedGenerationUsage.billableUsage,
+          usageNormalization: normalizedGenerationUsage.usageNormalization,
+          billableCost: normalizedGenerationUsage.billableCost,
+          returnedModel: returnedGeminiModel,
+          providerResponseReceivedAtUtc: new Date().toISOString(),
+        });
+      }
       const theoreticalUsd = operation === 'cached_contents_create'
         ? geminiCacheProvisionCost(cacheTokens, cacheTtlSeconds)
         : operation === 'embed_content'
           ? geminiTokenCount(usage?.promptTokenCount ?? 0, 'gemini_prompt_tokens', { allowZero: false })
             * GEMINI_EMBEDDING_INPUT_USD_PER_MTOK / 1_000_000
-          : geminiGenerateCost(usage);
+          : measuredGeneration
+            ? normalizedGenerationUsage.billableCost.amountUsd
+            : geminiGenerateCost(usage);
       if (operation === 'embed_content'
           && (!usage || geminiTokenCount(usage.promptTokenCount ?? 0, 'gemini_prompt_tokens') === 0)) {
         throw new Error('cloud_budget_gemini_usage_missing');
       }
       if (operation === 'generate_content'
-          && (!usage || geminiTokenCount(usage.totalTokenCount ?? 0, 'gemini_total_tokens') === 0)) {
+          && (!usage || (measuredGeneration
+            ? normalizedGenerationUsage.billableCost.status !== 'known'
+            : geminiTokenCount(usage.totalTokenCount ?? 0, 'gemini_total_tokens') === 0))) {
         throw new Error('cloud_budget_gemini_usage_missing');
       }
       await settle(ticket, {
         usage: usage || { totalTokenCount: cacheTokens },
-        returnedModel: result?.modelVersion || result?.model || normalizedModel,
+        returnedModel: returnedGeminiModel || normalizedModel,
         actualCny: 0,
         actualUpperCny: 0,
         theoreticalUsd,
+        ...(normalizedGenerationUsage ? {
+          billableUsage: normalizedGenerationUsage.billableUsage,
+          usageNormalization: normalizedGenerationUsage.usageNormalization,
+          billableCost: normalizedGenerationUsage.billableCost,
+        } : {}),
       });
     } catch {
       ticket.uncertainty = 'provider_usage_missing_or_settlement_uncertain_reservation_retained';
@@ -620,6 +703,34 @@ export function createCloudRequestBudget({env, fetchImpl = globalThis.fetch, com
     await settle(ticket,{usage:payload.usage,returnedModel:payload.model,
       actualCny:tokens*(ticket.operation==='embeddings'?0.07:0.28)/1e6,theoreticalUsd:0});
   }
+  async function remainingPreparationUsd({provider='gemini'}={}) {
+    if (!['gemini','bai','relay'].includes(provider)) {
+      throw new Error('cloud_budget_usd_preparation_provider_unsupported');
+    }
+    // This mirrors the amount checked by CLOUD_BUDGET_RESERVE. It is only an
+    // assembly hint; the later atomic reservation remains authoritative.
+    if (separatePublicFinal && provider === 'gemini') return Number.POSITIVE_INFINITY;
+    const fields = parseHashResult(await send(['HGETALL', key]));
+    let accountedNano = Number(fields.get('theoreticalNano')
+      ?? nano(initial.theoreticalUsd));
+    if (!Number.isSafeInteger(accountedNano) || accountedNano < 0) {
+      throw new Error('cloud_budget_total_invalid');
+    }
+    if (separatePublicFinal) {
+      for (const [id, value] of fields) {
+        if (['actualNano','theoreticalNano'].includes(id)) continue;
+        let prior;
+        try { prior = JSON.parse(value); } catch { throw new Error('cloud_budget_ticket_invalid'); }
+        if (prior.provider === 'gemini') {
+          if (!Number.isSafeInteger(prior.theoreticalNano) || prior.theoreticalNano < 0) {
+            throw new Error('cloud_budget_ticket_invalid');
+          }
+          accountedNano -= prior.theoreticalNano;
+        }
+      }
+    }
+    return Math.max(0, limits.theoreticalUsd - accountedNano / UNIT);
+  }
   function snapshot() {
     const hasRelay=records.some(record=>record.provider==='relay');
     const relayMultiplier=hasRelay?amount(relayMultiplierValue,'relay_multiplier'):null;
@@ -636,7 +747,8 @@ export function createCloudRequestBudget({env, fetchImpl = globalThis.fetch, com
         accountedActualUpperCny:['bai','gemini'].includes(r.provider)?null:r.actualNano/UNIT,
         theoreticalUsd:r.theoreticalNano/UNIT}))};
   }
-  return {relay,deepseek,openai,bai:request=>openai({...request,provider:'bai'}),gemini,beforeSend,onResponse,snapshot};
+  return {relay,deepseek,openai,bai:request=>openai({...request,provider:'bai'}),gemini,
+    beforeSend,onResponse,remainingPreparationUsd,snapshot};
 }
 
 export async function runCloudBudgetedQuestion({env,fetchImpl,budget},invoke) {
@@ -692,6 +804,12 @@ export function runCloudBaiRequest({body,invoke}) {
 export function runCloudDeepSeekRequest({body,invoke,channel='official'}) {
   const controller=scope.getStore();
   return controller?controller.deepseek({body,invoke,channel}):invoke();
+}
+export function currentCloudPreparationRemainingUsd(options) {
+  const controller = scope.getStore();
+  return controller
+    ? controller.remainingPreparationUsd(options)
+    : Promise.resolve(Number.POSITIVE_INFINITY);
 }
 export function runCloudGeminiRequest(request) {
   const controller=scope.getStore();

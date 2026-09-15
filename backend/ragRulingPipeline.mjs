@@ -493,6 +493,11 @@ function buildPreparedContinuation({
       "queryTexts",
       "queries",
       "candidateAssessments",
+      "generationProfileHash", "generationContracts", "strategy", "dataRevision",
+      "bundleRevision", "ruleRevision", "qaRevision", "navigationRevision",
+      "structureMappingRevision", "ruleDenseRevision", "qaDenseRevision",
+      "assetsCacheHit", "rounds", "actualCostKnown", "costBasis", "cacheProvisionUsd",
+      "elapsedBeforeRetrievalMs", "elapsedMs", "timingsMs", "queryPlan", "bounded",
     ]),
     timingsMs: { ...(timingsMs || {}) },
   };
@@ -574,6 +579,7 @@ async function answerRagRulingQuestionInternal({
   captureEvidenceOnly = false,
   prepareForContinuation = false,
   preloadedAssets,
+  nonCardElapsedBeforePipelineMs = 0,
   progress,
 } = {}) {
   const pipelineStartedAt = Date.now();
@@ -752,6 +758,11 @@ async function answerRagRulingQuestionInternal({
       },
       preparedEvidenceProvider: geminiProvider
         ? async (preparedEvidence) => {
+          const cardStages = preparedEvidence.debug?.timingsMs || {};
+          timingsMs.cardPreparation = timingsMs.dataAndQueryExtraction
+            + (cardStages.cardResolution || 0) + (cardStages.cardTextPreparation || 0);
+          const elapsedBeforeRetrievalMs = Math.max(0, nonCardElapsedBeforePipelineMs
+            + elapsedMs(pipelineStartedAt) - timingsMs.cardPreparation);
           const result = assertPreparedEvidenceResult(await geminiProvider.retrieve({
             userQuery: query,
             dataRevision,
@@ -760,6 +771,7 @@ async function answerRagRulingQuestionInternal({
             env,
             signal,
             assetsPromise: preloadedAssets?.geminiAssets,
+            elapsedBeforeRetrievalMs,
             packEvidence: (selectedEvidence) => buildRagRulingPromptBundle({
               userQuery: query,
               cardResolution: preparedEvidence.cardResolution,
@@ -771,7 +783,9 @@ async function answerRagRulingQuestionInternal({
           if (result.telemetry && typeof result.telemetry === 'object') {
             ruleQueryModel = { ...DISABLED_AUXILIARY_STAGE, ...result.telemetry };
           }
-          return result.evidence;
+          return { ...result.evidence,
+            retrievalWarnings: preparedEvidence.retrievalWarnings || [],
+            debug: { ...preparedEvidence.debug, ...result.evidence.debug } };
         }
         : cloudProvider ? async (preparedEvidence) => cloudProvider.retrieve({
           userQuery:query, dataRevision, cardResolution:preparedEvidence.cardResolution,
@@ -915,6 +929,11 @@ async function answerRagRulingQuestionInternal({
     jsonSafe: prepareForContinuation === true,
   });
   if (prepareForContinuation === true) {
+    // Include continuation serialization in server timing. Client transport and
+    // storage completion remain separately measured at the public boundary.
+    continuation.timingsMs.total = elapsedMs(pipelineStartedAt);
+    continuation.timingsMs.nonCardPreparation = Math.max(0, nonCardElapsedBeforePipelineMs
+      + continuation.timingsMs.total - (timingsMs.cardPreparation || 0));
     // Keep the progress stream in retrieve_rulings. The caller's second
     // request invokes the finalizer, which owns generate_ruling.
     return { status: "evidence_prepared", continuation };

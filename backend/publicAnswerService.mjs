@@ -325,6 +325,7 @@ export async function answerPublicRulingQuestion({
       officialQaExactAlreadyChecked: true,
       progress,
       preloadedAssets,
+      nonCardElapsedBeforePipelineMs: Math.max(0, Date.now() - publicRequestStartedAt),
       ...(prepareForContinuation === true ? { prepareForContinuation: true } : {}),
     });
     requestDiagnostics.completedAt = new Date().toISOString();

@@ -60,7 +60,7 @@ function normalizeCardIds(cardIds) {
     .filter(Boolean))].sort());
 }
 
-function snapshotRecords(records) {
+function snapshotRecords(records, { takeOwnership = false } = {}) {
   if (!Array.isArray(records)) throw new TypeError("gemini_qa_records_invalid");
   const selected = [];
   const ids = new Set();
@@ -73,23 +73,25 @@ function snapshotRecords(records) {
     const id = String(input.id || "").trim();
     if (!id || ids.has(id)) throw new Error("gemini_qa_record_identity_invalid");
     ids.add(id);
-    selected.push(cloneRecord(input));
+    selected.push(takeOwnership ? cloneAndFreeze(input) : cloneRecord(input));
   }
   return Object.freeze(selected);
 }
 
-function makeCandidate(record, qaRevision) {
+function makeCandidate(record, qaRevision, { bundleRevision = qaRevision, qaUnit, navigation } = {}) {
   // JSON is the source adapter's canonical complete body. This adapter only
   // preserves it and never compares parallel text fields for meaning.
   const text = JSON.stringify(record);
   if (typeof text !== "string" || !text) throw new Error("gemini_qa_record_body_invalid");
   const handle = sha256(canonicalJson({
-    qaRevision,
+    bundleRevision,
     recordType: record.recordType,
     id: record.id,
     record,
   }));
-  return Object.freeze({ binding: handle, handle, record, text });
+  const unitKey = qaUnit?.unitKey || `qa:${record.recordType}:${record.id}`;
+  return Object.freeze({ binding: handle, handle, unitKey, record, text,
+    navigation: navigation || null });
 }
 
 function encodeCursor({ qaRevision, queryFingerprint, offset }) {
@@ -143,7 +145,8 @@ function explicitAuthorityFields(record) {
 }
 
 function publicItem(candidate) {
-  const result = { handle: candidate.handle, record: candidate.record };
+  const result = { handle: candidate.handle, unitKey: candidate.unitKey, record: candidate.record,
+    ...(candidate.navigation ? { navigation: candidate.navigation } : {}) };
   Object.assign(result, explicitAuthorityFields(candidate.record));
   return Object.freeze(result);
 }
@@ -239,6 +242,12 @@ function buildRequestTools(compiled, { pageSize = 4, cardIds = [] } = {}) {
     });
   }
 
+  function searchAll({ queries } = {}) {
+    const normalizedQueries = normalizeQueries(queries);
+    const lexical = compiled.candidates.length ? rankLexicalUnion(compiled, normalizedQueries) : Object.freeze([]);
+    return Object.freeze(mergeQueues([cardLinkedQueue, lexical], compiled.byHandle).map(publicItem));
+  }
+
   function readSelected(handles = []) {
     if (!Array.isArray(handles)) throw new TypeError("gemini_qa_handles_invalid");
     const seen = new Set();
@@ -262,6 +271,8 @@ function buildRequestTools(compiled, { pageSize = 4, cardIds = [] } = {}) {
     snapshotSize: compiled.records.length,
     snapshotHandles: compiled.snapshotHandles,
     search,
+    searchAll,
+    searchOrdered: searchAll,
     readSelected,
   });
 }
@@ -271,16 +282,27 @@ function buildRequestTools(compiled, { pageSize = 4, cardIds = [] } = {}) {
  * index remains attached to this candidate array; request card ids are supplied
  * only when createQaTools is called on the returned snapshot.
  */
-export function createQaSnapshot({ records, qaRevision, lexicalIndexBytes } = {}) {
+export function createQaSnapshot({ records, qaRevision, lexicalIndexBytes, bundleRevision,
+  qaUnits = [], navigationRecords = [], recordsOwned = false,
+  lexicalIndexBytesOwned = false } = {}) {
   const revision = normalizeRevision(qaRevision);
-  const snapshot = snapshotRecords(records);
-  const candidates = Object.freeze(snapshot.map((record) => makeCandidate(record, revision)));
+  const releaseRevision = bundleRevision === undefined ? revision : normalizeRevision(bundleRevision);
+  const snapshot = snapshotRecords(records, { takeOwnership: recordsOwned });
+  const unitByRecord = new Map(qaUnits.map((unit) => [`${unit.recordType}:${unit.recordId}`, unit]));
+  const navigationByUnit = new Map(navigationRecords.map((record) => [record.unitKey, record]));
+  const candidates = Object.freeze(snapshot.map((record) => {
+    const qaUnit = unitByRecord.get(`${record.recordType}:${record.id}`);
+    const unitKey = qaUnit?.unitKey || `qa:${record.recordType}:${record.id}`;
+    return makeCandidate(record, revision, { bundleRevision: releaseRevision, qaUnit,
+      navigation: navigationByUnit.get(unitKey) });
+  }));
   const byHandle = new Map(candidates.map((candidate) => [candidate.handle, candidate]));
   const snapshotHandles = Object.freeze(candidates.map((candidate) => candidate.handle));
   const compiled = { qaRevision: revision, records: snapshot, candidates, byHandle, snapshotHandles };
 
   if (lexicalIndexBytes !== undefined) {
-    installManualCaptureLexicalIndex({ candidates, dataRevision: revision, bytes: lexicalIndexBytes });
+    installManualCaptureLexicalIndex({ candidates, dataRevision: revision, bytes: lexicalIndexBytes,
+      takeOwnership: lexicalIndexBytesOwned });
   }
 
   function buildLexicalIndex() {
@@ -295,9 +317,12 @@ export function createQaSnapshot({ records, qaRevision, lexicalIndexBytes } = {}
 
   return Object.freeze({
     qaRevision: revision,
+    bundleRevision: releaseRevision,
     records: snapshot,
     snapshotSize: snapshot.length,
     snapshotHandles,
+    qaUnitsByKey: new Map(candidates.map((candidate) => [candidate.unitKey, publicItem(candidate)])),
+    handleUnitKeys: new Map(candidates.map((candidate) => [candidate.handle, Object.freeze([candidate.unitKey])])),
     buildLexicalIndex,
     installLexicalIndex,
     createQaTools: (options = {}) => buildRequestTools(compiled, options),
@@ -316,8 +341,12 @@ export function createQaTools({
   cardIds = [],
   lexicalIndexBytes,
   snapshot,
+  bundleRevision,
+  qaUnits,
+  navigationRecords,
 } = {}) {
-  const prepared = snapshot || createQaSnapshot({ records, qaRevision, lexicalIndexBytes });
+  const prepared = snapshot || createQaSnapshot({ records, qaRevision, lexicalIndexBytes,
+    bundleRevision, qaUnits, navigationRecords });
   if (!prepared || typeof prepared.createQaTools !== "function") {
     throw new TypeError("gemini_qa_snapshot_invalid");
   }
