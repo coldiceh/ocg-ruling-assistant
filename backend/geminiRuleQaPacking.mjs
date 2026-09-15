@@ -26,7 +26,7 @@ function renderRepeatedQaText(prefix, marker, payload, original) {
     return Object.hasOwn(value, '$lines') || Object.values(value).some(hasReservedKey);
   }
   const candidates = payload.evidence.rawRelatedEvidence.map(item => {
-    if (item.recordType !== 'qa' || typeof item.text !== 'string') return item;
+    if (!['qa', 'card-faq'].includes(item.recordType) || typeof item.text !== 'string') return item;
     // This string is emitted above by JSON.stringify(record), not arbitrary
     // webpage text. Unknown display shapes retain their original form.
     let record;

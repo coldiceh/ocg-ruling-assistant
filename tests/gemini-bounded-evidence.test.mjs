@@ -279,3 +279,67 @@ test("native FAQ units retain complete source excerpts and all units map to thei
   const delivered = JSON.parse(requests[1].contents[0].parts[1].text);
   assert.ok(delivered.groups.some(group => group.items?.some(item => item.record.sourceExcerpt)));
 });
+
+test("confirmed-card FAQ delivery offers every source-ordered fragment as one reading bundle", async () => {
+  const conclusion = Array.from({ length: 40 }, (_, index) => `完整FAQ片段 ${index + 1}`).join("\n\n");
+  const faq = { id: "faq-confirmed-7", recordType: "card-faq", title: "fixture FAQ",
+    cards: [], cardIds: ["7"], conclusion, official: true };
+  const assets = schema3Assets([rule], [faq]);
+  const expectedFragments = assets.structureMapping.qaUnits
+    .filter(unit => unit.item.record.id.startsWith("faq-confirmed-7-"));
+  assert.equal(expectedFragments.length, 40);
+  const { provider, requests } = fixture({ assets, select: delivered => ({
+    selectedIds: [delivered.groups.flatMap(group => group.items || [])[0].handle],
+    unableToSelect: false, note: "",
+  }) });
+  const resolved = { resolvedCards: [{ id: "7" }], unresolvedMentions: [], ambiguousMentions: [] };
+  const result = await provider.retrieve({ ...input, userQuery: "fixture FAQ", retrievedEvidence: {},
+    env: { GEMINI_API_KEY: "fixture", GEMINI_EVIDENCE_READING_TARGET_CHARS: "128000" }, cardResolution: resolved });
+  const delivered = JSON.parse(requests[1].contents[0].parts[1].text);
+  const offered = delivered.groups.flatMap(group => group.items || [])
+    .filter(item => item.record?.id?.startsWith("faq-confirmed-7-"))
+    .map(item => Number(item.record.id.split("-").at(-2)));
+  assert.deepEqual(offered, expectedFragments.map(unit => unit.item.record.sourceExcerpt.start));
+  assert.equal(result.telemetry.bounded.selectedIds.length, 1);
+  assert.equal(result.telemetry.bounded.reading.lanes[0].channel, "confirmed_card_faq");
+
+  const { provider: unmatched } = fixture({ assets });
+  const unmatchedResult = await unmatched.retrieve({ ...input, userQuery: "fixture FAQ", retrievedEvidence: {},
+    env: { GEMINI_API_KEY: "fixture", GEMINI_EVIDENCE_READING_TARGET_CHARS: "128000" },
+    cardResolution: { resolvedCards: [{ id: "unconfirmed-card" }], unresolvedMentions: [], ambiguousMentions: [] } });
+  assert.equal(unmatchedResult.telemetry.bounded.reading.lanes.some(lane => lane.channel === "confirmed_card_faq"), false);
+});
+
+test("each confirmed card has an independent lane for source-declared QA links", async () => {
+  const records = [
+    ...Array.from({ length: 40 }, (_, index) => ({ ...qa, id: `qa-a-${String(index).padStart(2, '0')}`,
+      title: `fixture A ${index}`, question: `fixture A ${index}`, answer: `complete fixture answer ${index}`,
+      cardIds: ['card-a'] })),
+    { ...qa, id: 'qa-z-linked-b', title: 'z', question: 'z', answer: 'z', cardIds: ['card-b'], official: false,
+      sourceAuthority: 'community_reference' },
+  ];
+  const assets = schema3Assets([rule], records);
+  const createTools = assets.createQaTools;
+  assets.createQaTools = options => ({ ...createTools(options), *searchBounded() {} });
+  assets.navigationSearch = { searchBySourceKind: () => ({ rule: [], qa: [], faq: [] }) };
+  const { provider, requests } = fixture({ assets, denseQa: [], select: () => ({
+    selectedIds: [], unableToSelect: false, note: '',
+  }) });
+  const result = await provider.retrieve({ ...input,
+    cardResolution: { resolvedCards: [{ id: 'card-a' }, { id: 'card-b' }], unresolvedMentions: [], ambiguousMentions: [] },
+  });
+  const delivered = JSON.parse(requests[1].contents[0].parts[1].text);
+  const linked = delivered.groups.flatMap(group => group.items || []).find(item => item.record.id === 'qa-z-linked-b');
+  assert.ok(linked);
+  assert.equal(linked.record.official, false);
+  assert.equal(linked.record.sourceAuthority, 'community_reference');
+});
+
+ test("configured evidence transport deadline can exceed the 30 second target", async () => {
+  const { provider, requests } = fixture();
+  const result = await provider.retrieve({ ...input, elapsedBeforeRetrievalMs: 30001,
+    env: { ...input.env, GEMINI_EVIDENCE_DEADLINE_MS: "60000" } });
+  assert.equal(requests.length, 2);
+  assert.equal(result.telemetry.bounded.deadlineMs, 60000);
+  assert.ok(result.packing.prompt.length > 0);
+ });

@@ -4,6 +4,11 @@ import { fileURLToPath } from "node:url";
 import { buildCardAliasIndex, buildQaIndex } from "../backend/dataIndex.mjs";
 import { normalizeCardMetadata } from "../backend/liveOfficialQaProvider.mjs";
 import {
+  loadBaigeChineseNameSource,
+  mergeMissingChineseNamesFromBaige,
+  preserveBackfilledChineseNames,
+} from "./lib/baige-chinese-name-backfill.mjs";
+import {
   detectTranslationPlaceholder,
   formatRulingDataQualityIssue,
   quarantineRulingData,
@@ -27,6 +32,7 @@ const defaultIndexLanguages = (process.env.CARD_INDEX_LANGUAGES || "en,ja")
   .map((language) => language.trim())
   .filter(Boolean);
 const freshnessDays = Number(process.env.FRESHNESS_DAYS || 7);
+const baigeChineseNameSourcePath = String(process.env.BAIGE_CHINESE_NAME_SOURCE_PATH || "").trim();
 const userAgent = "ocg-ruling-assistant/0.1 (+https://github.com/)";
 
 const warnings = [];
@@ -86,6 +92,9 @@ async function main() {
   if (!cardSnapshotAuthoritative) {
     cards = mergeCardRecords(previousCards.records || [], cards);
   }
+  cards = preserveBackfilledChineseNames(cards, previousCards.records || []);
+  const chineseNameBackfill = await applyBaigeChineseNameBackfill(cards);
+  cards = chineseNameBackfill.records;
   rulings = mergeRulingsCumulatively(previousRulings.records || [], rulings, {
     removedQaIds: rulingSync.removedQaIds,
     authoritativeRecordTypes: cardSnapshotAuthoritative ? ["card-text", "card-faq"] : [],
@@ -134,32 +143,7 @@ async function main() {
   await writeJson(join(dataDir, "cards-lite.json"), {
     schemaVersion: 1,
     generatedAt,
-    records: cards.map((card) => ({
-      id: card.id,
-      name: card.name,
-      cnName: card.cnName,
-      jaName: card.jaName,
-      enName: card.enName,
-      aliases: card.aliases,
-      released: card.released,
-      type: card.type,
-      cardType: card.cardType,
-      race: card.race,
-      attribute: card.attribute,
-      attack: card.attack,
-      defense: card.defense,
-      atk: card.atk,
-      def: card.def,
-      level: card.level,
-      rank: card.rank,
-      link: card.link,
-      linkRating: card.linkRating,
-      linkArrows: card.linkArrows,
-      propertyIds: card.propertyIds,
-      properties: card.properties,
-      monsterPropertyIds: card.monsterPropertyIds,
-      monsterProperties: card.monsterProperties,
-    })),
+    records: cards.map(projectCardLite),
   });
   await writeJson(join(dataDir, "rulings.json"), {
     schemaVersion: 1,
@@ -220,6 +204,7 @@ async function main() {
     qaDiscoveryCardCount: qaDiscoveryRecords.length,
     qaDiscoveryQaCount: discoveredQaIds.length,
     qaDiscoveryComplete: cardSnapshotAuthoritative,
+    chineseNameBackfill: chineseNameBackfill.stats,
     sources: [
       {
         id: "official-card-database",
@@ -263,6 +248,7 @@ async function main() {
     qaDiscoveryRelationCount: qaDiscoveryRecords.reduce((sum, record) => sum + record.qaIds.length, 0),
     qaDiscoveryComplete: cardSnapshotAuthoritative,
     qaDetailSnapshotAuthoritative,
+    chineseNameBackfill: chineseNameBackfill.stats,
     warnings,
     sourceRetirementWarnings,
     dataQualityWarnings,
@@ -271,6 +257,77 @@ async function main() {
 
   console.log(`Synced ${cards.length} cards, ${cardAliasIndex.length} aliases, ${rulings.length} ruling records, and ${qaIndex.length} Q&A index entries.`);
   if (warnings.length) console.warn(warnings.join("\n"));
+}
+
+async function applyBaigeChineseNameBackfill(cards) {
+  if (!baigeChineseNameSourcePath) {
+    return {
+      records: cards,
+      stats: {
+        configured: false,
+        sourceRecordCount: 0,
+        usableSourceRecordCount: 0,
+        eligibleCardCount: 0,
+        matchedCardCount: 0,
+        backfilledCardCount: 0,
+        addedAliasCount: 0,
+      },
+    };
+  }
+
+  try {
+    const sourceRecords = await loadBaigeChineseNameSource(baigeChineseNameSourcePath);
+    const result = mergeMissingChineseNamesFromBaige(cards, sourceRecords);
+    return {
+      ...result,
+      stats: { configured: true, ...result.stats },
+    };
+  } catch (error) {
+    addAliasWarning(`Baige Chinese name source failed: ${formatError(error)}`);
+    return {
+      records: cards,
+      stats: {
+        configured: true,
+        sourceRecordCount: 0,
+        usableSourceRecordCount: 0,
+        eligibleCardCount: 0,
+        matchedCardCount: 0,
+        backfilledCardCount: 0,
+        addedAliasCount: 0,
+        failed: true,
+      },
+    };
+  }
+}
+
+export function projectCardLite(card = {}) {
+  return {
+    id: card.id,
+    name: card.name,
+    cnName: card.cnName,
+    jaName: card.jaName,
+    enName: card.enName,
+    aliases: card.aliases,
+    chineseNameSources: card.chineseNameSources,
+    released: card.released,
+    type: card.type,
+    cardType: card.cardType,
+    race: card.race,
+    attribute: card.attribute,
+    attack: card.attack,
+    defense: card.defense,
+    atk: card.atk,
+    def: card.def,
+    level: card.level,
+    rank: card.rank,
+    link: card.link,
+    linkRating: card.linkRating,
+    linkArrows: card.linkArrows,
+    propertyIds: card.propertyIds,
+    properties: card.properties,
+    monsterPropertyIds: card.monsterPropertyIds,
+    monsterProperties: card.monsterProperties,
+  };
 }
 
 async function loadNameIndexes(languages) {

@@ -1,0 +1,61 @@
+{
+  "profileId": "evidence-gemini-3.8-flash-medium-planning-room-20260915",
+  "status": "ready",
+  "providerId": "gemini",
+  "modelId": "gemini-3.8-flash",
+  "apiContractVersion": "google-generative-language-v1beta-generateContent-20260914",
+  "reasoningConfig": {
+    "thinkingConfig": {
+      "thinkingLevel": "medium"
+    }
+  },
+  "outputLimitConfig": {
+    "field": "generationConfig.maxOutputTokens",
+    "covers": [
+      "visible_output",
+      "thinking_output"
+    ]
+  },
+  "responseFormatConfig": {
+    "responseMimeType": "application/json"
+  },
+  "priceVersion": "google-gemini-3.8-flash-standard-intro-through-2026-12-31",
+  "countingContractVersion": "google-v1beta-countTokens-generateContentRequest-20260914",
+  "capacityContract": {
+    "version": "google-gemini-3.8-flash-model-and-inline-request-limits-20260914",
+    "contextCountingContractVersion": "google-v1beta-countTokens-generateContentRequest-20260914",
+    "maxInputTokens": 1048576,
+    "maxOutputTokens": 65536,
+    "maxSharedContextTokens": 1048576,
+    "maxRequestBodyBytes": 20000000,
+    "sharedContextRuleId": "input_plus_max_billable_output_lte_shared_context"
+  },
+  "pricingContract": {
+    "currency": "USD",
+    "billingMode": "standard",
+    "inputUsdPerMillion": 0.75,
+    "cachedInputUsdPerMillion": 0.075,
+    "outputUsdPerMillion": 3.75,
+    "outputIncludesThinking": true,
+    "cachedInputMode": "usage_reported",
+    "requestCachingMode": "none",
+    "validThrough": "2026-12-31"
+  },
+  "sources": {
+    "model": "https://ai.google.dev/gemini-api/docs/models/gemini-3.8-flash",
+    "pricing": "https://ai.google.dev/gemini-api/docs/pricing",
+    "counting": "https://ai.google.dev/api/tokens",
+    "requestSize": "https://ai.google.dev/gemini-api/docs/file-prompting-strategies"
+  },
+  "stages": {
+    "planning": {
+      "maxBillableOutputTokens": 4096
+    },
+    "selection": {
+      "maxBillableOutputTokens": 2048
+    },
+    "navigation": {
+      "maxBillableOutputTokens": 1024
+    }
+  }
+}
