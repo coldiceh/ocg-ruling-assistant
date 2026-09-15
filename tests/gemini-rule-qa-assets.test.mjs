@@ -185,9 +185,11 @@ test("release build and sync workflow verify and include only the same-version r
   assert.match(workflow, /pnpm build:gemini-rule-qa/u);
   assert.match(workflow, /tests\/gemini-rule-qa-assets\.test\.mjs/u);
   assert.match(vercel, /pnpm run build:vercel/u);
-  assert.match(vercel, /structure-mapping\.release\.json\.gz/u);
-  assert.doesNotMatch(vercel, /data\/gemini-rule-qa-v1\/\*\*/u);
-  assert.doesNotMatch(vercel, /navigation-inputs|dense-inputs|canonical-manifest/u);
+  assert.match(vercel, /gemini-rule-qa-v1\/\*\*/u);
+  assert.match(vercel, /canonical-manifest\.json/u);
+  assert.match(vercel, /navigation-inputs\.json\.gz/u);
+  assert.match(vercel, /dense-inputs\.json\.gz/u);
+  assert.match(vercel, /structure-mapping\.json\.gz/u);
   assert.equal(JSON.parse(packageJson).scripts["build:gemini-rule-qa"],
     "node scripts/build-gemini-rule-qa-assets.mjs");
 });
