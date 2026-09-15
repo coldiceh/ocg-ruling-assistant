@@ -1162,7 +1162,7 @@ function normalizedNeedSurfaceTexts(informationNeeds) {
   return Object.freeze(needs);
 }
 
-function rankCompleteLocalQuerySurface(query, stableCandidates, candidateTerms, onScores, preparedCorpus) {
+function scoreCompleteLocalQuerySurface(query, stableCandidates, candidateTerms, onScores, preparedCorpus) {
   const text = String(query || "").trim();
   if (!text) throw new TypeError("manual_capture_need_first_query_invalid");
   const scores = bm25NeedScores(text, candidateTerms, preparedCorpus);
@@ -1170,14 +1170,39 @@ function rankCompleteLocalQuerySurface(query, stableCandidates, candidateTerms, 
     candidates: Object.freeze([...stableCandidates]),
     scores: Object.freeze([...scores]),
   }));
+  return scores;
+}
+
+function compareCompleteLexicalRanks(left, right) {
+  return right.score - left.score || compareStableText(left.binding, right.binding);
+}
+
+function rankCompleteLocalQuerySurface(query, stableCandidates, candidateTerms, onScores, preparedCorpus) {
+  const scores = scoreCompleteLocalQuerySurface(query, stableCandidates, candidateTerms, onScores, preparedCorpus);
   return Object.freeze(stableCandidates.map((candidate, index) => ({
     candidate,
     score: scores[index],
-  })).sort((left, right) => (
-      right.score - left.score
-        || compareStableText(left.candidate.binding, right.candidate.binding)
-    ))
+    binding: candidate.binding,
+  })).sort(compareCompleteLexicalRanks)
     .map((item) => item.candidate));
+}
+
+function completeLexicalRankingContext(candidates) {
+  if (!Array.isArray(candidates) || candidates.length === 0) {
+    throw new TypeError("manual_capture_complete_lexical_candidates_invalid");
+  }
+  // The cache is only eligible for immutable arrays of immutable primitive
+  // binding/text fields. Mutable callers are recomputed, so a body-text update
+  // cannot reuse statistics merely because an old binding was retained.
+  const cacheable = completeLexicalCandidatesAreImmutable(candidates);
+  const cachedCorpus = cacheable && completeLexicalCorpusCache.get(candidates);
+  if (cachedCorpus) return cachedCorpus;
+  const stableCandidates = stableCompleteLexicalCandidates(candidates);
+  const preparedCorpus = prepareBm25Corpus(stableCandidates.length,
+    index => localSearchTerms(stableCandidates[index].text));
+  const context = { stableCandidates, preparedCorpus };
+  if (cacheable) completeLexicalCorpusCache.set(candidates, context);
+  return context;
 }
 
 // Offline shadow seam: expose the exact complete lexical matcher used by the
@@ -1189,21 +1214,61 @@ export function buildManualCaptureCompleteLexicalQueryQueue({
   candidates,
   onScores,
 } = {}) {
-  if (!Array.isArray(candidates) || candidates.length === 0) {
-    throw new TypeError("manual_capture_complete_lexical_candidates_invalid");
+  const context = completeLexicalRankingContext(candidates);
+  return rankCompleteLocalQuerySurface(query, context.stableCandidates, undefined, onScores,
+    context.preparedCorpus);
+}
+
+// Score the same complete immutable corpus and preserve the same stable ordering,
+// while retaining only the requested prefix inside each mechanically supplied
+// partition. This avoids allocating a complete ranked result when the caller
+// will immediately discard every item after each partition's fixed prefix.
+export function buildManualCaptureBoundedLexicalQueryPartitions({
+  query,
+  candidates,
+  partitions,
+  partitionOf,
+  limit,
+  onScores,
+} = {}) {
+  if (!Array.isArray(partitions) || !partitions.length
+      || partitions.some(partition => typeof partition !== "string" || !partition)
+      || new Set(partitions).size !== partitions.length) {
+    throw new TypeError("manual_capture_bounded_lexical_partitions_invalid");
   }
-  // The cache is only eligible for immutable arrays of immutable primitive
-  // binding/text fields. Mutable callers are recomputed, so a body-text update
-  // cannot reuse statistics merely because an old binding was retained.
-  const cacheable = completeLexicalCandidatesAreImmutable(candidates);
-  const cachedCorpus = cacheable && completeLexicalCorpusCache.get(candidates);
-  if (cachedCorpus) return rankCompleteLocalQuerySurface(query, cachedCorpus.stableCandidates,
-    undefined, onScores, cachedCorpus.preparedCorpus);
-  const stableCandidates = stableCompleteLexicalCandidates(candidates);
-  const preparedCorpus = prepareBm25Corpus(stableCandidates.length,
-    index => localSearchTerms(stableCandidates[index].text));
-  if (cacheable) completeLexicalCorpusCache.set(candidates, { stableCandidates, preparedCorpus });
-  return rankCompleteLocalQuerySurface(query, stableCandidates, undefined, onScores, preparedCorpus);
+  if (typeof partitionOf !== "function") {
+    throw new TypeError("manual_capture_bounded_lexical_partition_function_invalid");
+  }
+  if (!Number.isSafeInteger(limit) || limit <= 0) {
+    throw new TypeError("manual_capture_bounded_lexical_limit_invalid");
+  }
+  const context = completeLexicalRankingContext(candidates);
+  const scores = scoreCompleteLocalQuerySurface(query, context.stableCandidates, undefined, onScores,
+    context.preparedCorpus);
+  const queues = new Map(partitions.map(partition => [partition, []]));
+  for (let index = 0; index < context.stableCandidates.length; index += 1) {
+    const candidate = context.stableCandidates[index];
+    const queue = queues.get(partitionOf(candidate, index));
+    if (!queue) continue;
+    const binding = candidate.binding;
+    const score = scores[index];
+    const worst = queue.at(-1);
+    if (worst && queue.length >= limit
+        && compareCompleteLexicalRanks({ score, binding }, worst) >= 0) continue;
+    const ranked = { candidate, score, binding };
+    let low = 0, high = queue.length;
+    while (low < high) {
+      const middle = (low + high) >>> 1;
+      if (compareCompleteLexicalRanks(ranked, queue[middle]) < 0) high = middle;
+      else low = middle + 1;
+    }
+    queue.splice(low, 0, ranked);
+    if (queue.length > limit) queue.pop();
+  }
+  return Object.freeze(Object.fromEntries(partitions.map(partition => [
+    partition,
+    Object.freeze(queues.get(partition).map(item => item.candidate)),
+  ])));
 }
 
 function completeLexicalCandidatesAreImmutable(candidates) {

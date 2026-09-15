@@ -188,9 +188,14 @@ test('aborting a request stops waiting for shared assets and leaves their promis
   const timeout=setTimeout(()=>controller.abort(new Error('fixture_request_cancelled')),10);
   try {
     await assert.rejects(Promise.race([
-      provider.retrieve({...input,signal:controller.signal}),
+      provider.retrieve({...input,signal:controller.signal,elapsedBeforeRetrievalMs:1234}),
       new Promise((_,reject)=>setTimeout(()=>reject(new Error('shared_asset_wait_did_not_cancel')),250))
-    ]),/fixture_request_cancelled/);
+    ]),error=>{
+      assert.match(error.message,/fixture_request_cancelled/);
+      assert.equal(error.boundedRetrieval.elapsedBeforeRetrievalMs,1234);
+      assert.equal(typeof error.boundedRetrieval.timingsMs,'object');
+      return true;
+    });
     resolveAssets(assets());
     const result=await provider.retrieve(input);
     assert.equal(result.telemetry.rounds,2);
