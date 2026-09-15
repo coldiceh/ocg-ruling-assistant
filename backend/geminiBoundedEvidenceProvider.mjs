@@ -537,9 +537,12 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
         const qaRows = qaTools.searchAll({ queries: [query.text] });
         for (const kind of ['qa','faq']) channels.push([kind, 'original_lexical',
           mapRankedUnits(qaRows, item => qaKeys(item).filter(key => units.get(key)?.sourceKind === kind))]);
-        const navigation = snapshot.navigationSearch.search(query.text);
+        const navigation = snapshot.navigationSearch.searchBySourceKind(query.text, {
+          sourceKinds: ['rule','qa','faq'], limit: 32,
+          sourceKindForUnit: unitKey => units.get(unitKey)?.sourceKind,
+        });
         for (const kind of ['rule','qa','faq']) channels.push([kind, 'navigation_lexical',
-          mapRankedUnits(navigation.filter(hit => units.get(hit.unitKey)?.sourceKind === kind), hit => [hit.unitKey])]);
+          mapRankedUnits(navigation[kind], hit => [hit.unitKey])]);
         for (const [sourceKind, channel, hits] of channels) lanes.push({ needId: query.needId,
           queryVariantId: query.queryVariantId, sourceKind, channel, hits });
       }
@@ -688,7 +691,8 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
       return { ...result, telemetry };
     } catch (error) {
       error.boundedRetrieval = { calls, tokenCounts: counts, estimatedCostUsd: spentUsd,
-        elapsedMs: performance.now() - started, finalModelCalls: 0, completedPlan, reading: completedReading,
+        elapsedBeforeRetrievalMs, elapsedMs: performance.now() - started, timingsMs: { ...timingsMs },
+        finalModelCalls: 0, completedPlan, reading: completedReading,
         ...(error.packing ? { packingFailure: { actualPromptChars: error.packing.promptChars,
           prompt: error.packing.prompt, allowedEvidenceIds: error.packing.allowedEvidenceIds } } : {}) };
       throw error;

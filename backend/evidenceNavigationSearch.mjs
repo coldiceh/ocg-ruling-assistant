@@ -1,5 +1,8 @@
 import { createHash } from 'node:crypto';
-import { buildManualCaptureCompleteLexicalQueryQueue } from '../scripts/lib/manual-capture-evidence-selection.mjs';
+import {
+  buildManualCaptureBoundedLexicalQueryPartitions,
+  buildManualCaptureCompleteLexicalQueryQueue,
+} from '../scripts/lib/manual-capture-evidence-selection.mjs';
 
 export const NAVIGATION_LEXICAL_CONTRACT = 'context-navigation-lexical-v1';
 
@@ -17,12 +20,37 @@ export function createNavigationSearch(records = []) {
   }
   Object.freeze(candidates);
   const byBinding = new Map(candidates.map(item => [item.binding, item]));
-  return { search(query) {
+  function hit(candidate) {
+    const record = byBinding.get(candidate.binding);
+    if (!record) throw new Error('evidence_navigation_binding_invalid');
+    return { unitKey: record.unitKey, sourceKind: record.sourceKind };
+  }
+  function search(query) {
     if (!candidates.length) return [];
-    return buildManualCaptureCompleteLexicalQueryQueue({ query, candidates }).map(hit => {
-      const record = byBinding.get(hit.binding);
-      if (!record) throw new Error('evidence_navigation_binding_invalid');
-      return { unitKey: record.unitKey, sourceKind: record.sourceKind };
+    return buildManualCaptureCompleteLexicalQueryQueue({ query, candidates }).map(hit);
+  }
+  function searchBySourceKind(query, {
+    sourceKinds = ['rule', 'qa', 'faq'],
+    sourceKindForUnit = (_unitKey, sourceKind) => sourceKind,
+    limit = 32,
+  } = {}) {
+    if (typeof sourceKindForUnit !== 'function') {
+      throw new TypeError('evidence_navigation_source_kind_resolver_invalid');
+    }
+    if (!candidates.length) {
+      return Object.freeze(Object.fromEntries(sourceKinds.map(sourceKind => [sourceKind, Object.freeze([])])));
+    }
+    const partitioned = buildManualCaptureBoundedLexicalQueryPartitions({
+      query,
+      candidates,
+      partitions: sourceKinds,
+      partitionOf: candidate => sourceKindForUnit(candidate.unitKey, candidate.sourceKind),
+      limit,
     });
-  } };
+    return Object.freeze(Object.fromEntries(sourceKinds.map(sourceKind => [
+      sourceKind,
+      Object.freeze(partitioned[sourceKind].map(hit)),
+    ])));
+  }
+  return { search, searchBySourceKind };
 }

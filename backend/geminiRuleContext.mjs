@@ -33,10 +33,12 @@ const instructions = [
 export function buildRuleContext(records, { ruleContentRevision, structureMapping } = {}) {
   const docs = records.filter(record => record.recordType === 'rule-doc');
   const units = new Map(), sections = new Map(), unitSections = new Map(), context = [instructions];
-  const denseLocators = new Map();
+  const denseLocators = new Map(), documentHashes = new Map();
   let canonicalChars = 0;
   docs.forEach((doc, docIndex) => {
     if (typeof doc.text !== 'string') throw new Error('gemini_rule_canonical_text_absent');
+    const canonicalHash = sha256(doc.text);
+    documentHashes.set(doc, canonicalHash);
     canonicalChars += doc.text.length;
     const source = { sourceUrl: doc.sourceUrl, source: doc.sourceName,
       ...(Object.hasOwn(doc, 'sourceAuthority') ? { sourceAuthority: doc.sourceAuthority } : {}),
@@ -47,7 +49,7 @@ export function buildRuleContext(records, { ruleContentRevision, structureMappin
     // relevance or sufficiency. A false rejection would block malformed metadata
     // until repaired. Existing paragraph IDs contain no heading-offset binding.
     if (doc.structure && (![1, 2].includes(doc.structure.schemaVersion)
-      || doc.structure.canonicalSha256 !== sha256(doc.text)
+      || doc.structure.canonicalSha256 !== canonicalHash
       || !Array.isArray(sourceSections))) throw new Error('gemini_rule_structure_binding_invalid');
     const sourceIds = new Map(sourceSections.map((section, index) => [section.sectionKey || section.id, `S${docIndex + 1}.${index + 1}`]));
     const sectionsById = new Map(sourceSections.map(section => [section.sectionKey || section.id, section]));
@@ -69,7 +71,7 @@ export function buildRuleContext(records, { ruleContentRevision, structureMappin
       const end = offsets[index + 1], text = doc.text.slice(start, end);
       const id = `R${docIndex + 1}.${index + 1}`;
       units.set(id, { id, recordType: 'rule-doc', title: doc.title, ...source, text,
-        parentSourceId: doc.id, sourceId: doc.id, sourceCanonicalSha256: sha256(doc.text),
+        parentSourceId: doc.id, sourceId: doc.id, sourceCanonicalSha256: canonicalHash,
         sourceStart: start, sourceEnd: end, ruleUnitIndex: index });
       docUnits.push({ id, start, end });
       const containing = sourceSections.filter(section => section.start <= start && section.end >= end)
@@ -89,7 +91,7 @@ export function buildRuleContext(records, { ruleContentRevision, structureMappin
         units.get(id).sourceSection = sourceSectionMeta;
       }
       denseLocators.set(id, Object.freeze({ denseUnitId: id, sourceId: doc.id,
-        sourceCanonicalSha256: sha256(doc.text), offsetEncoding: 'utf16', start, end,
+        sourceCanonicalSha256: canonicalHash, offsetEncoding: 'utf16', start, end,
         ...(units.get(id).sourceSection?.sourceSectionKey
           ? { sectionKey: units.get(id).sourceSection.sourceSectionKey } : {}) }));
     });
@@ -114,7 +116,7 @@ export function buildRuleContext(records, { ruleContentRevision, structureMappin
   const sourceAtoms = new Map(), readingUnits = new Map(), contextRefs = new Map(), explicitRefs = new Map();
   for (const sourceMapping of mapping.sources || []) {
     const doc = docs.find(item => item.id === sourceMapping.sourceId);
-    if (!doc || sha256(doc.text) !== sourceMapping.sourceCanonicalSha256) {
+    if (!doc || documentHashes.get(doc) !== sourceMapping.sourceCanonicalSha256) {
       throw new Error('gemini_rule_structure_mapping_source_binding_invalid');
     }
     const atomSource = { sourceUrl: doc.sourceUrl, source: doc.sourceName,
