@@ -52,29 +52,9 @@ export async function loadRagRuntimeBundle({
   bundleDir,
   sourceRevisionManifest,
 } = {}) {
-  if (!dataDir) return fallback("data_dir_missing");
-  const resolvedBundleDir = bundleDir || join(dataDir, RAG_RUNTIME_BUNDLE_DIRECTORY);
-
-  let manifest;
-  try {
-    manifest = JSON.parse(await readFile(join(resolvedBundleDir, RAG_RUNTIME_BUNDLE_MANIFEST_FILE), "utf8"));
-  } catch (error) {
-    return fallback(classifyReadFailure(error, "bundle_manifest"));
-  }
-
-  const manifestValidation = validateRagRuntimeBundleManifest(manifest);
-  if (!manifestValidation.ok) return fallback(manifestValidation.reason, manifestValidation.reasons);
-
-  let revisionManifest = sourceRevisionManifest;
-  if (!revisionManifest) {
-    try {
-      revisionManifest = JSON.parse(await readFile(join(dataDir, RAG_DATA_REVISION_MANIFEST_FILE), "utf8"));
-    } catch (error) {
-      return fallback(classifyReadFailure(error, "source_revision_manifest"));
-    }
-  }
-  const sourceBinding = validateSourceRevisionBinding(manifest, revisionManifest);
-  if (!sourceBinding.ok) return fallback(sourceBinding.reason, sourceBinding.reasons);
+  const context = await loadValidatedRuntimeContext({ dataDir, bundleDir, sourceRevisionManifest });
+  if (!context.ok) return context.failure;
+  const { resolvedBundleDir, manifest } = context;
 
   const entries = [
     ...RAG_RUNTIME_CORPORA.map((corpus) => ({
@@ -127,6 +107,85 @@ export async function loadRagRuntimeBundle({
     bundleRevision: manifest.bundleRevision,
     manifest,
   });
+}
+
+/**
+ * Load the card identity subset required before the prepared evidence provider.
+ * This is deliberately marked incomplete and must never stand in for the full
+ * evidence corpus returned by loadRagRuntimeBundle().
+ */
+export async function loadPreparedRagCardRuntimeBundle({
+  dataDir,
+  bundleDir,
+  sourceRevisionManifest,
+} = {}) {
+  const context = await loadValidatedRuntimeContext({ dataDir, bundleDir, sourceRevisionManifest });
+  if (!context.ok) return context.failure;
+  const { resolvedBundleDir, manifest } = context;
+  const cardCorpus = RAG_RUNTIME_CORPORA.find(({ key }) => key === "cards");
+  const aliasArtifact = RAG_RUNTIME_AUXILIARY_ARTIFACTS.find(({ key }) => key === "cardAliasIndex");
+  const entries = [
+    { kind: "corpus", definition: cardCorpus, descriptor: manifest.corpora.cards },
+    { kind: "artifact", definition: aliasArtifact, descriptor: manifest.artifacts.cardAliasIndex },
+  ];
+  const loadedEntries = await loadRuntimeEntriesBounded(entries, resolvedBundleDir, manifest.counts, 2);
+  for (const entry of loadedEntries) {
+    if (!entry.result.ok) return fallback(entry.result.reason, entry.result.reasons);
+  }
+  const cards = loadedEntries[0].result.value;
+  const cardAliasIndex = loadedEntries[1].result.value;
+  const data = {
+    scope: "prepared_cards_only",
+    completeEvidenceCorpus: false,
+    cards,
+    records: [],
+    qaRecords: [],
+  };
+  if (!hydrateRagCardAliasRuntimeIndex(cards, cardAliasIndex)) {
+    return fallback("card_alias_index_hydration_failed", ["cardAliasIndex"]);
+  }
+  registerCanonicalNormalizedRagData(data);
+  bindTrustedRagDataRevision(data, { ok: true, revision: manifest.dataRevision });
+  return Object.freeze({
+    ok: true,
+    source: "rag_runtime_bundle_prepared_cards",
+    scope: "prepared_cards_only",
+    completeEvidenceCorpus: false,
+    reason: "",
+    reasons: Object.freeze([]),
+    data,
+    dataRevision: manifest.dataRevision,
+    bundleRevision: manifest.bundleRevision,
+    manifest,
+  });
+}
+
+async function loadValidatedRuntimeContext({ dataDir, bundleDir, sourceRevisionManifest }) {
+  if (!dataDir) return { ok: false, failure: fallback("data_dir_missing") };
+  const resolvedBundleDir = bundleDir || join(dataDir, RAG_RUNTIME_BUNDLE_DIRECTORY);
+  let manifest;
+  try {
+    manifest = JSON.parse(await readFile(join(resolvedBundleDir, RAG_RUNTIME_BUNDLE_MANIFEST_FILE), "utf8"));
+  } catch (error) {
+    return { ok: false, failure: fallback(classifyReadFailure(error, "bundle_manifest")) };
+  }
+  const manifestValidation = validateRagRuntimeBundleManifest(manifest);
+  if (!manifestValidation.ok) {
+    return { ok: false, failure: fallback(manifestValidation.reason, manifestValidation.reasons) };
+  }
+  let revisionManifest = sourceRevisionManifest;
+  if (!revisionManifest) {
+    try {
+      revisionManifest = JSON.parse(await readFile(join(dataDir, RAG_DATA_REVISION_MANIFEST_FILE), "utf8"));
+    } catch (error) {
+      return { ok: false, failure: fallback(classifyReadFailure(error, "source_revision_manifest")) };
+    }
+  }
+  const sourceBinding = validateSourceRevisionBinding(manifest, revisionManifest);
+  if (!sourceBinding.ok) {
+    return { ok: false, failure: fallback(sourceBinding.reason, sourceBinding.reasons) };
+  }
+  return { ok: true, resolvedBundleDir, manifest };
 }
 
 async function loadRuntimeEntriesBounded(entries, bundleDir, counts, concurrency) {

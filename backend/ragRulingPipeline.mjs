@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { extractRagCards, normalizeCardKey } from "./ragCardExtractor.mjs";
 import {
   loadRagData,
+  loadPreparedRagCardData,
   retrieveRagEvidence,
 } from "./ragEvidenceRetriever.mjs";
 import {
@@ -38,7 +39,9 @@ export function preloadRagRequestAssets({
   env = {},
   dataDir,
   loadData = loadRagData,
+  loadPreparedData = loadPreparedRagCardData,
   loadGeminiAssets = loadGeminiRuleQaAssets,
+  officialQaExactAlreadyChecked = false,
 } = {}) {
   if (env.RAG_EVIDENCE_PIPELINE !== 'cloud_evidence_v1'
       || !/^(?:1|true|yes|on)$/iu.test(String(env.GEMINI_RULE_QA_ENABLED || '').trim())) return undefined;
@@ -48,7 +51,7 @@ export function preloadRagRequestAssets({
     promise.catch(() => {});
     return promise;
   };
-  const data = observe(loadData(dataDir));
+  const data = observe((officialQaExactAlreadyChecked ? loadPreparedData : loadData)(dataDir));
   return {
     data,
     geminiAssets: observe(loadGeminiAssets({
@@ -590,6 +593,9 @@ async function answerRagRulingQuestionInternal({
   const query = String(question || userQuery || "").trim();
   if (!query) return buildEmptyQuestionAnswer();
   const cloudEvidence = env.RAG_EVIDENCE_PIPELINE === 'cloud_evidence_v1';
+  const geminiRuleQaEnabled = cloudEvidence
+    && /^(?:1|true|yes|on)$/iu.test(String(env.GEMINI_RULE_QA_ENABLED || '').trim());
+  const usePreparedCardSnapshot = geminiRuleQaEnabled && officialQaExactAlreadyChecked;
   if (cloudEvidence && (dryRun === true
       || ['1', 'true', 'yes', 'on'].includes(String(env.RAG_DRY_RUN || '').toLowerCase()))) {
     const error = new Error('cloud_evidence_dry_run_not_supported');
@@ -607,7 +613,12 @@ async function answerRagRulingQuestionInternal({
   try {
     data = await Promise.resolve(!usesCompleteDefaultSnapshot
       ? { cards: cards || [], records: records || [], qaRecords: qaRecords || [] }
-      : preloadedAssets?.data || loadRagData(dataDir));
+      : preloadedAssets?.data || (usePreparedCardSnapshot
+        ? loadPreparedRagCardData(dataDir)
+        : loadRagData(dataDir)));
+    if (data?.completeEvidenceCorpus === false && !usePreparedCardSnapshot) {
+      throw new Error('prepared_card_snapshot_outside_prepared_route');
+    }
     dataRevision = buildRagDataRevision(data, env, {
       cacheByIdentity: usesCompleteDefaultSnapshot,
     });
@@ -704,8 +715,6 @@ async function answerRagRulingQuestionInternal({
   const retrievalStage = beginPrivateEvaluationStage(privateEvaluationDiagnostics, "retrieval");
   let retrievedEvidence;
   let preparedPromptBundle = null;
-  const geminiRuleQaEnabled = cloudEvidence
-    && /^(?:1|true|yes|on)$/iu.test(String(env.GEMINI_RULE_QA_ENABLED || '').trim());
   // Gemini builds the final prompt inside the retrieval provider, so pending
   // typed-interface gaps must already be part of the card-resolution envelope
   // it receives. Other retrieval paths retain their existing ordering.
@@ -740,7 +749,7 @@ async function answerRagRulingQuestionInternal({
       records: data.records,
       qaRecords: data.qaRecords,
       enableLiveOfficialQa: true,
-      subsumptionCandidatePoolComplete: usesCompleteDefaultSnapshot,
+      subsumptionCandidatePoolComplete: usesCompleteDefaultSnapshot && data?.completeEvidenceCorpus !== false,
       cardIdentitySelectionProvider: async ({ candidateSets }) => {
         const selectionModel = await callCardIdentitySelectionModel({
           userQuery: query, candidateSets, dataRevision, env,
