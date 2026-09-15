@@ -3,6 +3,7 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { applyManualOcgRuleSourcePolicy } from "./lib/ocg-rule-source-policy.mjs";
+import { bindOcgRuleStructure, parseOcgRuleHtml } from "./lib/ocg-rule-structure.mjs";
 
 const rootDir = join(dirname(fileURLToPath(import.meta.url)), "..");
 const dataDir = join(rootDir, "data");
@@ -10,6 +11,8 @@ const baseUrl = normalizeBaseUrl(process.env.OCG_RULE_BASE_URL || "https://ocg-r
 const maxPages = Number(process.env.OCG_RULE_MAX_PAGES || 240);
 const fetchConcurrency = Number(process.env.OCG_RULE_FETCH_CONCURRENCY || 6);
 const userAgent = "ocg-ruling-assistant/0.2 (+https://github.com/coldiceh/ocg-ruling-assistant)";
+const OWNED_RECORD_PREFIX = "ocg-rule:";
+const fixedSourcesDir = join(dataDir, "fixed-rule-sources");
 
 const testKeywordPattern = /(测试|检定|試験|试题|题目|练习|practice|exam|test|judge)/i;
 const nonContentDocPattern = /(?:^|\/)(?:index|search|genindex|py-modindex)$/iu;
@@ -19,21 +22,39 @@ async function main() {
   const corpusPath = join(dataDir, "ocg-rule-corpus.json");
   const testsPath = join(dataDir, "ocg-rule-tests.json");
   const previousCorpus = await readJson(corpusPath, { records: [] });
+  const fixedRecords = await loadFixedRuleSources(fixedSourcesDir);
   const index = await loadSearchIndex();
-  const docs = buildDocTargets(index).slice(0, maxPages);
+  const enumeratedDocs = buildDocTargets(index);
+  assertCompleteOcgRuleFetch({ enumeratedDocs, maxPages });
+  const docs = enumeratedDocs;
   const pageResults = await mapLimit(docs, fetchConcurrency, loadRulePage);
-  const records = pageResults.map((item) => item.record).filter(Boolean);
+  const refreshedRecords = pageResults.map((item) => item.record).filter(Boolean);
   const failures = pageResults.filter((item) => !item.record);
-  const tests = records.filter((record) => testKeywordPattern.test(`${record.docname} ${record.title}`));
+  assertCompleteOcgRuleFetch({ enumeratedDocs, maxPages, pageResults });
+  const previousRecords = Array.isArray(previousCorpus.records) ? previousCorpus.records : [];
+  const previousOwnedRecords = previousRecords.filter((record) => String(record?.id || "").startsWith(OWNED_RECORD_PREFIX));
+  const records = mergeOwnedOcgRuleRecords(refreshedRecords, fixedRecords);
+  const tests = refreshedRecords.filter((record) => testKeywordPattern.test(`${record.docname} ${record.title}`));
   const generatedAt = new Date().toISOString();
   const sync = validateOcgRuleSnapshot({
     targets: docs,
     records,
     failures,
-    previousRecords: previousCorpus.records || [],
+    previousRecords: previousOwnedRecords,
     env: process.env,
   });
   sync.testCount = tests.length;
+  sync.recordCount = records.length;
+  sync.previousRecordCount = previousRecords.length;
+  sync.contentHash = hashOcgRuleRecords(records);
+  sync.previousContentHash = hashOcgRuleRecords(previousRecords);
+  sync.enumeration = docs.map((doc) => ({ docname: doc.docname, sourceUrl: doc.sourceUrl }));
+  sync.pages = pageResults.map(({ doc, record, error }) => ({
+    docname: doc.docname,
+    sourceUrl: doc.sourceUrl,
+    status: record ? "fetched" : "failed",
+    ...(error ? { error } : {}),
+  }));
 
   const corpusPayload = {
     schemaVersion: 1,
@@ -62,6 +83,7 @@ async function main() {
       docname: record.docname,
       sourceUrl: record.sourceUrl,
       text: record.text,
+      structure: record.structure,
     })),
   };
 
@@ -70,7 +92,61 @@ async function main() {
     writeJsonAtomic(testsPath, testsPayload),
   ]);
 
-  console.log(`Synced ${records.length}/${docs.length} OCG rule pages and ${tests.length} test pages (${sync.contentHash.slice(0, 12)}).`);
+  console.log(`Synced ${refreshedRecords.length}/${docs.length} OCG rule pages, restored ${fixedRecords.length} fixed sources, and wrote ${tests.length} test pages (${sync.contentHash.slice(0, 12)}).`);
+}
+
+/** The manifest is the complete authority for records outside this fetcher's
+ * explicit ocg-rule namespace. Removing a manifest entry removes that fixed
+ * record on the next successful complete sync.
+ */
+export function mergeOwnedOcgRuleRecords(refreshedRecords = [], fixedRecords = []) {
+  return [...(Array.isArray(refreshedRecords) ? refreshedRecords : []), ...(Array.isArray(fixedRecords) ? fixedRecords : [])];
+}
+
+export function assertCompleteOcgRuleFetch({ enumeratedDocs = [], maxPages: limit = maxPages, pageResults } = {}) {
+  if (!Array.isArray(enumeratedDocs) || !enumeratedDocs.length) {
+    throw new Error("OCG Rule enumeration incomplete: no content targets");
+  }
+  if (enumeratedDocs.length > limit) {
+    throw new Error(`OCG Rule enumeration incomplete: ${enumeratedDocs.length} targets exceed OCG_RULE_MAX_PAGES=${limit}`);
+  }
+  if (pageResults == null) return;
+  const failures = pageResults.filter((item) => !item?.record);
+  if (pageResults.length !== enumeratedDocs.length || failures.length) {
+    throw new Error(`OCG Rule page fetch incomplete: ${failures.length || enumeratedDocs.length - pageResults.length}/${enumeratedDocs.length} pages failed; previous corpus retained`);
+  }
+}
+
+export async function loadFixedRuleSources(directory = fixedSourcesDir) {
+  const manifestPath = join(directory, "manifest.json");
+  const manifestText = await readFile(manifestPath, "utf8");
+  const manifest = JSON.parse(manifestText);
+  if (manifest?.schemaVersion !== 1 || !Array.isArray(manifest.sources)) {
+    throw new Error("Invalid fixed rule source manifest");
+  }
+  const seenIds = new Set();
+  const records = [];
+  for (const entry of manifest.sources) {
+    const sourceId = String(entry?.sourceId || "");
+    const file = String(entry?.file || "");
+    const expectedSha256 = String(entry?.sha256 || "");
+    if (!sourceId || sourceId.startsWith(OWNED_RECORD_PREFIX) || seenIds.has(sourceId)) {
+      throw new Error(`Invalid fixed rule sourceId: ${sourceId || "<empty>"}`);
+    }
+    if (!/^[a-zA-Z0-9._-]+\.json$/.test(file) || !/^[a-f0-9]{64}$/.test(expectedSha256)) {
+      throw new Error(`Invalid fixed rule source manifest entry: ${sourceId}`);
+    }
+    const recordText = await readFile(join(directory, file), "utf8");
+    const actualSha256 = createHash("sha256").update(recordText.replace(/\r\n/g, "\n"), "utf8").digest("hex");
+    if (actualSha256 !== expectedSha256) throw new Error(`Fixed rule source hash mismatch: ${sourceId}`);
+    const record = JSON.parse(recordText);
+    if (record?.id !== sourceId || typeof record?.text !== "string" || !record.text || typeof record?.sourceUrl !== "string") {
+      throw new Error(`Fixed rule source record binding mismatch: ${sourceId}`);
+    }
+    seenIds.add(sourceId);
+    records.push(record);
+  }
+  return records;
 }
 
 async function loadSearchIndex() {
@@ -96,12 +172,20 @@ async function loadRulePage(doc) {
   try {
     const html = await fetchText(doc.sourceUrl);
     const title = extractTitle(html) || doc.title;
-    const rawText = cleanText(stripHtml(extractMainHtml(html)));
+    const parsed = parseOcgRuleHtml(html);
+    const rawText = parsed.text;
     const sourcePolicy = applyManualOcgRuleSourcePolicy({ docname: doc.docname, text: rawText });
     const text = sourcePolicy.text;
+    const removedRange = findAppliedSourceEditRange(rawText, sourcePolicy);
+    const sourceId = `ocg-rule:${doc.docname}`;
+    const structure = bindOcgRuleStructure(parsed, text, {
+      sourceId,
+      sourceUrl: doc.sourceUrl,
+      ...(removedRange ? { removedRange } : {}),
+    });
     if (text.length < 120) return { doc, error: "page_text_too_short" };
     return { doc, record: {
-      id: `ocg-rule:${doc.docname}`,
+      id: sourceId,
       recordType: testKeywordPattern.test(`${doc.docname} ${title}`) ? "rule-test" : "rule-doc",
       title,
       docname: doc.docname,
@@ -119,12 +203,27 @@ async function loadRulePage(doc) {
       } : {}),
       keywords: extractKeywords(`${doc.docname} ${title} ${text}`),
       text,
+      structure,
       updatedAt: new Date().toISOString(),
     } };
   } catch (error) {
     console.warn(`Skip ${doc.sourceUrl}: ${formatError(error)}`);
     return { doc, error: formatError(error) };
   }
+}
+
+function findAppliedSourceEditRange(rawText, sourcePolicy) {
+  if (sourcePolicy?.sourceEditStatus !== "applied" || rawText === sourcePolicy.text) return undefined;
+  const targetLength = rawText.length - String(sourcePolicy.text || "").length;
+  if (targetLength <= 0) throw new Error("Applied OCG Rule source edit is not a single deletion");
+  let start = 0;
+  const target = String(sourcePolicy.text || "");
+  while (start < target.length && rawText[start] === target[start]) start += 1;
+  const end = start + targetLength;
+  if (`${rawText.slice(0, start)}${rawText.slice(end)}` !== target) {
+    throw new Error("Applied OCG Rule source edit cannot be represented as one explicit deletion");
+  }
+  return { start, end };
 }
 
 async function fetchText(url) {

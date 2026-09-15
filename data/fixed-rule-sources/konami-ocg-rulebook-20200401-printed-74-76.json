@@ -1,0 +1,81 @@
+{
+  "id": "konami:ocg-rulebook-20200401:printed-74-76",
+  "recordType": "rule-doc",
+  "title": "遊戯王OCG 公式ルールブック（2020年4月1日改訂版）上級編・74-76ページの3小節",
+  "sourceName": "KONAMI 遊戯王OCG",
+  "sourceUrl": "https://www.yugioh-card.com/japan/howto/data/rulebook_masterrule20200401_ver1.0.pdf#page=37",
+  "sourceAuthority": "official_reference",
+  "official": true,
+  "text": "ペンデュラム召喚について\n\nペンデュラム召喚を行う場合、ペンデュラムスケールの数字に注意が必要です。例えば、左右のペンデュラムゾーンに同じペンデュラムスケールを持つモンスターを置いた場合や、ペンデュラムスケールの差が１つしかないペンデュラムモンスターを置いた場合、２つのペンデュラムスケールの間の数字となるレベルが存在しませんのでペンデュラム召喚を行う事はできません。（ペンデュラム召喚が行えなくても、ペンデュラムゾーンに置かれたペンデュラムモンスターのペンデュラム効果は通常通り適用されます。）\n\nペンデュラムゾーンへのペンデュラムモンスターの置き方\n\nペンデュラムモンスターはモンスターカードではありますが、左右両端の魔法＆罠ゾーンに置く際には魔法カードとして表向きで発動し、その処理によって置かれる事になります。\n\nこの処理によってペンデュラムモンスターが置かれたゾーンはペンデュラムゾーンとしても扱われます。（ペンデュラムモンスターを手札からペンデュラムゾーンに魔法カードとしてセットする事はできません。また、中央３カ所の魔法＆罠ゾーンには、この処理によってペンデュラムモンスターを発動し、置く事はできません。）\n\nペンデュラムゾーンに置かれている間は魔法カードとして扱われ、カードに記されているペンデュラム効果が適用される事になります。（モンスターとしての効果は適用する事ができません。）（ただし、魔法カードの分類としては、「通常」「永続」「フィールド」「装備」「速攻」「儀式」のいずれにも当てはまらない特別なカードです。）また、ペンデュラムゾーンに置かれたペンデュラムモンスターの数は魔法＆罠ゾーンの５枚に含まれます。\n\nペンデュラムゾーンに置かれたペンデュラムモンスターはフィールド魔法のように、プレイヤーが自分の意思で置きかえる事はできません。（破壊される等しない限り、ペンデュラムゾーンに残り続けます。）なお、自分の左右両端の魔法＆罠ゾーンが空いている状態であれば、ペンデュラムモンスターを１ターンに何回でも置く事は可能です。\n\nエクストラデッキへ加わるペンデュラムモンスターについて\n\nデュエルで使用する際に、あらかじめプレイヤーが準備しておくエクストラデッキは１５枚以下の枚数で、融合・シンクロ・エクシーズ・リンクモンスターのみで構築します。しかし、ペンデュラムモンスターはデュエル中にフィールドからエクストラデッキに加わる事があります。\n\nペンデュラムモンスターがエクストラデッキに加わる事で、デュエル中にエクストラデッキの枚数が１６枚以上になったとしても、ルールに反している事にはなりません。\n\nペンデュラムモンスターはペンデュラムゾーンに限らずフィールドにカードとして存在している状態から墓地へ送られる場合、墓地へは送られず、エクストラデッキに加わります。（裏側表示のペンデュラムモンスターがフィールドから墓地へ送られる場合も同様です。）\n\nエクストラデッキに加わったペンデュラムモンスターは、融合モンスター等と区別するために表向きで置いておきます。（エクストラデッキに加わったペンデュラムモンスターの枚数や、カードの内容は公開情報となりますので、お互いに確認する事ができます。）なお、ペンデュラムモンスターが手札やデッキから墓地へ送られる場合や、エクシーズ素材となっているペンデュラムモンスターが墓地へ送られる場合等は、通常通り、墓地へと送られる事になります。\n\nエクストラデッキに加わったペンデュラムモンスターは、デュエルが終了したらデッキに戻しておきましょう。\n\n",
+  "structure": {
+    "schemaVersion": 1,
+    "canonicalSha256": "3bd9fb9fbbbc16474b33195a3d0ec2ff828a3cd713ae1516e9672367597616e9",
+    "sections": [
+      {
+        "id": "printed-section-1",
+        "title": "ペンデュラム召喚について",
+        "level": 2,
+        "parentId": null,
+        "sourceFragment": "page=37",
+        "start": 0,
+        "end": 250
+      },
+      {
+        "id": "printed-section-2",
+        "title": "ペンデュラムゾーンへのペンデュラムモンスターの置き方",
+        "level": 2,
+        "parentId": null,
+        "sourceFragment": "page=38",
+        "start": 250,
+        "end": 874
+      },
+      {
+        "id": "printed-section-3",
+        "title": "エクストラデッキへ加わるペンデュラムモンスターについて",
+        "level": 2,
+        "parentId": null,
+        "sourceFragment": "page=38",
+        "start": 874,
+        "end": 1499
+      }
+    ]
+  },
+  "retrievedAt": "2026-09-13T22:35:35.2754538Z",
+  "originalPdfSha256": "d8fd0165bc5aa92880f934993de8b472b426dcb07b3588f3bbf2ddceaae0e8d6",
+  "extraction": {
+    "method": "parent_visual_transcription",
+    "scope": "Three complete source-defined subsections on printed pages 74-76; this is not a full-rulebook text extraction.",
+    "convention": "Direct parent transcription of rendered original pages. Furigana, running page furniture and layout-only line wrapping are omitted. Source headings, prose, punctuation, parentheses and paragraph order are retained. No translation, summary or ruling has been added.",
+    "pdfPages": [
+      37,
+      38
+    ],
+    "printedPages": [
+      74,
+      75,
+      76
+    ],
+    "completeSourceSubsections": [
+      {
+        "title": "ペンデュラム召喚について",
+        "printedPages": [
+          74,
+          75
+        ]
+      },
+      {
+        "title": "ペンデュラムゾーンへのペンデュラムモンスターの置き方",
+        "printedPages": [
+          75,
+          76
+        ]
+      },
+      {
+        "title": "エクストラデッキへ加わるペンデュラムモンスターについて",
+        "printedPages": [
+          76
+        ]
+      }
+    ]
+  }
+}

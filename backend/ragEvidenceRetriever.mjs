@@ -357,6 +357,7 @@ export async function retrieveRagEvidence({
     },
   );
 
+  const cardTextPreparationStartedAt = Date.now();
   let preparedCardMetadata = {
     cardMetadata: [],
     warnings: [],
@@ -410,6 +411,7 @@ export async function retrieveRagEvidence({
       cardResolution, retrievedCards: retrievalCards, remainingUnresolvedMentions,
       baigeAmbiguousMentions: baigeDebug.ambiguousMentions,
     });
+    timingsMs.cardTextPreparation = Date.now() - cardTextPreparationStartedAt;
     onProgressStage?.('retrieve_rulings');
     return preparedEvidenceProvider({
       cardTexts: dedupeEvidence(cardTexts),

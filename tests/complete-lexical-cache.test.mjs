@@ -86,6 +86,18 @@ test("prebuilt postings preserve every exact score, tie and zero row without tok
   } finally {String.prototype.normalize = normalize;}
 });
 
+test("explicit loader ownership adopts the lexical buffer while the default remains isolated", () => {
+  const copiedPool = immutablePool(), adoptedPool = immutablePool();
+  const copiedBytes = serializeManualCaptureLexicalIndex({ candidates: copiedPool, dataRevision: "copy-index" });
+  const adoptedBytes = serializeManualCaptureLexicalIndex({ candidates: adoptedPool, dataRevision: "adopt-index" });
+  const copied = installManualCaptureLexicalIndex({ candidates: copiedPool,
+    dataRevision: "copy-index", bytes: copiedBytes });
+  const adopted = installManualCaptureLexicalIndex({ candidates: adoptedPool,
+    dataRevision: "adopt-index", bytes: adoptedBytes, takeOwnership: true });
+  assert.equal(copied.inputBytesAdopted, false);
+  assert.equal(adopted.inputBytesAdopted, true);
+});
+
 test("prebuilt index binds actual lexical text as well as identity and revision", () => {
   const candidates = immutablePool();
   const bytes = serializeManualCaptureLexicalIndex({candidates, dataRevision: "synthetic-index"});

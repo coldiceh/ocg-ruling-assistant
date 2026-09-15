@@ -77,9 +77,13 @@ function norm(vector) {
   return value;
 }
 
-export async function loadRuleDenseSearch({ rules, dataDir } = {}) {
+export async function loadRuleDenseSearch({ rules, dataDir, denseRevision, denseMapping,
+  readingUnits, scanBatchSize = 128 } = {}) {
   const units = currentUnits(rules);
-  const index = await loadEvidenceVectorIndex({ dataDir, dataRevision: rules.ruleRevision });
+  const expectedDenseRevision = denseRevision || rules.ruleDenseRevision || rules.ruleRevision;
+  check(typeof expectedDenseRevision === 'string' && expectedDenseRevision.length > 0,
+    'gemini_rule_dense_revision_invalid');
+  const index = await loadEvidenceVectorIndex({ dataDir, dataRevision: expectedDenseRevision });
   const { manifest } = index;
   check(manifest.model?.id === RULE_EMBEDDING_MODEL
     && manifest.model?.revision === RULE_EMBEDDING_MODEL,
@@ -94,6 +98,23 @@ export async function loadRuleDenseSearch({ rules, dataDir } = {}) {
       manifest.entries[position]?.textSha256 === textSha256
       && manifest.orderedContentHashes[position] === textSha256
     )), 'gemini_rule_dense_unit_binding_changed');
+  const persistedMappings = rules.structureMapping?.denseMappings;
+  if (persistedMappings !== undefined) {
+    check(Array.isArray(persistedMappings) && persistedMappings.length === units.length,
+      'gemini_rule_dense_mapping_row_invalid');
+    const mappingById = new Map(persistedMappings.map(value => [value.denseUnitId, value]));
+    for (const current of units) {
+      const persisted = mappingById.get(current.id);
+      const entry = index.entries.get(current.textSha256);
+      check(persisted && entry && persisted.sourceSpans?.[0]?.embeddingInputSha256 === current.textSha256
+        && persisted.vectorRow?.shardIndex === entry.shardIndex
+        && persisted.vectorRow?.rowIndex === entry.rowIndex,
+      'gemini_rule_dense_mapping_row_invalid');
+      const expectedUnits = rules.denseMapping?.get(current.id);
+      if (expectedUnits) check(canonicalJson(persisted.readingUnitKeys) === canonicalJson([...expectedUnits]),
+        'gemini_rule_dense_mapping_reading_units_invalid');
+    }
+  }
 
   const rows = units.map((current, position) => {
     const entry = index.entries.get(current.textSha256);
@@ -120,5 +141,54 @@ export async function loadRuleDenseSearch({ rules, dataDir } = {}) {
       .map(result => result.unit));
   }
 
-  return Object.freeze({ search });
+  async function searchAsync(queryVector, { signal } = {}) {
+    check(Number.isSafeInteger(scanBatchSize) && scanBatchSize > 0,
+      'gemini_rule_dense_scan_batch_invalid');
+    check(Array.isArray(queryVector) || ArrayBuffer.isView(queryVector),
+      'gemini_rule_dense_query_vector_invalid');
+    check(queryVector.length === RULE_EMBEDDING_DIMENSION,
+      'gemini_rule_dense_query_vector_dimension_invalid');
+    const queryNorm = norm(queryVector);
+    const ranked = [];
+    for (let start = 0; start < rows.length; start += scanBatchSize) {
+      if (signal?.aborted) throw signal.reason || new Error('gemini_rule_dense_search_aborted');
+      const end = Math.min(start + scanBatchSize, rows.length);
+      for (let rowIndex = start; rowIndex < end; rowIndex += 1) {
+        const row = rows[rowIndex];
+        let dot = 0;
+        for (let component = 0; component < RULE_EMBEDDING_DIMENSION; component += 1) {
+          dot += queryVector[component] * row.vector[component];
+        }
+        ranked.push({ unit: row.unit, score: dot / (queryNorm * row.vectorNorm), position: row.position });
+      }
+      if (end < rows.length) await new Promise((resolve) => setImmediate(resolve));
+    }
+    return Object.freeze(ranked.sort((left, right) => right.score - left.score || left.position - right.position)
+      .map(result => result.unit));
+  }
+
+  const mapping = denseMapping || rules.denseMapping;
+  const reading = readingUnits || rules.readingUnits;
+  function mapDenseResults(results) {
+    check(mapping instanceof Map && reading instanceof Map, 'gemini_rule_dense_mapping_invalid');
+    const seen = new Set(), mapped = [];
+    for (const denseUnit of results) {
+      const unitKeys = mapping.get(denseUnit.id);
+      check(Array.isArray(unitKeys), 'gemini_rule_dense_mapping_missing');
+      for (let mappingOrdinal = 0; mappingOrdinal < unitKeys.length; mappingOrdinal += 1) {
+        const unit = reading.get(unitKeys[mappingOrdinal]);
+        check(unit, 'gemini_rule_dense_reading_unit_missing');
+        if (seen.has(unit.unitKey)) continue;
+        seen.add(unit.unitKey);
+        mapped.push(Object.freeze({ ...unit, denseUnitId: denseUnit.id, mappingOrdinal }));
+      }
+    }
+    return Object.freeze(mapped);
+  }
+
+  return Object.freeze({ denseRevision: expectedDenseRevision, search, searchAsync,
+    ...(mapping && reading ? {
+      searchReadingUnits: (queryVector) => mapDenseResults(search(queryVector)),
+      searchReadingUnitsAsync: async (queryVector, options) => mapDenseResults(await searchAsync(queryVector, options)),
+    } : {}) });
 }

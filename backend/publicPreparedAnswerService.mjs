@@ -44,6 +44,7 @@ export async function preparePublicAnswer({
         retrieval: result.answer.continuation.evidence?.debug?.cloudEvidence || null,
         ruleHints: result.answer.continuation.ruleQueryModel || null,
         cardLookup: {
+          totalMs: result.answer.continuation.timingsMs?.cardPreparation ?? null,
           baigeSearchCount: result.answer.continuation.evidence?.debug?.baigeSearchCount ?? null,
           baigeCacheHitCount: result.answer.continuation.evidence?.debug?.baigeCacheHitCount ?? null,
           baigeWarnings: result.answer.continuation.evidence?.debug?.baigeWarnings || [],
@@ -51,6 +52,7 @@ export async function preparePublicAnswer({
           timingsMs: result.answer.continuation.evidence?.debug?.timingsMs || null,
           extraction: result.answer.continuation.cardNameModel || null,
         },
+        serverPreparationTimingsMs: result.answer.continuation.timingsMs || null,
       },
     } };
   } catch (error) {
