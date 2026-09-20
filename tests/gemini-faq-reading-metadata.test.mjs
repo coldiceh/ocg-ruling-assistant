@@ -1,10 +1,13 @@
-import { renderReadableData, readableQaItem } from '../backend/readableEvidenceText.mjs';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { boundedSelectionBody } from '../backend/geminiBoundedEvidenceProvider.mjs';
 
-test('bounded FAQ reading preserves complete source fields without reconstruction tables', () => {
+function readPayload(body) {
+  return JSON.parse(body.contents[0].parts[1].text);
+}
+
+test('bounded FAQ reading encoding shares source metadata without changing records', () => {
   const sharedRecord = {
     recordType: 'card-faq',
     title: '同一FAQ标题',
@@ -60,18 +63,42 @@ test('bounded FAQ reading preserves complete source fields without reconstructio
   const originalOrdinary = structuredClone(ordinaryQa);
   const body = boundedSelectionBody(input, { informationNeeds: ['读取元数据'], queries: ['FAQ'] }, groups,
     { dataRevision: 'data-revision', ruleRevision: 'rule-revision', qaRevision: 'qa-revision-1' });
-  const text = body.contents[0].parts[1].text;
-  let position = 0;
-  for (const item of [items[0], ordinaryQa, items[1]]) {
-    const expected = renderReadableData(readableQaItem(item));
-    const at = text.indexOf(expected, position);
-    assert.ok(at >= position, 'complete field records and handles preserve their order');
-    position = at + expected.length;
+  const payload = readPayload(body);
+
+  assert.ok(payload.qaSources && typeof payload.qaSources === 'object');
+  const compactItems = payload.groups.flatMap((group) => group.items || []);
+  const compactFaq = compactItems.filter((item) => item.record?.qaSourceRef);
+  assert.equal(compactFaq.length, 2);
+  assert.equal(new Set(compactFaq.map((item) => item.record.qaSourceRef)).size, 1);
+  assert.equal(compactItems.find((item) => item.handle === ordinaryQa.handle).record.question, '问题');
+  assert.deepEqual(compactItems.find((item) => item.handle === ordinaryQa.handle), originalOrdinary);
+
+  const source = payload.qaSources[compactFaq[0].record.qaSourceRef];
+  assert.ok(source && source.record && source.sourceExcerpt);
+  assert.equal(Object.hasOwn(source.record, 'id'), false);
+  assert.equal(Object.hasOwn(source.record, 'conclusion'), false);
+  assert.equal(Object.hasOwn(source.sourceExcerpt, 'start'), false);
+  assert.equal(Object.hasOwn(source.sourceExcerpt, 'end'), false);
+  assert.equal(Object.hasOwn(source.sourceExcerpt, 'heading'), false);
+
+  for (const compactItem of compactFaq) {
+    const original = items.find((item) => item.handle === compactItem.handle);
+    const compactRecord = { ...compactItem.record };
+    delete compactRecord.qaSourceRef;
+    const restored = {
+      ...source.record,
+      ...compactRecord,
+      sourceExcerpt: { ...source.sourceExcerpt, ...compactRecord.sourceExcerpt },
+    };
+    assert.deepEqual(restored, original.record);
+    assert.equal(restored[restored.sourceExcerpt.bodyField], original.record[original.record.sourceExcerpt.bodyField]);
+    assert.equal(restored.sourceExcerpt.start, original.record.sourceExcerpt.start);
+    assert.equal(restored.sourceExcerpt.end, original.record.sourceExcerpt.end);
+    assert.deepEqual(restored.sourceExcerpt.heading, original.record.sourceExcerpt.heading);
+    assert.equal(restored.sourceAuthority, original.record.sourceAuthority);
   }
-  assert.equal(text.includes('qaSources:'), false);
-  assert.equal(text.includes('qaSourceRef:'), false);
-  assert.deepEqual(ordinaryQa, originalOrdinary);
   assert.deepEqual(records, originalRecords);
   assert.deepEqual(items, originalItems);
-
+  assert.ok(JSON.stringify(payload).length < JSON.stringify({ ...input, queryPlan: { informationNeeds: ['读取元数据'], queries: ['FAQ'] },
+    dataRevision: 'data-revision', ruleRevision: 'rule-revision', qaRevision: 'qa-revision-1', groups }).length);
 });

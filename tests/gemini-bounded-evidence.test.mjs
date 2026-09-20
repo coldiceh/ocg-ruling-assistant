@@ -1,4 +1,3 @@
-import { renderReadableData, readableRuleUnit } from '../backend/readableEvidenceText.mjs';
 import { displayedPayload } from './helpers/readable-prompt.mjs';
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
@@ -10,14 +9,6 @@ import { createFocusedQaView } from "../backend/geminiFocusedQaView.mjs";
 import { createQaTools } from "../backend/geminiQaTools.mjs";
 import { buildRuleContext } from "../backend/geminiRuleContext.mjs";
 import { computeGeminiSelectionPackingBudget } from "../backend/geminiRuleQaPacking.mjs";
-
-// The fake model reads only emitted selector aliases from synthetic fixtures.
-function fixtureView(text) {
-  return { text, selection: /^queryPlan:/mu.test(text),
-    ruleAliases: [...text.matchAll(/^id: (A\d+)$/gmu)].map(match => match[1]),
-    qaAliases: [...text.matchAll(/^handle: (Q\d+)$/gmu)].map(match => match[1]),
-    aliases: [...text.matchAll(/^(?:id|handle): ([AQ]\d+)$/gmu)].map(match => match[1]) };
-}
 
 const digest = value => createHash("sha256").update(value).digest("hex");
 const rule = { id: "rule", recordType: "rule-doc", title: "fixture source",
@@ -78,7 +69,7 @@ test('production request can omit output, single-question cost and deadline limi
 test('removing generation limits still rejects a final evidence prompt over 15000 characters', async () => {
   const oversizedQa = { ...qa, answer: 'complete fixture body '.repeat(900) };
   const { provider } = fixture({ assets: schema3Assets([rule], [oversizedQa]),
-    select: delivered => ({ selectedIds: delivered.qaAliases, unableToSelect: false, note: '' }) });
+    select: delivered => ({ selectedIds: delivered.groups.flatMap(group => group.items || []).map(item => item.handle), unableToSelect: false, note: '' }) });
   await assert.rejects(provider.retrieve({ ...input, env: { ...unrestrictedEvidenceEnv,
     GEMINI_EVIDENCE_READING_TARGET_CHARS: '100000' } }), error => {
     assert.ok(error.boundedRetrieval.packingFailure.actualPromptChars > 15000);
@@ -103,11 +94,13 @@ function fixture({ assets = schema3Assets(), plan, select, countTokens = 500,
         embeddings: body.requests.map(() => ({ values: Array(768).fill(1) })),
         usageMetadata: { promptTokenCount: 100 } });
       requests.push(body);
-      const delivered = fixtureView(body.contents[0].parts[1].text);
+      const delivered = JSON.parse(body.contents[0].parts[1].text);
       const output = requests.length === 1
         ? (plan || { needs: [{ id: "source-id", question: "fixture relation",
           ruleQuery: "fixture rule search", qaQuery: "fixture qa search" }] })
-        : (typeof select === "function" ? select(delivered) : select || { selectedIds: delivered.aliases.slice(0, 2), unableToSelect: false, note: "" });
+        : (typeof select === "function" ? select(delivered) : select || { selectedIds: delivered.groups.flatMap(group => [
+          ...(group.units || []).map(row => row[0]), ...(group.items || []).map(item => item.handle),
+        ]).slice(0, 2), unableToSelect: false, note: "" });
       return Response.json({ candidates: [{ content: { parts: [{ text: JSON.stringify(output) }] } }],
         usageMetadata: { promptTokenCount: 500, candidatesTokenCount: 80,
           thoughtsTokenCount: 20, totalTokenCount: 600 } });
@@ -119,11 +112,11 @@ function fixture({ assets = schema3Assets(), plan, select, countTokens = 500,
 test("plan-v2 carries the complete question/card projection without a corpus directory", () => {
   const body = boundedPlanBody({ question: "q", confirmedCards: [{ id: "c", text: "full" }],
     cardTexts: [{ text: "card" }], userProvidedCardTexts: [], unresolvedMentions: [], ambiguousMentions: [] });
-  const delivered = fixtureView(body.contents[0].parts[1].text);
-  assert.ok(delivered.text.includes("question: q\n"));
-  assert.ok(delivered.text.includes(renderReadableData([{ id: "c", text: "full" }])));
-  assert.equal(delivered.text.includes("ruleSections:"), false);
-  assert.equal(delivered.text.includes("qaCandidates:"), false);
+  const delivered = JSON.parse(body.contents[0].parts[1].text);
+  assert.equal(delivered.question, "q");
+  assert.equal(delivered.confirmedCards[0].text, "full");
+  assert.equal(Object.hasOwn(delivered, "ruleSections"), false);
+  assert.equal(Object.hasOwn(delivered, "qaCandidates"), false);
   assert.match(body.contents[0].parts[0].text, /"needs"/u);
 });
 
@@ -134,11 +127,11 @@ test("selection-v2 exposes only offered aliases and preserves rule authority and
     parentSourceId: "s", sourceSection: { titlePath: ["root", "leaf"] } };
   const body = boundedSelectionBody({ question: "q" }, { needs: [] },
     [{ groupId: "u", kind: "rule", units: [unit] }], { bundleRevision: "b" });
-  const delivered = fixtureView(body.contents[0].parts[1].text);
-  assert.deepEqual(delivered.ruleAliases, ['A1']);
-  assert.ok(delivered.text.includes(renderReadableData(readableRuleUnit(unit))));
-  assert.equal(delivered.text.includes('ruleUnitFields:'), false);
-  assert.equal(delivered.text.includes('bundleRevision:'), false);
+  const delivered = JSON.parse(body.contents[0].parts[1].text);
+  assert.deepEqual(delivered.ruleUnitFields, ["id", "text", "ruleUnitIndex", "sourceRef", "tableLayout"]);
+  assert.equal(delivered.groups[0].units[0][0], "A1");
+  assert.deepEqual(delivered.groups[0].units[0][4], unit.tableLayout);
+  assert.equal(Object.values(delivered.ruleSources)[0].sourceAuthority, "official_reference");
   assert.match(body.contents[0].parts[0].text, /selectedIds/u);
 });
 
@@ -146,37 +139,39 @@ test("selection packing budget contains exact serialized costs for offered alias
   const assets = schema3Assets();
   const { provider, requests } = fixture({ assets });
   await provider.retrieve(input);
-  const delivered = fixtureView(requests[1].contents[0].parts[1].text);
+  const delivered = JSON.parse(requests[1].contents[0].parts[1].text);
+  const offeredRules = delivered.groups.flatMap(group => group.units || []);
+  const offeredQa = delivered.groups.flatMap(group => group.items || []);
   const rules = buildRuleContext(assets.rulesRecords, { ruleContentRevision: assets.ruleContentRevision,
     structureMapping: assets.structureMapping });
+  const ruleByProjection = new Map([...rules.sourceAtoms.values()]
+    .map(atom => [`${atom.ruleUnitIndex}:${atom.text}`, atom]));
   const qaItems = assets.createQaTools().readSelected(assets.createQaTools().snapshotHandles);
-  const budget = computeGeminiSelectionPackingBudget({ rules: [...rules.sourceAtoms.values()], qaItems,
-    userQuery: input.userQuery, cardResolution: input.cardResolution, retrievedEvidence: input.retrievedEvidence });
-  assert.ok(delivered.text.includes('limitChars: 14000\n'));
-  assert.ok(delivered.text.includes('basePromptChars: ' + budget.basePromptChars + '\n'));
-  assert.ok(delivered.text.includes('availableEvidenceChars: ' + budget.availableEvidenceChars + '\n'));
-  const ruleCosts = {}, qaCosts = {};
-  for (const alias of delivered.ruleAliases) {
-    const canonical = [...rules.sourceAtoms.values()].find(atom =>
-      delivered.text.includes(renderReadableData(readableRuleUnit({ ...atom, id: alias }))));
-    assert.ok(canonical, 'alias is bound to an entire emitted canonical source');
-    ruleCosts[alias] = budget.ruleUnitChars[canonical.id];
-  }
-  for (const alias of delivered.qaAliases) {
-    const canonical = qaItems.find(item => delivered.text.includes(renderReadableData({ handle: alias, record: item.record })));
-    assert.ok(canonical);
-    qaCosts[alias] = budget.qaHandleChars[canonical.handle];
-  }
-  assert.ok(delivered.text.includes('ruleUnitChars: ' + renderReadableData(ruleCosts)));
-  assert.ok(delivered.text.includes('qaHandleChars: ' + renderReadableData(qaCosts)));
-
+  const qaById = new Map(qaItems.map(item => [item.record.id, item]));
+  const expected = computeGeminiSelectionPackingBudget({
+    rules: offeredRules.map(row => ruleByProjection.get(`${row[2]}:${row[1]}`)),
+    qaItems: offeredQa.map(item => qaById.get(item.record.id)),
+    userQuery: input.userQuery, cardResolution: input.cardResolution,
+    retrievedEvidence: input.retrievedEvidence,
+  });
+  assert.equal(delivered.packingBudget.limitChars, 14000);
+  assert.equal(delivered.packingBudget.basePromptChars, expected.basePromptChars);
+  assert.equal(delivered.packingBudget.availableEvidenceChars, expected.availableEvidenceChars);
+  assert.deepEqual(Object.keys(delivered.packingBudget.ruleUnitChars).sort(),
+    [...new Set(offeredRules.map(row => row[0]))].sort());
+  assert.deepEqual(Object.keys(delivered.packingBudget.qaHandleChars).sort(),
+    [...new Set(offeredQa.map(item => item.handle))].sort());
+  offeredRules.forEach(row => assert.equal(delivered.packingBudget.ruleUnitChars[row[0]],
+    expected.ruleUnitChars[ruleByProjection.get(`${row[2]}:${row[1]}`).id]));
+  offeredQa.forEach(item => assert.equal(delivered.packingBudget.qaHandleChars[item.handle],
+    expected.qaHandleChars[qaById.get(item.record.id).handle]));
 });
 
 test("oversized selected evidence preserves the actual prompt diagnostic without another model call", async () => {
   const oversizedQa = { ...qa, answer: "complete fixture body ".repeat(720) };
   const assets = schema3Assets([rule], [oversizedQa]);
   const { provider, requests } = fixture({ assets, select: delivered => ({
-    selectedIds: [delivered.qaAliases[0]],
+    selectedIds: [delivered.groups.flatMap(group => group.items || [])[0].handle],
     unableToSelect: false, note: "",
   }) });
   await assert.rejects(provider.retrieve(input), error => {
@@ -196,11 +191,11 @@ test("two-round retrieval keeps the original question and complete independent c
   const result = await provider.retrieve(input);
   assert.equal(requests.length, 2);
   for (const request of requests) {
-    const delivered = fixtureView(request.contents[0].parts[1].text);
-    assert.ok(delivered.text.includes("question: " + input.userQuery + "\n"));
-    for (const [key, value] of Object.entries({ ...input.retrievedEvidence, unresolvedMentions: input.cardResolution.unresolvedMentions })) {
-      assert.ok(delivered.text.includes(key + ": " + renderReadableData(value)));
-    }
+    const delivered = JSON.parse(request.contents[0].parts[1].text);
+    assert.equal(delivered.question, input.userQuery);
+    assert.deepEqual(delivered.cardTexts, input.retrievedEvidence.cardTexts);
+    assert.deepEqual(delivered.userProvidedCardTexts, input.retrievedEvidence.userProvidedCardTexts);
+    assert.deepEqual(delivered.unresolvedMentions, input.cardResolution.unresolvedMentions);
     assert.equal(Object.hasOwn(request, "cachedContent"), false);
   }
   assert.ok(result.packing.promptChars <= 14000);
@@ -246,17 +241,17 @@ test("both rounds preserve the complete confirmed-card identity and source proje
   const marker = "本次用户问题、卡片原文与检索资料如下：\n";
   const finalPayload = displayedPayload(result.packing);
   for (const request of requests) {
-    const delivered = fixtureView(request.contents[0].parts[1].text);
-    assert.ok(delivered.text.includes("confirmedCards: " + renderReadableData([{ ...finalPayload.resolvedCards[0],
+    const delivered = JSON.parse(request.contents[0].parts[1].text);
+    assert.deepEqual(delivered.confirmedCards, [{ ...finalPayload.resolvedCards[0],
       input: card.input, matchedQuery: card.matchedQuery, cardId: card.cardId, cid: card.cid,
       passcode: card.passcode, cnName: card.cnName, jaName: card.jaName, enName: card.enName,
       sourceUrl: card.sourceUrl, sourceLabel: card.sourceLabel, official: card.official,
       sourceAuthority: card.sourceAuthority, relatedOnly: card.relatedOnly,
-      linkRating: card.linkRating, linkArrows: card.linkArrows }])));
-    assert.ok(delivered.text.includes("effectText: " + effectText));
-    assert.ok(delivered.text.includes("pendulumEffectText: " + pendulumEffectText));
-    assert.ok(delivered.text.includes("pendulumScale: 7"));
-    assert.ok(delivered.text.includes("resolutionSource: card_text_reference"));
+      linkRating: card.linkRating, linkArrows: card.linkArrows }]);
+    assert.equal(delivered.confirmedCards[0].effectText, effectText);
+    assert.equal(delivered.confirmedCards[0].pendulumEffectText, pendulumEffectText);
+    assert.equal(delivered.confirmedCards[0].pendulumScale, 7);
+    assert.equal(delivered.confirmedCards[0].resolutionSource, "card_text_reference");
   }
 });
 
@@ -275,8 +270,8 @@ test("original and both planned query variants stay as independent retrieval lan
       if (url.endsWith(":countTokens")) return Response.json({ totalTokens: 500 });
       if (url.endsWith(":embedContent")) return Response.json({ embedding: { values: Array(768).fill(1) } });
       if (url.endsWith(":batchEmbedContents")) return Response.json({ embeddings: body.requests.map(() => ({ values: Array(768).fill(2) })) });
-      const delivered = fixtureView(body.contents[0].parts[1].text);
-      const output = delivered.selection ? { selectedIds: [], unableToSelect: false, note: "" }
+      const delivered = JSON.parse(body.contents[0].parts[1].text);
+      const output = delivered.groups ? { selectedIds: [], unableToSelect: false, note: "" }
         : { needs: [{ question: "need", ruleQuery: "rule variant", qaQuery: "qa variant" }] };
       return Response.json({ candidates: [{ content: { parts: [{ text: JSON.stringify(output) }] } }],
         usageMetadata: { promptTokenCount: 1, candidatesTokenCount: 1, totalTokenCount: 2 } });
@@ -310,8 +305,8 @@ test("native FAQ units retain complete source excerpts and all units map to thei
   const { provider, requests } = fixture({ assets });
   await provider.retrieve({ ...input, userQuery: "fixture FAQ", retrievedEvidence: {},
     cardResolution: { resolvedCards: [] } });
-  const delivered = fixtureView(requests[1].contents[0].parts[1].text);
-  assert.ok(units.some(unit => delivered.text.includes("record: " + renderReadableData(unit.item.record))));
+  const delivered = JSON.parse(requests[1].contents[0].parts[1].text);
+  assert.ok(delivered.groups.some(group => group.items?.some(item => item.record.sourceExcerpt)));
 });
 
 test("confirmed-card FAQ delivery offers every source-ordered fragment as one reading bundle", async () => {
@@ -323,20 +318,31 @@ test("confirmed-card FAQ delivery offers every source-ordered fragment as one re
     .filter(unit => unit.item.record.id.startsWith("faq-confirmed-7-"));
   assert.equal(expectedFragments.length, 40);
   const { provider, requests } = fixture({ assets, select: delivered => ({
-    selectedIds: [delivered.qaAliases[0]],
+    selectedIds: [delivered.groups.flatMap(group => group.items || [])[0].handle],
     unableToSelect: false, note: "",
   }) });
   const resolved = { resolvedCards: [{ id: "7" }], unresolvedMentions: [], ambiguousMentions: [] };
   const result = await provider.retrieve({ ...input, userQuery: "fixture FAQ", retrievedEvidence: {},
     env: { GEMINI_API_KEY: "fixture", GEMINI_EVIDENCE_READING_TARGET_CHARS: "128000" }, cardResolution: resolved });
-  const delivered = fixtureView(requests[1].contents[0].parts[1].text);
-  let position = 0;
-  for (const fragment of expectedFragments) {
-    const text = 'record: ' + renderReadableData(fragment.item.record);
-    const at = delivered.text.indexOf(text, position);
-    assert.ok(at >= position, 'every source-ordered FAQ fragment is emitted completely');
-    position = at + text.length;
-  }
+  const delivered = JSON.parse(requests[1].contents[0].parts[1].text);
+  const offered = delivered.groups.flatMap(group => group.items || [])
+    .filter(item => item.record?.id?.startsWith("faq-confirmed-7-"));
+  const decode = value => {
+    if (value && !Array.isArray(value) && typeof value === 'object'
+        && Object.keys(value).length === 1 && Array.isArray(value.$lines)) {
+      return value.$lines.map(part => typeof part === 'number' ? delivered.qaTextLines[part] : part).join('\n');
+    }
+    if (Array.isArray(value)) return value.map(decode);
+    if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, decode(item)]));
+    return value;
+  };
+  const restored = offered.map(item => {
+    const { qaSourceRef, ...record } = decode(item.record);
+    const source = decode(delivered.qaSources[qaSourceRef]);
+    return { ...source.record, ...record,
+      sourceExcerpt: { ...source.sourceExcerpt, ...record.sourceExcerpt } };
+  });
+  assert.deepEqual(restored, JSON.parse(JSON.stringify(expectedFragments.map(unit => unit.item.record))));
   assert.equal(result.telemetry.bounded.selectedIds.length, 1);
   assert.equal(result.telemetry.bounded.reading.lanes[0].channel, "confirmed_card_faq");
 
@@ -365,9 +371,12 @@ test("each confirmed card has an independent lane for source-declared QA links",
   const result = await provider.retrieve({ ...input,
     cardResolution: { resolvedCards: [{ id: 'card-a' }, { id: 'card-b' }], unresolvedMentions: [], ambiguousMentions: [] },
   });
-  const delivered = fixtureView(requests[1].contents[0].parts[1].text);
-  assert.ok(delivered.text.includes('record: ' + renderReadableData(records.at(-1))));
-
+  const delivered = JSON.parse(requests[1].contents[0].parts[1].text);
+  const linked = delivered.groups.flatMap(group => group.items || []).find(item => item.record.id === 'qa-z-linked-b');
+  assert.ok(linked);
+  assert.equal(linked.record.official, false);
+  assert.equal(linked.record.sourceAuthority, 'community_reference');
+  assert.deepEqual(linked.record, records.at(-1));
 });
 
  test("configured evidence transport deadline can exceed the 30 second target", async () => {

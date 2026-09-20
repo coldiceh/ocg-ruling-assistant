@@ -5,7 +5,7 @@ import { buildRuleStructureMapping, sourceSha256, stableJson } from '../backend/
 import { createQaTools } from '../backend/geminiQaTools.mjs';
 import { loadEvidenceGenerationContract } from '../backend/evidenceGenerationContract.mjs';
 
-test('actual provider serializes readable planning and selection inputs and returns the exact readable final prompt', async () => {
+test('actual provider serializes legacy JSON planning and selection inputs and returns the exact readable final prompt', async () => {
   const record = { id: 'public-source', recordType: 'rule-doc', title: '来源',
     sourceUrl: 'https://example.test/rules', sourceAuthority: 'community_reference',
     text: '原文第一段\n第二行\n\n原文第二段', official: false };
@@ -37,8 +37,9 @@ test('actual provider serializes readable planning and selection inputs and retu
       generations.push(text);
       // Mechanical extraction of emitted selector aliases for the fake model.
       // It does not decide whether these source bodies are relevant.
-      const aliases = [...text.matchAll(/^id: (A\d+)$/gmu)].map(match => match[1]);
-      const output = /^queryPlan:/mu.test(text)
+      const payload = JSON.parse(text);
+      const aliases = (payload.groups || []).flatMap(group => group.units || []).map(row => row[0]);
+      const output = payload.queryPlan
         ? { selectedIds: aliases, unableToSelect: false, note: '' }
         : { needs: [{ id: 'n1', question: '待查事项', ruleQuery: '一般规则查询', qaQuery: 'QA查询' }] };
       return Response.json({ candidates: [{ content: { parts: [{ text: JSON.stringify(output) }] } }],
@@ -51,9 +52,9 @@ test('actual provider serializes readable planning and selection inputs and retu
   assert.equal(generations.length, 2);
   assert.ok(counted.includes(generations[0]));
   assert.ok(counted.includes(generations[1]));
-  assert.match(generations[0], /问题第一行\n\s*问题第二行/u);
-  assert.match(generations[1], /原文第一段\n\s*第二行/u);
-  assert.equal(generations[1].includes('bundleRevision'), false);
+  assert.equal(JSON.parse(generations[0]).question, '问题第一行\n问题第二行');
+  assert.ok(JSON.parse(generations[1]).groups.flatMap(group => group.units || []).some(row => row[1].startsWith('原文第一段\n第二行')));
+  assert.equal(JSON.parse(generations[1]).bundleRevision, assets.bundleRevision);
   assert.equal(generations[1].includes('$lines'), false);
   assert.ok(result.packing.allowedEvidenceIds.length > 0);
   assert.match(result.packing.prompt, /原文第一段\n\s*第二行/u);

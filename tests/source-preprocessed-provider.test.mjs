@@ -1,4 +1,4 @@
-import { renderReadableData } from '../backend/readableEvidenceText.mjs';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createGeminiBoundedEvidenceProvider, boundedPlanBody } from '../backend/geminiBoundedEvidenceProvider.mjs';
@@ -10,10 +10,8 @@ import { runCloudBudgetedQuestion } from '../backend/cloudRequestBudget.mjs';
 // Only fixture IDs, group counts and numeric capacity are inspected by this fake model.
 // Source meaning is never interpreted and arbitrary display text is not parsed.
 function fixtureInput(text) {
-  return { queryPlan: /^queryPlan:/mu.test(text),
-    selectedIds: [...text.matchAll(/^id: (A\d+)$/gmu)].map(match => match[1]),
-    groups: [...text.matchAll(/^kind: rule$/gmu)],
-    packingBudget: { limitChars: Number(text.match(/^limitChars: (\d+)$/mu)?.[1]) } };
+  const input = JSON.parse(text);
+  return { ...input, selectedIds: (input.groups || []).flatMap(group => group.units || []).map(row => row[0]) };
 }
 
 const record = { id: 'synthetic-rule', recordType: 'rule-doc', title: 'Synthetic source',
@@ -67,7 +65,7 @@ function fixture({unknown=false, planTokens=500, selectionTokens, selectionInput
 test('short plan preserves exact input and never carries source directories',()=>{
   const expected={question:'unaltered question',cardTexts:[{text:'entire card'}]};
   const body=boundedPlanBody(expected,{sections:new Map([['huge','directory']])},[],['irrelevant']);
-  assert.equal(body.contents[0].parts[1].text,renderReadableData(expected));
+  assert.equal(body.contents[0].parts[1].text,JSON.stringify(expected));
 });
 test('production provider uses two counted generations, original query lane and canonical source pack',async()=>{
   const {provider,requests,reservations}=fixture();
@@ -273,7 +271,7 @@ test('B.AI profiles bind both generation stages to measured Responses wires and 
         assert.equal(url,'https://api.b.ai/v1/responses');
         generationRequests.push(body);
         const first=body.input.find(item=>item.role==='user').content;
-        const payload=fixtureInput(first);
+        const payload=fixtureInput(first.slice(first.lastIndexOf('\n\n') + 2));
         const selectedIds=payload.selectedIds;
         const output=payload.queryPlan
           ? {selectedIds,unableToSelect:false,note:''}
@@ -335,7 +333,7 @@ test('B.AI automatic-cache reading budget matches the generation reservation rat
       assert.equal(url, 'https://api.b.ai/v1/responses');
       requests.push(body);
       const first = body.input.find(item => item.role === 'user').content;
-      const payload = fixtureInput(first);
+      const payload = fixtureInput(first.slice(first.lastIndexOf('\n\n') + 2));
       const selectedIds = payload.selectedIds;
       const output = payload.queryPlan
         ? { selectedIds, unableToSelect: false, note: '' }
@@ -376,7 +374,7 @@ test('production mixed-stage profiles use the matching provider in the durable r
       }
       assert.equal(url, 'https://evidence.b.ai/v1/responses');
       const first = body.input.find(item => item.role === 'user').content;
-      const payload = fixtureInput(first);
+      const payload = fixtureInput(first.slice(first.lastIndexOf('\n\n') + 2));
       const selectedIds = payload.selectedIds;
       return Response.json({status:'completed',model:'gpt-5.6-luna',
         output:[{type:'message',content:[{type:'output_text',text:JSON.stringify({selectedIds,unableToSelect:false,note:''})}]}],
@@ -384,15 +382,20 @@ test('production mixed-stage profiles use the matching provider in the durable r
     },
   });
   const env = {
+    ...JSON.parse(readFileSync(new URL('../vercel.json', import.meta.url), 'utf8')).env,
     ...input.env,
-    EVIDENCE_PLANNING_PROFILE: 'gemini-3.8-flash-low',
-    EVIDENCE_SELECTION_PROFILE: 'bai-gpt-5.6-luna-low-theoretical',
     RAG_EVIDENCE_BAI_API_KEY: 'fixture',
     RAG_EVIDENCE_BAI_BASE_URL: 'https://evidence.b.ai/v1',
   };
   const result = await runCloudBudgetedQuestion({env, budget:controller}, () => provider.retrieve({...input, env}));
   assert.equal(result.telemetry.stageTelemetry.planning.provider, 'gemini');
   assert.equal(result.telemetry.stageTelemetry.selection.provider, 'bai');
+  assert.equal(result.telemetry.stageTelemetry.selection.model, 'gpt-5.6-luna');
+  assert.equal(result.telemetry.stageTelemetry.selection.reasoningEffort, 'high');
+  assert.equal(result.telemetry.stageTelemetry.planning.reasoningEffort, 'medium');
+  assert.equal(result.telemetry.bounded.maxPromptChars, 15000);
+  assert.equal(result.telemetry.bounded.deadlineMs, null);
+  assert.equal(result.telemetry.bounded.perQuestionMaxUsd, null);
   assert.ok(routed.some(([providerId, operation]) => providerId === 'gemini' && operation === 'generate_content'));
   assert.ok(routed.some(([providerId, operation]) => providerId === 'bai' && operation === 'generate_content'));
   assert.ok(routed.some(([providerId, operation]) => providerId === 'gemini' && operation === 'embed_content'));

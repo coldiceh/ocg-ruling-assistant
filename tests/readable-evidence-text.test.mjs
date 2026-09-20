@@ -17,24 +17,18 @@ const selection = { selectedRules: [], selectedQa: [item] };
 const common = { selection, userQuery: input.question, cardResolution: { resolvedCards: [] } };
 const visible = request => request.contents.flatMap(x => x.parts).map(p => p.text || '').join('\n');
 
-test('planning renders actual line breaks instead of JSON string escapes', () => {
-  const text = visible(boundedPlanBody(input));
-  assert.equal(text.includes(String.raw`第一问\n第二问`), false);
-  assert.match(text, /第一问\n\s*第二问/u);
+test('planning preserves the complete input under legacy JSON encoding', () => {
+  assert.deepEqual(JSON.parse(boundedPlanBody(input).contents[0].parts[1].text), input);
 });
 
-test('selection reads fields directly and keeps server bookkeeping out of the model text', () => {
-  const before = JSON.stringify(item);
-  const text = visible(boundedSelectionBody(input, { needs: [] },
-    [{ kind: 'qa', items: [item] }], { bundleRevision: 'server-only-revision' }));
-  assert.equal(text.includes(String.raw`第一行\n第二行`), false);
-  assert.equal(text.includes('server-only-hash'), false);
-  assert.equal(text.includes('server-only-revision'), false);
-  assert.equal(text.includes('$lines'), false);
-  assert.match(text, /第一行\n\s*第二行/u);
-  assert.ok(text.includes('回答："原文"'));
-  assert.ok(text.includes(record.extra.literalPath));
-  assert.equal(JSON.stringify(item), before);
+test('selection preserves the complete QA record and revision under legacy JSON encoding', () => {
+  const before = structuredClone(item);
+  const body = boundedSelectionBody(input, { needs: [] },
+    [{ kind: 'qa', items: [item] }], { bundleRevision: 'server-only-revision' });
+  const payload = JSON.parse(body.contents[0].parts[1].text);
+  assert.deepEqual(payload.groups[0].items[0], before);
+  assert.equal(payload.bundleRevision, 'server-only-revision');
+  assert.deepEqual(item, before);
 });
 
 test('final pack displays the complete QA record as fields, without rewriting the canonical record', () => {
@@ -51,14 +45,12 @@ test('final pack displays the complete QA record as fields, without rewriting th
   assert.equal(result.packing.promptChars, text.length);
 });
 
-test('synchronization navigation uses readable fields for the adapter-owned canonical QA JSON', () => {
-  const request = buildNavigationRequestBody({ input: {
-    sourceKind: 'qa', unitText: JSON.stringify(record), referenceCards: [],
-  } }, { maxBillableOutputTokens: 200, reasoningConfig: {}, responseFormatConfig: {} });
-  const text = visible(request);
-  assert.equal(text.includes(String.raw`第一行\n第二行`), false);
-  assert.match(text, /第一行\n\s*第二行/u);
-  assert.ok(text.includes(record.extra.literalPath));
+test('synchronization navigation preserves the full canonical input in legacy JSON', () => {
+  const input = { sourceKind: 'qa', unitText: JSON.stringify(record), referenceCards: [] };
+  const request = buildNavigationRequestBody({ input },
+    { maxBillableOutputTokens: 200, reasoningConfig: {}, responseFormatConfig: {} });
+  assert.deepEqual(JSON.parse(request.contents[0].parts[0].text), input);
+  assert.deepEqual(JSON.parse(JSON.parse(request.contents[0].parts[0].text).unitText), record);
 });
 
 test('readable pack counts the actual rendered size, and preserves whole records on overflow', () => {

@@ -135,7 +135,7 @@ function navigationTransport(contract, counter) {
     prepareRequest: (body) => convertEvidenceGenerationRequest(body, contract),
     invoke: async (body) => {
       counter.calls += 1;
-      const unitText = body.input.at(-1).content.match(/^unitText: (.+)$/mu)?.[1];
+      const unitText = JSON.parse(body.input.at(-1).content).unitText;
       assert.equal(typeof unitText, "string", "single-line fixture body is visible in the request");
       const input = { unitText };
       return {
