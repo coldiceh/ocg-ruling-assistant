@@ -42,6 +42,15 @@ export async function createCloudEvidencePreprocessResources({
   });
 }
 
+export async function readCloudEvidencePreprocessLedger({
+  env = process.env,
+  fetchImpl = globalThis.fetch,
+} = {}) {
+  const { redis, authorizationId, ledgerKey } = cloudConfig(env);
+  const command = createUpstashRedisCommand({ ...redis, fetchImpl });
+  return readRedisEvidencePreprocessLedger({ command, ledgerKey, authorizationId });
+}
+
 export async function initializeCloudEvidencePreprocessLedger({
   env = process.env,
   ledger,

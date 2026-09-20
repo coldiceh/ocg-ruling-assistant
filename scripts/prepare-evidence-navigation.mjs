@@ -118,15 +118,10 @@ export async function planNavigationMisses({
       continue;
     }
     const cached = await cache.readNavigation(key, NAVIGATION_NORMALIZER_VERSION);
-    rows.push({
-      input,
-      key,
-      contract: rowContract,
-      contractHash: rowContractHash,
-      state: cached.normalized ? "cache_hit" : cached.raw ? "raw_reusable"
-        : cached.providerRaw ? "provider_raw_reusable" : "generation_miss",
-      cached,
-    });
+    rows.push(await resolveOutputRecoveryRow({
+      input, key, contract: rowContract, contractHash: rowContractHash,
+      state: navigationCacheState(cached, rowContract), cached,
+    }, cache));
   }
   return { contractHash, ruleContractHash, coverageScope, rows };
 }
@@ -418,14 +413,69 @@ async function resolveNavigationRow({
     return { input, key, contract: rowContract, contractHash: rowContractHash, state: "not_generated_in_scope" };
   }
   const cached = await cache.readNavigation(key, NAVIGATION_NORMALIZER_VERSION);
+  return resolveOutputRecoveryRow({
+    input, key, contract: rowContract, contractHash: rowContractHash,
+    state: navigationCacheState(cached, rowContract), cached,
+  }, cache);
+}
+
+function navigationCacheState(cached, contract) {
+  const savedResponse = newestSavedProvider(cached)?.providerResponse;
+  const contradictedByProvider = contract.providerId === "bai" && savedResponse
+    && (savedResponse.status !== "completed" || savedResponse.model !== contract.modelId);
+  // The dry-run path also consumes normalized cache rows. It must not promote
+  // a normalized row contradicted by its saved provider response.
+  if (cached.normalized && !contradictedByProvider) return "cache_hit";
+  // A response saved immediately before interruption can be newer than its
+  // normalized/raw predecessor. Never replay an older attempt over that response.
+  if (cached.providerRaw && (!cached.raw || cached.providerRaw.attempt > cached.raw.attempt)) {
+    return "provider_raw_reusable";
+  }
+  return cached.raw ? "raw_reusable" : cached.providerRaw ? "provider_raw_reusable" : "generation_miss";
+}
+
+function newestSavedProvider(cached) {
+  return cached?.providerRaw && (!cached.raw || cached.providerRaw.attempt > cached.raw.attempt)
+    ? cached.providerRaw : cached?.raw || cached?.providerRaw;
+}
+
+function outputRecoveryContract(contract, response) {
+  // Do not infer an output-limit failure from duration, empty text, or usage.
+  // Only an explicit provider reason enables one independently budgeted attempt.
+  if (contract.providerId !== "bai" || contract.stage !== "navigation"
+      || contract.navigationOutputRecovery || contract.maxBillableOutputTokens >= 8192
+      || contract.capacityContract.maxOutputTokens < 8192
+      || contract.outputLimitConfig.omitFromRequest
+      || response?.model !== contract.modelId || response?.status !== "incomplete"
+      || response?.incomplete_details?.reason !== "max_output_tokens") return null;
+  const recovery = structuredClone(contract);
+  recovery.contractId += ":output-limit-recovery-8192-v1";
+  recovery.maxBillableOutputTokens = 8192;
+  recovery.outputLimitConfig.maxOutputTokens = 8192;
+  recovery.navigationOutputRecovery = {
+    version: 1,
+    baseGenerationContractSha256: generationContractSha256(contract),
+    reason: "max_output_tokens",
+    maxAttempts: 1,
+  };
+  generationContractSha256(recovery); // Validate accounting and context capacity.
+  return recovery;
+}
+
+async function resolveOutputRecoveryRow(row, cache) {
+  const saved = newestSavedProvider(row.cached);
+  const recovery = outputRecoveryContract(row.contract, saved?.providerResponse);
+  if (!recovery) return row;
+  const contractHash = generationContractSha256(recovery);
+  const key = navigationCacheKey({
+    contract: { ...recovery, generationContractSha256: contractHash },
+    promptContractSha256: NAVIGATION_PROMPT_CONTRACT_SHA256,
+    contextInputSha256: row.input.contextInputSha256,
+  });
+  const cached = await cache.readNavigation(key, NAVIGATION_NORMALIZER_VERSION);
   return {
-    input,
-    key,
-    contract: rowContract,
-    contractHash: rowContractHash,
-    state: cached.normalized ? "cache_hit" : cached.raw ? "raw_reusable"
-      : cached.providerRaw ? "provider_raw_reusable" : "generation_miss",
-    cached,
+    input: row.input, key, contract: recovery, contractHash,
+    state: navigationCacheState(cached, recovery), cached, recoveryFrom: row,
   };
 }
 
@@ -434,10 +484,20 @@ async function processNavigationRow({
   measureInput, extractText, rawUsage, normalizeUsage, validateResponse,
 }) {
   const contract = row.contract;
+  if (row.recoveryFrom) {
+    const saved = newestSavedProvider(row.recoveryFrom.cached);
+    const usage = saved.usage || normalizeUsage(rawUsage(saved.providerResponse, row.recoveryFrom.contract), row.recoveryFrom.contract);
+    if (usage.billableCost.status === "known") {
+      await budget.settle({ ticket: saved.requestTicket, spentUsd: usage.billableCost.amountUsd });
+    }
+    // Unknown usage retains the original reservation; it is never assumed free.
+  }
   if (row.state === "not_generated_in_scope") {
     return { record: emptyNavigationRecord(row.input, "not_generated_in_scope"), budgetBlocked: false };
   }
   if (row.state === "cache_hit") {
+    const saved = newestSavedProvider(row.cached);
+    if (saved?.providerResponse) validateResponse(saved.providerResponse, contract);
     return {
       record: recordFromNormalized(row.input, row.cached.normalized.normalized, row.cached.normalized.generator),
       budgetBlocked: false,
@@ -464,12 +524,17 @@ async function processNavigationRow({
         spentUsd: row.cached.raw.usage.billableCost.amountUsd,
       });
     }
+    // Validation must also run on cache replay. A syntactically valid partial
+    // JSON response is not a completed response and must never be published.
+    if (row.cached.raw.providerResponse) validateResponse(row.cached.raw.providerResponse, contract);
+    else if (contract.providerId === "bai") throw new Error("navigation_cached_provider_response_missing");
     try {
       const normalized = normalizeNavigationOutput(row.cached.raw.rawResponse);
       const normalizedRow = makeNormalizedCacheRow(row, normalized, row.cached.raw.generator);
       await cache.saveNavigationNormalized(row.key, NAVIGATION_NORMALIZER_VERSION, normalizedRow);
       return { record: recordFromNormalized(row.input, normalized, normalizedRow.generator), budgetBlocked: false };
     } catch {
+      if (contract.navigationOutputRecovery) throw new Error("navigation_output_recovery_invalid_json");
       if (row.cached.raw.attempt !== 0) {
         return { record: emptyNavigationRecord(row.input, "unavailable_after_attempt"), budgetBlocked: false };
       }
@@ -505,6 +570,8 @@ async function materializeNavigationRecords({
     selectedRows.push({
       index,
       input,
+      contract: rowContract,
+      contractHash: rowContractHash,
       key: navigationCacheKey({
         contract: { ...rowContract, generationContractSha256: rowContractHash },
         promptContractSha256: NAVIGATION_PROMPT_CONTRACT_SHA256,
@@ -520,7 +587,8 @@ async function materializeNavigationRecords({
       : await Promise.all(batch.map((row) => cache.readNavigation(row.key, NAVIGATION_NORMALIZER_VERSION)));
     for (let index = 0; index < batch.length; index += 1) {
       const row = batch[index];
-      const cached = cachedRows[index];
+      const effective = await resolveOutputRecoveryRow({ ...row, cached: cachedRows[index] }, cache);
+      const cached = effective.cached;
       if (cached?.normalized) {
         records[row.index] = recordFromNormalized(
           row.input, cached.normalized.normalized, cached.normalized.generator,
@@ -545,7 +613,8 @@ async function generateOneNavigation({ row, cache, contract, budget, countTokens
   };
   let claimReleased = false;
   try {
-    for (let attempt = startAttempt; attempt < 2; attempt += 1) {
+    const maxAttempts = contract.navigationOutputRecovery ? 1 : 2;
+    for (let attempt = startAttempt; attempt < maxAttempts; attempt += 1) {
       const body = prepareRequest(buildNavigationRequestBody(row.input, contract, { simplified: attempt === 1 }), contract);
       if (contract.capacityContract.maxRequestBodyBytes !== null
           && Buffer.byteLength(JSON.stringify(body), "utf8") > contract.capacityContract.maxRequestBodyBytes) {
@@ -632,6 +701,16 @@ async function processSavedProviderResponse({ row, providerRaw, cache, contract,
   if (usage.billableCost.status === "known") {
     await budget.settle({ ticket: providerRaw.requestTicket, spentUsd: usage.billableCost.amountUsd });
   }
+  const recoveryRow = await resolveOutputRecoveryRow({
+    ...row, cached: { providerRaw, raw: null, normalized: null },
+  }, cache);
+  if (recoveryRow.contractHash !== row.contractHash) {
+    const recovered = await processNavigationRow({
+      row: recoveryRow, cache, budget, countTokens, generateContent, prepareRequest,
+      measureInput, extractText, rawUsage, normalizeUsage, validateResponse,
+    });
+    return { status: recovered.record.navigationStatus, record: recovered.record };
+  }
   validateResponse(providerRaw.providerResponse, contract);
   try {
     const normalized = normalizeNavigationOutput(rawText);
@@ -639,6 +718,11 @@ async function processSavedProviderResponse({ row, providerRaw, cache, contract,
     await cache.saveNavigationNormalized(row.key, NAVIGATION_NORMALIZER_VERSION, normalizedRow);
     return { status: "generated", record: recordFromNormalized(row.input, normalized, generator) };
   } catch (error) {
+    if (contract.navigationOutputRecovery) {
+      const failure = new Error("navigation_output_recovery_invalid_json");
+      failure.cause = error;
+      throw failure;
+    }
     if (providerRaw.attempt === 0) return { status: "retry_required" };
     return { status: "unavailable_after_attempt", record: emptyNavigationRecord(row.input, "unavailable_after_attempt") };
   }
@@ -848,7 +932,13 @@ export async function runNavigationCli(argv = process.argv.slice(2), {
       }
     }
   }
-  const transportFor = (currentContract) => transports.get(generationContractSha256(currentContract));
+  const transportFor = (currentContract) => {
+    const hash = generationContractSha256(currentContract);
+    if (!transports.has(hash)) {
+      transports.set(hash, createEvidenceGenerationTransport({ contract: currentContract, env, fetchImpl }));
+    }
+    return transports.get(hash);
+  };
   const requestOptions = (base = {}) => options.requestTimeoutMs
     ? { ...base, signal: AbortSignal.timeout(options.requestTimeoutMs) }
     : base;

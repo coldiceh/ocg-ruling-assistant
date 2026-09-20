@@ -134,11 +134,33 @@ function measurementBasisAllowed(contract, measurement) {
     && measurement.estimatorVersion === contract.measurementContract?.estimator?.version;
 }
 
+export function evidenceGenerationResponseDiagnostic(raw) {
+  const label = (value) => typeof value === "string" && /^[a-zA-Z0-9_.:-]{1,160}$/u.test(value)
+    ? value : null;
+  const count = (value) => Number.isSafeInteger(value) && value >= 0 ? value : null;
+  return {
+    status: label(raw?.status),
+    model: label(raw?.model),
+    responseId: label(raw?.id),
+    incompleteReason: label(raw?.incomplete_details?.reason),
+    providerErrorCode: label(raw?.error?.code),
+    inputTokens: count(raw?.usage?.input_tokens),
+    outputTokens: count(raw?.usage?.output_tokens),
+    reasoningTokens: count(raw?.usage?.output_tokens_details?.reasoning_tokens),
+    maxOutputTokens: count(raw?.max_output_tokens),
+  };
+}
+
 function validateBaiResponse(raw, contract) {
-  if (raw?.model !== contract.modelId) throw new Error("evidence_generation_response_model_mismatch");
+  if (raw?.model !== contract.modelId) {
+    const error = new Error("evidence_generation_response_model_mismatch");
+    error.responseDiagnostic = evidenceGenerationResponseDiagnostic(raw);
+    throw error;
+  }
   if (raw?.status !== "completed") {
     const error = new Error(`evidence_generation_response_${String(raw?.status || "invalid")}`);
     error.incompleteDetails = raw?.incomplete_details ?? null;
+    error.responseDiagnostic = evidenceGenerationResponseDiagnostic(raw);
     throw error;
   }
   return true;

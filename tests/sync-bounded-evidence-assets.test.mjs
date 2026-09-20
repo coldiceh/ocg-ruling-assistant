@@ -10,7 +10,7 @@ import {
   buildDefaultNavigationRecords,
   buildGeminiRuleQaAssets,
 } from "../scripts/build-gemini-rule-qa-assets.mjs";
-import { convertEvidenceGenerationRequest } from "../backend/evidenceGenerationTransport.mjs";
+import { convertEvidenceGenerationRequest, createEvidenceGenerationTransport } from "../backend/evidenceGenerationTransport.mjs";
 import {
   EMBEDDING_DIMENSION,
   EMBEDDING_INPUT_CONTRACT,
@@ -377,4 +377,83 @@ test("navigation failure leaves canonical staging but no publishable release", a
   assert.equal(report.publishable, false);
   assert.equal(report.status, "failed");
   assert.match(report.error, /provider_failed/u);
+});
+
+
+test("output-limit recovery reaches a verified release and retains the actual recovery-contract provenance", async (t) => {
+  const source = await fixture(t);
+  const rulePath = join(source.dataDir, "ocg-rule-corpus.json");
+  const rules = JSON.parse(await readFile(rulePath, "utf8"));
+  rules.records[0].text = "changed public rule requiring complete navigation";
+  await writeFile(rulePath, JSON.stringify(rules));
+  const caps = [];
+  const cacheDir = join(source.directory, "recovery-cache");
+  const dependencies = {
+    budget: testBudget(),
+    navigationTransportFactory: (contract) => {
+      const transport = navigationTransport(contract, { calls: 0 });
+      return {
+        ...transport,
+        validateResponse: (response) => createEvidenceGenerationTransport({ contract, env: {} }).validateResponse(response),
+        invoke: async (body) => {
+          caps.push(body.max_output_tokens);
+          const response = await transport.invoke(body);
+          return body.max_output_tokens === 2048
+            ? { ...response, status: "incomplete", incomplete_details: { reason: "max_output_tokens" } }
+            : response;
+        },
+      };
+    },
+    embedBatch: async (texts) => ({
+      embeddings: texts.map(() => ({ values: Array(EMBEDDING_DIMENSION).fill(0.25) })),
+      usageMetadata: { promptTokenCount: texts.length },
+    }),
+  };
+  const result = await runBoundedEvidenceAssetSync({
+    dataDir: source.dataDir, outDir: join(source.directory, "recovery-stage"),
+    cacheDir, execute: true, maxUsd: 5, env: {},
+  }, dependencies);
+  assert.equal(result.report.publishable, true);
+  assert.deepEqual(caps, [2048, 8192]);
+  const navigation = await readReleasedNavigation(result.outputDir);
+  assert.ok(navigation.find((row) => row.sourceId === "rule-1").generator.generationContractSha256);
+  const replay = await runBoundedEvidenceAssetSync({
+    dataDir: source.dataDir, outDir: join(source.directory, "recovery-replay-stage"),
+    cacheDir, execute: true, maxUsd: 5, env: {},
+  }, { ...dependencies, navigationTransportFactory: () => { throw new Error("must_reuse_paid_recovery"); } });
+  assert.equal(replay.report.publishable, true);
+  assert.deepEqual(caps, [2048, 8192]);
+});
+
+test("unrecognized incomplete reason is retained in the failure artifact and cannot release assets", async (t) => {
+  const source = await fixture(t);
+  const rulePath = join(source.dataDir, "ocg-rule-corpus.json");
+  const rules = JSON.parse(await readFile(rulePath, "utf8"));
+  rules.records[0].text = "changed public failing rule";
+  await writeFile(rulePath, JSON.stringify(rules));
+  const outDir = join(source.directory, "diagnostic-stage");
+  let calls = 0;
+  await assert.rejects(runBoundedEvidenceAssetSync({
+    dataDir: source.dataDir, outDir, cacheDir: join(source.directory, "diagnostic-cache"),
+    execute: true, maxUsd: 5, env: {},
+  }, {
+    budget: testBudget(),
+    navigationTransportFactory: (contract) => {
+      const transport = navigationTransport(contract, { calls: 0 });
+      return {
+        ...transport,
+        validateResponse: (response) => createEvidenceGenerationTransport({ contract, env: {} }).validateResponse(response),
+        invoke: async (body) => {
+          calls += 1;
+          return { ...await transport.invoke(body), status: "incomplete", incomplete_details: { reason: "content_filter" } };
+        },
+      };
+    },
+    embedBatch: async () => { throw new Error("must_not_embed_incomplete_navigation"); },
+  }), /evidence_generation_response_incomplete/u);
+  assert.equal(calls, 1);
+  const report = JSON.parse(await readFile(join(outDir, "bounded-evidence-sync-report.json"), "utf8"));
+  assert.equal(report.publishable, false);
+  assert.equal(report.responseDiagnostic.incompleteReason, "content_filter");
+  await assert.rejects(readFile(join(outDir, "gemini-rule-qa-v1", "manifest.json")), /ENOENT/u);
 });

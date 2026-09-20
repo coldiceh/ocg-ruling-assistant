@@ -43,6 +43,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Test navigation output recovery (no provider calls)
+        run: node --test tests/evidence-navigation-output-recovery.test.mjs tests/evidence-generation-transport.test.mjs tests/evidence-preprocess-navigation.test.mjs tests/evidence-preprocess-cloud.test.mjs tests/sync-bounded-evidence-assets.test.mjs tests/bai-evidence-generation-profile.test.mjs
+
       - name: Sync YGOResources snapshot
         env:
           SYNC_ALL_RELEASED_CARDS: "true"
@@ -111,6 +114,7 @@ jobs:
             limitUsd: result.ledger.limitUsd, spentUsd: result.ledger.spentUsd,
             reservedUsd: result.ledger.reservedUsd }));
           NODE
+          set +e
           node scripts/sync-bounded-evidence-assets.mjs \
             --data-dir data \
             --out-dir "$RUNNER_TEMP/bounded-evidence-stage" \
@@ -119,6 +123,20 @@ jobs:
             --max-usd "$EVIDENCE_PREPROCESS_MAX_USD" \
             --cloud \
             --execute
+          bounded_status=$?
+          node --input-type=module <<'NODE'
+          import { readCloudEvidencePreprocessLedger } from './scripts/lib/evidence-preprocess-cloud.mjs';
+          const ledger = await readCloudEvidencePreprocessLedger();
+          console.log(JSON.stringify({ ledgerStatus: 'after_sync',
+            accountingBasis: 'project_ledger_not_supplier_invoice',
+            limitUsd: ledger.limitUsd, spentUsd: ledger.spentUsd,
+            reservedUsd: ledger.reservedUsd,
+            remainingUsd: ledger.limitUsd - ledger.spentUsd - ledger.reservedUsd }));
+          NODE
+          ledger_status=$?
+          set -e
+          if [ "$bounded_status" -ne 0 ]; then exit "$bounded_status"; fi
+          if [ "$ledger_status" -ne 0 ]; then exit "$ledger_status"; fi
 
       - name: Promote verified bounded evidence assets
         run: |

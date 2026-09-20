@@ -264,6 +264,7 @@ export async function runBoundedEvidenceAssetSync(options = {}, dependencies = {
   } catch (error) {
     report.status = "failed";
     report.error = error?.message || String(error);
+    if (error?.responseDiagnostic) report.responseDiagnostic = error.responseDiagnostic;
     await writeJsonAtomic(reportPath, report).catch(() => {});
     throw error;
   }
@@ -512,6 +513,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     .then((result) => process.stdout.write(`${JSON.stringify(result.report, null, 2)}\n`))
     .catch((error) => {
       console.error(error?.message || String(error));
+      if (error?.responseDiagnostic) console.error(JSON.stringify({ responseDiagnostic: error.responseDiagnostic }));
       process.exitCode = error?.exitCode || 1;
     });
 }
