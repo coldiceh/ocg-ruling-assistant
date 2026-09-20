@@ -1,3 +1,4 @@
+import { renderReadableData } from '../backend/readableEvidenceText.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createGeminiBoundedEvidenceProvider, boundedPlanBody } from '../backend/geminiBoundedEvidenceProvider.mjs';
@@ -5,6 +6,15 @@ import { buildRuleStructureMapping, sourceSha256, stableJson } from '../backend/
 import { createQaTools } from '../backend/geminiQaTools.mjs';
 import { loadEvidenceGenerationContract } from '../backend/evidenceGenerationContract.mjs';
 import { runCloudBudgetedQuestion } from '../backend/cloudRequestBudget.mjs';
+
+// Only fixture IDs, group counts and numeric capacity are inspected by this fake model.
+// Source meaning is never interpreted and arbitrary display text is not parsed.
+function fixtureInput(text) {
+  return { queryPlan: /^queryPlan:/mu.test(text),
+    selectedIds: [...text.matchAll(/^id: (A\d+)$/gmu)].map(match => match[1]),
+    groups: [...text.matchAll(/^kind: rule$/gmu)],
+    packingBudget: { limitChars: Number(text.match(/^limitChars: (\d+)$/mu)?.[1]) } };
+}
 
 const record = { id: 'synthetic-rule', recordType: 'rule-doc', title: 'Synthetic source',
   text: 'complete synthetic source paragraph\n\nanother complete paragraph', official: false, sourceAuthority: 'community_reference' };
@@ -37,14 +47,14 @@ function fixture({unknown=false, planTokens=500, selectionTokens, selectionInput
       if(url.endsWith(':embedContent'))return Response.json({embedding:{values:Array(768).fill(1)},usageMetadata:{promptTokenCount:10}});
       if(url.endsWith(':batchEmbedContents'))return Response.json({embeddings:body.requests.map(()=>({values:Array(768).fill(1)})),usageMetadata:{promptTokenCount:10}});
       if(url.endsWith(':countTokens')){
-        const payload=JSON.parse(body.generateContentRequest.contents[0].parts[1].text);
+        const payload=fixtureInput(body.generateContentRequest.contents[0].parts[1].text);
         counts.push(body);
         return Response.json({totalTokens:payload.queryPlan?(selectionTokens?.(payload)??500):planTokens});
       }
       assert.ok(url.endsWith(':generateContent'));
       requests.push(body);
-      const payload=JSON.parse(body.contents[0].parts[1].text);
-      const selectedIds=payload.groups?.flatMap(group=>group.units||[]).map(row=>row[0]);
+      const payload=fixtureInput(body.contents[0].parts[1].text);
+      const selectedIds=payload.selectedIds;
       const output=payload.queryPlan?{selectedIds:unknown?['unoffered']:selectedIds,unableToSelect:false,note:''}
         :{needs:[{id:'n1',question:'synthetic relation',ruleQuery:'synthetic rule query',qaQuery:'synthetic QA query'}]};
       const tokens=payload.queryPlan?500:planTokens;
@@ -57,7 +67,7 @@ function fixture({unknown=false, planTokens=500, selectionTokens, selectionInput
 test('short plan preserves exact input and never carries source directories',()=>{
   const expected={question:'unaltered question',cardTexts:[{text:'entire card'}]};
   const body=boundedPlanBody(expected,{sections:new Map([['huge','directory']])},[],['irrelevant']);
-  assert.deepEqual(JSON.parse(body.contents[0].parts[1].text),expected);
+  assert.equal(body.contents[0].parts[1].text,renderReadableData(expected));
 });
 test('production provider uses two counted generations, original query lane and canonical source pack',async()=>{
   const {provider,requests,reservations}=fixture();
@@ -112,10 +122,10 @@ test('constructor-only offline prompt limit binds selection budget, final serial
   } });
   const result = await provider.retrieve({ ...input, elapsedBeforeRetrievalMs: 26001 });
   const selectionRequest = requests.find(request => {
-    const payload = JSON.parse(request.contents[0].parts[1].text);
+    const payload = fixtureInput(request.contents[0].parts[1].text);
     return payload.queryPlan;
   });
-  const selectionPayload = JSON.parse(selectionRequest.contents[0].parts[1].text);
+  const selectionPayload = fixtureInput(selectionRequest.contents[0].parts[1].text);
   assert.equal(selectionPayload.packingBudget.limitChars, 15000);
   assert.match(selectionRequest.contents[0].parts[0].text, /上限15000字符/u);
   assert.ok(result.packing.promptChars <= 15000);
@@ -131,10 +141,10 @@ test('production environment binds the 30 second, 15000 character and 64000 read
     GEMINI_EVIDENCE_READING_TARGET_CHARS: '64000',
   }});
   const selectionRequest = requests.find(request => {
-    const payload = JSON.parse(request.contents[0].parts[1].text);
+    const payload = fixtureInput(request.contents[0].parts[1].text);
     return payload.queryPlan;
   });
-  const selectionPayload = JSON.parse(selectionRequest.contents[0].parts[1].text);
+  const selectionPayload = fixtureInput(selectionRequest.contents[0].parts[1].text);
   assert.equal(selectionPayload.packingBudget.limitChars, 15000);
   assert.ok(result.packing.promptChars <= 15000);
   assert.equal(result.telemetry.bounded.deadlineMs, 30000);
@@ -173,9 +183,9 @@ test('selection above input capacity is measured and rebuilt once before generat
   const {provider,requests,counts}=fixture({selectionInputLimit:1000,
     selectionTokens:payload=>payload.groups.length?1500:500});
   const result=await provider.retrieve(input);
-  const selectionRequests=requests.filter(body=>JSON.parse(body.contents[0].parts[1].text).queryPlan);
+  const selectionRequests=requests.filter(body=>fixtureInput(body.contents[0].parts[1].text).queryPlan);
   assert.equal(selectionRequests.length,1);
-  assert.deepEqual(JSON.parse(selectionRequests[0].contents[0].parts[1].text).groups,[]);
+  assert.deepEqual(fixtureInput(selectionRequests[0].contents[0].parts[1].text).groups,[]);
   assert.ok(counts.length<=4); // planning, fixed, initial, rebuilt (identical bodies may reuse)
   assert.equal(result.telemetry.rounds,2);
 });
@@ -197,13 +207,14 @@ test('nonlinear selection count trims whole offered bundles after the ratio resi
     selectionTokens: payload => payload.groups.length === 0 ? 500
       : payload.groups.length === 1 ? 1700 : 1800 });
   const result = await provider.retrieve(input);
-  const selectionRequest = requests.find(body => JSON.parse(body.contents[0].parts[1].text).queryPlan);
-  const selectionPayload = JSON.parse(selectionRequest.contents[0].parts[1].text);
+  const selectionRequest = requests.find(body => fixtureInput(body.contents[0].parts[1].text).queryPlan);
+  const selectionPayload = fixtureInput(selectionRequest.contents[0].parts[1].text);
   assert.equal(requests.length, 2);
   assert.equal(result.telemetry.rounds, 2);
   assert.deepEqual(selectionPayload.groups, []);
   assert.ok(result.telemetry.bounded.omittedGroupIds.length >= 2);
-  assert.equal(JSON.parse(counts.at(-1).generateContentRequest.contents[0].parts[1].text).groups.length, 0);
+  assert.ok(counts.some(count => count.generateContentRequest.contents[0].parts[1].text
+    === selectionRequest.contents[0].parts[1].text), 'the actual generated body has an exact token measurement, including cache reuse');
   for (const call of result.telemetry.bounded.calls.filter(row => row.operation === 'generate_content')) {
     const contract = result.telemetry.generationContracts[call.stage];
     const measurement = call.measurement;
@@ -262,8 +273,8 @@ test('B.AI profiles bind both generation stages to measured Responses wires and 
         assert.equal(url,'https://api.b.ai/v1/responses');
         generationRequests.push(body);
         const first=body.input.find(item=>item.role==='user').content;
-        const payload=JSON.parse(first.slice(first.lastIndexOf('\n\n')+2));
-        const selectedIds=payload.groups?.flatMap(group=>group.units||[]).map(row=>row[0]);
+        const payload=fixtureInput(first);
+        const selectedIds=payload.selectedIds;
         const output=payload.queryPlan
           ? {selectedIds,unableToSelect:false,note:''}
           : {needs:[{id:'n1',question:'synthetic relation',ruleQuery:'synthetic rule query',qaQuery:'synthetic QA query'}]};
@@ -324,8 +335,8 @@ test('B.AI automatic-cache reading budget matches the generation reservation rat
       assert.equal(url, 'https://api.b.ai/v1/responses');
       requests.push(body);
       const first = body.input.find(item => item.role === 'user').content;
-      const payload = JSON.parse(first.slice(first.lastIndexOf('\n\n') + 2));
-      const selectedIds = payload.groups?.flatMap(group => group.units || []).map(row => row[0]);
+      const payload = fixtureInput(first);
+      const selectedIds = payload.selectedIds;
       const output = payload.queryPlan
         ? { selectedIds, unableToSelect: false, note: '' }
         : { needs: [{ id: 'n1', question: 'synthetic relation', ruleQuery: 'synthetic rule query', qaQuery: 'synthetic QA query' }] };
@@ -365,8 +376,8 @@ test('production mixed-stage profiles use the matching provider in the durable r
       }
       assert.equal(url, 'https://evidence.b.ai/v1/responses');
       const first = body.input.find(item => item.role === 'user').content;
-      const payload = JSON.parse(first.slice(first.lastIndexOf('\n\n') + 2));
-      const selectedIds = payload.groups.flatMap(group => group.units || []).map(row => row[0]);
+      const payload = fixtureInput(first);
+      const selectedIds = payload.selectedIds;
       return Response.json({status:'completed',model:'gpt-5.6-luna',
         output:[{type:'message',content:[{type:'output_text',text:JSON.stringify({selectedIds,unableToSelect:false,note:''})}]}],
         usage:{input_tokens:500,output_tokens:70,total_tokens:570}});

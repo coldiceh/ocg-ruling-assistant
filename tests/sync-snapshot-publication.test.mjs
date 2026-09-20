@@ -124,6 +124,12 @@ function assertSnapshotRetained(f, result) {
 
 test("publishes changed data on unchanged main without repeating validation", async context => {
   const f = await fixture(context);
+  const newAssets = [
+    "data/gemini-rule-qa-v1/navigation-records.json.gz",
+    "data/rule-embedding-v1/evidence-vectors-001.f32",
+    "data/qa-embedding-v1/evidence-vectors-001.f32",
+  ];
+  for (const file of newAssets) await write(f.working, file, "new asset\n");
   const before = git(f.remote, "rev-parse", "refs/heads/main");
   const result = await run(f);
   assert.equal(result.status, 0, result.stdout + result.stderr);
@@ -133,6 +139,7 @@ test("publishes changed data on unchanged main without repeating validation", as
   assert.equal(published, result.outputs.snapshot_commit);
   assert.equal(git(f.remote, "rev-parse", `${published}^`), before);
   assert.equal(git(f.remote, "show", `${published}:data/cards.json`), '{"revision":"generated"}');
+  for (const file of newAssets) assert.equal(git(f.remote, "show", `${published}:${file}`), "new asset");
   assert.deepEqual(result.events, ["push"]);
 });
 

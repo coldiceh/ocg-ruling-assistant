@@ -1,4 +1,5 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { exportReadableSources } from "./export-readable-sources.mjs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildCardAliasIndex, buildQaIndex } from "../backend/dataIndex.mjs";
@@ -255,6 +256,7 @@ async function main() {
     changedPaths: manifest.changedPaths,
   });
 
+  await exportReadableSources({ dataDir, names: ["cards.json", "rulings.json", "qa-index.json", "official-responses.json"] });
   console.log(`Synced ${cards.length} cards, ${cardAliasIndex.length} aliases, ${rulings.length} ruling records, and ${qaIndex.length} Q&A index entries.`);
   if (warnings.length) console.warn(warnings.join("\n"));
 }

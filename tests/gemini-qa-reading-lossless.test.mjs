@@ -1,23 +1,9 @@
+import { renderReadableData, readableQaItem } from '../backend/readableEvidenceText.mjs';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { boundedSelectionBody } from '../backend/geminiBoundedEvidenceProvider.mjs';
 
-function payload(body) {
-  return JSON.parse(body.contents[0].parts[1].text);
-}
-
-function decode(value, lines) {
-  if (value && !Array.isArray(value) && typeof value === 'object'
-      && Object.keys(value).length === 1 && Array.isArray(value.$lines)) {
-    return value.$lines.map(part => typeof part === 'number' ? lines[part] : part).join('\n');
-  }
-  if (Array.isArray(value)) return value.map(item => decode(item, lines));
-  if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value)
-    .map(([key, item]) => [key, decode(item, lines)]));
-  return value;
-}
-
-test('bounded QA reading body losslessly encodes repeated normal and FAQ source records', () => {
+test('bounded QA reading displays every field directly, including source-owned marker objects', () => {
   const repeated = '相同的日文原文、来源与条件。'.repeat(32);
   const normal = { id: 'normal-1', recordType: 'qa', title: repeated, question: repeated,
     rawQuestion: repeated, rawDetailedQuestion: `${repeated}\n${repeated}`, answer: repeated,
@@ -40,20 +26,15 @@ test('bounded QA reading body losslessly encodes repeated normal and FAQ source 
   const body = boundedSelectionBody({ question: repeated, confirmedCards: [], cardTexts: [],
     userProvidedCardTexts: [], unresolvedMentions: [], ambiguousMentions: [] }, { needs: [] }, groups,
   { dataRevision: 'd', ruleRevision: 'r', qaRevision: 'q' });
-  const visible = payload(body);
-  assert.ok(visible.qaTextLines?.length);
-  assert.ok(visible.qaSources && Object.keys(visible.qaSources).length === 1);
-  const restoredItems = visible.groups.flatMap(group => group.items || []).map(item => ({ ...item, record: decode(item.record, visible.qaTextLines) }));
-  assert.deepEqual(restoredItems.map(item => item.handle), ['Q1', 'QR', 'QF0', 'QF1']);
-  assert.equal(JSON.stringify(restoredItems[0].record), JSON.stringify(normal));
-  assert.equal(JSON.stringify(visible.groups[1].items[0].record), JSON.stringify(reserved));
-  const decodedSource = decode(visible.qaSources[restoredItems[2].record.qaSourceRef], visible.qaTextLines);
-  for (const [index, item] of restoredItems.slice(2).entries()) {
-    const record = { ...decodedSource.record, ...item.record,
-      sourceExcerpt: { ...decodedSource.sourceExcerpt, ...item.record.sourceExcerpt } };
-    delete record.qaSourceRef;
-    assert.equal(JSON.stringify(record), JSON.stringify(faqRecords[index]));
-    assert.equal(record.sourceAuthority, 'official_database');
-    assert.equal(record.recordType, 'card-faq');
+  const visible = body.contents[0].parts[1].text;
+  let position = 0;
+  for (const group of groups) for (const item of group.items) {
+    const rendered = renderReadableData(readableQaItem(item));
+    const at = visible.indexOf(rendered, position);
+    assert.ok(at >= position, 'complete records and handles retain their order');
+    position = at + rendered.length;
   }
+  assert.equal(visible.includes('qaTextLines:'), false);
+  assert.equal(visible.includes('qaSources:'), false);
+  assert.ok(visible.includes('$lines:'), 'a source-owned field is never treated as an encoding instruction');
 });

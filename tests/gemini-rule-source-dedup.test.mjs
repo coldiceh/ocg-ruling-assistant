@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { packGeminiSelection } from "../backend/geminiRuleQaPacking.mjs";
-import { extractPromptAllowedEvidenceIds } from "../backend/ragRulingPrompt.mjs";
+import { displayedPayload } from './helpers/readable-prompt.mjs';
+import { readableRuleUnit } from '../backend/readableEvidenceText.mjs';
 
 const PROMPT_MARKER = "本次用户问题、卡片原文与检索资料如下：\n";
 const RULE_SOURCE_FIELDS = [
@@ -12,14 +13,7 @@ const RULE_SOURCE_FIELDS = [
   "source",
   "sourceAuthority",
   "official",
-  "parentSourceId",
 ];
-
-function parsePromptPayload(prompt) {
-  const markerIndex = prompt.lastIndexOf(PROMPT_MARKER);
-  assert.ok(markerIndex >= 0, "pack output must retain its serialized evidence envelope");
-  return JSON.parse(prompt.slice(markerIndex + PROMPT_MARKER.length));
-}
 
 function makeFixture() {
   const sharedSource = {
@@ -93,10 +87,10 @@ function decodeRuleItems(payload) {
   return payload.evidence.rawRelatedEvidence
     .filter((item) => item.recordType === "rule-doc" || Object.hasOwn(item, "sourceRef"))
     .map((segment) => {
-      assert.deepEqual(Object.keys(segment).sort(), ["id", "ruleUnitIndex", "sourceRef", "text"].sort());
+      assert.deepEqual(Object.keys(segment).sort(), ["id", "sourceRef", "text"].sort());
       const source = payload.ruleSources[segment.sourceRef];
       assert.ok(source, `missing source map entry for ${segment.sourceRef}`);
-      return { ...source, id: segment.id, text: segment.text, ruleUnitIndex: segment.ruleUnitIndex };
+      return { ...source, id: segment.id, text: segment.text };
     });
 }
 
@@ -116,12 +110,12 @@ test("pack keeps full selected rules in model evidence while prompt deduplicates
     },
     maxPromptChars: 1000,
   });
-  const payload = parsePromptPayload(packing.prompt);
+  const payload = displayedPayload(packing);
   const originalRules = packing.modelEvidence.rawRelatedEvidence.filter((item) => item.recordType === "rule-doc");
   const promptRules = payload.evidence.rawRelatedEvidence.filter((item) => Object.hasOwn(item, "sourceRef"));
   assert.ok(promptRules.length >= 10, "fixture must exercise the rule source packing path");
   assert.ok(promptRules.every((item) => !Object.hasOwn(item, "parentSourceId")));
-  assert.deepEqual(decodeRuleItems(payload), originalRules);
+  assert.deepEqual(decodeRuleItems(payload), originalRules.map(readableRuleUnit));
   assert.deepEqual(evidence.rawRelatedEvidence, packing.modelEvidence.rawRelatedEvidence);
   assert.deepEqual(fixture.qaRecord, qaBefore, "packing must not mutate the server QA record");
 
@@ -132,7 +126,8 @@ test("pack keeps full selected rules in model evidence while prompt deduplicates
 
   const promptQa = payload.evidence.rawRelatedEvidence.filter((item) => item.id === "qa-handle-stable");
   const modelQa = packing.modelEvidence.rawRelatedEvidence.filter((item) => item.id === "qa-handle-stable");
-  assert.deepEqual(promptQa, modelQa);
+  const { text: canonical, ...metadata } = modelQa[0];
+  assert.deepEqual(promptQa, [{ ...metadata, sourceRecord: JSON.parse(canonical) }]);
   assert.equal(promptQa[0].title, "服务端 QA 标题");
   assert.equal(promptQa[0].sourceUrl, "https://qa.example.test/full-record");
   assert.deepEqual(payload.evidence.cardTexts, packing.modelEvidence.cardTexts);
@@ -144,7 +139,7 @@ test("pack keeps full selected rules in model evidence while prompt deduplicates
     ...fixture.selectedRules.map((item) => item.id),
     "qa-handle-stable",
   ]);
-  assert.deepEqual(extractPromptAllowedEvidenceIds(packing.prompt), packing.allowedEvidenceIds);
+  assert.deepEqual(payload.allowedEvidenceIds, packing.allowedEvidenceIds);
   assert.equal(packing.promptChars, packing.prompt.length);
   assert.equal(packing.capacityExceeded, packing.prompt.length > 1000);
   assert.match(packing.prompt, /ruleSources/u);
@@ -161,7 +156,7 @@ test("rule source identity includes every required source field", () => {
     cardResolution: { resolvedCards: [], unresolvedMentions: [], ambiguousMentions: [] },
     maxPromptChars: 1000,
   });
-  const payload = parsePromptPayload(packing.prompt);
+  const payload = displayedPayload(packing);
   const promptRules = payload.evidence.rawRelatedEvidence.filter((item) => Object.hasOwn(item, "sourceRef"));
   assert.ok(promptRules.length > 0);
   const sourceEntries = [...new Set(promptRules.map((item) => payload.ruleSources[item.sourceRef]))];

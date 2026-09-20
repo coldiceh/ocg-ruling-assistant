@@ -1,18 +1,9 @@
+import { displayedPayload } from './helpers/readable-prompt.mjs';
+import { readableRuleUnit } from '../backend/readableEvidenceText.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { packGeminiSelection } from '../backend/geminiRuleQaPacking.mjs';
 
-const marker = '本次用户问题、卡片原文与检索资料如下：\n';
-const payload = prompt => JSON.parse(prompt.slice(prompt.indexOf(marker) + marker.length));
-function decode(value, lines) {
-  if (value && !Array.isArray(value) && typeof value === 'object'
-      && Object.keys(value).length === 1 && Array.isArray(value.$lines)) {
-    return value.$lines.map(part => typeof part === 'number' ? lines[part] : part).join('\n');
-  }
-  if (Array.isArray(value)) return value.map(item => decode(item, lines));
-  if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, decode(item, lines)]));
-  return value;
-}
 function fixture() {
   const question = 'Original quoted question with a newline, whitespace and punctuation. '.repeat(14) + '\r\n';
   const answer = '\n' + 'Original answer: different capitalization, symbols, and Unicode 原文。'.repeat(14) + '\n\n';
@@ -28,17 +19,18 @@ function fixture() {
   };
 }
 
-test('an overflowing QA pack fits by lossless encoding and restores every source field exactly', () => {
+test('an overflowing QA pack retains every field as readable text and reports the actual overflow', () => {
   const input = fixture();
   const originalRecord = structuredClone(input.selection.selectedQa[0].record);
   const uncompressed = packGeminiSelection({ ...input, maxPromptChars: 100000 });
   const limit = uncompressed.packing.promptChars - 1500;
   const encoded = packGeminiSelection({ ...input, maxPromptChars: limit });
-  assert.equal(encoded.packing.capacityExceeded, false);
-  assert.ok(encoded.packing.promptChars <= limit);
-  const visible = payload(encoded.packing.prompt);
-  assert.ok(visible.qaTextLines.length);
-  const item = decode(visible.evidence.rawRelatedEvidence[0], visible.qaTextLines);
+  assert.equal(encoded.packing.capacityExceeded, true);
+  assert.equal(encoded.packing.prompt, uncompressed.packing.prompt);
+  assert.ok(encoded.packing.promptChars > limit);
+  const visible = displayedPayload(encoded.packing);
+  assert.equal(Object.hasOwn(visible, "qaTextLines"), false);
+  const item = visible.evidence.rawRelatedEvidence[0];
   assert.equal(JSON.stringify(item.sourceRecord), JSON.stringify(originalRecord));
   assert.equal(encoded.packing.modelEvidence.rawRelatedEvidence[0].text, JSON.stringify(originalRecord));
   assert.deepEqual(input.selection.selectedQa[0].record, originalRecord);
@@ -48,7 +40,7 @@ test('an overflowing QA pack fits by lossless encoding and restores every source
   assert.deepEqual(encoded.packing.allowedEvidenceIds, uncompressed.packing.allowedEvidenceIds);
 });
 
-test('an overflowing card FAQ pack uses the same lossless encoding without changing source records', () => {
+test('an overflowing card FAQ pack preserves complete readable source records', () => {
   const input = fixture();
   const repeated = '完整 FAQ 原文、来源身份与限定条件。'.repeat(28);
   input.selection.selectedQa = ['first', 'second'].map((suffix, index) => ({ handle: `faq-${suffix}`, record: {
@@ -61,10 +53,10 @@ test('an overflowing card FAQ pack uses the same lossless encoding without chang
   const originals = structuredClone(input.selection.selectedQa.map(item => item.record));
   const uncompressed = packGeminiSelection({ ...input, maxPromptChars: 100000 });
   const encoded = packGeminiSelection({ ...input, maxPromptChars: uncompressed.packing.promptChars - 1500 });
-  assert.equal(encoded.packing.capacityExceeded, false);
-  const visible = payload(encoded.packing.prompt);
-  assert.ok(visible.qaTextLines.length);
-  const restored = visible.evidence.rawRelatedEvidence.map(item => decode(item, visible.qaTextLines));
+  assert.equal(encoded.packing.capacityExceeded, true);
+  const visible = displayedPayload(encoded.packing);
+  assert.equal(Object.hasOwn(visible, "qaTextLines"), false);
+  const restored = visible.evidence.rawRelatedEvidence;
   assert.deepEqual(restored.map(item => item.id), ['faq-first', 'faq-second']);
   assert.deepEqual(restored.map(item => item.sourceAuthority), ['official_database', 'official_database']);
   assert.deepEqual(restored.map(item => item.official), [true, true]);
@@ -78,19 +70,20 @@ test('an already fitting prompt keeps its exact previous representation', () => 
   const first = packGeminiSelection({ ...input, maxPromptChars: 100000 });
   const exactLimit = packGeminiSelection({ ...input, maxPromptChars: first.packing.promptChars });
   assert.equal(exactLimit.packing.prompt, first.packing.prompt);
-  assert.equal(Object.hasOwn(payload(exactLimit.packing.prompt), 'qaTextLines'), false);
+  assert.equal(Object.hasOwn(displayedPayload(exactLimit.packing), 'qaTextLines'), false);
 });
 
-test('a source record containing the display marker remains an untouched canonical string', () => {
+test('a source-owned display marker remains untouched in both readable and canonical forms', () => {
   const input = fixture();
   input.selection.selectedQa[0].record.originalObject = { $lines: [0, 'literal original field'] };
   const result = packGeminiSelection({ ...input, maxPromptChars: 100 });
-  const item = payload(result.packing.prompt).evidence.rawRelatedEvidence[0];
-  assert.equal(item.text, JSON.stringify(input.selection.selectedQa[0].record));
+  const item = displayedPayload(result.packing).evidence.rawRelatedEvidence[0];
+  assert.deepEqual(item.sourceRecord, input.selection.selectedQa[0].record);
+  assert.equal(result.packing.modelEvidence.rawRelatedEvidence[0].text, JSON.stringify(item.sourceRecord));
   assert.equal(result.packing.capacityExceeded, true);
 });
 
-test('overflow shares exact rule section metadata without removing any source field or body', () => {
+test('overflow retains all rule bodies and headings while server locators stay internal', () => {
   const selectedRules = Array.from({ length: 18 }, (_, index) => ({
     id: `rule-${index}`, atomKey: `rule-${index}`, recordType: 'rule-doc',
     title: 'Synthetic rule source', sourceUrl: 'https://example.test/rules',
@@ -106,12 +99,13 @@ test('overflow shares exact rule section metadata without removing any source fi
   const initial = packGeminiSelection({ ...input, maxPromptChars: 100000 });
   const limit = initial.packing.promptChars - 1200;
   const packed = packGeminiSelection({ ...input, maxPromptChars: limit });
-  assert.equal(packed.packing.capacityExceeded, false);
-  const visible = payload(packed.packing.prompt);
+  assert.equal(packed.packing.capacityExceeded, true);
+  assert.equal(packed.packing.prompt, initial.packing.prompt);
+  const visible = displayedPayload(packed.packing);
   const restored = visible.evidence.rawRelatedEvidence.map(({ sourceRef, ...item }) => ({
     ...visible.ruleSources[sourceRef], ...item,
   }));
-  assert.deepEqual(restored, selectedRules);
+  assert.deepEqual(restored, selectedRules.map(readableRuleUnit));
   assert.deepEqual(packed.packing.modelEvidence.rawRelatedEvidence, selectedRules);
   assert.deepEqual(packed.packing.allowedEvidenceIds, initial.packing.allowedEvidenceIds);
   assert.equal(packGeminiSelection({ ...input, maxPromptChars: initial.packing.promptChars }).packing.prompt,

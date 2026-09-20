@@ -58,3 +58,24 @@ test('dense mapping expands beyond old top k and keeps one-to-many ordered posit
   const spread = mapRankedUnits([0,1], row => row ? ['b1','b2'] : ['a1','a2'], 4);
   assert.deepEqual(spread.map(hit => hit.unitKey), ['a1','b1','a2','b2']);
 });
+
+test('a duplicate does not spend the inner source/channel reading turn', () => {
+  const result = admitWholeReadingUnits({ materialize, measure, maxChars: 3, lanes: [
+    lane('original', 'original', 'rule', 'dense', ['shared', 'next-original']),
+    lane('planned', 'planned.zh', 'rule', 'dense', ['shared', 'next-rule']),
+    lane('planned', 'planned.zh', 'qa', 'dense', ['qa-first']),
+  ] });
+  assert.deepEqual(result.offered.map(bundle => bundle.unitKey), ['shared', 'next-rule', 'next-original']);
+  assert.equal(result.visits, 5);
+  assert.equal(result.offered[0].hits.length, 2);
+});
+
+test('adding supplemental needs does not dilute the original query reading turn', () => {
+  const result = admitWholeReadingUnits({ materialize, measure, maxChars: 4, lanes: [
+    lane('original', 'original', 'rule', 'dense', ['o1', 'o2', 'o3']),
+    lane('n1', 'n1.zh', 'rule', 'dense', ['a1', 'a2']),
+    lane('n2', 'n2.zh', 'qa', 'dense', ['b1', 'b2']),
+    lane('n3', 'n3.zh', 'qa', 'lexical', ['c1', 'c2']),
+  ] });
+  assert.deepEqual(result.offered.map(bundle => bundle.unitKey), ['o1', 'a1', 'o2', 'b1']);
+});

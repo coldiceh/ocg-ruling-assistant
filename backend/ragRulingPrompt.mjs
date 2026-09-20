@@ -1,4 +1,7 @@
+import { renderReadableData } from './readableEvidenceText.mjs';
 import { evidenceBucketsToList } from "./ragEvidenceRetriever.mjs";
+
+export const OCG_RULE_SOURCE_POLICY = "OCG Rule（ocg-rule）是本站认可的权威规则整理，可与官方规则资料同等作为规则分析依据，不因 community_reference 标签降为仅供辅助。核对原文的适用条件、例外及更新时间；具体卡片 Q&A 与一般规则表面冲突时，先区分适用范围。保留 OCG Rule 的真实出处，不称其为 KONAMI 发布或本题官方直接 Q&A。";
 
 export const RAG_ANSWER_LEVELS = Object.freeze([
   "official_confirmed",
@@ -46,7 +49,8 @@ const ALLOCATION_INSTRUCTIONS = Object.freeze([
   "先完整阅读用户问题，识别其中每一个子问题；逐个子问题给出直接结论，并说明结论所依据的题面事实、卡片原文和资料。不要漏答，也不要自行补造题面没有给出的状态。",
   "resolvedCards 是已经匹配成功的卡片；其中的 effectText 是原始卡文依据，pendulumEffectText 是独立的灵摆效果原文，typeLine 保留来源的完整卡片类型。resolutionSource 为 card_text_reference 的卡片来自卡文引用，不代表题面中存在该卡。场面状态以用户题面为准。只有 unresolvedMentions 或 ambiguousMentions 中仍存在的项目才算没有确定。",
   "严格区分证据层级：只有确实对应本题完整场景的 officialQaDirectCandidates 可以支持 official_confirmed；officialQaRelated、faqRelated、provisionalOfficialResponses、卡文和 rawRelatedEvidence 都只能作为相关资料或推导依据。",
-  "每条资料中的 official、recordType、source、sourceTier 和 sourceAuthority 表示来源层级，不表示它必然适用于本题。official=true 只说明资料来自官方数据库或官方来源；仍须核对其问题场景后才能采用。community_reference（包括 ocg-rule 等社区整理）只能作为辅助；与适用于本题的官方 Q&A/FAQ 冲突时，以官方资料为准。",
+  "每条资料中的 official、recordType、source、sourceTier 和 sourceAuthority 表示来源，不表示它必然适用于本题。official=true 只说明资料来自官方数据库或官方来源；仍须核对其问题场景后才能采用。除下述 OCG Rule 政策外，其他社区资料作为辅助；与适用于本题的官方 Q&A/FAQ 冲突时，以官方资料为准。",
+  OCG_RULE_SOURCE_POLICY,
   "相关资料不是本题原题时，必须比较它与题面的卡片、条件、位置、时点、对象、玩家和处理过程；只采用可迁移的部分，不得直接复制其结论或把它伪装成官方直接裁定。",
   "retrievalContext.relatedOnly=true 的资料（包括跨卡机制资料）始终只是相关证据；即使来源为官方，也不得据此提升为 official direct 或 official_confirmed。",
   "先建立事件时间线，并为每个实际相关步骤建立统一状态检查表：发动快照（发动/适用条件、cost、对象、区域、表示形式、当时作为何种卡处理）、处理快照（逆序处理到该连锁项时的当前区域、类型、属性/等级与正在适用的效果）以及处理后快照。引用相关 Q&A 前必须核对它描述的是同一阶段与事件节点，不得把相邻但不同的时点互换。",
@@ -68,7 +72,8 @@ const ALLOCATION_INSTRUCTIONS = Object.freeze([
 const GENERAL_INSTRUCTIONS = Object.freeze([
   "你是游戏王 OCG 规则分析助手。仅依据本次用户问题、原始卡文和所给资料，逐一回答全部子问题；不编造事实、规则或来源，不套用卡名、题号、题型或历史答案。",
   "resolvedCards 是已确认卡片；effectText、pendulumEffectText、typeLine 分别是原始效果、独立灵摆效果及完整类型。resolutionSource=card_text_reference 仅表示卡文引用，不代表题面存在该卡。未确定项以 unresolvedMentions、ambiguousMentions 为准，场面状态以题面为准。",
-  "来源等级不等于本题适用性。只有完整对应本题的 officialQaDirectCandidates 支持官方直接裁定；卡文、FAQ、相关 Q&A 和其他资料支持规则分析，relatedOnly=true 始终为相关证据。community_reference 仅供辅助，与适用于本题的官方资料冲突时以官方为准。使用相关资料须比较卡片、条件、位置、时点、对象、玩家及处理过程，仅迁移适用部分。没有官方原题但依据足够时仍给出明确分析。",
+  "来源等级不等于本题适用性。只有完整对应本题的 officialQaDirectCandidates 支持官方直接裁定；卡文、FAQ、相关 Q&A 和其他资料支持规则分析，relatedOnly=true 始终为相关证据。除下述 OCG Rule 政策外，其他社区资料仅供辅助，与适用于本题的官方资料冲突时以官方为准。使用相关资料须比较卡片、条件、位置、时点、对象、玩家及处理过程，仅迁移适用部分。没有官方原题但依据足够时仍给出明确分析。",
+  OCG_RULE_SOURCE_POLICY,
   "按事件顺序核对发动、处理和处理后状态：条件、cost、对象、区域、表示形式、卡片类型、属性/等级及当时适用效果。固定连锁编号与效果对应关系，分别说明发动顺序和逆序处理结果，不提前执行未轮到的效果或混用不同节点的资料。",
   "核对每一步的效果来源、效果类型、受影响实体及权限范围；允许、追加、禁止、免疫、替代约束的是谁和何种动作，不能按结果有利与否改变判断。分别检查发动及处理时所有合法选择方向。连续处理逐步记录执行者、完成情况、后状态和依赖，不凭相同终态认定原效果已完成，不由后状态补足发动条件，不无依据撤销已完成的独立步骤。",
   "涉及次数时记录初始权限、已使用、新增或替换及剩余次数；依原文区分上限、覆盖、明确追加，不重复计数或默认相加。decisionChecklist、decisionPlan 只是内部核对计划，不是证据或答案；仅检查适用项，不输出过程或添加题外问题。",
@@ -193,7 +198,7 @@ export function buildRagRulingPromptBundle({
       maxPromptChars: limits.maxPromptChars,
     });
     if (traceLineage) {
-      const visibleItems = promptVisibleEvidenceItems(promptResult.prompt);
+      const visibleItems = promptVisibleEvidenceItems(promptResult.promptPayload);
       emitRagPromptTrace(lineageTraceSink, {
         type: "PROMPT_PACKING",
         stage: "prompt_packing",
@@ -216,6 +221,7 @@ export function buildRagRulingPromptBundle({
     }
     return {
       prompt: promptResult.prompt,
+      promptPayload: promptResult.promptPayload,
       recoveryPrompt: "",
       modelEvidence: evidencePayload,
       allowedEvidenceIds,
@@ -231,26 +237,27 @@ export function buildRagRulingPromptBundle({
     };
   }
 
-  let prompt = renderGeneralPrompt(restorePromptEvidenceBodies(payload));
-  const ordinaryPromptChars = prompt.length;
-  const promptCompacted = prompt.length > limits.maxPromptChars;
+  let rendered = renderGeneralPrompt(restorePromptEvidenceBodies(payload));
+  const ordinaryPromptChars = rendered.prompt.length;
+  const promptCompacted = rendered.prompt.length > limits.maxPromptChars;
   if (promptCompacted) {
     warnings.push("rag_prompt_compacted_to_max_chars");
-    prompt = buildCompactRagPrompt({ payload, maxPromptChars: limits.maxPromptChars });
+    rendered = buildCompactRagPrompt({ payload, maxPromptChars: limits.maxPromptChars });
   }
   // Selection has finished under the unchanged 36k allocation envelope. Only
   // the repeated instructions are condensed; the complete payload is retained.
-  prompt = compactRagPromptInstructions(prompt);
-  const allowedEvidenceIds = extractPromptAllowedEvidenceIds(prompt);
+  const promptPayload = rendered.promptPayload;
+  const prompt = compactRagPromptInstructions(rendered.prompt, promptPayload);
+  const allowedEvidenceIds = promptPayload.allowedEvidenceIds;
   appendSerializedEvidenceTruncationWarnings({
-    prompt,
+    promptPayload,
     evidencePayload,
     allowedEvidenceIds,
     warnings,
   });
   if (traceLineage) {
     const preparedItems = evidenceBucketsToList(evidencePayload);
-    const visibleItems = promptVisibleEvidenceItems(prompt);
+    const visibleItems = promptVisibleEvidenceItems(promptPayload);
     emitRagPromptTrace(lineageTraceSink, {
       type: "PROMPT_PACKING",
       stage: "prompt_packing",
@@ -285,6 +292,7 @@ export function buildRagRulingPromptBundle({
   }
   return {
     prompt,
+    promptPayload,
     // Compatibility field only. Public generation is deliberately one-call,
     // so constructing a second model prompt here would be dead work and could
     // obscure the exact input used for evaluation.
@@ -308,18 +316,20 @@ export function buildRagRulingPromptBundle({
   };
 }
 
-export function compactRagPromptInstructions(prompt) {
-  const selectedPayload = parseSerializedPromptPayload(prompt);
+export function compactRagPromptInstructions(prompt, selectedPayload = parseSerializedPromptPayload(prompt)) {
   if (!selectedPayload || !Object.hasOwn(selectedPayload, "evidence")) return prompt;
   const leanPrompt = [
     ...GENERAL_INSTRUCTIONS,
     "本次用户问题、卡片原文与检索资料如下：",
-    JSON.stringify(selectedPayload),
+    renderReadableData(selectedPayload),
   ].join("\n");
   return leanPrompt.length < prompt.length ? leanPrompt : prompt;
 }
 
 export function extractPromptAllowedEvidenceIds(prompt) {
+  // Reader for historical JSON prompts only. Current callers retain the
+  // rendered promptPayload and allowedEvidenceIds in the bundle; the readable
+  // text is deliberately not parsed back into a machine protocol.
   const parsed = parseSerializedPromptPayload(prompt);
   if (!parsed
     || !Object.hasOwn(parsed, "evidence")
@@ -354,8 +364,7 @@ function parseSerializedPromptPayload(prompt) {
   }
 }
 
-function promptVisibleEvidenceItems(prompt) {
-  const parsed = parseSerializedPromptPayload(prompt);
+function promptVisibleEvidenceItems(parsed) {
   if (!parsed || typeof parsed !== "object") return [];
   if (parsed.officialQaDirectCandidate
       && typeof parsed.officialQaDirectCandidate === "object"
@@ -458,12 +467,11 @@ function restorePromptEvidenceBodies(payload = {}) {
 }
 
 function appendSerializedEvidenceTruncationWarnings({
-  prompt,
+  promptPayload: parsed,
   evidencePayload = {},
   allowedEvidenceIds = [],
   warnings = [],
 } = {}) {
-  const parsed = parseSerializedPromptPayload(prompt);
   if (!parsed || typeof parsed !== "object") return;
   const allowed = new Set((allowedEvidenceIds || [])
     .map((id) => String(id || "").trim())
@@ -603,11 +611,12 @@ export function selectAuthoritativeOfficialDirectCandidate({
 }
 
 function renderGeneralPrompt(payload) {
-  return [
+  const promptPayload = modelVisiblePromptPayload(payload);
+  return { promptPayload, prompt: [
     ...ALLOCATION_INSTRUCTIONS,
     "本次用户问题、卡片原文与检索资料如下：",
-    JSON.stringify(modelVisiblePromptPayload(payload)),
-  ].join("\n");
+    renderReadableData(promptPayload),
+  ].join("\n") };
 }
 
 function modelVisiblePromptPayload(payload = {}) {
@@ -660,9 +669,7 @@ function buildOfficialDirectPrompt({
   const cards = resolvedCards.map((card) => ({ id: card.id, name: card.name, aliases: card.aliases || [] }));
   const sourceBody = compactEvidenceTextFields(capturePromptEvidenceBody(directQa));
   const directSourceMetadata = promptSourceMetadata(directQa, "official_direct");
-  const prompt = [
-    ...instructions,
-    JSON.stringify({
+  const promptPayload = {
       userQuery: String(userQuery || ""),
       resolvedCards: cards,
       decisionChecklist,
@@ -675,8 +682,8 @@ function buildOfficialDirectPrompt({
         ...sourceBody,
         sourceUrl: directQa.sourceUrl || "",
       },
-    }),
-  ].join("\n");
+  };
+  const prompt = [...instructions, renderReadableData(promptPayload)].join("\n");
   if (prompt.length > maxChars) {
     throw evidencePromptBudgetExceeded({
       reason: "complete_reference_does_not_fit",
@@ -684,7 +691,7 @@ function buildOfficialDirectPrompt({
       maxPromptChars: maxChars,
     });
   }
-  return { prompt, truncated: false };
+  return { prompt, promptPayload, truncated: false };
 }
 
 function normalizePromptEvidenceSafety(evidence = {}) {
@@ -1212,7 +1219,7 @@ function buildCompactRagPrompt({ payload, maxPromptChars }) {
     }
     if (attempt.baseFits) smallestBaseAttempt = { attempt, variant };
   }
-  if (bestWholeAttempt) return bestWholeAttempt.attempt.prompt;
+  if (bestWholeAttempt) return bestWholeAttempt.attempt;
   throw evidencePromptBudgetExceeded({
     reason: smallestBaseAttempt ? "complete_reference_does_not_fit" : "fixed_envelope_does_not_fit",
     evidenceId: prioritizedEntries[0]?.item?.id,
@@ -1253,12 +1260,15 @@ function buildCompactPromptVariants(payload = {}) {
       evidence: [],
       allowedEvidenceIds: [],
     },
-    render: (compactPayload) => [
+    render: (compactPayload) => {
+      const promptPayload = modelVisiblePromptPayload(compactPayload);
+      return { promptPayload, prompt: [
       "仅依据用户问题、卡片原文和所给资料，逐个子问题推理；不得编造。先在内部逐项核对 decisionChecklist 和 decisionPlan，但不得把它们当证据或输出检查过程。只有完整对应本题的 official direct Q&A 才能称为官方直接裁定，相关资料与卡文只能支持分析。",
       "typeLine 为来源的完整卡片类型；resolutionSource 为 card_text_reference 的卡片只是卡文引用，不能据此添加题面状态。",
       "面向玩家输出中文裁定：先回答，再用短段落或列表解释处理与依据。可用 Markdown，不输出 JSON、代码围栏或内部字段。引用写【资料标题】，标题须对应 allowedEvidenceIds 中真实资料；不要输出资料 ID。用自然中文说明证据范围，不解释 relatedOnly、officialQaDirectCandidates、sourceAuthority 等内部字段或程序状态。",
-      JSON.stringify(modelVisiblePromptPayload(compactPayload)),
-    ].join("\n"),
+      renderReadableData(promptPayload),
+    ].join("\n") };
+    },
   }];
 }
 
@@ -1267,28 +1277,28 @@ function packWholeEvidenceEntries({ entries, variant, focusCardIds, maxChars }) 
     bucket,
     item: compactPromptEvidenceItem(item, Number.POSITIVE_INFINITY, focusCardIds),
   }));
-  const emptyPrompt = variant.render(buildPackedPromptPayload(
+  const empty = variant.render(buildPackedPromptPayload(
     variant.basePayload,
     [],
     variant.mode,
   ));
-  if (emptyPrompt.length > maxChars) {
+  if (empty.prompt.length > maxChars) {
     return { prompt: "", selectedCount: 0, baseFits: false };
   }
 
   let lower = 1;
   let upper = fullEntries.length;
-  let bestPrompt = emptyPrompt;
+  let best = empty;
   let bestCount = 0;
   while (lower <= upper) {
     const count = Math.floor((lower + upper) / 2);
-    const prompt = variant.render(buildPackedPromptPayload(
+    const rendered = variant.render(buildPackedPromptPayload(
       variant.basePayload,
       fullEntries.slice(0, count),
       variant.mode,
     ));
-    if (prompt.length <= maxChars) {
-      bestPrompt = prompt;
+    if (rendered.prompt.length <= maxChars) {
+      best = rendered;
       bestCount = count;
       lower = count + 1;
     } else {
@@ -1296,7 +1306,7 @@ function packWholeEvidenceEntries({ entries, variant, focusCardIds, maxChars }) 
     }
   }
   return {
-    prompt: bestPrompt,
+    ...best,
     selectedCount: bestCount,
     baseFits: true,
   };

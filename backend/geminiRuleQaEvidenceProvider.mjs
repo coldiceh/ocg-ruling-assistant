@@ -1,3 +1,4 @@
+import { renderReadableData, readableQaItem } from './readableEvidenceText.mjs';
 import { fileURLToPath } from 'node:url';
 import { loadGeminiRuleQaAssets } from './geminiRuleQaAssets.mjs';
 import { buildRuleContext } from './geminiRuleContext.mjs';
@@ -5,6 +6,10 @@ import { createGeminiRuleCacheClient } from './geminiRuleCacheClient.mjs';
 import { resolveGeminiSelection, packGeminiSelection } from './geminiRuleQaPacking.mjs';
 
 const ruleContexts = new WeakMap();
+function readableQaPage(page) {
+  return { items: page.items.map(readableQaItem), nextCursor: page.nextCursor,
+    hasMore: page.hasMore, total: page.total };
+}
 const FINAL_SUBMISSION_INSTRUCTION = '补查结束，现在用已读资料submit_evidence，提交 ruleUnitIds 和 qaHandles；不得编造缺失依据。';
 function normalizeCalls(content) {
   const calls = (content?.parts || []).flatMap(part => part.functionCall ? [part.functionCall] : []);
@@ -40,10 +45,10 @@ export function createGeminiRuleQaEvidenceProvider({ fetchImpl = globalThis.fetc
     let step = performance.now();
     const cache = await client.getCache(rules);
     timingsMs.cache = performance.now() - step;
-    const contents = [{ role: 'user', parts: [{ text: JSON.stringify({ question: userQuery,
+    const contents = [{ role: 'user', parts: [{ text: renderReadableData({ question: userQuery,
       confirmedCards: cardResolution.resolvedCards, userProvidedCardTexts: retrievedEvidence.userProvidedCardTexts || [],
       unresolvedMentions: cardResolution.unresolvedMentions || [], ambiguousMentions: cardResolution.ambiguousMentions || [],
-      ruleRevision: rules.ruleRevision, qaRevision: qaTools.qaRevision, initialQa }) }] }];
+      initialQa: readableQaPage(initialQa) }) }] }];
     await onEvent({ type: 'initial', rules, qaTools, initialQa, cache, contents });
     let reminderUsed = false, searchCount = 0;
     timingsMs.model = 0;
@@ -86,7 +91,7 @@ export function createGeminiRuleQaEvidenceProvider({ fetchImpl = globalThis.fetc
           timingsMs.qaSearch += performance.now() - step;
           searchCount++;
           await onEvent({ type: 'search', round, args, result });
-          responses.push({ functionResponse: { name: call.name, ...(call.id ? { id: call.id } : {}), response: result } });
+          responses.push({ functionResponse: { name: call.name, ...(call.id ? { id: call.id } : {}), response: { text: renderReadableData(readableQaPage(result)) } } });
         } else if (call.name === 'submit_evidence') {
           step = performance.now();
           const selection = resolveGeminiSelection({ args, rules, qaTools });

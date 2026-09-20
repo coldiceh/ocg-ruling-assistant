@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { exportReadableSources } from "./export-readable-sources.mjs";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -15,7 +16,7 @@ const OWNED_RECORD_PREFIX = "ocg-rule:";
 const fixedSourcesDir = join(dataDir, "fixed-rule-sources");
 
 const testKeywordPattern = /(测试|检定|試験|试题|题目|练习|practice|exam|test|judge)/i;
-const nonContentDocPattern = /(?:^|\/)(?:index|search|genindex|py-modindex)$/iu;
+const nonContentDocPattern = /(?:^|\/)(?:index|links|search|genindex|py-modindex)$/iu;
 
 async function main() {
   await mkdir(dataDir, { recursive: true });
@@ -91,6 +92,7 @@ async function main() {
     writeJsonAtomic(corpusPath, corpusPayload),
     writeJsonAtomic(testsPath, testsPayload),
   ]);
+  await exportReadableSources({ dataDir, names: ["ocg-rule-corpus.json"] });
 
   console.log(`Synced ${refreshedRecords.length}/${docs.length} OCG rule pages, restored ${fixedRecords.length} fixed sources, and wrote ${tests.length} test pages (${sync.contentHash.slice(0, 12)}).`);
 }
@@ -111,9 +113,18 @@ export function assertCompleteOcgRuleFetch({ enumeratedDocs = [], maxPages: limi
     throw new Error(`OCG Rule enumeration incomplete: ${enumeratedDocs.length} targets exceed OCG_RULE_MAX_PAGES=${limit}`);
   }
   if (pageResults == null) return;
-  const failures = pageResults.filter((item) => !item?.record);
+  const failures = enumeratedDocs.flatMap((doc, index) => {
+    const result = pageResults[index];
+    if (result?.record) return [];
+    const sourceUrl = result?.doc?.sourceUrl || doc?.sourceUrl || doc?.docname || `<target-${index}>`;
+    return [`${sourceUrl}: ${result?.error || "missing_result"}`];
+  });
   if (pageResults.length !== enumeratedDocs.length || failures.length) {
-    throw new Error(`OCG Rule page fetch incomplete: ${failures.length || enumeratedDocs.length - pageResults.length}/${enumeratedDocs.length} pages failed; previous corpus retained`);
+    const countMismatch = pageResults.length === enumeratedDocs.length
+      ? ""
+      : `; result count ${pageResults.length}/${enumeratedDocs.length}`;
+    const failureDetails = failures.length ? `; ${failures.join("; ")}` : "";
+    throw new Error(`OCG Rule page fetch incomplete: ${failures.length}/${enumeratedDocs.length} pages failed${countMismatch}${failureDetails}; previous corpus retained`);
   }
 }
 
@@ -168,7 +179,7 @@ export function buildDocTargets(index) {
     .filter((doc) => doc.docname && !nonContentDocPattern.test(doc.docname));
 }
 
-async function loadRulePage(doc) {
+export async function loadRulePage(doc) {
   try {
     const html = await fetchText(doc.sourceUrl);
     const title = extractTitle(html) || doc.title;
@@ -176,6 +187,7 @@ async function loadRulePage(doc) {
     const rawText = parsed.text;
     const sourcePolicy = applyManualOcgRuleSourcePolicy({ docname: doc.docname, text: rawText });
     const text = sourcePolicy.text;
+    if (!text) return { doc, error: "page_text_empty" };
     const removedRange = findAppliedSourceEditRange(rawText, sourcePolicy);
     const sourceId = `ocg-rule:${doc.docname}`;
     const structure = bindOcgRuleStructure(parsed, text, {
@@ -183,7 +195,6 @@ async function loadRulePage(doc) {
       sourceUrl: doc.sourceUrl,
       ...(removedRange ? { removedRange } : {}),
     });
-    if (text.length < 120) return { doc, error: "page_text_too_short" };
     return { doc, record: {
       id: sourceId,
       recordType: testKeywordPattern.test(`${doc.docname} ${title}`) ? "rule-test" : "rule-doc",

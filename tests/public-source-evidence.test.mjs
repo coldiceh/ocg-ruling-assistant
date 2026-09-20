@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import { renderReadableData } from '../backend/readableEvidenceText.mjs';
 
 const app = await readFile(new URL('../src/app.js', import.meta.url), 'utf8');
 function between(start, end) { return app.slice(app.indexOf(start), app.indexOf(end, app.indexOf(start))); }
@@ -39,10 +40,13 @@ test('sources keep titles without URLs and group same document without losing pa
 });
 
 test('serialized QA bodies display their original question, scene and answer strings', () => {
-  const record = { recordType: 'qa', question: 'question\nwith newline', rawDetailedQuestion: 'scene', answer: 'answer', text: 'index text' };
+  const record = { recordType: 'qa', question: 'question\nwith newline', rawDetailedQuestion: 'scene', answer: 'answer', text: 'index text',
+    extra: { original: '"原文"\n日本語', path: String.raw`C:\tierra\qliphoth.exe` } };
   api.renderSources([{ title: 'QA', text: JSON.stringify(record) }]);
   assert.deepEqual(descendants(ui.sourcesList, 'pre').map(node => node.textContent),
-    [record.question, record.rawDetailedQuestion, record.answer, record.text]);
+    [renderReadableData(record)]);
+  api.renderSources([{ title: 'QA', sourceRecord: record }]);
+  assert.deepEqual(descendants(ui.sourcesList, 'pre').map(node => node.textContent), [renderReadableData(record)]);
 });
 
 test('bold bracket citations and stable evidence IDs resolve through supplied sources', () => {

@@ -1,3 +1,4 @@
+import { displayedPayload } from './helpers/readable-prompt.mjs';
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -6,14 +7,6 @@ import {
   extractPromptAllowedEvidenceIds,
 } from "../backend/ragRulingPrompt.mjs";
 
-function parsePromptPayload(prompt) {
-  const fullMarker = "本次用户问题、卡片原文与检索资料如下：\n";
-  const markerIndex = prompt.lastIndexOf(fullMarker);
-  if (markerIndex >= 0) return JSON.parse(prompt.slice(markerIndex + fullMarker.length));
-  const compactIndex = prompt.lastIndexOf('{"userQuery"');
-  assert.ok(compactIndex >= 0, "prompt must retain a complete JSON evidence envelope");
-  return JSON.parse(prompt.slice(compactIndex));
-}
 
 function flattenPromptEvidence(evidence) {
   if (Array.isArray(evidence)) return evidence;
@@ -29,7 +22,7 @@ test("resolved card type line survives into the model-visible prompt", () => {
     cardResolution: { resolvedCards: [{ id: "type-line-fixture", name: "测试卡片", cardType: "spell", typeLine, effectText: "测试原文。" }] },
     evidence: { cardTexts: [{ id: "type-line-evidence", type: "card_text", text: "测试原文。" }] },
   });
-  const payload = parsePromptPayload(bundle.prompt);
+  const payload = displayedPayload(bundle);
   assert.equal(payload.resolvedCards[0].typeLine, typeLine);
   assert.equal(payload.resolvedCards[0].effectText, "测试原文。");
 });
@@ -122,7 +115,7 @@ test("prompt preserves provenance and presents official QA as structured fields"
     },
   });
 
-  const payload = parsePromptPayload(bundle.prompt);
+  const payload = displayedPayload(bundle);
   const officialQa = payload.evidence.officialQaRelated[0];
   assert.equal(officialQa.official, true);
   assert.equal(officialQa.recordType, "qa");
@@ -173,7 +166,7 @@ test("an explicitly non-official QA-shaped record cannot become official through
     },
   });
 
-  const payload = parsePromptPayload(bundle.prompt);
+  const payload = displayedPayload(bundle);
   const item = payload.evidence.rawRelatedEvidence[0];
   assert.equal(item.official, false);
   assert.equal(item.sourceTier, "S2_COMMUNITY_REFERENCE");
@@ -217,7 +210,7 @@ test("long official QA keeps the resolved-card context window instead of only it
   assert.match(retained, /ANSWER_HEAD/u);
   assert.match(retained, /<<entity-alpha>> FOCUSED_CONTEXT_MARKER/u);
   assert.match(retained, /ANSWER_TAIL/u);
-  const serialized = flattenPromptEvidence(parsePromptPayload(bundle.prompt).evidence)
+  const serialized = flattenPromptEvidence(displayedPayload(bundle).evidence)
     .find((item) => item.id === "official-reference-with-middle-context");
   assert.equal(serialized.answer, answer);
   assert.equal(
@@ -272,7 +265,7 @@ test("compact prompt spends evidence slots on card text and official references 
   });
 
   assert.ok(bundle.warnings.includes("rag_prompt_compacted_to_max_chars"));
-  const payload = parsePromptPayload(bundle.prompt);
+  const payload = displayedPayload(bundle);
   const evidenceItems = flattenPromptEvidence(payload.evidence);
   const retainedIds = new Set(evidenceItems.map((item) => item.id));
   assert.ok(retainedIds.has("card-text-anchor"));
@@ -382,7 +375,7 @@ test("minimal prompt keeps the highest-ranked official evidence without role slo
   });
 
   assert.ok(bundle.warnings.includes("rag_prompt_compacted_to_max_chars"));
-  const payload = parsePromptPayload(bundle.prompt);
+  const payload = displayedPayload(bundle);
   assert.ok(Array.isArray(payload.evidence), "the fixture must exercise secondary minimal compression");
   const evidenceItems = flattenPromptEvidence(payload.evidence);
   const retainedIds = new Set(evidenceItems.map((item) => item.id));
@@ -464,7 +457,7 @@ test("ordinary compact prompt keeps the complete question and card text while pa
 
   assert.ok(bundle.warnings.includes("rag_prompt_compacted_to_max_chars"));
   assert.ok(bundle.prompt.length <= 12000);
-  const payload = parsePromptPayload(bundle.prompt);
+  const payload = displayedPayload(bundle);
   assert.ok(Array.isArray(payload.evidence), "fixture must use the normal compact envelope");
   assert.equal(payload.userQuery, userQuery);
   assert.equal(payload.resolvedCards.length, resolvedCards.length);
@@ -564,7 +557,7 @@ test("the actual 36k prompt keeps the complete projected tail of the highest-pri
 
   assert.ok(bundle.warnings.includes("rag_prompt_compacted_to_max_chars"));
   assert.ok(bundle.prompt.length <= 36000);
-  const payload = parsePromptPayload(bundle.prompt);
+  const payload = displayedPayload(bundle);
   const evidenceItems = flattenPromptEvidence(payload.evidence);
   const retainedTop = evidenceItems.find((item) => item.id === topOfficial.id);
   assert.ok(retainedTop, "the top-ranked official record must remain visible");
@@ -626,7 +619,7 @@ test("an official body above the projection limit is restored in full when the 3
 
   assert.equal(bundle.modelEvidence.officialQaRelated[0].answer, shortAnswer);
   assert.ok(bundle.modelEvidence.officialQaRelated[0].text.length < completeFullText.length);
-  const payload = parsePromptPayload(bundle.prompt);
+  const payload = displayedPayload(bundle);
   const serialized = flattenPromptEvidence(payload.evidence)
     .find((item) => item.id === evidenceId);
   assert.equal(serialized.answer, shortAnswer);
@@ -680,7 +673,7 @@ test("complementary text matching consumes each structured field at most once", 
   });
 
   const projected = bundle.modelEvidence.officialQaRelated[0];
-  const serialized = flattenPromptEvidence(parsePromptPayload(bundle.prompt).evidence)
+  const serialized = flattenPromptEvidence(displayedPayload(bundle).evidence)
     .find((item) => item.id === evidenceId);
   assert.equal(Object.hasOwn(projected, "text"), false);
   assert.equal(Object.hasOwn(serialized, "text"), false);
@@ -691,7 +684,7 @@ test("complementary text matching consumes each structured field at most once", 
 
   const repeatedProjected = bundle.modelEvidence.officialQaRelated
     .find((item) => item.id === "official-body-repeated-structured-part");
-  const repeatedSerialized = flattenPromptEvidence(parsePromptPayload(bundle.prompt).evidence)
+  const repeatedSerialized = flattenPromptEvidence(displayedPayload(bundle).evidence)
     .find((item) => item.id === "official-body-repeated-structured-part");
   assert.equal(repeatedProjected.text, "F O O\nB A R\nB A R");
   assert.equal(repeatedSerialized.text, "F O O\nB A R\nB A R");
@@ -765,7 +758,7 @@ test("compact whole-entry packing retains a short answer and its complementary f
   });
 
   assert.ok(bundle.warnings.includes("rag_prompt_compacted_to_max_chars"));
-  const serialized = flattenPromptEvidence(parsePromptPayload(bundle.prompt).evidence)
+  const serialized = flattenPromptEvidence(displayedPayload(bundle).evidence)
     .find((item) => item.id === evidenceId);
   assert.equal(serialized.answer, shortAnswer);
   assert.equal(serialized.text, completeFullText);
@@ -812,7 +805,7 @@ test("compact single-entry fitting counts and warns on a truncated complementary
   });
 
   assert.ok(bundle.warnings.includes("rag_prompt_compacted_to_max_chars"));
-  const payload = parsePromptPayload(bundle.prompt);
+  const payload = displayedPayload(bundle);
   assert.ok(Array.isArray(payload.evidence));
   const serialized = flattenPromptEvidence(payload.evidence)
     .find((item) => item.id === evidenceId);
@@ -866,7 +859,7 @@ test("compact single-entry fitting uses the complete source length beyond the 28
   assert.ok(bundle.warnings.includes("rag_prompt_compacted_to_max_chars"));
   const projected = bundle.modelEvidence.officialQaRelated[0];
   assert.ok(projected.text.length < 2800);
-  const serialized = flattenPromptEvidence(parsePromptPayload(bundle.prompt).evidence)
+  const serialized = flattenPromptEvidence(displayedPayload(bundle).evidence)
     .find((item) => item.id === evidenceId);
   assert.equal(serialized.answer, shortAnswer);
   assert.ok(serialized.text.length > 10000);
@@ -924,7 +917,7 @@ test("focused official direct prompt retains complementary full text beside a sh
     env: { RAG_MAX_PROMPT_CHARS: "36000" },
   });
 
-  const payload = parsePromptPayload(bundle.prompt);
+  const payload = displayedPayload(bundle);
   const direct = payload.officialQaDirectCandidate;
   assert.match(direct.answer, /SHORT_DIRECT_ANSWER/u);
   assert.match(direct.answer, /LONG_DECISIVE_DETAIL/u);

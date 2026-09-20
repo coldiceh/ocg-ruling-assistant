@@ -14,9 +14,9 @@ concurrency:
 jobs:
   sync:
     runs-on: ubuntu-latest
-    # Recent CPU syncs use almost 44 minutes; allow the existing checks to run
-    # again after a concurrent main update without repeating synchronization.
-    timeout-minutes: 60
+    # Leave room for the existing CPU embedding path, bounded preprocessing,
+    # and post-rebase checks. Paid progress persists in the authorized Redis cache.
+    timeout-minutes: 120
     permissions:
       contents: write
     outputs:
@@ -60,6 +60,14 @@ jobs:
           OCG_RULE_MAX_PAGES: "240"
         run: node scripts/sync-ocg-rule.mjs
 
+      - name: Preserve readable source fields and bodies
+        uses: actions/upload-artifact@v4
+        with:
+          name: readable-sources-${{ github.run_id }}-${{ github.run_attempt }}
+          path: data/readable-sources/*.txt
+          if-no-files-found: error
+          retention-days: 3
+
       - name: Validate synchronized data
         id: data_validation
         run: |
@@ -76,19 +84,37 @@ jobs:
       - name: Build versioned RAG data revision manifest
         run: pnpm build:rag-revision
 
-      - name: Build versioned Gemini rule and QA assets
+      - name: Incrementally refresh current navigation and Gemini vectors
+        id: bounded_sync
+        env:
+          EVIDENCE_PREPROCESS_AUTHORIZATION_ID: ${{ vars.EVIDENCE_PREPROCESS_AUTHORIZATION_ID }}
+          EVIDENCE_PREPROCESS_LEDGER_KEY: ${{ vars.EVIDENCE_PREPROCESS_LEDGER_KEY }}
+          EVIDENCE_PREPROCESS_CACHE_NAMESPACE: ${{ vars.EVIDENCE_PREPROCESS_CACHE_NAMESPACE }}
+          EVIDENCE_PREPROCESS_MAX_USD: ${{ vars.EVIDENCE_PREPROCESS_MAX_USD }}
+          GEMINI_RULE_QA_API_KEY: ${{ secrets.GEMINI_RULE_QA_API_KEY }}
+          RAG_EVIDENCE_BAI_API_KEY: ${{ secrets.RAG_EVIDENCE_BAI_API_KEY }}
+          BAI_API_KEY: ${{ secrets.BAI_API_KEY }}
+          UPSTASH_BUDGET_KV_REST_API_URL: ${{ secrets.UPSTASH_BUDGET_KV_REST_API_URL }}
+          UPSTASH_BUDGET_KV_REST_API_TOKEN: ${{ secrets.UPSTASH_BUDGET_KV_REST_API_TOKEN }}
         run: |
-          node scripts/build-gemini-rule-qa-assets.mjs \
-            --stage canonical \
+          node scripts/sync-bounded-evidence-assets.mjs \
             --data-dir data \
-            --output-dir data/gemini-rule-qa-v1
-          node scripts/build-gemini-rule-qa-assets.mjs \
-            --stage release \
-            --data-dir data \
-            --output-dir data/gemini-rule-qa-v1 \
-            --navigation data/gemini-rule-qa-v1/navigation-records.json.gz \
-            --rule-dense-dir data/rule-embedding-v1 \
-            --qa-dense-dir data/qa-embedding-v1
+            --out-dir "$RUNNER_TEMP/bounded-evidence-stage" \
+            --cache-dir "$RUNNER_TEMP/bounded-evidence-cache" \
+            --generation-profile config/evidence-generation/bai-gpt-5.6-luna-medium-theoretical.json \
+            --max-usd "$EVIDENCE_PREPROCESS_MAX_USD" \
+            --cloud \
+            --execute
+
+      - name: Promote verified bounded evidence assets
+        run: |
+          node --input-type=module -e 'import fs from "node:fs"; const report=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); if(report.publishable !== true) throw new Error("bounded_sync_not_publishable")' \
+            "$RUNNER_TEMP/bounded-evidence-stage/bounded-evidence-sync-report.json"
+          mkdir -p "$RUNNER_TEMP/bounded-evidence-previous"
+          for asset in gemini-rule-qa-v1 rule-embedding-v1 qa-embedding-v1; do
+            if [ -d "data/$asset" ]; then mv "data/$asset" "$RUNNER_TEMP/bounded-evidence-previous/$asset"; fi
+            mv "$RUNNER_TEMP/bounded-evidence-stage/$asset" "data/$asset"
+          done
           node scripts/build-gemini-rule-qa-assets.mjs \
             --stage verify \
             --data-dir data \
@@ -164,7 +190,7 @@ jobs:
 
       - name: Test updated snapshot
         id: snapshot_tests
-        run: node --test --test-concurrency=1 tests/sync-ygoresources-selection.test.mjs tests/sync-ocg-rule.test.mjs tests/source-freshness.test.mjs tests/rag-data-source-file.test.mjs tests/rag-data-revision-manifest.test.mjs tests/rag-runtime-bundle.test.mjs tests/rag-runtime-deployment-safety.test.mjs tests/gemini-qa-tools.test.mjs tests/gemini-rule-qa-assets.test.mjs tests/cloud-evidence-assets.test.mjs tests/cloud-evidence-incremental-sync.test.mjs tests/evidence-vector-index.test.mjs tests/deployment-workflows.test.mjs tests/sync-snapshot-publication.test.mjs
+        run: node --test --test-concurrency=1 tests/sync-ygoresources-selection.test.mjs tests/sync-ocg-rule.test.mjs tests/source-freshness.test.mjs tests/rag-data-source-file.test.mjs tests/rag-data-revision-manifest.test.mjs tests/rag-runtime-bundle.test.mjs tests/rag-runtime-deployment-safety.test.mjs tests/gemini-qa-tools.test.mjs tests/gemini-rule-qa-assets.test.mjs tests/cloud-evidence-assets.test.mjs tests/cloud-evidence-incremental-sync.test.mjs tests/evidence-vector-index.test.mjs tests/deployment-workflows.test.mjs tests/sync-snapshot-publication.test.mjs tests/sync-bounded-evidence-assets.test.mjs
 
       - name: Verify interrupted sync recovery
         run: |
@@ -187,9 +213,21 @@ jobs:
             data/*.json.gz
             data/rag-runtime-v1/**
             data/cloud-evidence-v1/**
+            data/gemini-rule-qa-v1/**
+            data/rule-embedding-v1/**
+            data/qa-embedding-v1/**
           if-no-files-found: error
           retention-days: 1
           compression-level: 9
+
+      - name: Preserve bounded preprocessing diagnostics
+        if: ${{ always() && steps.bounded_sync.outcome != 'skipped' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: bounded-daily-report-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/bounded-evidence-stage/bounded-evidence-sync-report.json
+          if-no-files-found: warn
+          retention-days: 3
 
       - name: Report ruling sync status
         run: pnpm report:rulings

@@ -525,7 +525,7 @@ function parseArguments(argv) {
   return options;
 }
 
-function createGeminiEmbeddingTransport({ apiKey, fetchImpl = globalThis.fetch }) {
+export function createGeminiEmbeddingTransport({ apiKey, fetchImpl = globalThis.fetch }) {
   if (!apiKey) throw codedError("gemini_embedding_api_key_required", 2);
   return async (texts, profile) => {
     const body = {

@@ -1,3 +1,4 @@
+import { displayedPayload } from './helpers/readable-prompt.mjs';
 import test from "node:test";
 import assert from "node:assert/strict";
 
@@ -85,12 +86,6 @@ function fixture() {
   };
 }
 
-function parsePromptPayload(prompt) {
-  const markerIndex = prompt.lastIndexOf(MARKER);
-  assert.ok(markerIndex >= 0);
-  return JSON.parse(prompt.slice(markerIndex + MARKER.length));
-}
-
 test("budget maps conservatively bound a multi-source packed prompt", () => {
   const input = fixture();
   const budget = computeGeminiSelectionPackingBudget({ ...input, maxPromptChars: 14000 });
@@ -115,14 +110,17 @@ test("budget maps conservatively bound a multi-source packed prompt", () => {
   assert.deepEqual(Object.keys(budget.ruleUnitChars), ["R1", "R2", "R3"]);
   assert.deepEqual(Object.keys(budget.qaHandleChars), ["qa-escaped", "qa-plain"]);
 
-  const payload = parsePromptPayload(actual.packing.prompt);
+  const payload = displayedPayload(actual.packing);
   const first = payload.evidence.rawRelatedEvidence.find((item) => item.id === "R1");
   const second = payload.evidence.rawRelatedEvidence.find((item) => item.id === "R2");
-  assert.ok(payload.ruleSources);
-  assert.equal(payload.ruleSources[first.sourceRef].sourceUrl, "https://rules.example.test/shared");
-  assert.equal(first.sourceRef, second.sourceRef, "shared source metadata remains mechanically deduplicated");
+  const firstSource = first.sourceRef ? payload.ruleSources[first.sourceRef] : first;
+  const secondSource = second.sourceRef ? payload.ruleSources[second.sourceRef] : second;
+  assert.equal(firstSource.sourceUrl, "https://rules.example.test/shared");
+  assert.equal(secondSource.sourceUrl, firstSource.sourceUrl);
+  if (payload.ruleSources) assert.equal(first.sourceRef, second.sourceRef,
+    "when sharing saves characters, identical source metadata uses the same reference");
   assert.match(actual.packing.prompt, /qa-escaped/u);
-  assert.match(actual.packing.prompt, /\\\\/u, "escaped QA data remains serialized in the prompt");
+  assert.match(actual.packing.prompt, /\\\\/u, "literal source backslashes remain in the prompt");
 });
 
 test("each estimate covers its actual single-entry marginal size and separators", () => {

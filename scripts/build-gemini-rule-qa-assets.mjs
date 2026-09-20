@@ -200,13 +200,16 @@ async function canonicalStage(sourceDir, destination) {
   await atomicWrite(join(destination, CANONICAL_MANIFEST), Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`));
   return { outputDir: destination, manifest, stage: "canonical", indexSource: "rebuilt" };
 }
-async function navigationRecords(pathValue, inputs) {
-  if (!pathValue) return inputs.map(value => ({ unitKey: value.unitKey, sourceId: value.sourceId,
+export function buildDefaultNavigationRecords(inputs = []) {
+  return inputs.map(value => ({ unitKey: value.unitKey, sourceId: value.sourceId,
     sourceKind: value.input.sourceKind, canonicalBodySha256: value.canonicalBodySha256,
     contextInputSha256: value.contextInputSha256, titlePath: value.input.titlePath,
     descriptionZh: "", descriptionJa: "", searchQuestions: [],
     navigationStatus: "not_generated_in_scope", contextRefs: value.contextRefs,
     explicitRefs: value.explicitRefs, generator: null }));
+}
+async function navigationRecords(pathValue, inputs) {
+  if (!pathValue) return buildDefaultNavigationRecords(inputs);
   const bytes = await readFile(resolve(pathValue));
   const parsed = JSON.parse((pathValue.endsWith(".gz") ? await ungz(bytes) : bytes).toString("utf8"));
   return Array.isArray(parsed) ? parsed : parsed.records;

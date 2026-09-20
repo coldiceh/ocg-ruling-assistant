@@ -1,3 +1,4 @@
+import { renderReadableData, readableRuleUnit } from './readableEvidenceText.mjs';
 import { buildRagRulingPromptBundle } from './ragRulingPrompt.mjs';
 
 // Latest user limit for the complete prompt, in UTF-16 characters, including
@@ -6,65 +7,11 @@ import { buildRagRulingPromptBundle } from './ragRulingPrompt.mjs';
 export const GEMINI_EVIDENCE_MAX_PROMPT_CHARS = 14000;
 
 const RULE_SOURCE_FIELDS = [
-  'recordType', 'title', 'sourceUrl', 'source', 'sourceAuthority', 'official', 'parentSourceId',
+  'recordType', 'title', 'sourceUrl', 'source', 'sourceAuthority', 'official',
 ];
 const RULE_SOURCE_INSTRUCTION = 'ruleSources 保存规则的共用来源字段；每段 sourceRef 对应 ruleSources 中同名条目，其来源字段均继承自该条目。结合来源等级阅读原文，引用使用对应来源的 title。';
-const QA_TEXT_INSTRUCTION = 'sourceRecord是该QA的完整原始记录。字段值为{"$lines":[…]}时，依次读取其中的原文字符串或qaTextLines中的数字索引（从0开始），用换行连接；它与原始字段文字完全相同，重复原文只保存一次。';
-
-// Lossless display encoding only: exact line equality is never evidence of
-// semantic coverage. Every selected source, field, character and line break is
-// retained. The server-side canonical JSON string remains unchanged.
-function renderRepeatedQaText(prefix, marker, payload, original) {
-  const counts = new Map();
-  function walk(value, visit) {
-    if (typeof value === 'string') visit(value);
-    else if (Array.isArray(value)) value.forEach(item => walk(item, visit));
-    else if (value && typeof value === 'object') Object.values(value).forEach(item => walk(item, visit));
-  }
-  function hasReservedKey(value) {
-    if (!value || typeof value !== 'object') return false;
-    return Object.hasOwn(value, '$lines') || Object.values(value).some(hasReservedKey);
-  }
-  const candidates = payload.evidence.rawRelatedEvidence.map(item => {
-    if (!['qa', 'card-faq'].includes(item.recordType) || typeof item.text !== 'string') return item;
-    // This string is emitted above by JSON.stringify(record), not arbitrary
-    // webpage text. Unknown display shapes retain their original form.
-    let record;
-    try { record = JSON.parse(item.text); } catch { return item; }
-    if (hasReservedKey(record) || JSON.stringify(record) !== item.text) return item;
-    const next = { ...Object.fromEntries(Object.entries(item).filter(([key]) => key !== 'text')), sourceRecord: record };
-    walk(next, text => text.split('\n').forEach(line => counts.set(line, (counts.get(line) || 0) + 1)));
-    return next;
-  });
-  const qaTextLines = [];
-  for (const [line, count] of counts) {
-    if (count < 2) continue;
-    const rawChars = JSON.stringify(line).length;
-    const refChars = JSON.stringify({ $lines: [qaTextLines.length] }).length;
-    if ((count - 1) * rawChars > count * refChars + 2) qaTextLines.push(line);
-  }
-  const refs = new Map(qaTextLines.map((line, index) => [line, index]));
-  function encode(value) {
-    if (typeof value === 'string') {
-      const parts = value.split('\n').map(line => refs.has(line) ? refs.get(line) : line);
-      const encoded = { $lines: parts };
-      return parts.some(part => typeof part === 'number') && JSON.stringify(encoded).length < JSON.stringify(value).length
-        ? encoded : value;
-    }
-    if (Array.isArray(value)) return value.map(encode);
-    if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, encode(item)]));
-    return value;
-  }
-  const compact = prefix + QA_TEXT_INSTRUCTION + '\n' + marker + JSON.stringify({
-    ...payload, evidence: { ...payload.evidence, rawRelatedEvidence: candidates.map(item => Object.hasOwn(item, 'sourceRecord')
-      ? Object.fromEntries(Object.entries(item).map(([key, value]) => [key,
-        ['id', 'recordType', 'sourceAuthority', 'sourceTier', 'official'].includes(key) ? value : encode(value)])) : item) }, qaTextLines,
-  });
-  return compact.length < original.length ? compact : original;
-}
-
 function renderRuleSources(prefix, marker, payload, fields = RULE_SOURCE_FIELDS) {
-  const original = prefix + marker + JSON.stringify(payload);
+  const original = prefix + marker + renderReadableData(payload);
   const ruleSources = {}, sourceRefs = new Map();
   const selectedBodies = payload.evidence.rawRelatedEvidence.map((item) => {
     if (item.recordType !== 'rule-doc') return item;
@@ -88,28 +35,24 @@ function renderRuleSources(prefix, marker, payload, fields = RULE_SOURCE_FIELDS)
   // for citation links and the player's original-evidence display.
   const compactPayload = { ...payload, evidence: { ...payload.evidence, rawRelatedEvidence: selectedBodies }, ruleSources };
   const compactPrefix = prefix + RULE_SOURCE_INSTRUCTION + '\n';
-  const compact = compactPrefix + marker + JSON.stringify(compactPayload);
+  const compact = compactPrefix + marker + renderReadableData(compactPayload);
   const useRuleSources = sourceRefs.size && compact.length < original.length;
   return useRuleSources ? { prompt: compact, prefix: compactPrefix, payload: compactPayload }
     : { prompt: original, prefix, payload };
 }
 
-function renderSelectedPrompt(prefix, marker, payload, maxPromptChars) {
-  const chosen = renderRuleSources(prefix, marker, payload);
-  // Already fitting prompts keep exactly the existing representation and pay
-  // no text-table work. Overflow gets one local, reversible encoding attempt.
-  if (chosen.prompt.length <= maxPromptChars) return chosen.prompt;
-  const qaEncoded = renderRepeatedQaText(chosen.prefix, marker, chosen.payload, chosen.prompt);
-  if (qaEncoded.length <= maxPromptChars) return qaEncoded;
-  // Exact serialized equality alone shares section metadata. Decoding sourceRef
-  // restores every field, authority value and body; no evidence is removed or
-  // judged. Incorrect binding would lose provenance, so round-trip equality is
-  // tested directly. The prior source-only encoding still exceeds the real cap.
-  const sections = renderRuleSources(prefix, marker, payload,
-    [...RULE_SOURCE_FIELDS, 'sourceId', 'sourceSectionKey', 'sourceSection']);
-  const sectionEncoded = sections.prompt.length <= maxPromptChars ? sections.prompt
-    : renderRepeatedQaText(sections.prefix, marker, sections.payload, sections.prompt);
-  return sectionEncoded.length < qaEncoded.length ? sectionEncoded : qaEncoded;
+function renderSelectedPrompt(prefix, marker, payload) {
+  return renderRuleSources(prefix, marker, payload);
+}
+
+function readableSelectedPayload(payload, selection) {
+  const rows = payload.evidence.rawRelatedEvidence;
+  const displayed = selection.selectedRules.map(readableRuleUnit);
+  selection.selectedQa.forEach(({ record }, index) => {
+    const { text: _canonicalJson, ...metadata } = rows[selection.selectedRules.length + index];
+    displayed.push({ ...metadata, sourceRecord: record });
+  });
+  return { ...payload, evidence: { ...payload.evidence, rawRelatedEvidence: displayed } };
 }
 
 function selectedQaSourceUrl(record = {}) {
@@ -200,13 +143,14 @@ export function packGeminiSelection({ selection, userQuery, cardResolution, retr
   const marker = '本次用户问题、卡片原文与检索资料如下：\n';
   const at = base.prompt.indexOf(marker);
   if (at < 0) throw new Error('gemini_published_prompt_envelope_absent');
-  const payload = JSON.parse(base.prompt.slice(at + marker.length));
+  const payload = structuredClone(base.promptPayload);
   payload.evidence.rawRelatedEvidence = selectedBodies;
   payload.allowedEvidenceIds = [...new Set([
     ...(base.allowedEvidenceIds || []), ...selectedBodies.map(item => item.id),
   ])];
-  const prompt = renderSelectedPrompt(base.prompt.slice(0, at), marker, payload, maxPromptChars);
-  const packing = { ...base, prompt, promptChars: prompt.length, promptTruncated: false,
+  const rendered = renderSelectedPrompt(base.prompt.slice(0, at), marker, readableSelectedPayload(payload, selection));
+  const { prompt } = rendered;
+  const packing = { ...base, prompt, promptPayload: rendered.payload, promptChars: prompt.length, promptTruncated: false,
     modelEvidence: payload.evidence, allowedEvidenceIds: payload.allowedEvidenceIds,
     selectedEntryChars: selectedBodies.map(item => ({ id: item.id, chars: item.text.length })),
     capacityExceeded: prompt.length > maxPromptChars };
@@ -220,7 +164,7 @@ export function packGeminiSelection({ selection, userQuery, cardResolution, retr
  *
  * The canonical uncompressed selected body is an upper bound for the
  * production renderer, whose source-map path only replaces repeated metadata
- * with shorter references. Per-entry JSON plus two separators therefore bounds
+ * with shorter references. Per-entry readable fields plus their full nesting and separators bound
  * any multi-entry serialization, including shared source metadata.
  */
 export function computeGeminiSelectionPackingBudget({
@@ -249,7 +193,7 @@ export function computeGeminiSelectionPackingBudget({
   }
   for (const [id, rule] of uniqueRules) {
     const [body] = selectedBodiesForSelection({ selectedRules: [rule], selectedQa: [] });
-    ruleUnitChars[id] = JSON.stringify(body).length + JSON.stringify(body.id).length + 2;
+    ruleUnitChars[id] = renderReadableData({ evidence: { rawRelatedEvidence: [readableRuleUnit(body)] }, allowedEvidenceIds: [body.id] }).length + 2;
   }
 
   const uniqueQa = new Map();
@@ -262,7 +206,8 @@ export function computeGeminiSelectionPackingBudget({
   }
   for (const [handle, item] of uniqueQa) {
     const [body] = selectedBodiesForSelection({ selectedRules: [], selectedQa: [item] });
-    qaHandleChars[handle] = JSON.stringify(body).length + JSON.stringify(body.id).length + 2;
+    const { text: _canonicalJson, ...metadata } = body;
+    qaHandleChars[handle] = renderReadableData({ evidence: { rawRelatedEvidence: [{ ...metadata, sourceRecord: item.record }] }, allowedEvidenceIds: [body.id] }).length + 2;
   }
 
   return {

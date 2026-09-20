@@ -1,3 +1,5 @@
+import { displayedPayload } from './helpers/readable-prompt.mjs';
+import { readableRuleUnit, renderReadableData } from '../backend/readableEvidenceText.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createGeminiRuleQaEvidenceProvider } from '../backend/geminiRuleQaEvidenceProvider.mjs';
@@ -21,7 +23,12 @@ test('provider preserves whole selected records and native supplement signatures
     clientFactory: () => ({ model: 'gemini-3.8-flash', getCache: async () => ({ reused: true }),
       generate: async (_cache, contents) => {
         rounds++;
-        if (rounds === 1) return { candidates: [{ content: modelPart }] };
+        if (rounds === 1) {
+          assert.ok(contents[0].parts[0].text.includes(record.question));
+          assert.equal(contents[0].parts[0].text.includes('qaRevision:'), false);
+          return { candidates: [{ content: modelPart }] };
+        }
+        assert.ok(contents[2].parts[0].functionResponse.response.text.includes(record.conclusion));
         assert.deepEqual(contents[1], modelPart);
         assert.equal(contents[2].parts[0].functionResponse.id, 'native-1');
         return {
@@ -50,8 +57,10 @@ test('provider preserves whole selected records and native supplement signatures
   assert.equal(bodies[1].text, JSON.stringify(record));
   assert.equal(bodies[1].official, false);
   assert.deepEqual(result.packing.allowedEvidenceIds, ['R1.1', 'h']);
-  const payload = JSON.parse(result.packing.prompt.split('本次用户问题、卡片原文与检索资料如下：\n')[1]);
-  assert.deepEqual(payload.evidence.rawRelatedEvidence, JSON.parse(JSON.stringify(bodies)));
+  const payload = displayedPayload(result.packing);
+  assert.deepEqual(payload.evidence.rawRelatedEvidence[0], readableRuleUnit(bodies[0]));
+  const { text: _canonical, ...metadata } = bodies[1];
+  assert.deepEqual(payload.evidence.rawRelatedEvidence[1], { ...metadata, sourceRecord: record });
 });
 
 test('provider gives a third QA search result one final submit-only call', async () => {
@@ -72,7 +81,7 @@ test('provider gives a third QA search result one final submit-only call', async
         }] } }] };
         assert.equal(generateCalls, 4);
         const thirdResponse = contents.find((content) => content?.parts?.[0]?.functionResponse?.id === 'search-3');
-        assert.deepEqual(thirdResponse.parts[0].functionResponse.response.items[0].handle, 'result-3');
+        assert.ok(thirdResponse.parts[0].functionResponse.response.text.includes(renderReadableData({ handle: 'result-3', record })));
         assert.match(contents.at(-1).parts[0].text, /补查结束/u);
         return { candidates: [{ content: { role: 'model', parts: [{
           functionCall: { name: 'submit_evidence', args: { ruleUnitIds: [], qaHandles: ['result-3'] } },

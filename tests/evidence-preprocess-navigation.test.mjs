@@ -34,7 +34,8 @@ function input(unitKey, sourceKind, extras = {}) {
   const projected = {
     sourceKind,
     titlePath: extras.titlePath || [unitKey],
-    unitText: `${unitKey} public text`,
+    unitText: sourceKind === "rule" ? `${unitKey} public text`
+      : JSON.stringify({ id: unitKey, text: `${unitKey} public text` }),
     unitStructure: extras.unitStructure || { blocks: [] },
     structuralContextTexts: [],
     structuralContextStructures: [],
@@ -331,7 +332,7 @@ test("bounded lazy execution stops before the job deadline and resumes without d
   const coverageScope = { selectedUnitKeys: inputs.map((row) => row.unitKey) };
   const calls = new Map();
   const generateContent = async (body) => {
-    const unitKey = JSON.parse(body.contents[0].parts[0].text).titlePath.at(-1);
+    const unitKey = body.contents[0].parts[0].text.match(/^unitText: (\S+) public text$/mu)?.[1];
     calls.set(unitKey, (calls.get(unitKey) || 0) + 1);
     return {
       candidates: [{ content: { parts: [{ text: JSON.stringify({
@@ -411,8 +412,7 @@ test("navigation execution uses exactly two active requests, preserves order, re
   let generationCalls = 0;
 
   const generateContent = async (body) => {
-    const requestInput = JSON.parse(body.contents[0].parts[0].text);
-    const unitKey = requestInput.titlePath.at(-1);
+    const unitKey = body.contents[0].parts[0].text.match(/^unitText: (\S+) public text$/mu)?.[1];
     const callCount = (callsByUnit.get(unitKey) || 0) + 1;
     callsByUnit.set(unitKey, callCount);
     generationCalls += 1;
@@ -632,7 +632,7 @@ test("a worker hard failure stops new claims and waits for the other paid respon
     coverageScope,
     countTokens: async () => ({ totalTokens: 100 }),
     generateContent: async (body) => {
-      const unitKey = JSON.parse(body.contents[0].parts[0].text).titlePath.at(-1);
+      const unitKey = body.contents[0].parts[0].text.match(/^unitText: (\S+) public text$/mu)?.[1];
       calls.push(unitKey);
       if (unitKey === "fails") {
         await deferredStarted;

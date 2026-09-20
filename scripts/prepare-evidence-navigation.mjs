@@ -1,3 +1,4 @@
+import { renderReadableData, readableNavigationInput } from '../backend/readableEvidenceText.mjs';
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
@@ -169,7 +170,7 @@ export function normalizeNavigationOutput(rawValue) {
 export function buildNavigationRequestBody(input, contract, { simplified = false } = {}) {
   return {
     systemInstruction: { parts: [{ text: simplified ? SIMPLIFIED_PROMPT : NAVIGATION_PROMPT }] },
-    contents: [{ role: "user", parts: [{ text: stableJson(input.input) }] }],
+    contents: [{ role: "user", parts: [{ text: renderReadableData(readableNavigationInput(input.input)) }] }],
     generationConfig: {
       maxOutputTokens: contract.maxBillableOutputTokens,
       ...contract.reasoningConfig,

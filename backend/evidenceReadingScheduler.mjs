@@ -1,6 +1,6 @@
 // Source identity, finite queue order and serialized size only. This scheduler
 // makes no decision about relevance, completeness or ruling correctness.
-export const READING_SCHEDULER_CONTRACT = 'need-variant-source-channel-whole-bundle-v1';
+export const READING_SCHEDULER_CONTRACT = 'original-support-need-unseen-whole-bundle-v2';
 export const DENSE_MAPPING_ORDER_CONTRACT = 'source-rank-mapping-ordinal-interleave-v1';
 
 export function mapRankedUnits(results, mapResult, limit = 32) {
@@ -23,12 +23,22 @@ function descend(parent, key) {
   if (!parent.children.has(key)) parent.children.set(key, node());
   return parent.children.get(key);
 }
-function nextFromNode(current, getReferences) {
-  if (current.lane) return nextFromLane(current.lane, getReferences);
+function nextFromNode(current, getReferences, seen, onVisit) {
+  if (current.lane) {
+    // Skip exact duplicate identities before yielding this lane's turn.
+    // Otherwise a duplicate would advance every ancestor cursor and give a
+    // different source/channel the reading opportunity owed to this lane.
+    while (true) {
+      const hit = nextFromLane(current.lane, getReferences);
+      if (!hit) return null;
+      onVisit();
+      if (!seen.has(hit.unitKey)) return hit;
+    }
+  }
   const children = [...current.children.values()];
   for (let attempt = 0; attempt < children.length; attempt++) {
     const child = children[current.cursor++ % children.length];
-    const candidate = nextFromNode(child, getReferences);
+    const candidate = nextFromNode(child, getReferences, seen, onVisit);
     if (candidate) return candidate;
   }
   return null;
@@ -81,17 +91,27 @@ export function admitWholeReadingUnits({ lanes, materialize, measure, maxChars,
   // Recreate all cursors for every assembly, including a smaller budget retry.
   const state = createReadingLanes(lanes);
   const offered = [], omitted = [], seen = new Set(), offeredIds = new Set();
+  // The original question is one independent retrieval scope. Generated needs
+  // and card-link lookups share the other scope, so adding more of them cannot
+  // multiply their turns at the expense of the original question.
+  const original = state.needs.get('original');
+  const supporting = node();
+  supporting.children = new Map([...state.needs].filter(([id]) => id !== 'original'));
+  const turns = [original, supporting].filter(Boolean);
   let visits = 0, measuredChars = measure([]), advanced;
   do {
     advanced = false;
-    for (const need of state.needs.values()) {
+    for (const need of turns) {
       // A duplicate or an oversized item does not consume this need's single
       // successful admission opportunity. Every finite lane entry is visited once.
       while (true) {
         signal?.throwIfAborted();
-        const hit = nextFromNode(need, getReferences);
+        const hit = nextFromNode(need, getReferences, seen, () => {
+          signal?.throwIfAborted();
+          visits++;
+        });
         if (!hit) break;
-        advanced = true; visits++;
+        advanced = true;
         if (seen.has(hit.unitKey)) continue;
         seen.add(hit.unitKey);
         const bundle = materialize(hit.unitKey);

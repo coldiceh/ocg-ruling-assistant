@@ -5,6 +5,7 @@ import path from 'node:path';
 import {spawn} from 'node:child_process';
 import test from 'node:test';
 import {pathToFileURL} from 'node:url';
+import {renderReadableData} from '../backend/readableEvidenceText.mjs';
 
 // Execute the production entry point against an isolated data directory and
 // HTTP fixture. No remote data, model or historical evaluation case is used.
@@ -16,6 +17,7 @@ test('sync persists unfinished changes and advances only the captured manifest b
   await fs.mkdir(path.join(root, 'data'));
   await fs.cp(new URL('../backend/', import.meta.url), path.join(root, 'backend'), {recursive:true});
   await fs.copyFile(new URL('../scripts/sync-ygoresources.mjs', import.meta.url), path.join(root, 'scripts/sync-ygoresources.mjs'));
+  await fs.copyFile(new URL('../scripts/export-readable-sources.mjs', import.meta.url), path.join(root, 'scripts/export-readable-sources.mjs'));
   await fs.copyFile(new URL('../scripts/lib/baige-chinese-name-backfill.mjs', import.meta.url), path.join(root, 'scripts/lib/baige-chinese-name-backfill.mjs'));
   await fs.writeFile(path.join(root, 'data/snapshot-meta.json'), JSON.stringify({sourceRevision:'10'}));
   const mock = path.join(root, 'mock-http.mjs');
@@ -49,6 +51,17 @@ test('sync persists unfinished changes and advances only the captured manifest b
       let output=''; child.stdout.on('data', chunk => output+=chunk); child.stderr.on('data', chunk => output+=chunk);
       child.once('error',reject); child.once('exit', code => code===0 ? resolve() : reject(new Error(output)));
     });
+    // The real synchronization entry point must refresh the reading copy on
+    // every run, including a resumed run. The source records remain canonical.
+    for (const name of ['cards', 'rulings', 'qa-index']) {
+      const source = JSON.parse(await fs.readFile(path.join(root, 'data', name + '.json'), 'utf8'));
+      const display = await fs.readFile(path.join(root, 'data/readable-sources', name + '.txt'), 'utf8');
+      assert.equal(display, renderReadableData({
+        ...(source.source ? { source: source.source } : {}),
+        ...(source.generatedAt ? { generatedAt: source.generatedAt } : {}),
+        records: source.records,
+      }) + '\n');
+    }
     return {meta:JSON.parse(await fs.readFile(path.join(root,'data/snapshot-meta.json'),'utf8')),
       requests:(await fs.readFile(requests,'utf8')).trim().split('\n').filter(Boolean)};
   }

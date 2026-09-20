@@ -116,11 +116,16 @@ test("data sync rebuilds and commits the versioned RAG runtime before synchroniz
   const snapshotTests = workflow.indexOf("id: snapshot_tests");
 
   assert.ok(evidence >= 0 && evidence < revision);
-  const geminiCanonical = workflow.indexOf("--stage canonical");
-  const geminiRelease = workflow.indexOf("--stage release");
+  const refresh = workflow.indexOf("node scripts/sync-bounded-evidence-assets.mjs");
+  const promotion = workflow.indexOf("name: Promote verified bounded evidence assets");
   const geminiVerify = workflow.indexOf("--stage verify");
-  assert.ok(geminiCanonical > revision && geminiCanonical < geminiRelease && geminiRelease < geminiVerify,
-    "source sync must rebuild canonical inputs before release and verify rather than replaying a stale canonical manifest");
+  assert.ok(refresh > revision && refresh < promotion && promotion < geminiVerify && geminiVerify < runtime,
+    "source sync must refresh navigation and vectors, promote the complete asset set, then verify before building runtime");
+  assert.match(workflow, /--cloud[\s\S]*?--execute/u);
+  assert.match(workflow, /vars\.EVIDENCE_PREPROCESS_MAX_USD/u);
+  assert.match(workflow, /secrets\.GEMINI_RULE_QA_API_KEY/u);
+  assert.match(workflow, /secrets\.BAI_API_KEY/u);
+  assert.match(workflow, /report\.publishable !== true/u);
   assert.ok(revision < runtime && runtime < verifyRuntime);
   assert.ok(verifyRuntime < parity && parity < snapshotTests);
   assert.match(publication, /git add -u -- data/u);
@@ -153,6 +158,7 @@ test("data sync runs the bounded synchronization checks and keeps the complete s
     "tests/evidence-vector-index.test.mjs",
     "tests/deployment-workflows.test.mjs",
     "tests/sync-snapshot-publication.test.mjs",
+    "tests/sync-bounded-evidence-assets.test.mjs",
   ];
   const targetedCommand = [
     "node --test --test-concurrency=1",
@@ -175,7 +181,7 @@ test("concurrent publication rechecks the combined snapshot and retains the orig
   const push = publication.indexOf("git push origin HEAD:refs/heads/main");
   for (const check of [
     "pnpm install --frozen-lockfile", "pnpm check:data", "pnpm check:freshness", "pnpm check\n",
-    "--check-only", "tests/rag-runtime-parity.test.mjs", "tests/sync-snapshot-publication.test.mjs",
+    "--check-only", "--stage verify", "tests/rag-runtime-parity.test.mjs", "tests/sync-snapshot-publication.test.mjs",
     "git diff --exit-code", "git diff --cached --exit-code",
   ]) {
     const index = publication.indexOf(check);
@@ -256,6 +262,7 @@ test("Vercel verifies the source, runtime, and enabled Gemini asset bindings bef
   ])).flat();
   const expectedBoundedAssets = [
     "data/gemini-rule-qa-v1/manifest.json",
+    "data/gemini-rule-qa-v1/navigation-lexical-index.bm25.gz",
     "data/gemini-rule-qa-v1/navigation-records.json.gz",
     "data/gemini-rule-qa-v1/qa-lexical-index.bm25.gz",
     "data/gemini-rule-qa-v1/qa-records.json.gz",
@@ -275,7 +282,7 @@ test("Vercel verifies the source, runtime, and enabled Gemini asset bindings bef
     assert.deepEqual(
       matchedFiles(boundedAssetFiles, included, excluded),
       expectedBoundedAssets,
-      `${route} must package exactly the six Gemini runtime files and two files per dense index`,
+      `${route} must package exactly the seven Gemini runtime files and two files per dense index`,
     );
     assert.match(excluded, /data\/\{cards,rulings,qa-index,evidence-index,ocg-rule-corpus,official-responses\}\.json/u);
     assert.match(excluded, /data\/evidence-index\.json\.gz/u);

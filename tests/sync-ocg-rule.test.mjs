@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { hashOcgRuleRecords, validateOcgRuleSnapshot } from "../scripts/sync-ocg-rule.mjs";
+import {
+  assertCompleteOcgRuleFetch,
+  buildDocTargets,
+  hashOcgRuleRecords,
+  loadRulePage,
+  validateOcgRuleSnapshot,
+} from "../scripts/sync-ocg-rule.mjs";
 
 function records(count) {
   return Array.from({ length: count }, (_, index) => ({
@@ -57,4 +63,59 @@ test("OCG Rule content hash uses locale-independent code-unit ordering", () => {
 
   assert.equal(hashOcgRuleRecords(source), hashOcgRuleRecords([...source].reverse()));
   assert.equal(hashOcgRuleRecords(source).length, 64);
+});
+
+test("OCG Rule enumeration excludes the confirmed links infrastructure page", () => {
+  const targets = buildDocTargets({
+    docnames: ["index", "links", "c01/short-rule"],
+    titles: ["Index", "Links", "Short rule"],
+  });
+
+  assert.deepEqual(targets.map((target) => target.docname), ["c01/short-rule"]);
+});
+
+test("OCG Rule page loading accepts a non-empty short canonical body", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response("<article><p>短正文</p></article>", { status: 200 });
+  try {
+    const doc = {
+      docname: "c01/short-rule",
+      title: "Short rule",
+      sourceUrl: "https://example.test/c01/short-rule.html",
+    };
+    const result = await loadRulePage(doc);
+    assert.equal(result.error, undefined);
+    assert.equal(result.record?.text, "短正文");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("OCG Rule page loading rejects an actually empty canonical body", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response("<article>   </article>", { status: 200 });
+  try {
+    const doc = {
+      docname: "c01/empty-rule",
+      title: "Empty rule",
+      sourceUrl: "https://example.test/c01/empty-rule.html",
+    };
+    const result = await loadRulePage(doc);
+    assert.equal(result.record, undefined);
+    assert.equal(result.error, "page_text_empty");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("OCG Rule incomplete fetch error identifies the failed URL and cause", () => {
+  const doc = {
+    docname: "c01/broken-rule",
+    sourceUrl: "https://example.test/c01/broken-rule.html",
+  };
+  assert.throws(() => assertCompleteOcgRuleFetch({
+    enumeratedDocs: [doc],
+    maxPages: 10,
+    pageResults: [{ doc, error: "503 Service Unavailable" }],
+  }), /https:\/\/example\.test\/c01\/broken-rule\.html: 503 Service Unavailable/u);
 });

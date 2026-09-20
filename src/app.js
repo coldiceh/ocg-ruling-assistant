@@ -6295,14 +6295,28 @@ function renderSources(sources) {
 
 function sourceEvidenceBlocks(source) {
   const keys = ['question', 'rawQuestion', 'rawDetailedQuestion', 'detailedScene', 'answer', 'conclusion', 'text', 'fullText', 'officialText'];
-  let body = source;
+  let body = source.sourceRecord || source;
   // Gemini packs the complete QA source record as JSON. Display its available
   // body fields as plain text; never render source HTML or cut an excerpt.
   try {
     const record = JSON.parse(source.text);
     if (record && ['qa', 'card-faq'].includes(record.recordType)) body = record;
   } catch { /* Ordinary rule paragraphs are already plain text. */ }
+  if (body !== source) return [renderSourceFields(body)];
   return [...new Set(keys.map(key => body[key]).filter(value => typeof value === 'string' && value.length))];
+}
+
+// Same field-and-text display as the server. This classic browser script does
+// not import server modules. Source values always go into textContent.
+function renderSourceFields(value) {
+  if (typeof value === 'string') return value === '' ? '""' : value;
+  if (value === null || typeof value !== 'object') return JSON.stringify(value) ?? 'null';
+  if (Array.isArray(value)) return value.length
+    ? '[\n' + Array.from(value, renderSourceFields).join('\n,\n') + '\n]' : '[]';
+  const entries = Object.entries(value).filter(([, item]) =>
+    item !== undefined && typeof item !== 'function' && typeof item !== 'symbol');
+  if (!entries.length) return '{}';
+  return '{\n' + entries.map(([key, item]) => key + ': ' + renderSourceFields(item)).join('\n') + '\n}';
 }
 
 function renderFeedbackPanel(answer) {
