@@ -457,3 +457,145 @@ test("unrecognized incomplete reason is retained in the failure artifact and can
   assert.equal(report.responseDiagnostic.incompleteReason, "content_filter");
   await assert.rejects(readFile(join(outDir, "gemini-rule-qa-v1", "manifest.json")), /ENOENT/u);
 });
+
+async function changedCostFixture(t) {
+  const source = await fixture(t);
+  const path = join(source.dataDir, "ocg-rule-corpus.json");
+  const rules = JSON.parse(await readFile(path, "utf8"));
+  rules.records[0].text = "changed report-only fixture rule";
+  await writeFile(path, JSON.stringify(rules));
+  return source;
+}
+function costDependencies() {
+  return {
+    navigationTransportFactory: (contract) => navigationTransport(contract, { calls: 0 }),
+    embedBatch: async (texts) => ({
+      embeddings: texts.map(() => ({ values: Array(EMBEDDING_DIMENSION).fill(0.25) })),
+      usageMetadata: { promptTokenCount: 100 },
+    }),
+  };
+}
+function costOptions(source, suffix) {
+  return { dataDir: source.dataDir, outDir: join(source.directory, suffix),
+    cacheDir: join(source.directory, "run-cost-cache"), execute: true,
+    reportOnlyCost: true, env: {} };
+}
+
+test("report-only full sync needs no ledger or max-usd, reports both providers and replay costs zero", async (t) => {
+  const source = await changedCostFixture(t);
+  const first = await runBoundedEvidenceAssetSync(costOptions(source, "cost-first"), costDependencies());
+  assert.equal(first.report.publishable, true);
+  assert.equal(first.report.cost.requestsAttempted, 2);
+  assert.equal(first.report.cost.byProvider.bai.knownCostUsd, 0.000044);
+  assert.equal(first.report.cost.byProvider.gemini.knownCostUsd, 0.00002);
+  assert.equal(first.report.cost.totalCostUsd, 0.000064);
+  const replay = await runBoundedEvidenceAssetSync(costOptions(source, "cost-replay"), {
+    navigationTransportFactory: () => { throw new Error("must_not_repeat_paid_navigation"); },
+    embedBatch: async () => { throw new Error("must_not_repeat_paid_embeddings"); },
+  });
+  assert.equal(replay.report.publishable, true);
+  assert.equal(replay.report.cost.requestsAttempted, 0);
+  assert.equal(replay.report.cost.totalCostUsd, 0);
+});
+
+test("report-only cloud wiring receives reporter instead of requiring cumulative budget", async (t) => {
+  const source = await changedCostFixture(t);
+  const { createLocalEvidencePreprocessCache } = await import("../scripts/lib/evidence-preprocess-cache.mjs");
+  const options = { ...costOptions(source, "cloud-cost"), cloud: true };
+  let calls = 0;
+  const result = await runBoundedEvidenceAssetSync(options, {
+    ...costDependencies(),
+    createCloudResources: async ({ reportOnlyCost, costReporter, env }) => {
+      calls += 1;
+      assert.equal(reportOnlyCost, true);
+      assert.equal(costReporter.reportOnly, true);
+      assert.equal(env.EVIDENCE_PREPROCESS_MAX_USD, undefined);
+      return { budget: costReporter, cache: createLocalEvidencePreprocessCache({ cacheDir: options.cacheDir }) };
+    },
+  });
+  assert.equal(calls, 1);
+  assert.equal(result.report.cost.totalCostUsd, 0.000064);
+});
+
+test("report-only captures navigation usage even when saving the response fails", async (t) => {
+  const source = await changedCostFixture(t);
+  const { createLocalEvidencePreprocessCache } = await import("../scripts/lib/evidence-preprocess-cache.mjs");
+  const options = costOptions(source, "cache-error-cost");
+  const cache = createLocalEvidencePreprocessCache({ cacheDir: options.cacheDir });
+  await assert.rejects(runBoundedEvidenceAssetSync(options, {
+    ...costDependencies(), cache: { ...cache, saveNavigationProviderRaw: async () => { throw new Error("fixture_cache_write_failed"); } },
+  }), /fixture_cache_write_failed/);
+  const report = JSON.parse(await readFile(join(options.outDir, "run-cost.json"), "utf8"));
+  assert.equal(report.outcome, "failed");
+  assert.equal(report.requestsAttempted, 1);
+  assert.equal(report.totalCostUsd, 0.000044);
+});
+
+test("provider exception gives unknown request cost, not a zero bill", async (t) => {
+  const source = await changedCostFixture(t);
+  const options = costOptions(source, "lost-response-cost");
+  await assert.rejects(runBoundedEvidenceAssetSync(options, {
+    ...costDependencies(),
+    navigationTransportFactory: (contract) => ({ ...navigationTransport(contract, { calls: 0 }),
+      invoke: async () => { throw new Error("fixture_connection_lost"); } }),
+  }), /fixture_connection_lost/);
+  const report = JSON.parse(await readFile(join(options.outDir, "run-cost.json"), "utf8"));
+  assert.equal(report.outcome, "failed");
+  assert.equal(report.unknownCostRequests, 1);
+  assert.equal(report.totalCostUsd, null);
+});
+
+test("invalid embedding response still contributes its reported usage to failed-run cost", async (t) => {
+  const source = await changedCostFixture(t);
+  const options = costOptions(source, "bad-embedding-cost");
+  await assert.rejects(runBoundedEvidenceAssetSync(options, {
+    ...costDependencies(), embedBatch: async () => ({ embeddings: [], usageMetadata: { promptTokenCount: 100 } }),
+  }), /embedding_response_count_invalid/);
+  const report = JSON.parse(await readFile(join(options.outDir, "run-cost.json"), "utf8"));
+  assert.equal(report.outcome, "failed");
+  assert.equal(report.totalCostUsd, 0.000064);
+});
+
+test("report-only preserves one output recovery and counts each fresh response exactly once", async (t) => {
+  const source = await changedCostFixture(t);
+  const options = costOptions(source, "recovery-cost");
+  const caps = [];
+  const result = await runBoundedEvidenceAssetSync(options, {
+    ...costDependencies(),
+    navigationTransportFactory: (contract) => {
+      const base = navigationTransport(contract, { calls: 0 });
+      return { ...base,
+        validateResponse: (r) => createEvidenceGenerationTransport({ contract, env: {} }).validateResponse(r),
+        invoke: async (body) => {
+          caps.push(body.max_output_tokens);
+          const r = await base.invoke(body);
+          return body.max_output_tokens === 2048
+            ? { ...r, status: "incomplete", incomplete_details: { reason: "max_output_tokens" } } : r;
+        },
+      };
+    },
+  });
+  assert.deepEqual(caps, [2048, 8192]);
+  assert.equal(result.report.cost.requestsAttempted, 3);
+  assert.equal(result.report.cost.totalCostUsd, 0.000108);
+});
+
+test("report-only rejects incomplete response, preserves known failed-call cost and does not embed", async (t) => {
+  const source = await changedCostFixture(t);
+  const options = costOptions(source, "incomplete-cost");
+  await assert.rejects(runBoundedEvidenceAssetSync(options, {
+    ...costDependencies(),
+    navigationTransportFactory: (contract) => {
+      const base = navigationTransport(contract, { calls: 0 });
+      return { ...base,
+        validateResponse: (r) => createEvidenceGenerationTransport({ contract, env: {} }).validateResponse(r),
+        invoke: async (body) => ({ ...(await base.invoke(body)), status: "incomplete", incomplete_details: { reason: "unknown" } }),
+      };
+    },
+    embedBatch: async () => { throw new Error("must_not_embed"); },
+  }), /evidence_generation_response_incomplete/);
+  const report = JSON.parse(await readFile(join(options.outDir, "bounded-evidence-sync-report.json"), "utf8"));
+  assert.equal(report.publishable, false);
+  assert.equal(report.cost.totalCostUsd, 0.000044);
+  assert.equal(report.cost.requestsAttempted, 1);
+});

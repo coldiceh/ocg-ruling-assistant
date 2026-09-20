@@ -29,7 +29,20 @@ export function createUpstashRedisCommand({ url, token, fetchImpl = globalThis.f
 export async function createCloudEvidencePreprocessResources({
   env = process.env,
   fetchImpl = globalThis.fetch,
+  reportOnlyCost = false,
+  costReporter = null,
 } = {}) {
+  if (reportOnlyCost) {
+    if (costReporter?.reportOnly !== true) throw new Error("evidence_run_cost_reporter_required");
+    // Keep the paid-result cache namespace. Do not read or modify the old ledger.
+    const cacheNamespace = requiredMatch(env.EVIDENCE_PREPROCESS_CACHE_NAMESPACE,
+      /^[a-zA-Z0-9._-]{1,160}$/u, "evidence_preprocess_cache_namespace_required");
+    const command = createUpstashRedisCommand({ ...redisConfig(env), fetchImpl });
+    return Object.freeze({ command,
+      cache: createRedisEvidencePreprocessCache({ command, namespace: cacheNamespace }),
+      budget: costReporter,
+    });
+  }
   const { redis, authorizationId, ledgerKey, cacheNamespace } = cloudConfig(env);
   const maxUsd = Number(env.EVIDENCE_PREPROCESS_MAX_USD);
   if (!(maxUsd > 0)) throw new Error("evidence_preprocess_max_usd_required");

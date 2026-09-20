@@ -33,6 +33,7 @@ import {
   stableJson,
 } from "./lib/evidence-preprocess-cache.mjs";
 import { createCloudEvidencePreprocessResources } from "./lib/evidence-preprocess-cloud.mjs";
+import { createEvidenceRunCostReporter, formatEvidenceRunCost } from "./lib/evidence-preprocess-run-cost.mjs";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const rootDir = join(scriptDir, "..");
@@ -51,6 +52,9 @@ export async function runBoundedEvidenceAssetSync(options = {}, dependencies = {
   await assertFreshOutputDirectory(normalized.outDir);
   const assetDir = join(normalized.outDir, GEMINI_RULE_QA_ASSET_DIRECTORY);
   const reportPath = join(normalized.outDir, REPORT_FILE);
+  const costReporter = normalized.reportOnlyCost && normalized.execute
+    ? createEvidenceRunCostReporter({ reportPath: join(normalized.outDir, "run-cost.json") })
+    : null;
   const report = {
     schemaVersion: 1,
     kind: "bounded-evidence-asset-sync",
@@ -64,6 +68,7 @@ export async function runBoundedEvidenceAssetSync(options = {}, dependencies = {
   };
 
   try {
+    if (costReporter) await costReporter.persist();
     const builder = dependencies.buildGeminiRuleQaAssets || buildGeminiRuleQaAssets;
     const canonical = await builder({
       dataDir: normalized.dataDir,
@@ -136,20 +141,25 @@ export async function runBoundedEvidenceAssetSync(options = {}, dependencies = {
       : false;
     const preliminaryNeedsEmbeddingWork = embeddingNeedsBudget(embeddingDry);
     let cache = preliminaryCache;
-    let budget = dependencies.budget || null;
+    let budget = costReporter || dependencies.budget || null;
     if (preliminaryNeedsNavigationWork || preliminaryNeedsEmbeddingWork) {
-      if (!(normalized.maxUsd > 0)) throw codedError("bounded_sync_max_usd_required_for_changes", 2);
-      if (dependencies.budget) {
-        cache = dependencies.cache || preliminaryCache;
+      if (!normalized.reportOnlyCost && !(normalized.maxUsd > 0)) throw codedError("bounded_sync_max_usd_required_for_changes", 2);
+      if (dependencies.cache && budget) {
+        cache = dependencies.cache;
+      } else if (dependencies.budget && !normalized.reportOnlyCost) {
+        cache = preliminaryCache;
       } else if (normalized.cloud) {
         const cloudFactory = dependencies.createCloudResources || createCloudEvidencePreprocessResources;
         const cloud = await cloudFactory({
-          env: { ...normalized.env, EVIDENCE_PREPROCESS_MAX_USD: String(normalized.maxUsd) },
+          env: normalized.reportOnlyCost ? normalized.env
+            : { ...normalized.env, EVIDENCE_PREPROCESS_MAX_USD: String(normalized.maxUsd) },
           fetchImpl: dependencies.fetchImpl || globalThis.fetch,
+          reportOnlyCost: normalized.reportOnlyCost,
+          costReporter,
         });
         cache = cloud.cache;
         budget = cloud.budget;
-      } else {
+      } else if (!normalized.reportOnlyCost) {
         if (!normalized.ledgerPath) throw codedError("bounded_sync_local_ledger_required_for_changes", 2);
         budget ||= createLocalEvidencePreprocessBudget({
           ledgerPath: normalized.ledgerPath,
@@ -259,14 +269,18 @@ export async function runBoundedEvidenceAssetSync(options = {}, dependencies = {
     report.status = "ready_to_publish";
     report.publishable = true;
     report.bundleRevision = verified.manifest.bundleRevision;
+    if (costReporter) report.cost = await costReporter.finish("success");
     await writeJsonAtomic(reportPath, report);
     return { report, reportPath, outputDir: normalized.outDir, manifest: verified.manifest };
   } catch (error) {
     report.status = "failed";
     report.error = error?.message || String(error);
     if (error?.responseDiagnostic) report.responseDiagnostic = error.responseDiagnostic;
+    if (costReporter) report.cost = await costReporter.finish("failed");
     await writeJsonAtomic(reportPath, report).catch(() => {});
     throw error;
+  } finally {
+    if (costReporter) console.log(formatEvidenceRunCost(costReporter.summary()));
   }
 }
 
@@ -432,6 +446,7 @@ function normalizeOptions(options) {
       : null,
     ledgerPath: options.ledgerPath ? resolve(options.ledgerPath) : null,
     cloud: Boolean(options.cloud),
+    reportOnlyCost: Boolean(options.reportOnlyCost),
     execute: Boolean(options.execute),
     maxUsd: Number(options.maxUsd),
     batchSize,
@@ -461,6 +476,7 @@ function parseArguments(argv) {
     else if (argument === "--max-usd") options.maxUsd = Number(take(index++));
     else if (argument === "--batch-size") options.batchSize = Number(take(index++));
     else if (argument === "--cloud") options.cloud = true;
+    else if (argument === "--report-only-cost") options.reportOnlyCost = true;
     else if (argument === "--execute") options.execute = true;
     else if (argument === "--dry-run") options.execute = false;
     else throw codedError(`unknown_argument:${argument}`, 2);

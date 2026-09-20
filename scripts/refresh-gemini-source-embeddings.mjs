@@ -139,7 +139,7 @@ export async function runEmbeddingRefresh({
   if (!outDir) throw codedError("embedding_output_dir_required", 2);
   const totalMisses = Object.values(plans).reduce((sum, plan) => sum + plan.rows.filter((row) => row.state === "generation_miss").length, 0);
   const reusableRaw = Object.values(plans).some((plan) => plan.rows.some((row) => row.state === "raw_reusable"));
-  if ((totalMisses && (typeof embedBatch !== "function" || !(maxUsd > 0)))
+  if ((totalMisses && (typeof embedBatch !== "function" || (!(maxUsd > 0) && resolvedBudget?.reportOnly !== true)))
       || ((totalMisses || reusableRaw) && !resolvedBudget)) {
     throw codedError("embedding_execute_configuration_incomplete", 2);
   }
@@ -226,7 +226,7 @@ async function fillEmbeddingMisses({ plan, cache, embedBatch, budget, batchSize 
     }
     const reserve = claimed.length * EMBEDDING_MAX_INPUT_TOKENS * EMBEDDING_PRICE_USD_PER_MILLION / 1_000_000;
     try {
-      await budget.reserve({ ticket: requestTicket, amountUsd: reserve });
+      await budget.reserve({ ticket: requestTicket, amountUsd: reserve, providerId: "gemini", modelId: EMBEDDING_MODEL });
     } catch (error) {
       for (const row of claimed) await cache.releaseClaim("dense", row.key, requestTicket);
       if (batchClaimOwned) await cache.releaseClaim("dense-batch", requestKey, requestTicket);
@@ -243,6 +243,8 @@ async function fillEmbeddingMisses({ plan, cache, embedBatch, budget, batchSize 
     const spentUsd = Number.isSafeInteger(tokens) && tokens >= 0
       ? tokens * EMBEDDING_PRICE_USD_PER_MILLION / 1_000_000
       : null;
+    if (budget.recordUsage) await budget.recordUsage({ ticket: requestTicket,
+      usage: { billableCost: { status: spentUsd === null ? "unknown" : "known", amountUsd: spentUsd } } });
     batchRaw = {
       schemaVersion: 1,
       kind: "dense-batch-raw",

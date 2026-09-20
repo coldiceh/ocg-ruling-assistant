@@ -44,7 +44,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Test navigation output recovery (no provider calls)
-        run: node --test tests/evidence-navigation-output-recovery.test.mjs tests/evidence-generation-transport.test.mjs tests/evidence-preprocess-navigation.test.mjs tests/evidence-preprocess-cloud.test.mjs tests/sync-bounded-evidence-assets.test.mjs tests/bai-evidence-generation-profile.test.mjs
+        run: node --test tests/evidence-navigation-output-recovery.test.mjs tests/evidence-generation-transport.test.mjs tests/evidence-preprocess-navigation.test.mjs tests/evidence-preprocess-cloud.test.mjs tests/sync-bounded-evidence-assets.test.mjs tests/bai-evidence-generation-profile.test.mjs tests/evidence-preprocess-run-cost.test.mjs
 
       - name: Sync YGOResources snapshot
         env:
@@ -90,53 +90,27 @@ jobs:
       - name: Incrementally refresh current navigation and Gemini vectors
         id: bounded_sync
         env:
-          EVIDENCE_PREPROCESS_AUTHORIZATION_ID: ${{ vars.EVIDENCE_PREPROCESS_AUTHORIZATION_ID }}
-          EVIDENCE_PREPROCESS_LEDGER_KEY: ${{ vars.EVIDENCE_PREPROCESS_LEDGER_KEY }}
           EVIDENCE_PREPROCESS_CACHE_NAMESPACE: ${{ vars.EVIDENCE_PREPROCESS_CACHE_NAMESPACE }}
-          EVIDENCE_PREPROCESS_MAX_USD: ${{ vars.EVIDENCE_PREPROCESS_MAX_USD }}
           GEMINI_RULE_QA_API_KEY: ${{ secrets.GEMINI_RULE_QA_API_KEY }}
           RAG_EVIDENCE_BAI_API_KEY: ${{ secrets.RAG_EVIDENCE_BAI_API_KEY }}
           BAI_API_KEY: ${{ secrets.BAI_API_KEY }}
           UPSTASH_BUDGET_KV_REST_API_URL: ${{ secrets.UPSTASH_BUDGET_KV_REST_API_URL }}
           UPSTASH_BUDGET_KV_REST_API_TOKEN: ${{ secrets.UPSTASH_BUDGET_KV_REST_API_TOKEN }}
         run: |
-          # Initialization is SET NX: an existing ledger keeps all spending and
-          # reservations across daily runs and manual retries.
-          node --input-type=module <<'NODE'
-          import { initializeCloudEvidencePreprocessLedger } from './scripts/lib/evidence-preprocess-cloud.mjs';
-          const result = await initializeCloudEvidencePreprocessLedger({ ledger: {
-            schemaVersion: 1,
-            authorizationId: process.env.EVIDENCE_PREPROCESS_AUTHORIZATION_ID,
-            limitUsd: Number(process.env.EVIDENCE_PREPROCESS_MAX_USD),
-            spentUsd: 0, reservedUsd: 0, tickets: {},
-          } });
-          console.log(JSON.stringify({ ledgerStatus: result.status,
-            limitUsd: result.ledger.limitUsd, spentUsd: result.ledger.spentUsd,
-            reservedUsd: result.ledger.reservedUsd }));
-          NODE
-          set +e
+          # Report-only costs: no cumulative budget or Redis ledger access.
           node scripts/sync-bounded-evidence-assets.mjs \
             --data-dir data \
             --out-dir "$RUNNER_TEMP/bounded-evidence-stage" \
             --cache-dir "$RUNNER_TEMP/bounded-evidence-cache" \
             --generation-profile config/evidence-generation/bai-gpt-5.6-luna-medium-theoretical.json \
-            --max-usd "$EVIDENCE_PREPROCESS_MAX_USD" \
+            --report-only-cost \
             --cloud \
             --execute
-          bounded_status=$?
-          node --input-type=module <<'NODE'
-          import { readCloudEvidencePreprocessLedger } from './scripts/lib/evidence-preprocess-cloud.mjs';
-          const ledger = await readCloudEvidencePreprocessLedger();
-          console.log(JSON.stringify({ ledgerStatus: 'after_sync',
-            accountingBasis: 'project_ledger_not_supplier_invoice',
-            limitUsd: ledger.limitUsd, spentUsd: ledger.spentUsd,
-            reservedUsd: ledger.reservedUsd,
-            remainingUsd: ledger.limitUsd - ledger.spentUsd - ledger.reservedUsd }));
-          NODE
-          ledger_status=$?
-          set -e
-          if [ "$bounded_status" -ne 0 ]; then exit "$bounded_status"; fi
-          if [ "$ledger_status" -ne 0 ]; then exit "$ledger_status"; fi
+
+      - name: Report this run's model API cost
+        if: ${{ always() && steps.bounded_sync.outcome != 'skipped' }}
+        continue-on-error: true
+        run: node scripts/lib/evidence-preprocess-run-cost.mjs "$RUNNER_TEMP/bounded-evidence-stage/run-cost.json"
 
       - name: Promote verified bounded evidence assets
         run: |
@@ -257,7 +231,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: bounded-daily-report-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/bounded-evidence-stage/bounded-evidence-sync-report.json
+          path: |
+            ${{ runner.temp }}/bounded-evidence-stage/bounded-evidence-sync-report.json
+            ${{ runner.temp }}/bounded-evidence-stage/run-cost.json
           if-no-files-found: warn
           retention-days: 3
 

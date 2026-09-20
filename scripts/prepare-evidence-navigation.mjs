@@ -636,7 +636,7 @@ async function generateOneNavigation({ row, cache, contract, budget, countTokens
       const reserve = estimateGenerationUpperBoundUsd({ measurement, contract }).amountUsd;
       const requestTicket = `nav-request-${randomUUID()}`;
       try {
-        await budget.reserve({ ticket: requestTicket, amountUsd: reserve });
+        await budget.reserve({ ticket: requestTicket, amountUsd: reserve, providerId: contract.providerId, modelId: contract.modelId });
       } catch (error) {
         if (error?.code !== "evidence_preprocess_budget_exceeded") throw error;
         await cache.releaseNavigationClaim(row.key, claimTicket);
@@ -644,6 +644,9 @@ async function generateOneNavigation({ row, cache, contract, budget, countTokens
         return { status: "blocked_before_attempt", record: emptyNavigationRecord(row.input, "blocked_before_attempt", "budget_exceeded") };
       }
       const providerResponse = await generateContent(body, contract, { measurement });
+      // Capture usage even when persistence or response validation later fails.
+      if (budget.recordUsage) await budget.recordUsage({ ticket: requestTicket,
+        usage: normalizeUsage(rawUsage(providerResponse, contract), contract) });
       const providerRaw = {
         schemaVersion: 1,
         kind: "provider-raw",
