@@ -634,7 +634,8 @@ export function createCloudRequestBudget({env, fetchImpl = globalThis.fetch, com
       pricingBasis = 'google_list_theoretical_embedding_input_bound';
     } else {
       const output = geminiTokenCount(
-        body?.generationConfig?.maxOutputTokens,
+        measuredGeneration && generationContract.outputLimitConfig.omitFromRequest
+          ? generationContract.maxBillableOutputTokens : body?.generationConfig?.maxOutputTokens,
         'gemini_output_limit',
         { allowZero: false },
       );

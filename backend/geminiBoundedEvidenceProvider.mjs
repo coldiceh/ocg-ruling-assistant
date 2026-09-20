@@ -178,10 +178,11 @@ function waitForShared(promise, signal) {
 
 function applyGenerationContract(body, contract) {
   if (contract.providerId !== 'gemini') return body;
+  const { maxOutputTokens: _priorOutputLimit, ...generationConfig } = body.generationConfig || {};
   return { ...body, generationConfig: {
-    ...body.generationConfig,
+    ...generationConfig,
     thinkingConfig: cloneValue(contract.reasoningConfig.thinkingConfig),
-    maxOutputTokens: contract.outputLimitConfig.maxOutputTokens,
+    ...(contract.outputLimitConfig.omitFromRequest ? {} : { maxOutputTokens: contract.outputLimitConfig.maxOutputTokens }),
     responseMimeType: contract.responseFormatConfig.responseMimeType,
   } };
 }
@@ -300,13 +301,16 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
     env = {}, signal: outerSignal, assetsPromise, elapsedBeforeRetrievalMs = 0 }) {
     const started = performance.now();
     const deadlineMs = offlineLimits?.deadlineMs
-      ?? positiveConfig(env, 'GEMINI_EVIDENCE_DEADLINE_MS', DEADLINE_MS, 60000);
-    const remainingMs = Math.floor(deadlineMs - elapsedBeforeRetrievalMs);
+      ?? (String(env.GEMINI_EVIDENCE_DEADLINE_MS) === '0' ? null
+        : positiveConfig(env, 'GEMINI_EVIDENCE_DEADLINE_MS', DEADLINE_MS, 60000));
+    const remainingMs = deadlineMs === null ? Infinity : Math.floor(deadlineMs - elapsedBeforeRetrievalMs);
     if (remainingMs <= 0) throw new Error('evidence_deadline_exceeded');
-    const signal = outerSignal ? AbortSignal.any([outerSignal, AbortSignal.timeout(remainingMs)]) : AbortSignal.timeout(remainingMs);
+    const signal = deadlineMs === null ? (outerSignal || new AbortController().signal)
+      : outerSignal ? AbortSignal.any([outerSignal, AbortSignal.timeout(remainingMs)]) : AbortSignal.timeout(remainingMs);
     const fx = positiveConfig(env, 'GEMINI_EVIDENCE_FX_CNY_PER_USD', 7);
     const perQuestionMaxUsd = offlineLimits?.perQuestionMaxUsd
-      ?? positiveConfig(env, 'GEMINI_EVIDENCE_MAX_CNY', 0.30, 0.30) / fx;
+      ?? (String(env.GEMINI_EVIDENCE_MAX_CNY) === '0' ? Infinity
+        : positiveConfig(env, 'GEMINI_EVIDENCE_MAX_CNY', 0.30, 0.30) / fx);
     const maxPromptChars = offlineLimits?.maxPromptChars
       ?? positiveIntegerConfig(env, 'GEMINI_EVIDENCE_MAX_PROMPT_CHARS', GEMINI_EVIDENCE_MAX_PROMPT_CHARS, MAX_PROMPT_CHARS);
     let maxUsd = perQuestionMaxUsd;
@@ -703,7 +707,8 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
           schedulerContract: READING_SCHEDULER_CONTRACT, coverageScope: assets.coverageScope,
           readGroupIds: admitted.offered.map(bundle => bundle.unitKey), selectedIds: selection.selectedIds,
           omittedGroupIds: admitted.omitted.map(unit => unit.unitKey), estimatedCostUsd: spentUsd,
-          maxPromptChars, deadlineMs, readTargetChars: readChars, perQuestionMaxUsd, maxUsd,
+          maxPromptChars, deadlineMs, readTargetChars: readChars,
+          perQuestionMaxUsd: Number.isFinite(perQuestionMaxUsd) ? perQuestionMaxUsd : null, maxUsd,
           fx, fxVersion: 'trial-fixed-7-cny-per-usd' } };
       await onEvent({ type: 'packed', selection: resolved, ...result });
       return { ...result, telemetry };

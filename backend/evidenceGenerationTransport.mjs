@@ -40,7 +40,7 @@ export function convertEvidenceGenerationRequest(body, contract) {
     ...(instructions ? { instructions } : {}),
     input: wireInput,
     stream: false,
-    max_output_tokens: contract.maxBillableOutputTokens,
+    ...(contract.outputLimitConfig?.omitFromRequest ? {} : { max_output_tokens: contract.maxBillableOutputTokens }),
     reasoning: structuredClone(reasoning),
     text: { format: structuredClone(responseFormat) },
   };

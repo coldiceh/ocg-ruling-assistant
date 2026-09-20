@@ -58,6 +58,34 @@ const input = { userQuery: "original complete question and scene", dataRevision:
   retrievedEvidence: { cardTexts: [{ id: "card-text", text: "complete canonical card text" }],
     userProvidedCardTexts: [{ name: "user fixture", text: "complete user-supplied text" }] } };
 
+const unrestrictedEvidenceEnv = { ...input.env,
+  EVIDENCE_GENERATION_OUTPUT_LIMIT: 'provider',
+  GEMINI_EVIDENCE_DEADLINE_MS: '0', GEMINI_EVIDENCE_MAX_CNY: '0',
+  GEMINI_EVIDENCE_MAX_PROMPT_CHARS: '15000' };
+
+test('production request can omit output, single-question cost and deadline limits', async () => {
+  const { provider, requests } = fixture({ countTokens: 100000 });
+  const result = await provider.retrieve({ ...input, env: unrestrictedEvidenceEnv,
+    elapsedBeforeRetrievalMs: 61000 });
+  assert.equal(requests.length, 2);
+  for (const request of requests) assert.equal(Object.hasOwn(request.generationConfig, 'maxOutputTokens'), false);
+  assert.equal(result.telemetry.bounded.deadlineMs, null);
+  assert.equal(result.telemetry.bounded.perQuestionMaxUsd, null);
+  assert.equal(result.telemetry.bounded.maxPromptChars, 15000);
+  assert.ok(result.packing.prompt.length <= 15000);
+});
+
+test('removing generation limits still rejects a final evidence prompt over 15000 characters', async () => {
+  const oversizedQa = { ...qa, answer: 'complete fixture body '.repeat(900) };
+  const { provider } = fixture({ assets: schema3Assets([rule], [oversizedQa]),
+    select: delivered => ({ selectedIds: delivered.qaAliases, unableToSelect: false, note: '' }) });
+  await assert.rejects(provider.retrieve({ ...input, env: { ...unrestrictedEvidenceEnv,
+    GEMINI_EVIDENCE_READING_TARGET_CHARS: '100000' } }), error => {
+    assert.ok(error.boundedRetrieval.packingFailure.actualPromptChars > 15000);
+    return true;
+  });
+});
+
 function fixture({ assets = schema3Assets(), plan, select, countTokens = 500,
   denseRules, denseQa } = {}) {
   const requests = [];

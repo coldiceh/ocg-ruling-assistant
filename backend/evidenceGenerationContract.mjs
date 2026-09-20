@@ -185,14 +185,20 @@ export function loadEvidenceGenerationContract(stage, { profileUrl, env = {} } =
     throw new Error('evidence_generation_profile_stage_missing');
   }
   const { profileId, stages: _stages, ...base } = profile;
+  const useProviderOutputLimit = env.EVIDENCE_GENERATION_OUTPUT_LIMIT === 'provider';
+  // Keep a finite accounting/context reservation even when the request omits its output cap.
+  const maxBillableOutputTokens = useProviderOutputLimit
+    ? base.capacityContract.maxOutputTokens : stageConfig.maxBillableOutputTokens;
   const contract = {
     ...base,
     ...stageConfig,
+    maxBillableOutputTokens,
     stage,
     contractId: `${profileId}:${stage}:v1`,
     outputLimitConfig: {
       ...base.outputLimitConfig,
-      maxOutputTokens: stageConfig.maxBillableOutputTokens,
+      maxOutputTokens: maxBillableOutputTokens,
+      ...(useProviderOutputLimit ? { omitFromRequest: true } : {}),
     },
   };
   validateEvidenceGenerationContract(contract);
@@ -200,10 +206,12 @@ export function loadEvidenceGenerationContract(stage, { profileUrl, env = {} } =
 }
 
 function assertGenerationRequestProfile(body, contract) {
+  const outputLimit = contract.outputLimitConfig.omitFromRequest
+    ? undefined : contract.outputLimitConfig.maxOutputTokens;
   if (contract.providerId === 'bai') {
     if (body?.model !== contract.modelId
         || body?.stream !== false
-        || body?.max_output_tokens !== contract.outputLimitConfig.maxOutputTokens
+        || body?.max_output_tokens !== outputLimit
         || !jsonEqual(body?.reasoning, contract.reasoningConfig.responses)
         || !jsonEqual(body?.text?.format, contract.responseFormatConfig.responses)) {
       throw new Error('evidence_generation_request_profile_mismatch');
@@ -214,7 +222,7 @@ function assertGenerationRequestProfile(body, contract) {
   if (!config || typeof config !== 'object') {
     throw new Error('evidence_generation_request_profile_mismatch');
   }
-  if (config.maxOutputTokens !== contract.outputLimitConfig.maxOutputTokens
+  if (config.maxOutputTokens !== outputLimit
       || !jsonEqual(config.thinkingConfig, contract.reasoningConfig.thinkingConfig)
       || config.responseMimeType !== contract.responseFormatConfig.responseMimeType) {
     throw new Error('evidence_generation_request_profile_mismatch');

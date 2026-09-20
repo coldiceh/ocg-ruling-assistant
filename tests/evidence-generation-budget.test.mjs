@@ -43,6 +43,31 @@ function fixtureBudget() {
   return { budget, commands };
 }
 
+test('cloud dispatch reserves provider output capacity without requiring an output cap on the wire', async () => {
+  const contract = loadEvidenceGenerationContract('planning', {
+    env: { EVIDENCE_GENERATION_OUTPUT_LIMIT: 'provider' },
+  });
+  const body = bodyFor(contract);
+  delete body.generationConfig.maxOutputTokens;
+  const measurement = await buildEvidenceInputMeasurement({ body, contract,
+    countTokens: async () => ({ totalTokens: 100 }) });
+  const { budget, commands } = fixtureBudget();
+  let invoked = false;
+  await budget.gemini({ body, model: contract.modelId, operation: 'generate_content',
+    measurement, generationContract: contract, cachedTokenCount: 0,
+    invoke: async () => {
+      invoked = true;
+      return { usageMetadata: { promptTokenCount: 100, candidatesTokenCount: 200,
+        thoughtsTokenCount: 5800, totalTokenCount: 6100 } };
+    } });
+  assert.equal(invoked, true);
+  assert.equal(commands.length, 2);
+  const ticket = budget.snapshot().calls[0];
+  assert.equal(ticket.reservationMetadata.maxBillableOutputTokens, 65536);
+  assert.equal(ticket.status, 'usage_settled');
+  assert.equal(ticket.usage.thoughtsTokenCount, 5800);
+});
+
 test('frozen Gemini profile derives the two generation stages and navigation output bounds', () => {
   const planning = loadEvidenceGenerationContract('planning');
   const selection = loadEvidenceGenerationContract('selection');
