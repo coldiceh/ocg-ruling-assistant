@@ -97,6 +97,20 @@ jobs:
           UPSTASH_BUDGET_KV_REST_API_URL: ${{ secrets.UPSTASH_BUDGET_KV_REST_API_URL }}
           UPSTASH_BUDGET_KV_REST_API_TOKEN: ${{ secrets.UPSTASH_BUDGET_KV_REST_API_TOKEN }}
         run: |
+          # Initialization is SET NX: an existing ledger keeps all spending and
+          # reservations across daily runs and manual retries.
+          node --input-type=module <<'NODE'
+          import { initializeCloudEvidencePreprocessLedger } from './scripts/lib/evidence-preprocess-cloud.mjs';
+          const result = await initializeCloudEvidencePreprocessLedger({ ledger: {
+            schemaVersion: 1,
+            authorizationId: process.env.EVIDENCE_PREPROCESS_AUTHORIZATION_ID,
+            limitUsd: Number(process.env.EVIDENCE_PREPROCESS_MAX_USD),
+            spentUsd: 0, reservedUsd: 0, tickets: {},
+          } });
+          console.log(JSON.stringify({ ledgerStatus: result.status,
+            limitUsd: result.ledger.limitUsd, spentUsd: result.ledger.spentUsd,
+            reservedUsd: result.ledger.reservedUsd }));
+          NODE
           node scripts/sync-bounded-evidence-assets.mjs \
             --data-dir data \
             --out-dir "$RUNNER_TEMP/bounded-evidence-stage" \
