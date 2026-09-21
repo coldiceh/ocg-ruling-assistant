@@ -21,6 +21,7 @@ jobs:
       - name: Apply scoped provenance and preflight changes
         run: |
           python maintenance/patch-official-source.py
+          python -c 'from pathlib import Path; p=Path("scripts/lib/manual-capture-evidence-selection.mjs"); p.write_bytes(p.read_bytes().replace(b"\r\n",b"\n"))'
           node --check scripts/build-cloud-evidence-assets.mjs
           node --check scripts/lib/manual-capture-evidence-selection.mjs
           git diff --check
