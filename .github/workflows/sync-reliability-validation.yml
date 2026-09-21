@@ -27,6 +27,8 @@ jobs:
           git apply --check "$RUNNER_TEMP/repair.patch"
           git apply "$RUNNER_TEMP/repair.patch"
           git apply --numstat "$RUNNER_TEMP/repair.patch" | cut -f3 > "$RUNNER_TEMP/changed-paths.txt"
+          node maintenance/repair-publication-test.mjs
+          echo 'tests/gemini-rule-qa-assets.test.mjs' >> "$RUNNER_TEMP/changed-paths.txt"
           while IFS= read -r file; do node --check "$file"; done < "$RUNNER_TEMP/changed-paths.txt"
           git diff --check
       - name: Run repair and publication regressions with no provider credentials
@@ -61,7 +63,7 @@ jobs:
       - name: Commit only tested source and regression files to the repair branch
         run: |
           set -euo pipefail
-          test "$(wc -l < "$RUNNER_TEMP/changed-paths.txt")" -eq 16
+          test "$(wc -l < "$RUNNER_TEMP/changed-paths.txt")" -eq 17
           while IFS= read -r file; do case "$file" in scripts/*.mjs|scripts/lib/*.mjs|tests/*.mjs) git add -- "$file";; *) exit 1;; esac; done < "$RUNNER_TEMP/changed-paths.txt"
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
