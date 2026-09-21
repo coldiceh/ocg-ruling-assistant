@@ -2,6 +2,15 @@ name: Sync ruling data
 
 on:
   workflow_dispatch:
+    inputs:
+      resume_run_id:
+        description: 'Completed main run whose verified unpublished snapshot should be resumed (no paid calls)'
+        required: false
+        default: ''
+      resume_sequence:
+        description: 'Bounded CPU continuation sequence, 0 through 4'
+        required: false
+        default: '0'
   schedule:
     - cron: "0 19 * * *"
 
@@ -19,8 +28,11 @@ jobs:
     timeout-minutes: 120
     permissions:
       contents: write
+      actions: read
     outputs:
       data_changed: ${{ steps.commit.outputs.data_changed }}
+      checkpoint_ready: ${{ steps.checkpoint.outputs.ready }}
+      next_sequence: ${{ steps.checkpoint.outputs.next_sequence }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -43,10 +55,19 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Restore verified unpublished snapshot without paid calls
+        id: restore
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SYNC_RESUME_RUN_ID: ${{ inputs.resume_run_id || '' }}
+          SYNC_RESUME_SEQUENCE: ${{ inputs.resume_sequence || '0' }}
+        run: node scripts/restore-sync-checkpoint.mjs
+
       - name: Test navigation output recovery (no provider calls)
-        run: node --test tests/evidence-navigation-output-recovery.test.mjs tests/evidence-generation-transport.test.mjs tests/evidence-preprocess-navigation.test.mjs tests/evidence-preprocess-cloud.test.mjs tests/sync-bounded-evidence-assets.test.mjs tests/bai-evidence-generation-profile.test.mjs tests/evidence-preprocess-run-cost.test.mjs tests/evidence-sync-budget-speed.test.mjs tests/sync-official-reference.test.mjs
+        run: node --test tests/evidence-navigation-output-recovery.test.mjs tests/evidence-generation-transport.test.mjs tests/evidence-preprocess-navigation.test.mjs tests/evidence-preprocess-cloud.test.mjs tests/sync-bounded-evidence-assets.test.mjs tests/bai-evidence-generation-profile.test.mjs tests/evidence-preprocess-run-cost.test.mjs tests/evidence-sync-budget-speed.test.mjs tests/sync-official-reference.test.mjs tests/sync-cpu-continuation.test.mjs
 
       - name: Sync YGOResources snapshot
+        if: steps.restore.outputs.resumed != 'true'
         env:
           SYNC_ALL_RELEASED_CARDS: "true"
           SYNC_ONLY_RELEASED_CARDS: "true"
@@ -58,12 +79,14 @@ jobs:
         run: node scripts/sync-data.mjs
 
       - name: Sync OCG rule corpus
+        if: steps.restore.outputs.resumed != 'true'
         env:
           OCG_RULE_BASE_URL: "https://ocg-rule.readthedocs.io/zh-cn/latest/"
           OCG_RULE_MAX_PAGES: "240"
         run: node scripts/sync-ocg-rule.mjs
 
       - name: Preserve readable source fields and bodies
+        if: steps.restore.outputs.resumed != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: readable-sources-${{ github.run_id }}-${{ github.run_attempt }}
@@ -77,20 +100,24 @@ jobs:
           pnpm check:data
 
       - name: Diff ruling snapshot
+        if: steps.restore.outputs.resumed != 'true'
         run: |
           pnpm diff:rulings
           cp data/cards-lite.json data/snapshot-meta.json public/data/
 
       - name: Build current evidence index
+        if: steps.restore.outputs.resumed != 'true'
         run: pnpm build:evidence
 
       - name: Build versioned RAG data revision manifest
+        if: steps.restore.outputs.resumed != 'true'
         run: pnpm build:rag-revision
 
       - name: Validate cloud source identities and provenance before paid calls
         run: node scripts/build-cloud-evidence-assets.mjs --data-dir data --validate-only
 
       - name: Incrementally refresh current navigation and Gemini vectors
+        if: steps.restore.outputs.resumed != 'true'
         id: bounded_sync
         env:
           # Carry the last saved usage report from cancelled run 35544091500 once.
@@ -121,7 +148,12 @@ jobs:
         continue-on-error: true
         run: node scripts/lib/evidence-preprocess-run-cost.mjs "$RUNNER_TEMP/bounded-evidence-stage/run-cost.json"
 
+      - name: Report CPU-only continuation model cost
+        if: steps.restore.outputs.resumed == 'true'
+        run: 'echo "Resume model API cost: USD 0; paid stages skipped; previous paid results reused."'
+
       - name: Promote verified bounded evidence assets
+        if: steps.restore.outputs.resumed != 'true'
         run: |
           node --input-type=module -e 'import fs from "node:fs"; const report=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); if(report.publishable !== true) throw new Error("bounded_sync_not_publishable")' \
             "$RUNNER_TEMP/bounded-evidence-stage/bounded-evidence-sync-report.json"
@@ -177,6 +209,7 @@ jobs:
           CLOUD_EMBED_CPU_THREADS: "4"
           CLOUD_EMBED_BATCH_SIZE: "8"
           CLOUD_EMBED_CACHE_DIR: .cache/cloud-embeddings
+          CLOUD_EMBED_PROGRESS_PATH: ${{ runner.temp }}/cloud-sync-progress.json
           # Stop between batches while time remains to persist progress.
           CLOUD_EMBED_MAX_SECONDS: "2100"
           TOKENIZERS_PARALLELISM: "false"
@@ -187,6 +220,7 @@ jobs:
             --python python
 
       - name: Preserve completed vectors even after an interrupted increment
+        id: cloud_cache_save
         if: ${{ always() && steps.cloud_sync.outcome != 'skipped' }}
         uses: actions/cache/save@v5
         with:
@@ -211,6 +245,7 @@ jobs:
         run: |
           node --test tests/sync-ygoresources-cursor.test.mjs tests/cloud-sync-resume.test.mjs
           python -m unittest discover -s tests -p 'test_cloud_embedding_cache.py'
+          python -m unittest discover -s tests -p 'test_cloud_embedding_progress.py'
 
       - name: Preserve a failed validated snapshot for diagnosis
         if: >-
@@ -236,6 +271,7 @@ jobs:
           compression-level: 9
 
       - name: Preserve unpublished source and derived assets after downstream failure
+        id: resume_snapshot
         if: ${{ failure() && steps.data_validation.outcome == 'success' }}
         uses: actions/upload-artifact@v4
         with:
@@ -251,6 +287,24 @@ jobs:
           if-no-files-found: error
           retention-days: 3
           compression-level: 1
+
+      - name: Preserve CPU progress diagnostics
+        if: ${{ always() && steps.cloud_sync.outcome != 'skipped' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloud-sync-progress-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/cloud-sync-progress.json
+          if-no-files-found: ignore
+          retention-days: 3
+
+      - name: Mark saved CPU time checkpoint for bounded continuation
+        id: checkpoint
+        if: ${{ failure() && steps.cloud_sync.outcome == 'failure' && steps.resume_snapshot.outcome == 'success' && steps.cloud_cache_save.outcome == 'success' }}
+        env:
+          CLOUD_EMBED_PROGRESS_PATH: ${{ runner.temp }}/cloud-sync-progress.json
+          SYNC_RESUME_RUN_ID: ${{ inputs.resume_run_id || '' }}
+          SYNC_RESUME_SEQUENCE: ${{ inputs.resume_sequence || '0' }}
+        run: node scripts/restore-sync-checkpoint.mjs --check-progress
 
       - name: Preserve bounded preprocessing diagnostics
         if: ${{ always() && steps.bounded_sync.outcome != 'skipped' }}
@@ -287,6 +341,29 @@ jobs:
           if-no-files-found: error
           retention-days: 1
           compression-level: 0
+
+  continue-cpu:
+    name: Continue saved CPU work without source fetching or paid calls
+    needs: sync
+    if: ${{ always() && needs.sync.result == 'failure' && needs.sync.outputs.checkpoint_ready == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - name: Queue one bounded CPU-only continuation on main
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RESUME_RUN_ID: ${{ github.run_id }}
+          RESUME_SEQUENCE: ${{ needs.sync.outputs.next_sequence }}
+        run: |
+          set -euo pipefail
+          [[ "$RESUME_RUN_ID" =~ ^[0-9]+$ && "$RESUME_SEQUENCE" =~ ^[1-4]$ ]]
+          gh api --method POST "repos/$GH_REPO/actions/workflows/sync-data.yml/dispatches" \
+            -f ref=main -f "inputs[resume_run_id]=$RESUME_RUN_ID" -f "inputs[resume_sequence]=$RESUME_SEQUENCE"
+          echo "CPU work continues from the saved unpublished snapshot. This run has NOT published new data."
 
   deploy-pages:
     name: Deploy synchronized snapshot to GitHub Pages

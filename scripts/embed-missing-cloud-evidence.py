@@ -11,6 +11,7 @@ import torch
 import torch.nn.functional as functional
 from transformers import AutoModel, AutoTokenizer
 from cloud_embedding_cache import CloudEmbeddingCache
+from cloud_embedding_progress import save_progress
 
 MODEL_ID = "Qwen/Qwen3-Embedding-0.6B"
 MODEL_REVISION = "97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3"
@@ -87,7 +88,13 @@ def main():
         else:
             output[index] = np.frombuffer(cached, dtype="<f4")
     print(f"cloud-embedding-cache:reused={len(texts)-len(pending)} pending={len(pending)}", flush=True)
+    progress_file = os.environ.get("CLOUD_EMBED_PROGRESS_PATH")
+    def progress(computed, status="running"):
+        save_progress(progress_file, total=len(texts), cached=len(texts)-len(pending),
+                      computed=computed, status=status)
+    progress(0)
     if not pending:
+        progress(0, "complete")
         finish_output(output, args.output)
         return
     started = time.monotonic()
@@ -110,6 +117,7 @@ def main():
     row_order = sorted(pending, key=lambda index: len(texts[index]))
     for start in range(0, len(pending), batch_size):
         if max_seconds and time.monotonic() - started >= max_seconds:
+            progress(start, "paused_time")
             print("cloud_sync_embedding_checkpoint_saved:resume_next_run", flush=True)
             output._mmap.close()
             sys.exit(75)
@@ -127,8 +135,10 @@ def main():
         output[row_indices] = vectors.numpy().astype(np.float32, copy=False)
         for index in row_indices:
             cache.save(rows[index]["textSha256"], np.asarray(output[index], dtype="<f4").tobytes())
+        progress(start + len(current))
         print(f"missing-cloud-embeddings:{start + len(current)}/{len(pending)}", flush=True)
     finish_output(output, args.output)
+    progress(len(pending), "complete")
 
 
 if __name__ == "__main__":
