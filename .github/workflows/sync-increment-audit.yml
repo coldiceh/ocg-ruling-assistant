@@ -1,0 +1,70 @@
+name: Sync increment reliability audit
+on:
+  push:
+    branches: [fix/sync-reliability-20260921]
+    paths: [.github/workflows/sync-increment-audit.yml]
+permissions: {}
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - name: Preserve exact failed-job log and published input bindings
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/audit"
+          gh api repos/coldiceh/ocg-ruling-assistant/actions/jobs/106180948122/logs > "$RUNNER_TEMP/audit/failed-job.log"
+          cp data/gemini-rule-qa-v1/dense-inputs.json.gz "$RUNNER_TEMP/audit/old-dense.json.gz"
+          cp data/gemini-rule-qa-v1/rule-records.json.gz "$RUNNER_TEMP/audit/old-rules.json.gz"
+      - name: Measure two source refreshes without any model credentials
+        env:
+          SYNC_ALL_RELEASED_CARDS: 'true'
+          SYNC_ONLY_RELEASED_CARDS: 'true'
+          CARD_INDEX_LANGUAGES: en,ja
+          FETCH_CONCURRENCY: '8'
+          MAX_QA_TOTAL: '250'
+          OCG_RULE_MAX_PAGES: '240'
+        run: |
+          set -euo pipefail
+          node scripts/sync-data.mjs
+          node scripts/sync-ocg-rule.mjs
+          node scripts/build-rag-data-revision-manifest.mjs
+          node scripts/build-gemini-rule-qa-assets.mjs --stage canonical --data-dir data --output-dir "$RUNNER_TEMP/canonical"
+          cp "$RUNNER_TEMP/canonical/dense-inputs.json.gz" "$RUNNER_TEMP/audit/new-dense.json.gz"
+          cp "$RUNNER_TEMP/canonical/rule-records.json.gz" "$RUNNER_TEMP/audit/new-rules.json.gz"
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';import z from 'node:zlib';
+          const files=['rulings.json','qa-index.json','cards.json','ocg-rule-corpus.json'];
+          for(const f of files)fs.writeFileSync(process.env.RUNNER_TEMP+'/audit/first-'+f+'.gz',z.gzipSync(fs.readFileSync('data/'+f)));
+          NODE
+          node scripts/sync-data.mjs
+          node scripts/sync-ocg-rule.mjs
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';import z from 'node:zlib';import {stableJson} from './scripts/lib/evidence-preprocess-cache.mjs';
+          const report={};for(const f of ['rulings.json','qa-index.json','cards.json','ocg-rule-corpus.json']){
+            const a=JSON.parse(z.gunzipSync(fs.readFileSync(process.env.RUNNER_TEMP+'/audit/first-'+f+'.gz'))),b=JSON.parse(fs.readFileSync('data/'+f));
+            const old=new Map((a.records||[]).map(r=>[r.id,r]));const fields={};let changed=0,added=0;
+            for(const n of b.records||[]){const o=old.get(n.id);if(!o){added++;continue;}if(stableJson(o)!==stableJson(n)){changed++;for(const k of new Set([...Object.keys(o),...Object.keys(n)]))if(stableJson(o[k]??null)!==stableJson(n[k]??null))fields[k]=(fields[k]||0)+1;}}
+            report[f]={oldCount:(a.records||[]).length,newCount:(b.records||[]).length,changed,added,fields};
+            fs.writeFileSync(process.env.RUNNER_TEMP+'/audit/second-'+f+'.gz',z.gzipSync(fs.readFileSync('data/'+f)));
+          }fs.writeFileSync(process.env.RUNNER_TEMP+'/audit/repeat-source-diff.json',JSON.stringify(report,null,2));console.log('REPEAT_SOURCE_DIFF '+JSON.stringify(report));
+          NODE
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sync-increment-audit-${{ github.run_id }}
+          path: ${{ runner.temp }}/audit/*
+          retention-days: 3
+          if-no-files-found: error
