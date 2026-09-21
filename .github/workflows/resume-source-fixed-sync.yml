@@ -1,0 +1,45 @@
+name: Resume source-compatible capped sync
+on:
+  push:
+    branches: [fix/sync-source-resume-20260921]
+    paths: [.github/workflows/resume-source-fixed-sync.yml]
+permissions: {}
+concurrency:
+  group: sync-ruling-data
+  cancel-in-progress: false
+jobs:
+  resume:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - name: Verify exact main, successful source validation and active daily schedule
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$(gh api repos/coldiceh/ocg-ruling-assistant/git/refs/heads/main --jq .object.sha)" = 848ce8d4ed2506982f97665a8012a2c110929fd2
+          test "$(gh api repos/coldiceh/ocg-ruling-assistant/actions/runs/35555376933 --jq .conclusion)" = success
+          test "$(gh api repos/coldiceh/ocg-ruling-assistant/actions/workflows/296804325 --jq .state)" = active
+          gh api 'repos/coldiceh/ocg-ruling-assistant/actions/workflows/296804325/runs?per_page=20' > "$RUNNER_TEMP/runs.json"
+          python - <<'PY'
+          import json,os
+          runs=json.load(open(os.environ['RUNNER_TEMP']+'/runs.json'))['workflow_runs']
+          assert all(r['status']=='completed' for r in runs),'Another synchronization is active; do not duplicate dispatch'
+          PY
+      - name: Start one normal main run with its unchanged cap and paid cache
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api --method POST repos/coldiceh/ocg-ruling-assistant/actions/workflows/296804325/dispatches -f ref=main
+          sleep 5
+          gh api 'repos/coldiceh/ocg-ruling-assistant/actions/workflows/296804325/runs?per_page=3' --jq '.workflow_runs[] | {id,head_sha,status,conclusion}' | tee "$RUNNER_TEMP/dispatched.json"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: source-fixed-sync-dispatch-${{ github.run_id }}
+          path: ${{ runner.temp }}/dispatched.json
+          if-no-files-found: warn
+          retention-days: 3
