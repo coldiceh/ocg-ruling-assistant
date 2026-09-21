@@ -1,0 +1,82 @@
+name: Start verified CPU completion
+on:
+  push:
+    branches: [fix/start-verified-cpu-completion-20260921]
+    paths: [.github/workflows/start-verified-cpu-completion-20260921.yml]
+permissions: {}
+concurrency:
+  group: start-cpu-completion-35614487948
+  cancel-in-progress: false
+jobs:
+  resume:
+    if: github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: 35ab6a2f72373d9f9a194d6fa14f3b135bae734c
+          fetch-depth: 2
+          sparse-checkout: scripts
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Validate live state and queue one CPU-only continuation
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs/promises';
+          import path from 'node:path';
+          import assert from 'node:assert/strict';
+          import {execFileSync} from 'node:child_process';
+          import {stripVTControlCharacters} from 'node:util';
+          const repo='coldiceh/ocg-ruling-assistant',main='35ab6a2f72373d9f9a194d6fa14f3b135bae734c',source='35614487948';
+          const out=path.join(process.env.RUNNER_TEMP,'cpu-completion-start');await fs.mkdir(out,{recursive:true});
+          const report={sourceRun:source,mainCommit:main,sequence:5,modelApiCalls:0,published:false};
+          const save=()=>fs.writeFile(path.join(out,'start-report.json'),JSON.stringify(report,null,2));
+          function gh(args) {
+            try {return execFileSync('gh',args,{encoding:'utf8',timeout:120000,maxBuffer:32*1024*1024,stdio:['ignore','pipe','pipe']});}
+            catch {throw Error('github_command_failed_no_automatic_dispatch_retry');}
+          }
+          const api=s=>JSON.parse(gh(['api',`repos/${repo}/${s}`]));
+          try {
+            assert.equal(process.env.GITHUB_REPOSITORY,repo);assert.equal(process.env.GITHUB_RUN_ATTEMPT,'1');
+            assert.equal(api('git/ref/heads/main').object.sha,main,'main_changed_reinspect');
+            const recent=api('actions/workflows/sync-data.yml/runs?branch=main&per_page=100').workflow_runs;
+            const active=recent.filter(r=>r.status!=='completed');
+            if(active.length) {
+              report.action='existing_sync_no_duplicate';report.existingRuns=active.map(r=>({id:r.id,sha:r.head_sha,status:r.status}));
+            } else {
+              assert.equal(recent.filter(r=>BigInt(r.id)>BigInt(source)).length,0,'newer_sync_exists_reinspect');
+              execFileSync('node',['scripts/select-sync-cpu-checkpoint.mjs'],{encoding:'utf8',stdio:'inherit',
+                env:{...process.env,SYNC_RESUME_RUN_ID:source,SYNC_RESUME_SEQUENCE:'5'}});
+              const outputs=await fs.readFile(process.env.GITHUB_OUTPUT,'utf8');
+              assert.match(outputs,/^required_cached_rows=33673$/m);assert.match(outputs,/^expected_rows=42210$/m);
+              assert.equal(api('git/ref/heads/main').object.sha,main,'main_changed_before_dispatch');
+              const updated=api('actions/workflows/sync-data.yml/runs?branch=main&per_page=100').workflow_runs;
+              assert.equal(updated.filter(r=>r.status!=='completed'||BigInt(r.id)>BigInt(source)).length,0,'newer_sync_before_dispatch');
+              report.action='dispatch_started';await save();
+              gh(['api','--method','POST',`repos/${repo}/actions/workflows/sync-data.yml/dispatches`,
+                '-f','ref=main','-f',`inputs[resume_run_id]=${source}`,'-f','inputs[resume_sequence]=5']);
+              report.action='dispatched_cpu_only_sequence_5';report.requiredCachedRows=33673;report.remainingAtSource=8537;
+            }
+            report.completedAt=new Date().toISOString();await save();console.log('CPU_COMPLETION_START '+JSON.stringify(report));
+          } catch(error) {
+            report.error=stripVTControlCharacters(String(error.message)).slice(0,1200);await save();
+            console.error('CPU_COMPLETION_START_STOP '+JSON.stringify(report));process.exitCode=1;
+          }
+          NODE
+      - name: Preserve start receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cpu-completion-start-${{ github.run_id }}
+          path: ${{ runner.temp }}/cpu-completion-start
+          if-no-files-found: warn
+          retention-days: 3
