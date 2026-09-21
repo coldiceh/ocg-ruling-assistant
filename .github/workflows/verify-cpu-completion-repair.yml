@@ -24,13 +24,51 @@ jobs:
           node-version: '24'
           package-manager-cache: false
       - name: Apply narrow CPU orchestration and cache-floor changes
-        run: python3 scripts/maintenance-cpu-completion-patch.py
+        run: |
+          python3 scripts/maintenance-cpu-completion-patch.py
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('tests/sync-cpu-selection.test.mjs');s=p.read_text()
+          old="\\x1b[0m'))),{...progress,sequence:4});"
+          assert s.count(old)==1
+          s=s.replace(old,"\\x1b[0m')),{...progress,sequence:4});")
+          s+='''
+          test('scheduled default input zero uses the validated saved sequence, not the initial selector input',()=>{
+            const state={reason:'paused_time_continuing',sequence:5,maxSequence:8,progress,published:false};
+            const text=log(5)+'  SYNC_RESUME_SEQUENCE: 0\\nSYNC_CPU_STATUS '+JSON.stringify(state)+'\\n';
+            assert.equal(parseCpuCheckpointLog(text).sequence,5);
+            for(const patch of [{published:true},{sequence:99},{progress:{...progress,computedRows:1}},{reason:'complete'}]) {
+              assert.throws(()=>parseCpuCheckpointLog(log(5)+'SYNC_CPU_STATUS '+JSON.stringify({...state,...patch})+'\\n'));
+            }
+            assert.throws(()=>parseCpuCheckpointLog(log(5)+'SYNC_CPU_STATUS broken-json\\n'));
+          });
+          '''
+          p.write_text(s)
+          p=Path('scripts/select-sync-cpu-checkpoint.mjs');s=p.read_text()
+          old="  if (sequences.length > 1) fail('sync_checkpoint_sequence_ambiguous');\n  const sequence = sequences[0] ?? 0;"
+          new="""  const states = lines.filter(line=>line.startsWith('SYNC_CPU_STATUS '))
+              .map(line=>JSON.parse(line.slice('SYNC_CPU_STATUS '.length)));
+            if(states.length>1 || (!states.length && sequences.length>1)) fail('sync_checkpoint_sequence_ambiguous');
+            const sequence = states.length ? states[0].sequence : (sequences[0] ?? 0);"""
+          assert s.count(old)==1;s=s.replace(old,new)
+          old="  return {schemaVersion:1,status:'paused_time',totalRows:cachedRows+pendingRows,\n    cachedRows,computedRows,remainingRows:pendingRows-computedRows,sequence};"
+          new="""  const checkpoint = {schemaVersion:1,status:'paused_time',totalRows:cachedRows+pendingRows,
+              cachedRows,computedRows,remainingRows:pendingRows-computedRows,sequence};
+            if(states.length) {
+              if(states[0].published !== false || !['paused_time_continuing','chain_limit_reached'].includes(states[0].reason))
+                fail('sync_checkpoint_structured_status_invalid');
+              validateProgressProof(states[0].progress,checkpoint);
+            }
+            return checkpoint;"""
+          assert s.count(old)==1;s=s.replace(old,new);p.write_text(s)
+          PY
       - name: Check syntax and run all targeted no-provider regression tests
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/cpu-completion-validated"
           node --check scripts/select-sync-cpu-checkpoint.mjs
           node --check scripts/restore-sync-checkpoint.mjs
+          node --check tests/sync-cpu-selection.test.mjs
           python3 -m py_compile scripts/embed-missing-cloud-evidence.py
           ruby -ryaml -e 'YAML.load_file(".github/workflows/sync-data.yml"); puts "Workflow YAML parsed"'
           git diff --check
