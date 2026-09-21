@@ -1,0 +1,70 @@
+name: Bridge active synchronization to CPU-only recovery
+on:
+  push:
+    branches: [fix/sync-durable-increments-20260921]
+    paths: [.github/workflows/sync-bootstrap-cpu.yml]
+permissions: {}
+jobs:
+  bridge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: f0c9a411077f87bc84c3738cf0bd35f9b179ee51
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - name: Let the active original run save its paid results and CPU cache
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/cpu-bridge"
+          gh run watch 35555797334 --repo coldiceh/ocg-ruling-assistant --interval 30 --exit-status || true
+      - name: Verify terminal checkpoint and dispatch at most one CPU-only continuation
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs/promises';
+          import {execFileSync} from 'node:child_process';
+          import {validateCheckpointRun} from './scripts/restore-sync-checkpoint.mjs';
+          const repo='coldiceh/ocg-ruling-assistant',id='35555797334',out=process.env.RUNNER_TEMP+'/cpu-bridge';
+          const gh=args=>execFileSync('gh',args,{encoding:'utf8',maxBuffer:32*1024*1024});
+          const api=p=>JSON.parse(gh(['api',`repos/${repo}/${p}`]));
+          const run=api(`actions/runs/${id}`);
+          if(run.status!=='completed')throw Error('original_run_not_terminal');
+          const report={originalRunId:id,originalConclusion:run.conclusion,paidModelCallsInBridge:0};
+          const save=()=>fs.writeFile(out+'/bridge-summary.json',JSON.stringify(report,null,2));
+          if(run.conclusion==='success'){report.action='no_resume_original_completed';await save();console.log(JSON.stringify(report));process.exit(0);}
+          const jobs=api(`actions/runs/${id}/attempts/${run.run_attempt}/jobs?per_page=100`);
+          const proof=validateCheckpointRun(run,jobs,{repo,runId:id,currentRunId:process.env.GITHUB_RUN_ID});
+          const job=jobs.jobs.find(j=>j.name==='sync');
+          if(!job.steps.some(s=>s.name==='Preserve completed vectors even after an interrupted increment'&&s.conclusion==='success'))throw Error('cpu_cache_not_saved');
+          const logs=gh(['api',`repos/${repo}/actions/jobs/${job.id}/logs`]);
+          const counts=[...logs.matchAll(/missing-cloud-embeddings:(\d+)\/(\d+)/g)].at(-1);
+          if(!logs.includes('cloud_sync_embedding_checkpoint_saved:resume_next_run')||!logs.includes('cloud_sync_embedder_exit_75')||!counts||Number(counts[1])<=0||Number(counts[1])>=Number(counts[2]))throw Error('not_a_positive_cpu_time_checkpoint');
+          const artifacts=api(`actions/runs/${id}/artifacts?per_page=100`).artifacts;
+          const saved=artifacts.filter(a=>a.name===proof.artifactName&&!a.expired&&String(a.workflow_run?.id)===id);
+          if(saved.length!==1)throw Error('verified_snapshot_not_saved');
+          const costs=out+'/costs';await fs.mkdir(costs);
+          gh(['run','download',id,'--repo',repo,'--name',`bounded-daily-report-${id}-${run.run_attempt}`,'--dir',costs]);
+          report.originalCost=JSON.parse(await fs.readFile(costs+'/run-cost.json','utf8'));
+          report.cpuComputed=Number(counts[1]);report.cpuPendingAtStart=Number(counts[2]);report.snapshotArtifactId=saved[0].id;
+          const active=api('actions/workflows/296804325/runs?per_page=30').workflow_runs.filter(r=>r.status!=='completed');
+          if(active.length)throw Error('another_sync_is_active_no_duplicate_dispatch');
+          gh(['api','--method','POST',`repos/${repo}/actions/workflows/296804325/dispatches`,'-f','ref=main','-f',`inputs[resume_run_id]=${id}`,'-f','inputs[resume_sequence]=1']);
+          report.action='dispatched_one_cpu_only_resume';await save();console.log('CPU_BRIDGE '+JSON.stringify(report));
+          NODE
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sync-cpu-bridge-${{ github.run_id }}
+          path: ${{ runner.temp }}/cpu-bridge/*
+          if-no-files-found: warn
+          retention-days: 3
