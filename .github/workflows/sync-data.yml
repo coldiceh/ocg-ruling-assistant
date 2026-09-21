@@ -2,8 +2,8 @@ name: Sync ruling data
 
 on:
   workflow_dispatch:
-  # Scheduled synchronization is paused pending capped manual verification.
-  # Do not restore the cron without an explicit decision.
+  schedule:
+    - cron: "0 19 * * *"
 
 permissions: {}
 
