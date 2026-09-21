@@ -21,6 +21,17 @@ def fail(code):
     raise RuntimeError(code)
 
 
+def require_cached_progress(cached_rows, total_rows):
+    floor = os.environ.get("CLOUD_EMBED_REQUIRED_CACHED_ROWS", "").strip()
+    expected = os.environ.get("CLOUD_EMBED_EXPECTED_ROWS", "").strip()
+    if not floor and not expected:
+        return
+    if not floor.isascii() or not floor.isdigit() or not expected.isascii() or not expected.isdigit():
+        fail("cloud_sync_saved_cache_proof_invalid")
+    if int(expected) != total_rows or cached_rows < int(floor) or int(floor) > total_rows:
+        fail("cloud_sync_saved_cache_progress_regressed_no_recompute")
+
+
 def sha256_text(value):
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
@@ -88,6 +99,7 @@ def main():
         else:
             output[index] = np.frombuffer(cached, dtype="<f4")
     print(f"cloud-embedding-cache:reused={len(texts)-len(pending)} pending={len(pending)}", flush=True)
+    require_cached_progress(len(texts)-len(pending), len(texts))
     progress_file = os.environ.get("CLOUD_EMBED_PROGRESS_PATH")
     def progress(computed, status="running"):
         save_progress(progress_file, total=len(texts), cached=len(texts)-len(pending),

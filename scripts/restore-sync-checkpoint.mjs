@@ -9,9 +9,9 @@ const fail = code => { throw new Error(code); };
 const directories = new Set(['rag-runtime-v1','cloud-evidence-v1','gemini-rule-qa-v1','rule-embedding-v1','qa-embedding-v1']);
 const proofSteps = ['Validate synchronized data','Incrementally refresh current navigation and Gemini vectors',
   'Promote verified bounded evidence assets','Build and verify versioned RAG runtime bundle','Verify runtime behavior matches the raw snapshot'];
-export const MAX_CPU_CONTINUATIONS = 4;
+export const MAX_CPU_CONTINUATIONS = 8;
 export function parseResumeInputs(runId = '', sequence = '0') {
-  if (!/^(?:0|[1-4])$/.test(sequence)) fail('sync_resume_sequence_invalid');
+  if (!/^(?:0|[1-8])$/.test(sequence)) fail('sync_resume_sequence_invalid');
   if (runId && !/^[1-9][0-9]{0,18}$/.test(runId)) fail('sync_resume_run_id_invalid');
   if (!runId && sequence !== '0') fail('sync_resume_run_id_required');
   return {runId, sequence:Number(sequence)};
@@ -113,7 +113,12 @@ async function main() {
     try { progress=JSON.parse(await fs.readFile(process.env.CLOUD_EMBED_PROGRESS_PATH,'utf8')); } catch {}
     const ready=shouldContinueCpu(progress,inputs.sequence);
     await output({ready:String(ready),next_sequence:inputs.sequence+1});
-    console.log(ready?'SYNC CPU CHECKPOINT: progress saved; queue a CPU-only continuation.':'SYNC CPU: no automatic continuation (not a time checkpoint, no progress, or chain limit reached).');
+    const reason=ready?'paused_time_continuing':inputs.sequence>=MAX_CPU_CONTINUATIONS?'chain_limit_reached':!progress?'progress_missing':'not_a_positive_time_checkpoint';
+    console.log('SYNC_CPU_STATUS '+JSON.stringify({reason,sequence:inputs.sequence,maxSequence:MAX_CPU_CONTINUATIONS,progress,published:false}));
+    if(process.env.GITHUB_STEP_SUMMARY) await fs.appendFile(process.env.GITHUB_STEP_SUMMARY,
+      `## CPU synchronization status\n${reason}; continuation ${inputs.sequence}/${MAX_CPU_CONTINUATIONS}.\n\n`+
+      `Remaining rows: ${progress?.remainingRows ?? 'unknown'}. This run has NOT published new data.\n`);
+    console.log(ready?'SYNC CPU CHECKPOINT: saved; continuing without source or paid work.':'SYNC CPU STOPPED: '+reason+'; saved data retained; no automatic paid restart.');
     return;
   }
   await restoreCheckpoint({...inputs,repo:process.env.GITHUB_REPOSITORY,currentRunId:process.env.GITHUB_RUN_ID,

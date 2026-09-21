@@ -8,7 +8,7 @@ on:
         required: false
         default: ''
       resume_sequence:
-        description: 'Bounded CPU continuation sequence, 0 through 4'
+        description: 'Bounded CPU continuation sequence, 0 through 8; 0 derives the next saved sequence'
         required: false
         default: '0'
   schedule:
@@ -25,7 +25,7 @@ jobs:
     runs-on: ubuntu-latest
     # Leave room for the existing CPU embedding path, bounded preprocessing,
     # and post-rebase checks. Paid progress persists in the authorized Redis cache.
-    timeout-minutes: 120
+    timeout-minutes: 240
     permissions:
       contents: write
       actions: read
@@ -55,16 +55,24 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Restore verified unpublished snapshot without paid calls
-        id: restore
+      - name: Select saved CPU checkpoint before new source or paid work
+        id: select_resume
         env:
           GH_TOKEN: ${{ github.token }}
           SYNC_RESUME_RUN_ID: ${{ inputs.resume_run_id || '' }}
           SYNC_RESUME_SEQUENCE: ${{ inputs.resume_sequence || '0' }}
+        run: node scripts/select-sync-cpu-checkpoint.mjs
+
+      - name: Restore verified unpublished snapshot without paid calls
+        id: restore
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SYNC_RESUME_RUN_ID: ${{ steps.select_resume.outputs.run_id || '' }}
+          SYNC_RESUME_SEQUENCE: ${{ steps.select_resume.outputs.sequence || '0' }}
         run: node scripts/restore-sync-checkpoint.mjs
 
       - name: Test navigation output recovery (no provider calls)
-        run: node --test tests/evidence-navigation-output-recovery.test.mjs tests/evidence-generation-transport.test.mjs tests/evidence-preprocess-navigation.test.mjs tests/evidence-preprocess-cloud.test.mjs tests/sync-bounded-evidence-assets.test.mjs tests/bai-evidence-generation-profile.test.mjs tests/evidence-preprocess-run-cost.test.mjs tests/evidence-sync-budget-speed.test.mjs tests/sync-official-reference.test.mjs tests/sync-cpu-continuation.test.mjs
+        run: node --test tests/evidence-navigation-output-recovery.test.mjs tests/evidence-generation-transport.test.mjs tests/evidence-preprocess-navigation.test.mjs tests/evidence-preprocess-cloud.test.mjs tests/sync-bounded-evidence-assets.test.mjs tests/bai-evidence-generation-profile.test.mjs tests/evidence-preprocess-run-cost.test.mjs tests/evidence-sync-budget-speed.test.mjs tests/sync-official-reference.test.mjs tests/sync-cpu-continuation.test.mjs tests/sync-cpu-selection.test.mjs
 
       - name: Sync YGOResources snapshot
         if: steps.restore.outputs.resumed != 'true'
@@ -199,19 +207,22 @@ jobs:
         uses: actions/cache/restore@v5
         with:
           path: .cache/cloud-embeddings
-          key: cloud-embedding-rows-v1-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
-          restore-keys: cloud-embedding-rows-v1-${{ runner.os }}-
+          key: ${{ steps.select_resume.outputs.cache_key || format('cloud-embedding-rows-v1-{0}-{1}-{2}', runner.os, github.run_id, github.run_attempt) }}
+          restore-keys: ${{ steps.restore.outputs.resumed != 'true' && format('cloud-embedding-rows-v1-{0}-', runner.os) || '' }}
+          fail-on-cache-miss: ${{ steps.restore.outputs.resumed == 'true' }}
 
       - name: Incrementally synchronize and mechanically verify cloud evidence assets
         id: cloud_sync
-        timeout-minutes: 40
+        timeout-minutes: ${{ steps.restore.outputs.resumed == 'true' && 180 || 40 }}
         env:
           CLOUD_EMBED_CPU_THREADS: "4"
           CLOUD_EMBED_BATCH_SIZE: "8"
           CLOUD_EMBED_CACHE_DIR: .cache/cloud-embeddings
           CLOUD_EMBED_PROGRESS_PATH: ${{ runner.temp }}/cloud-sync-progress.json
           # Stop between batches while time remains to persist progress.
-          CLOUD_EMBED_MAX_SECONDS: "2100"
+          CLOUD_EMBED_MAX_SECONDS: ${{ steps.restore.outputs.resumed == 'true' && 10500 || 2100 }}
+          CLOUD_EMBED_REQUIRED_CACHED_ROWS: ${{ steps.select_resume.outputs.required_cached_rows || '' }}
+          CLOUD_EMBED_EXPECTED_ROWS: ${{ steps.select_resume.outputs.expected_rows || '' }}
           TOKENIZERS_PARALLELISM: "false"
         run: |
           node scripts/sync-cloud-evidence-assets.mjs \
@@ -302,8 +313,8 @@ jobs:
         if: ${{ failure() && steps.cloud_sync.outcome == 'failure' && steps.resume_snapshot.outcome == 'success' && steps.cloud_cache_save.outcome == 'success' }}
         env:
           CLOUD_EMBED_PROGRESS_PATH: ${{ runner.temp }}/cloud-sync-progress.json
-          SYNC_RESUME_RUN_ID: ${{ inputs.resume_run_id || '' }}
-          SYNC_RESUME_SEQUENCE: ${{ inputs.resume_sequence || '0' }}
+          SYNC_RESUME_RUN_ID: ${{ steps.select_resume.outputs.run_id || '' }}
+          SYNC_RESUME_SEQUENCE: ${{ steps.select_resume.outputs.sequence || '0' }}
         run: node scripts/restore-sync-checkpoint.mjs --check-progress
 
       - name: Preserve bounded preprocessing diagnostics
@@ -360,7 +371,7 @@ jobs:
           RESUME_SEQUENCE: ${{ needs.sync.outputs.next_sequence }}
         run: |
           set -euo pipefail
-          [[ "$RESUME_RUN_ID" =~ ^[0-9]+$ && "$RESUME_SEQUENCE" =~ ^[1-4]$ ]]
+          [[ "$RESUME_RUN_ID" =~ ^[0-9]+$ && "$RESUME_SEQUENCE" =~ ^[1-8]$ ]]
           gh api --method POST "repos/$GH_REPO/actions/workflows/sync-data.yml/dispatches" \
             -f ref=main -f "inputs[resume_run_id]=$RESUME_RUN_ID" -f "inputs[resume_sequence]=$RESUME_SEQUENCE"
           echo "CPU work continues from the saved unpublished snapshot. This run has NOT published new data."
