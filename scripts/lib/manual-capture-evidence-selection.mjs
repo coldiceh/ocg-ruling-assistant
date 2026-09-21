@@ -145,6 +145,12 @@ function stableRecordKeys(item = {}) {
 function inferredSourceAuthority(record = {}) {
   const declaredAuthority = String(record.sourceAuthority || "").trim();
   const declaredTier = String(record.sourceTier || "").trim();
+  // Explicit, consistent official-reference provenance takes precedence over
+  // the legacy rule-doc fallback. It is not an official database ruling.
+  if (declaredAuthority === "official_reference" && record.official === true
+      && (!declaredTier || declaredTier === "S0_OFFICIAL_REFERENCE")) {
+    return "official_reference";
+  }
   const identity = [
     record.source,
     record.sourceName,
@@ -852,11 +858,17 @@ function referenceRecordCandidate(record = {}) {
   const hasAuthority = Object.hasOwn(record, "sourceAuthority");
   const hasTier = Object.hasOwn(record, "sourceTier");
   const hasOfficial = Object.hasOwn(record, "official");
-  if ((hasAuthority && record.sourceAuthority !== "community_reference")
-      || (hasTier && record.sourceTier !== "S2_COMMUNITY_REFERENCE")
-      || (hasOfficial && record.official !== false)) {
+  const officialReference = record.sourceAuthority === "official_reference"
+    && record.official === true
+    && (!hasTier || record.sourceTier === "S0_OFFICIAL_REFERENCE");
+  const communityReference = (!hasAuthority || record.sourceAuthority === "community_reference")
+    && (!hasTier || record.sourceTier === "S2_COMMUNITY_REFERENCE")
+    && (!hasOfficial || record.official === false);
+  if (!officialReference && !communityReference) {
     throw new Error("manual_capture_reference_record_authority_conflict");
   }
+  const authority = officialReference ? "official_reference" : "community_reference";
+  const tier = officialReference ? "S0_OFFICIAL_REFERENCE" : "S2_COMMUNITY_REFERENCE";
   const id = itemId(record);
   const hasFullText = Object.hasOwn(record, "fullText");
   const body = {
@@ -868,9 +880,9 @@ function referenceRecordCandidate(record = {}) {
       fullText: String(record.text || ""),
       fullTextProjectionOf: "text",
     } : {}),
-    ...(!hasAuthority ? { sourceAuthority: "community_reference" } : {}),
-    ...(!hasTier ? { sourceTier: "S2_COMMUNITY_REFERENCE" } : {}),
-    ...(!hasOfficial ? { official: false } : {}),
+    ...(!hasAuthority ? { sourceAuthority: authority } : {}),
+    ...(!hasTier ? { sourceTier: tier } : {}),
+    ...(!hasOfficial ? { official: officialReference } : {}),
     isDirect: false,
   };
   const text = sourceText(body);

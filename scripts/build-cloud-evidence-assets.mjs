@@ -79,9 +79,8 @@ async function reuseVectorAssets({vectorDir, outputDir, dataRevision, documentFi
 // Build only from the complete public source snapshot. Evaluation questions,
 // reference answers, frozen identities and previously selected evidence are
 // deliberately not inputs to this builder.
-export async function buildCloudEvidenceAssets({dataDir, outputDir, vectorDir} = {}) {
-  if (!dataDir || !outputDir) throw new Error('dataDir and new outputDir are required');
-  await fs.mkdir(outputDir, {recursive: false});
+async function loadCloudEvidenceCandidates(dataDir) {
+  if (!dataDir) throw new Error('dataDir is required');
   const data = await loadRagData(dataDir);
   const dataRevision = getTrustedRagDataRevision(data);
   const ruleBytes = await fs.readFile(path.join(dataDir, 'ocg-rule-corpus.json'));
@@ -97,6 +96,21 @@ export async function buildCloudEvidenceAssets({dataDir, outputDir, vectorDir} =
     cards: data.cards,
     dataRevision,
   }).sort((a, b) => a.binding.localeCompare(b.binding, 'en'));
+  return {dataRevision, ruleBytes, candidates};
+}
+
+// Same candidate/provenance validation as the real builder, before any paid
+// providers are invoked. This preflight writes no files and makes no model calls.
+export async function validateCloudEvidenceSources({dataDir} = {}) {
+  const {dataRevision, candidates} = await loadCloudEvidenceCandidates(dataDir);
+  return {dataRevision, candidateCount:candidates.length, validated:true,
+    externalCalls:0, embeddingComputations:0};
+}
+
+export async function buildCloudEvidenceAssets({dataDir, outputDir, vectorDir} = {}) {
+  if (!dataDir || !outputDir) throw new Error('dataDir and new outputDir are required');
+  const {dataRevision, ruleBytes, candidates} = await loadCloudEvidenceCandidates(dataDir);
+  await fs.mkdir(outputDir, {recursive: false});
   const corpusMetadata = await writeCloudEvidenceCorpus({outputDir, dataRevision, candidates});
   const vectorMetadata = vectorDir ? await reuseVectorAssets({
     vectorDir, outputDir, dataRevision, documentFile:path.join(outputDir, 'vector-documents.json'),
@@ -116,7 +130,7 @@ export async function buildCloudEvidenceAssets({dataDir, outputDir, vectorDir} =
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   const args=process.argv.slice(2), option=name=>args.includes(name)?args[args.indexOf(name)+1]:undefined;
-  console.log(JSON.stringify(await buildCloudEvidenceAssets({
-    dataDir:option('--data-dir'), outputDir:option('--output-dir'), vectorDir:option('--vector-dir'),
-  })));
+  const options={dataDir:option('--data-dir'), outputDir:option('--output-dir'), vectorDir:option('--vector-dir')};
+  console.log(JSON.stringify(args.includes('--validate-only')
+    ?await validateCloudEvidenceSources(options):await buildCloudEvidenceAssets(options)));
 }
