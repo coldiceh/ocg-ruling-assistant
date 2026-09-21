@@ -1,0 +1,107 @@
+name: Sync recovery audit (no model calls)
+on:
+  push:
+    branches: [fix/sync-resume-audit-20260920]
+    paths: [.github/workflows/sync-resume-audit.yml]
+permissions: {}
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - name: Verify restored schedule and budget tests without providers
+        run: node --test tests/evidence-navigation-output-recovery.test.mjs tests/evidence-generation-transport.test.mjs tests/evidence-preprocess-navigation.test.mjs tests/evidence-preprocess-cloud.test.mjs tests/sync-bounded-evidence-assets.test.mjs tests/bai-evidence-generation-profile.test.mjs tests/evidence-preprocess-run-cost.test.mjs tests/evidence-sync-budget-speed.test.mjs
+      - name: Enable original daily workflow and verify state
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          node --input-type=module -e 'import fs from "node:fs"; const s=fs.readFileSync(".github/workflows/sync-data.yml","utf8"); if(!s.includes("cron: \"0 19 * * *\"") || !s.includes("--batch-budget-usd 1") || !s.includes("0.66364875")) throw Error("restore_contract_mismatch");'
+          gh api --method PUT repos/coldiceh/ocg-ruling-assistant/actions/workflows/296804325/enable
+          gh api repos/coldiceh/ocg-ruling-assistant/actions/workflows/296804325 --jq '{id,state,path}'
+      - name: Prepare read-only comparison
+        run: |
+          cat > scripts/.sync-audit-ephemeral.mjs <<'NODE'
+          import fs from 'node:fs/promises';
+          import path from 'node:path';
+          import {gunzipSync} from 'node:zlib';
+          import {createHash} from 'node:crypto';
+          import {buildGeminiRuleQaAssets} from './build-gemini-rule-qa-assets.mjs';
+          import {planNavigationReuse} from './sync-bounded-evidence-assets.mjs';
+          import {stableJson} from './lib/evidence-preprocess-cache.mjs';
+          const out=path.join(process.env.RUNNER_TEMP,'sync-audit');
+          await fs.mkdir(out,{recursive:true});
+          const stage=process.argv[2];
+          const gz=async p=>JSON.parse(gunzipSync(await fs.readFile(p)));
+          const old=await gz('data/gemini-rule-qa-v1/navigation-inputs.json.gz');
+          const records=await gz('data/gemini-rule-qa-v1/navigation-records.json.gz');
+          const destination=path.join(out,stage);
+          await buildGeminiRuleQaAssets({dataDir:'data',outputDir:destination,stage:'canonical'});
+          const current=await gz(path.join(destination,'navigation-inputs.json.gz'));
+          const previous=new Map(old.map(r=>[r.unitKey,r]));
+          const sourceTexts=new Map();
+          for(const r of old){const key=stableJson([r.sourceId,r.input?.unitText]);const a=sourceTexts.get(key)||[];a.push(r);sourceTexts.set(key,a);}
+          const plan=planNavigationReuse(current,{inputs:old,records});
+          const count={oldInputs:old.length,newInputs:current.length,reused:plan.reusedCount,generationRequired:plan.generationInputs.length,placeholders:plan.placeholderRecords.length,new:plan.newCount,changed:plan.changedCount,removed:plan.removedCount};
+          const fields={},inputFields={},kinds={},details=[];
+          for(const n of plan.generationInputs){
+            const o=previous.get(n.unitKey);
+            const k=n.input?.sourceKind||'unknown';kinds[k]=(kinds[k]||0)+1;
+            if(o){
+              for(const f of new Set([...Object.keys(o),...Object.keys(n)]))if(stableJson(o[f]??null)!==stableJson(n[f]??null))fields[f]=(fields[f]||0)+1;
+              for(const f of new Set([...Object.keys(o.input||{}),...Object.keys(n.input||{})]))if(stableJson(o.input?.[f]??null)!==stableJson(n.input?.[f]??null))inputFields[f]=(inputFields[f]||0)+1;
+              if(stableJson(o.input)===stableJson(n.input))count.identicalModelInputButGeneration=(count.identicalModelInputButGeneration||0)+1;
+              if(o.input?.unitText===n.input?.unitText)count.identicalUnitTextButGeneration=(count.identicalUnitTextButGeneration||0)+1;
+            }else if(sourceTexts.has(stableJson([n.sourceId,n.input?.unitText]))){count.newKeySameSourceAndText=(count.newKeySameSourceAndText||0)+1;}
+            if(details.length<12)details.push({kind:k,oldKeyExists:!!o,sameInput:!!o&&stableJson(o.input)===stableJson(n.input),sameUnitText:!!o&&o.input?.unitText===n.input?.unitText,changedFields:o?Object.keys(n).filter(f=>stableJson(o[f]??null)!==stableJson(n[f]??null)):[]});
+          }
+          const hash=v=>createHash('sha256').update(stableJson(v)).digest('hex');
+          const oldRules=await gz('data/gemini-rule-qa-v1/rule-records.json.gz');
+          const newRules=await gz(path.join(destination,'rule-records.json.gz'));
+          const om=new Map(oldRules.map(r=>[r.id,r]));
+          const ruleChanges={oldPages:oldRules.length,newPages:newRules.length,addedPages:0,changedBodies:0,sameBodies:0,metadataOnly:0,changedFields:{}};
+          for(const n of newRules){const o=om.get(n.id);if(!o){ruleChanges.addedPages++;continue;}if(o.text===n.text){ruleChanges.sameBodies++;if(hash(o)!==hash(n))ruleChanges.metadataOnly++;}else ruleChanges.changedBodies++;for(const f of new Set([...Object.keys(o),...Object.keys(n)]))if(hash(o[f]??null)!==hash(n[f]??null))ruleChanges.changedFields[f]=(ruleChanges.changedFields[f]||0)+1;}
+          const result={stage,count,generationByKind:kinds,changedOuterFields:fields,changedInputFields:inputFields,ruleChanges,examples:details};
+          await fs.writeFile(path.join(out,stage+'-summary.json'),JSON.stringify(result,null,2));
+          console.log('SYNC_AUDIT '+JSON.stringify(result));
+          NODE
+          node scripts/.sync-audit-ephemeral.mjs repository-baseline
+      - name: Fetch current sources without model calls
+        env:
+          SYNC_ALL_RELEASED_CARDS: 'true'
+          SYNC_ONLY_RELEASED_CARDS: 'true'
+          CARD_INDEX_LANGUAGES: en,ja
+          FETCH_CONCURRENCY: '8'
+          MAX_QA_TOTAL: '250'
+          OCG_RULE_BASE_URL: https://ocg-rule.readthedocs.io/zh-cn/latest/
+          OCG_RULE_MAX_PAGES: '240'
+        run: |
+          node scripts/sync-data.mjs
+          node scripts/sync-ocg-rule.mjs
+          node scripts/build-rag-data-revision-manifest.mjs
+          node scripts/.sync-audit-ephemeral.mjs fresh-sources
+      - name: Export audit summaries and source code for local analysis
+        if: always()
+        run: |
+          mkdir -p "$RUNNER_TEMP/sync-audit"
+          tar -czf "$RUNNER_TEMP/sync-audit/source-code.tgz" backend scripts tests config package.json pnpm-lock.yaml .github/workflows
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sync-recovery-audit-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/sync-audit/*-summary.json
+            ${{ runner.temp }}/sync-audit/source-code.tgz
+          if-no-files-found: warn
+          retention-days: 3
