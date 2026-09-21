@@ -36,6 +36,11 @@ jobs:
           test -z "$(git diff --name-only 848ce8d4ed2506982f97665a8012a2c110929fd2 HEAD -- backend scripts tests config .github/workflows/sync-data.yml)"
           git apply --check /tmp/sync-durability.patch
           git apply /tmp/sync-durability.patch
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('scripts/restore-sync-checkpoint.mjs');s=p.read_text();a=r'\.(?:json|json\.gz|bm25\.gz|f32)$';b=r'\.(?:json|json\.gz|json\.br|bm25\.gz|bin\.gz|f32)$';assert s.count(a)==1;p.write_text(s.replace(a,b))
+          p=Path('tests/sync-cpu-continuation.test.mjs');s=p.read_text();a="'cloud-evidence-v1/evidence-vector-index.json'];for(const f of files)";b="'cloud-evidence-v1/evidence-vector-index.json','rag-runtime-v1/cards.json.br','cloud-evidence-v1/lexical-index.bin.gz'];for(const f of files)";assert s.count(a)==1;p.write_text(s.replace(a,b))
+          PY
       - name: Test complete synchronization and CPU continuation gates without providers
         run: |
           set -euo pipefail
@@ -44,6 +49,19 @@ jobs:
           node --check scripts/restore-sync-checkpoint.mjs
           python -m py_compile scripts/embed-missing-cloud-evidence.py scripts/cloud_embedding_progress.py
           git diff --check
+      - name: Validate actual published file encodings and snapshot layout
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs/promises';
+          import path from 'node:path';
+          import {validateCheckpointDirectory} from './scripts/restore-sync-checkpoint.mjs';
+          const dest=process.env.RUNNER_TEMP+'/checkpoint-layout';await fs.mkdir(dest);
+          const dirs=['rag-runtime-v1','cloud-evidence-v1','gemini-rule-qa-v1','rule-embedding-v1','qa-embedding-v1'];
+          for(const e of await fs.readdir('data',{withFileTypes:true}))if(dirs.includes(e.name)||(e.isFile()&&/\.json(?:\.gz)?$/.test(e.name)))await fs.cp(path.join('data',e.name),path.join(dest,e.name),{recursive:true});
+          const proof=await validateCheckpointDirectory(dest);
+          const summary={fileCount:proof.files.length,dataRevision:proof.dataRevision};
+          await fs.writeFile(process.env.RUNNER_TEMP+'/continuation-validation/layout.json',JSON.stringify(summary));console.log('ACTUAL_CHECKPOINT_LAYOUT '+JSON.stringify(summary));
+          NODE
       - name: Upload only the six validated source blobs without changing any branch
         env:
           GH_TOKEN: ${{ github.token }}
