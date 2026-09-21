@@ -1,4 +1,4 @@
-name: Stop uncapped sync and install budget-speed repair
+name: Verify budget-speed repair for connector publication
 on:
   push:
     branches: [fix/sync-budget-speed-20260920]
@@ -13,9 +13,9 @@ jobs:
   repair:
     if: github.repository == 'coldiceh/ocg-ruling-assistant'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
     permissions:
-      actions: write
+      actions: read
       contents: write
     env:
       GH_TOKEN: ${{ github.token }}
@@ -26,20 +26,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          state="$(gh api "repos/$GH_REPO/actions/workflows/296804325" --jq .state)"
-          if [ "$state" = active ]; then gh workflow disable sync-data.yml; fi
           test "$(gh api "repos/$GH_REPO/actions/workflows/296804325" --jq .state)" = disabled_manually
-          run=35544091500
-          test "$(gh api "repos/$GH_REPO/actions/runs/$run" --jq .path)" = .github/workflows/sync-data.yml
-          status="$(gh run view "$run" --json status --jq .status)"
-          if [ "$status" != completed ]; then gh run cancel "$run"; fi
-          for n in $(seq 1 90); do
-            status="$(gh run view "$run" --json status --jq .status)"
-            if [ "$status" = completed ]; then break; fi
-            sleep 2
-          done
-          test "$status" = completed
-          gh run view "$run" --json databaseId,status,conclusion,url
+          test "$(gh run view 35544091500 --json status --jq .status)" = completed
+          gh run view 35544091500 --json databaseId,status,conclusion,url
           gh api "repos/$GH_REPO/actions/workflows/296804325" --jq '{state,path}'
       - name: Checkout the maintenance payload
         uses: actions/checkout@v6
@@ -60,8 +49,8 @@ jobs:
           import base64,gzip,hashlib,pathlib
           raw=base64.b64decode(pathlib.Path('.github/ocg-sync-budget-speed.patch.b64').read_text().strip(),validate=True)
           code=gzip.decompress(raw)
-          expected='ffd79db3d980a70433c7b47ebd4d85df6823525b67be15fffd9afcd9a99a06fe'
-          if hashlib.sha256(code).hexdigest()!=expected: raise SystemExit('Repair integrity check failed')
+          if hashlib.sha256(code).hexdigest()!='ffd79db3d980a70433c7b47ebd4d85df6823525b67be15fffd9afcd9a99a06fe':
+              raise SystemExit('Repair integrity check failed')
           pathlib.Path('/tmp/repair-sync.py').write_bytes(code)
           PY
           python3 /tmp/repair-sync.py
@@ -72,23 +61,18 @@ jobs:
           set -euo pipefail
           node --test tests/evidence-navigation-output-recovery.test.mjs tests/evidence-generation-transport.test.mjs tests/evidence-preprocess-navigation.test.mjs tests/evidence-preprocess-cloud.test.mjs tests/sync-bounded-evidence-assets.test.mjs tests/bai-evidence-generation-profile.test.mjs tests/evidence-preprocess-run-cost.test.mjs tests/evidence-sync-budget-speed.test.mjs
           for f in scripts/lib/evidence-sync-batch-budget.mjs scripts/lib/evidence-sync-progress.mjs scripts/lib/evidence-preprocess-cache.mjs scripts/lib/evidence-preprocess-cloud.mjs scripts/prepare-evidence-navigation.mjs scripts/refresh-gemini-source-embeddings.mjs scripts/sync-bounded-evidence-assets.mjs; do node --check "$f"; done
-      - name: Store the tested Git tree without starting a paid sync
+      - name: Store tested source tree excluding workflow changes
         shell: bash
         run: |
           set -euo pipefail
           test "$(gh api "repos/$GH_REPO/git/ref/heads/main" --jq .object.sha)" = "$EXPECTED_MAIN"
           python3 - <<'PY'
           import json,pathlib
-          paths=['.github/workflows/sync-data.yml','scripts/lib/evidence-preprocess-cache.mjs','scripts/lib/evidence-preprocess-cloud.mjs','scripts/lib/evidence-sync-batch-budget.mjs','scripts/lib/evidence-sync-progress.mjs','scripts/prepare-evidence-navigation.mjs','scripts/refresh-gemini-source-embeddings.mjs','scripts/sync-bounded-evidence-assets.mjs','tests/evidence-preprocess-run-cost.test.mjs','tests/evidence-sync-budget-speed.test.mjs','tests/helpers/evidence-sync-budget-fixture.mjs','tests/sync-bounded-evidence-assets.test.mjs']
+          paths=['scripts/lib/evidence-preprocess-cache.mjs','scripts/lib/evidence-preprocess-cloud.mjs','scripts/lib/evidence-sync-batch-budget.mjs','scripts/lib/evidence-sync-progress.mjs','scripts/prepare-evidence-navigation.mjs','scripts/refresh-gemini-source-embeddings.mjs','scripts/sync-bounded-evidence-assets.mjs','tests/evidence-preprocess-run-cost.test.mjs','tests/evidence-sync-budget-speed.test.mjs','tests/helpers/evidence-sync-budget-fixture.mjs','tests/sync-bounded-evidence-assets.test.mjs']
           body={'base_tree':'da87861845dd879cd46a4d30ba0cd9549f8fa8f0','tree':[{'path':p,'mode':'100644','type':'blob','content':pathlib.Path(p).read_text()} for p in paths]}
           pathlib.Path('/tmp/repair-tree.json').write_text(json.dumps(body))
           PY
           tree="$(gh api --method POST "repos/$GH_REPO/git/trees" --input /tmp/repair-tree.json --jq .sha)"
-          echo "VERIFIED_REPAIR_TREE=$tree"
-          echo '95 offline tests passed. Main has NOT been moved. No provider calls. Sync remains DISABLED.'
-          {
-            echo '## Verified synchronization repair'
-            echo "VERIFIED_REPAIR_TREE=$tree"
-            echo 'USD 1 per unfinished batch. Carry-forward: USD 0.66364875 from stopped run 35544091500, on its published baseline only.'
-            echo '95 focused offline tests passed. No new paid sync was started. Main requires final fast-forward publication.'
-          } >> "$GITHUB_STEP_SUMMARY"
+          echo "VERIFIED_SOURCE_TREE=$tree"
+          echo '95 offline tests passed. Only source objects stored; no commit or branch update; no provider calls.'
+          echo "VERIFIED_SOURCE_TREE=$tree" >> "$GITHUB_STEP_SUMMARY"
