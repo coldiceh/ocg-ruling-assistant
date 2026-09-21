@@ -1,0 +1,50 @@
+name: Rule structure difference audit
+on:
+  push:
+    branches: [fix/sync-resume-audit-20260920]
+    paths: [.github/workflows/sync-rule-diff.yml]
+permissions: {}
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - name: Compare previous and freshly parsed rule structures without model calls
+        run: |
+          mkdir -p "$RUNNER_TEMP/rule-diff"
+          cp data/gemini-rule-qa-v1/rule-records.json.gz "$RUNNER_TEMP/rule-diff/previous-rules.json.gz"
+          node scripts/sync-ocg-rule.mjs
+          cat > scripts/.rule-diff-ephemeral.mjs <<'NODE'
+          import fs from 'node:fs/promises';
+          import {gunzipSync,gzipSync} from 'node:zlib';
+          import {buildRuleSourceStructure,stableJson} from '../backend/evidenceSourceStructure.mjs';
+          const out=process.env.RUNNER_TEMP+'/rule-diff';
+          const old=JSON.parse(gunzipSync(await fs.readFile(out+'/previous-rules.json.gz')));
+          const all=JSON.parse(await fs.readFile('data/ocg-rule-corpus.json','utf8')).records;
+          const current=all.filter(r=>r.recordType==='rule-doc'&&!['toc','table-of-contents','site-info','rule-test'].includes(r.sourceRole));
+          const byId=new Map(old.map(r=>[r.id,r]));
+          const summarize=r=>({schema:r.structure?.schemaVersion||null,sections:r.structure?.sections?.length||0,blocks:r.structure?.blocks?.length||0,sectionExamples:(r.structure?.sections||[]).slice(0,3).map(s=>({key:s.sectionKey||s.id,title:s.title}))});
+          const rows=current.map(n=>{const o=byId.get(n.id),nu=buildRuleSourceStructure(n).readingUnits,ou=o?buildRuleSourceStructure(o).readingUnits:[];const oldKeys=new Set(ou.map(u=>u.unitKey));return {sourceId:n.id,sameText:!!o&&o.text===n.text,sameStructure:!!o&&stableJson(o.structure)===stableJson(n.structure),old:o?summarize(o):null,current:summarize(n),oldUnits:ou.length,newUnits:nu.length,reusedUnitKeys:nu.filter(u=>oldKeys.has(u.unitKey)).length};});
+          const result={rows,removedSources:old.filter(o=>!current.some(n=>n.id===o.id)).map(o=>o.id)};
+          await fs.writeFile(out+'/structure-diff.json',JSON.stringify(result,null,2));
+          await fs.writeFile(out+'/fresh-rules.json.gz',gzipSync(JSON.stringify(current)));
+          console.log('RULE_STRUCTURE_DIFF '+JSON.stringify(result));
+          NODE
+          node scripts/.rule-diff-ephemeral.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rule-structure-diff-${{ github.run_id }}
+          path: ${{ runner.temp }}/rule-diff/*
+          if-no-files-found: warn
+          retention-days: 3
