@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 // names are adapters for the existing preprocessing call sites.
 export function createEvidenceRunCostReporter({ reportPath = null } = {}) {
   const requests = new Map();
+  let rejectedAttempts = 0;
   let outcome = "running";
   let pending = Promise.resolve();
   const warnings = new Set();
@@ -35,6 +36,7 @@ export function createEvidenceRunCostReporter({ reportPath = null } = {}) {
       costBasis: "provider_usage_times_existing_configured_rates_not_supplier_invoice",
       outcome,
       requestsAttempted: rows.length,
+      httpRejectedAttempts: rejectedAttempts,
       knownCostRequests: known.length,
       unknownCostRequests,
       knownCostUsd: sum(known),
@@ -67,6 +69,7 @@ export function createEvidenceRunCostReporter({ reportPath = null } = {}) {
       await persist();
       return { status: "reported", ticket };
     },
+    async recordRejectedAttempt() { rejectedAttempts += 1; await persist(); },
     async recordUsage({ ticket, usage }) {
       const row = requests.get(ticket);
       // Replaying an old response is not a new provider request this run.

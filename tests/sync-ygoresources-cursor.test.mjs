@@ -14,6 +14,7 @@ test('sync persists unfinished changes and advances only the captured manifest b
   context.after(() => fs.rm(root, {recursive:true, force:true}));
   await fs.mkdir(path.join(root, 'scripts'));
   await fs.mkdir(path.join(root, 'scripts', 'lib'));
+  for (const name of ['sync-input-stability.mjs','evidence-preprocess-cache.mjs']) await fs.copyFile(new URL('../scripts/lib/'+name, import.meta.url), path.join(root,'scripts','lib',name));
   await fs.mkdir(path.join(root, 'data'));
   await fs.cp(new URL('../backend/', import.meta.url), path.join(root, 'backend'), {recursive:true});
   await fs.copyFile(new URL('../scripts/sync-ygoresources.mjs', import.meta.url), path.join(root, 'scripts/sync-ygoresources.mjs'));

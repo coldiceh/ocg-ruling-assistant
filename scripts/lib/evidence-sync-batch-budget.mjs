@@ -51,11 +51,16 @@ function nano(value) {
  if(!Number.isFinite(value)||value<0||!Number.isSafeInteger(n))throw fail('sync_batch_amount_invalid',2);
  return n;
 }
-export function quoteNavigation(contract) {
+export function quoteNavigation(contract, request = null) {
  const p=contract.pricingContract, c=contract.capacityContract;
  // The old bytes/3 measurement is an estimate, not a spending upper bound.
  const rate=Math.max(p.inputUsdPerMillion,p.cachedInputUsdPerMillion,p.cacheWriteUsdPerMillion??p.inputUsdPerMillion);
- const amount=(c.maxInputTokens*rate+contract.maxBillableOutputTokens*p.outputUsdPerMillion)/1e6;
+ // Full serialized wire bytes plus framing allowance, not an average bytes/token guess.
+ // This is a conservative configured-rate allocation, not a supplier billing guarantee.
+ const wireBytes = request?.body ? Buffer.byteLength(JSON.stringify(request.body), 'utf8') : null;
+ const inputTokens = wireBytes === null ? c.maxInputTokens
+   : Math.min(c.maxInputTokens, Math.max(wireBytes + 1024, Number(request?.measurement?.inputTokensUpperBound || 0)));
+ const amount=(inputTokens*rate+contract.maxBillableOutputTokens*p.outputUsdPerMillion)/1e6;
  if(!Number.isFinite(amount)||amount<=0)throw fail('sync_batch_quote_unavailable',2);
  return amount;
 }
@@ -63,7 +68,7 @@ export async function createSyncBatchBudget({command,namespace,batchId,limitUsd=
  if(typeof command!=='function'||!/^[a-zA-Z0-9._-]{1,160}$/.test(namespace||'')||!/^[a-f0-9]{64}$/.test(batchId||'')||!(limitUsd>0&&limitUsd<=1))throw fail('sync_batch_configuration_invalid',2);
  const limit=nano(limitUsd),seed=nano(initialSpentUsd);
  const key=`evidence-sync-batch:v1:{${namespace}}:${batchId}`;
- const live=new Set();let version=0,stopped=false;
+ const live=new Set(), settlements=new Map();let version=0,stopped=false;
  let state={batchId,limitUsd,carriedCostUsd:initialSpentUsd,spentUsd:initialSpentUsd,reservedUsd:0,remainingUsd:Math.max(0,limitUsd-initialSpentUsd),blocked:false,accountingBasis:'configured_rates_not_supplier_invoice'};
  const notify=()=>onProgress({budget:{...state},activeRequests:live.size});
  const stop=()=>{stopped=true;version++;};
@@ -79,6 +84,14 @@ export async function createSyncBatchBudget({command,namespace,batchId,limitUsd=
  }
  await operate('read');
  async function settle({ticket,spentUsd}) {
+  nano(spentUsd);
+  const prior = settlements.get(ticket);
+  if(prior){if(prior.amount!==spentUsd){stop();throw fail('sync_batch_settlement_conflict',2);}return prior.promise;}
+  const promise = settleOnce({ticket,spentUsd});
+  settlements.set(ticket,{amount:spentUsd,promise});
+  try{return await promise;}catch(error){settlements.delete(ticket);throw error;}
+ }
+ async function settleOnce({ticket,spentUsd}) {
   try {
    const status=await operate('settle',ticket,nano(spentUsd));
    if(!['SETTLED','HISTORICAL_IGNORED'].includes(status))throw fail(`sync_batch_${status.toLowerCase()}`,2);
@@ -112,6 +125,7 @@ export async function createSyncBatchBudget({command,namespace,batchId,limitUsd=
    if(c?.status==='known'&&Number.isFinite(c.amountUsd)&&c.amountUsd>=0)return settle({ticket,spentUsd:c.amountUsd});
    live.delete(ticket);version++;notify();return {status:'unknown_reservation_retained'};
   },
+  async recordRejectedAttempt(value){await costReporter?.recordRejectedAttempt?.(value);},
   async markRequestUnknown(ticket){live.delete(ticket);version++;notify();},
   settle,async refresh(){await operate('read');return {...state};},
  });

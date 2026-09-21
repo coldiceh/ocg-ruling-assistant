@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto";
+import { mapCacheIo } from "./lib/evidence-sync-io.mjs";
+import { createRetryingGeminiEmbeddingTransport } from "./lib/gemini-embedding-transport.mjs";
 import { mkdir, open, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -18,6 +20,12 @@ export const EMBEDDING_MODEL = "gemini-embedding-2";
 export const EMBEDDING_DIMENSION = 768;
 export const EMBEDDING_PRICE_USD_PER_MILLION = 0.20;
 export const EMBEDDING_MAX_INPUT_TOKENS = 8192;
+export function embeddingInputAllocation(text) {
+  // UTF-8 bytes plus explicit framing allowance; configured-rate allocation, not exact token counting.
+  return Math.min(EMBEDDING_MAX_INPUT_TOKENS, Buffer.byteLength(text, "utf8") + 256);
+}
+const embeddingQuote = rows => rows.reduce((n, row) => n + embeddingInputAllocation(row.item.embeddingInput), 0)
+  * EMBEDDING_PRICE_USD_PER_MILLION / 1_000_000;
 export const EMBEDDING_INPUT_CONTRACT = Object.freeze({
   dimension: EMBEDDING_DIMENSION,
   documentTemplate: "title: ${unit.sourceSection.titlePath.join(' / ') || unit.title || 'none'} | text: ${unit.text}",
@@ -149,8 +157,8 @@ export async function runEmbeddingRefresh({
       generationMisses: misses.length,
       inputChars: misses.reduce((sum, row) => sum + row.item.embeddingInput.length, 0),
       inputBytes: misses.reduce((sum, row) => sum + Buffer.byteLength(row.item.embeddingInput, "utf8"), 0),
-      inputTokenEstimate: { status: "conservative_model_limit", upperBound: misses.length * EMBEDDING_MAX_INPUT_TOKENS },
-      conservativeQuoteUsd: misses.length * EMBEDDING_MAX_INPUT_TOKENS * EMBEDDING_PRICE_USD_PER_MILLION / 1_000_000,
+      inputTokenEstimate: { status: "conservative_utf8_byte_allocation_not_exact_count", upperBound: misses.reduce((n, row) => n + embeddingInputAllocation(row.item.embeddingInput), 0) },
+      conservativeQuoteUsd: embeddingQuote(misses),
     };
   }
   if (!execute) return { report, plans };
@@ -162,6 +170,7 @@ export async function runEmbeddingRefresh({
     throw codedError("embedding_execute_configuration_incomplete", 2);
   }
 
+  try {
   for (const kind of ["rule", "qa"]) {
     for (const row of plans[kind].rows.filter((candidate) => candidate.state === "raw_reusable")) {
       await materializeDenseRaw({ row, cache, budget: resolvedBudget });
@@ -170,6 +179,11 @@ export async function runEmbeddingRefresh({
     onProgress({ stage: "embedding_assembly", kind });
     await assembleEmbeddingIndex({ plan: plans[kind], destination: join(outDir, `${kind}-embedding-v1`) });
   }
+  } catch (error) {
+    for (const kind of ["rule", "qa"]) report.collections[kind].remainingInputs = plans[kind].rows.filter(r => r.state === "generation_miss").length;
+    error.embeddingReport = report; throw error;
+  }
+  for (const kind of ["rule", "qa"]) report.collections[kind].remainingInputs = 0;
   return { report, plans, exitCode: 0 };
 }
 
@@ -178,9 +192,11 @@ async function fillEmbeddingMisses({ plan, cache, embedBatch, budget, batchSize,
   onProgress({ stage: "embedding_generation", kind: plan.kind, completed: 0, total: misses.length });
   for (let offset = 0; offset < misses.length;) {
     const snapshot = budget.snapshot?.();
-    const perInputQuote = EMBEDDING_MAX_INPUT_TOKENS * EMBEDDING_PRICE_USD_PER_MILLION / 1_000_000;
-    const fitting = snapshot ? Math.max(1, Math.floor(snapshot.remainingUsd / perInputQuote)) : batchSize;
-    const candidates = misses.slice(offset, offset + Math.min(batchSize, fitting));
+    const candidates = [];
+    for (const row of misses.slice(offset, offset + batchSize)) {
+      if (snapshot && candidates.length && embeddingQuote([...candidates, row]) > snapshot.remainingUsd) break;
+      candidates.push(row);
+    }
     offset += candidates.length;
     const requestKey = sha256(stableJson({
       kind: plan.kind,
@@ -192,8 +208,9 @@ async function fillEmbeddingMisses({ plan, cache, embedBatch, budget, batchSize,
     const requestTicket = `dense-${plan.kind}-${requestKey}`;
     const claimed = [];
     const unresolved = [];
-    for (const row of candidates) {
-      const claim = await cache.claim("dense", row.key, requestTicket);
+    const claims = await mapCacheIo(candidates, row => cache.claim("dense", row.key, requestTicket));
+    for (let candidateIndex = 0; candidateIndex < candidates.length; candidateIndex++) {
+      const row = candidates[candidateIndex], claim = claims[candidateIndex];
       if (claim.status === "claimed") {
         claimed.push(row);
         continue;
@@ -248,9 +265,11 @@ async function fillEmbeddingMisses({ plan, cache, embedBatch, budget, batchSize,
       }
       continue;
     }
-    const reserve = claimed.length * EMBEDDING_MAX_INPUT_TOKENS * EMBEDDING_PRICE_USD_PER_MILLION / 1_000_000;
+    const reserve = embeddingQuote(claimed);
+    // Claim identity remains stable; a proven rejected attempt can get a fresh payment ticket.
+    const paymentTicket = `${requestTicket}-attempt-${randomUUID()}`;
     try {
-      await budget.reserve({ ticket: requestTicket, amountUsd: reserve, providerId: "gemini", modelId: EMBEDDING_MODEL });
+      await budget.reserve({ ticket: paymentTicket, amountUsd: reserve, providerId: "gemini", modelId: EMBEDDING_MODEL });
     } catch (error) {
       for (const row of claimed) await cache.releaseClaim("dense", row.key, requestTicket);
       if (batchClaimOwned) await cache.releaseClaim("dense-batch", requestKey, requestTicket);
@@ -258,49 +277,58 @@ async function fillEmbeddingMisses({ plan, cache, embedBatch, budget, batchSize,
     }
     let raw;
     try { raw = await embedBatch(claimed.map((row) => row.item.embeddingInput), {
-      model: EMBEDDING_MODEL, dimension: EMBEDDING_DIMENSION, autoTruncate: false, requestTicket,
-    }); } catch (error) { await budget.markRequestUnknown?.(requestTicket); throw error; }
+      model: EMBEDDING_MODEL, dimension: EMBEDDING_DIMENSION, autoTruncate: false, requestTicket: paymentTicket,
+      onRejectedAttempt: diagnostic => budget.recordRejectedAttempt?.({ ticket: paymentTicket, diagnostic }),
+    }); } catch (error) {
+      if (error?.requestRejected === true && error.responseDiagnostic?.httpStatus === 429) {
+        // Preserve proof before releasing ONLY this explicitly rejected batch. Unknown failures stay held.
+        await cache.writeResult("dense-batch", requestKey, { variant: `rejected-${paymentTicket}`, value: {
+          kind: "dense-batch-rejected", key: requestKey, requestTicket: paymentTicket,
+          responseDiagnostic: error.responseDiagnostic, inputHashes: claimed.map(r => r.item.embeddingInputSha256),
+        } });
+        await budget.settle({ ticket: paymentTicket, spentUsd: 0 });
+        await mapCacheIo(claimed, row => cache.releaseClaim("dense", row.key, requestTicket));
+        if (batchClaimOwned) await cache.releaseClaim("dense-batch", requestKey, requestTicket);
+      } else await budget.markRequestUnknown?.(paymentTicket);
+      throw error;
+    }
     const vectors = raw?.embeddings?.map((embedding) => embedding?.values);
     const tokens = raw?.usageMetadata?.promptTokenCount;
     const spentUsd = Number.isSafeInteger(tokens) && tokens >= 0
       ? tokens * EMBEDDING_PRICE_USD_PER_MILLION / 1_000_000
       : null;
-    if (budget.recordUsage) await budget.recordUsage({ ticket: requestTicket,
-      usage: { billableCost: { status: spentUsd === null ? "unknown" : "known", amountUsd: spentUsd } } });
     batchRaw = {
       schemaVersion: 1,
       kind: "dense-batch-raw",
       key: requestKey,
-      requestTicket,
+      requestTicket: paymentTicket,
       inputHashes: claimed.map((row) => row.item.embeddingInputSha256),
       rawResponse: raw,
       reservedUsd: reserve,
       spentUsd,
     };
     await cache.writeRaw("dense-batch", requestKey, { ticket: requestTicket, value: batchRaw });
-    for (let index = 0; index < claimed.length; index += 1) {
-      await cache.writeRaw("dense", claimed[index].key, {
-        ticket: requestTicket,
-        value: makeDenseRawPointer(claimed[index], batchRaw, index),
-      });
-    }
+    await mapCacheIo(claimed, (row, index) => cache.writeRaw("dense", row.key, {
+      ticket: requestTicket, value: makeDenseRawPointer(row, batchRaw, index),
+    }));
+    if (budget.recordUsage) await budget.recordUsage({ ticket: paymentTicket,
+      usage: { billableCost: { status: spentUsd === null ? "unknown" : "known", amountUsd: spentUsd } } });
     if (!Array.isArray(vectors) || vectors.length !== claimed.length) throw new Error("embedding_response_count_invalid");
-    for (let index = 0; index < claimed.length; index += 1) {
+    await mapCacheIo(claimed, async (row, index) => {
       validateVector(vectors[index]);
-      const row = claimed[index];
       const value = {
         schemaVersion: 1,
         kind: "dense",
         key: row.key,
         inputKey: row.item.embeddingInputSha256,
-        requestTicket,
+        requestTicket: paymentTicket,
         vector: vectors[index],
       };
       await cache.writeResult("dense", row.key, { value });
       row.cached = value;
       row.state = "cache_hit";
-    }
-    if (spentUsd !== null) await budget.settle({ ticket: requestTicket, spentUsd });
+    });
+    if (spentUsd !== null) await budget.settle({ ticket: paymentTicket, spentUsd });
     onProgress({ stage: "embedding_generation", kind: plan.kind, completed: offset, total: misses.length });
   }
 }
@@ -550,25 +578,8 @@ function parseArguments(argv) {
   return options;
 }
 
-export function createGeminiEmbeddingTransport({ apiKey, fetchImpl = globalThis.fetch }) {
-  if (!apiKey) throw codedError("gemini_embedding_api_key_required", 2);
-  return async (texts, profile) => {
-    const body = {
-      requests: texts.map((text) => ({
-        model: `models/${profile.model}`,
-        content: { parts: [{ text }] },
-        embedContentConfig: { outputDimensionality: profile.dimension, autoTruncate: profile.autoTruncate },
-      })),
-    };
-    const response = await fetchImpl(`https://generativelanguage.googleapis.com/v1beta/models/${profile.model}:batchEmbedContents`, {
-      method: "POST",
-      headers: { "content-type": "application/json", "x-goog-api-key": apiKey },
-      body: JSON.stringify(body),
-    });
-    const raw = await response.json();
-    if (!response.ok) throw codedError(`gemini_embedding_http_${response.status}`, 4);
-    return raw;
-  };
+export function createGeminiEmbeddingTransport(options) {
+  return createRetryingGeminiEmbeddingTransport(options);
 }
 
 async function main(argv = process.argv.slice(2)) {

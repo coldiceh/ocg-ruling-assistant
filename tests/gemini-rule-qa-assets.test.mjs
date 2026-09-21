@@ -305,15 +305,22 @@ test("release build and sync workflow verify and include only the same-version r
     readFile(new URL("../vercel.json", import.meta.url), "utf8"),
     readFile(new URL("../package.json", import.meta.url), "utf8"),
   ]);
-  const canonical = workflow.indexOf("--stage canonical");
-  const release = workflow.indexOf("--stage release");
-  const verify = workflow.indexOf("--stage verify");
+  const syncSource = await readFile(new URL("../scripts/sync-bounded-evidence-assets.mjs", import.meta.url), "utf8");
+  const canonical = syncSource.indexOf('stage: "canonical"');
+  const release = syncSource.indexOf('stage: "release"');
+  const verify = syncSource.indexOf('stage: "verify"');
   assert.ok(canonical >= 0 && canonical < release && release < verify,
-    "data sync must build canonical, release, and verify stages in order");
-  const releaseStep = workflow.slice(release, verify);
-  assert.match(releaseStep, /--navigation data\/gemini-rule-qa-v1\/navigation-records\.json\.gz/u);
-  assert.match(releaseStep, /--rule-dense-dir data\/rule-embedding-v1/u);
-  assert.match(releaseStep, /--qa-dense-dir data\/qa-embedding-v1/u);
+    "bounded data sync must build canonical, release, and verify stages in order");
+  const releaseStep = syncSource.slice(release, verify);
+  assert.match(releaseStep, /navigationPath/u);
+  assert.match(releaseStep, /ruleDenseDir: join\(normalized\.outDir, "rule-embedding-v1"\)/u);
+  assert.match(releaseStep, /qaDenseDir: join\(normalized\.outDir, "qa-embedding-v1"\)/u);
+  const refresh = workflow.indexOf('node scripts/sync-bounded-evidence-assets.mjs');
+  const promote = workflow.indexOf('bounded_sync_not_publishable');
+  const verifyPromoted = workflow.indexOf('--stage verify', promote);
+  assert.ok(refresh >= 0 && refresh < promote && promote < verifyPromoted,
+    "workflow must use the bounded builder, gate promotion, then verify promoted assets");
+  assert.match(syncSource, /report\.publishable = true/u);
   assert.match(workflow, /tests\/gemini-rule-qa-assets\.test\.mjs/u);
   assert.match(vercel, /pnpm run build:vercel/u);
   assert.match(vercel, /gemini-rule-qa-v1\/\*\*/u);

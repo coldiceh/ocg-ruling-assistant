@@ -1,3 +1,4 @@
+import { stableQaSelection } from "./lib/sync-input-stability.mjs";
 import { createHash } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
@@ -61,24 +62,19 @@ async function readAsset(dir, desc) {
   }
   return JSON.parse(canonical.toString("utf8"));
 }
-function selectQa(indexRecords, rulingRecords) {
-  const byId = new Map();
-  for (const record of indexRecords) {
-    if (!QA_TYPES.has(String(record?.recordType || ""))) continue;
-    const id = String(record?.id || "").trim();
-    if (!id || byId.has(id)) throw new Error("gemini_rule_qa_qa_index_identity_invalid");
-    byId.set(id, record);
+async function previousQaRecords(sourceDir) {
+  const directory = join(sourceDir, GEMINI_RULE_QA_ASSET_DIRECTORY);
+  let manifest;
+  try { manifest = JSON.parse(await readFile(join(directory, CANONICAL_MANIFEST), "utf8")); }
+  catch (error) { if (error.code === "ENOENT") return []; throw error; }
+  const { canonicalRevision, ...body } = manifest;
+  if (manifest.kind !== "gemini-rule-qa-canonical-stage" || sha256(stableJson(body)) !== canonicalRevision) {
+    throw new Error("gemini_previous_qa_manifest_invalid");
   }
-  const seen = new Set();
-  for (const record of rulingRecords) {
-    if (!QA_TYPES.has(String(record?.recordType || ""))) continue;
-    const id = String(record?.id || "").trim();
-    if (!id) throw new Error("gemini_rule_qa_rulings_identity_invalid");
-    if (seen.has(id)) continue;
-    seen.add(id); byId.set(id, record);
-  }
-  return [...byId.values()];
+  if (manifest.assets?.qaRecords?.file !== FILES.qaRecords) throw new Error("gemini_previous_qa_descriptor_invalid");
+  return readAsset(directory, manifest.assets.qaRecords);
 }
+
 function finalizeMapping(ruleRecords, qaUnits) {
   const base = buildRuleStructureMapping(ruleRecords);
   const rules = buildRuleContext(ruleRecords, { ruleContentRevision: "canonical-stage", structureMapping: base });
@@ -117,7 +113,8 @@ function ruleNavInput(unit, source, byKey, refsByKey) {
 async function canonicalStage(sourceDir, destination) {
   const names = ["rulings.json", "qa-index.json", "ocg-rule-corpus.json", "rag-data-revision-manifest.json", "cards.json"];
   const bytes = await Promise.all(names.map(name => readFile(join(sourceDir, name))));
-  const qaRecords = selectQa(parseRecords(bytes[1], "qa_index"), parseRecords(bytes[0], "rulings"));
+  const qaRecords = stableQaSelection(parseRecords(bytes[1], "qa_index"), parseRecords(bytes[0], "rulings"),
+    await previousQaRecords(sourceDir), parseRecords(bytes[4], "cards"));
   // The catalog's id and each QA's cardIds use the same upstream card identity.
   // Supply explicit names as navigation context; do not rewrite the canonical QA
   // or its existing embedding input, and do not infer names from placeholder text.
