@@ -1,0 +1,81 @@
+name: Verify sync admission log boundary
+on:
+  push:
+    branches: [fix/start-verified-cpu-completion-20260921]
+    paths: [.github/workflows/verify-sync-log-boundary-20260921.yml]
+permissions: {}
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: 35ab6a2f72373d9f9a194d6fa14f3b135bae734c
+          fetch-depth: 1
+          sparse-checkout: |
+            scripts
+            tests
+            .github
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Isolate production admission log before mock tests
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('scripts/select-sync-cpu-checkpoint.mjs');s=p.read_text()
+          old='      if(previousLog.split(/\\r?\\n/).some(line=>/^\\d{4}-\\d{2}-\\d{2}T[\\d:.]+Z SYNC_CPU_SELECTION /.test(line)))'
+          new="      // Test fixtures print their own selection records later; they are not production evidence.\n      const admissionLog=previousLog.split('##[group]Run node --test')[0];\n      if(admissionLog.split(/\\r?\\n/).some(line=>/^\\d{4}-\\d{2}-\\d{2}T[\\d:.]+Z SYNC_CPU_SELECTION /.test(line)))"
+          assert s.count(old)==1;p.write_text(s.replace(old,new))
+          p=Path('tests/sync-cpu-selection.test.mjs');s=p.read_text()
+          s+='''
+          test('mock selection output in the test step is not mistaken for a production recovery',async t=>{
+            const job={id:999,name:'sync',steps:[{name:'Select saved CPU checkpoint before new source or paid work',conclusion:'success'}]};
+            const log='2026-09-21T15:00:00.000Z ##[group]Run node --test tests/sync-cpu-selection.test.mjs\\n2026-09-21T15:00:01.000Z SYNC_CPU_SELECTION {"mode":"cpu_resume","run_id":"123"}\\n';
+            const {options}=await fakeEnvironment(t,{job,log});
+            assert.equal((await selectCheckpoint(options)).mode,'fresh');
+          });
+          '''
+          p.write_text(s)
+          PY
+      - name: Run no-provider boundary and continuation regression tests
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/verified-log-boundary"
+          node --check scripts/select-sync-cpu-checkpoint.mjs
+          node --check tests/sync-cpu-selection.test.mjs
+          git diff --check
+          node --test tests/sync-cpu-selection.test.mjs tests/sync-cpu-continuation.test.mjs | tee "$RUNNER_TEMP/verified-log-boundary/tests.txt"
+          python3 -m unittest discover -s tests -p 'test_cloud_embedding_cache.py'
+          python3 -m unittest discover -s tests -p 'test_cloud_embedding_progress.py'
+      - name: Store two exact validated blobs without changing main or dispatching a sync
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs/promises';
+          import path from 'node:path';
+          import {execFileSync} from 'node:child_process';
+          import {createHash} from 'node:crypto';
+          const dir=path.join(process.env.RUNNER_TEMP,'verified-log-boundary');
+          const report={base:'35ab6a2f72373d9f9a194d6fa14f3b135bae734c',runId:process.env.GITHUB_RUN_ID,modelCalls:0,files:[]};
+          for(const name of ['scripts/select-sync-cpu-checkpoint.mjs','tests/sync-cpu-selection.test.mjs']) {
+            const content=await fs.readFile(name,'utf8'),b=Buffer.from(content);
+            const result=JSON.parse(execFileSync('gh',['api','--method','POST',`repos/${process.env.GITHUB_REPOSITORY}/git/blobs`,'--input','-'],{encoding:'utf8',input:JSON.stringify({content,encoding:'utf-8'}),stdio:['pipe','pipe','pipe']}));
+            const sha=createHash('sha1').update(`blob ${b.length}\0`).update(b).digest('hex');if(sha!==result.sha)throw Error('blob_mismatch');
+            await fs.mkdir(path.dirname(path.join(dir,name)),{recursive:true});await fs.writeFile(path.join(dir,name),content);
+            report.files.push({path:name,sha,size:b.length});
+          }
+          await fs.writeFile(path.join(dir,'manifest.json'),JSON.stringify(report,null,2));console.log('VERIFIED_LOG_BOUNDARY '+JSON.stringify(report));
+          NODE
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: verified-log-boundary-${{ github.run_id }}
+          path: ${{ runner.temp }}/verified-log-boundary
+          retention-days: 3
