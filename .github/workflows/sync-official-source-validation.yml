@@ -47,23 +47,19 @@ jobs:
           node scripts/build-rag-data-revision-manifest.mjs
           node scripts/build-cloud-evidence-assets.mjs --data-dir data --validate-only | tee "$RUNNER_TEMP/source-preflight.json"
           node scripts/build-cloud-evidence-assets.mjs --data-dir data --output-dir "$RUNNER_TEMP/cloud-source" | tee "$RUNNER_TEMP/cloud-source.json"
-          node --input-type=module <<'NODE'
-          import fs from 'node:fs';import z from 'node:zlib';
-          const c=JSON.parse(z.gunzipSync(fs.readFileSync(process.env.RUNNER_TEMP+'/cloud-source/corpus.json.gz')));
-          const old=JSON.parse(fs.readFileSync('data/cloud-evidence-v1/evidence-vector-index.json'));
-          const hashes=new Set(old.orderedContentHashes),all=new Set(c.documents.flatMap(d=>d.views.map(v=>v.textSha256)));
-          const report={total:all.size,reused:[...all].filter(h=>hashes.has(h)).length,missing:[...all].filter(h=>!hashes.has(h)).length,officialReferences:c.candidates.filter(c=>c.body.sourceAuthority==='official_reference').length,modelCalls:0};
-          fs.writeFileSync(process.env.RUNNER_TEMP+'/cpu-plan.json',JSON.stringify(report));console.log(JSON.stringify(report));
-          NODE
-      - name: Commit only the four verified source and test files
+          node maintenance/audit-cpu-hash-diff.mjs
+      - name: Export tested workflow and commit permitted source files only
         run: |
           set -euo pipefail
-          git add .github/workflows/sync-data.yml scripts/lib/manual-capture-evidence-selection.mjs scripts/build-cloud-evidence-assets.mjs tests/sync-official-reference.test.mjs
+          cp .github/workflows/sync-data.yml "$RUNNER_TEMP/tested-sync-data.yml"
+          git hash-object .github/workflows/sync-data.yml > "$RUNNER_TEMP/workflow-blob.txt"
+          git add scripts/lib/manual-capture-evidence-selection.mjs scripts/build-cloud-evidence-assets.mjs tests/sync-official-reference.test.mjs
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git commit -m 'fix(sync): preserve official rule provenance and preflight sources before billing'
+          git commit -m 'fix(sync): preserve explicit official source provenance'
           git push origin HEAD:fix/sync-reliability-20260921
-          git ls-files --stage .github/workflows/sync-data.yml scripts/lib/manual-capture-evidence-selection.mjs scripts/build-cloud-evidence-assets.mjs tests/sync-official-reference.test.mjs > "$RUNNER_TEMP/source-blobs.txt"
+          git ls-files --stage scripts/lib/manual-capture-evidence-selection.mjs scripts/build-cloud-evidence-assets.mjs tests/sync-official-reference.test.mjs > "$RUNNER_TEMP/source-blobs.txt"
+          git rev-parse HEAD > "$RUNNER_TEMP/tested-commit.txt"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -72,10 +68,11 @@ jobs:
             ${{ runner.temp }}/source-tests.log
             ${{ runner.temp }}/source-preflight.json
             ${{ runner.temp }}/cloud-source.json
-            ${{ runner.temp }}/cpu-plan.json
+            ${{ runner.temp }}/cpu-hash-diff.json
             ${{ runner.temp }}/source-blobs.txt
+            ${{ runner.temp }}/tested-commit.txt
+            ${{ runner.temp }}/tested-sync-data.yml
+            ${{ runner.temp }}/workflow-blob.txt
             ${{ runner.temp }}/cloud-plan-baseline-comparison.json
-            ${{ runner.temp }}/cloud-plan-baseline.log
-            ${{ runner.temp }}/cloud-plan-repaired.log
           retention-days: 3
           if-no-files-found: warn
