@@ -25,7 +25,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p "$RUNNER_TEMP/audit"
-          gh api repos/coldiceh/ocg-ruling-assistant/actions/jobs/106180948122/logs > "$RUNNER_TEMP/audit/failed-job.log"
+          gh api --allow-escape-sequences repos/coldiceh/ocg-ruling-assistant/actions/jobs/106180948122/logs > "$RUNNER_TEMP/audit/failed-job.log"
           cp data/gemini-rule-qa-v1/dense-inputs.json.gz "$RUNNER_TEMP/audit/old-dense.json.gz"
           cp data/gemini-rule-qa-v1/rule-records.json.gz "$RUNNER_TEMP/audit/old-rules.json.gz"
       - name: Measure two source refreshes without any model credentials
