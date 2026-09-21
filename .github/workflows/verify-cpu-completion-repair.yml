@@ -42,6 +42,16 @@ jobs:
             }
             assert.throws(()=>parseCpuCheckpointLog(log(5)+'SYNC_CPU_STATUS broken-json\\n'));
           });
+          test('a failed recovery selector cannot cause a fresh paid restart on tomorrow schedule',async t=>{
+            const job={name:'sync',steps:[{name:'Select saved CPU checkpoint before new source or paid work',conclusion:'failure'}]};
+            const {options}=await fakeEnvironment(t,{job});
+            await assert.rejects(selectCheckpoint(options),/previous_checkpoint_failure_no_paid_restart/);
+          });
+          test('a post-restore failure must be repaired without re-entering paid source stages',async t=>{
+            const job={id:999,name:'sync',steps:[{name:'Select saved CPU checkpoint before new source or paid work',conclusion:'success'}]};
+            const {options}=await fakeEnvironment(t,{job,log:'2026-09-21T15:00:00.000Z SYNC_CPU_SELECTION {"mode":"cpu_resume"}\\n'});
+            await assert.rejects(selectCheckpoint(options),/previous_checkpoint_failure_no_paid_restart/);
+          });
           '''
           p.write_text(s)
           p=Path('scripts/select-sync-cpu-checkpoint.mjs');s=p.read_text()
@@ -60,6 +70,17 @@ jobs:
               validateProgressProof(states[0].progress,checkpoint);
             }
             return checkpoint;"""
+          assert s.count(old)==1;s=s.replace(old,new)
+          old="    if(explicit) fail('sync_requested_checkpoint_not_cpu_pause');"
+          new="""    if(explicit) fail('sync_requested_checkpoint_not_cpu_pause');
+              if(job?.steps?.some(s=>['Select saved CPU checkpoint before new source or paid work',
+                'Restore verified unpublished snapshot without paid calls'].includes(s.name) && s.conclusion==='failure'))
+                fail('sync_previous_checkpoint_failure_no_paid_restart');
+              if(job?.steps?.some(s=>s.name==='Select saved CPU checkpoint before new source or paid work' && s.conclusion==='success')) {
+                const previousLog=stripVTControlCharacters(await command('gh',['api',`repos/${repo}/actions/jobs/${job.id}/logs`,'--allow-escape-sequences']));
+                if(previousLog.split(/\\r?\\n/).some(line=>/^\\d{4}-\\d{2}-\\d{2}T[\\d:.]+Z SYNC_CPU_SELECTION /.test(line)))
+                  fail('sync_previous_checkpoint_failure_no_paid_restart');
+              }"""
           assert s.count(old)==1;s=s.replace(old,new);p.write_text(s)
           PY
       - name: Check syntax and run all targeted no-provider regression tests
