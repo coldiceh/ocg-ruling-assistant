@@ -1,0 +1,42 @@
+name: Read CPU sync failure without model calls
+on:
+  push:
+    branches: [fix/sync-reliability-20260921]
+    paths: [.github/workflows/sync-cpu-diagnostic.yml]
+permissions: {}
+jobs:
+  read:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+    steps:
+      - name: Save completed production log and extract the failed stage
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api --allow-escape-sequences repos/coldiceh/ocg-ruling-assistant/actions/jobs/106191034830/logs > "$RUNNER_TEMP/production-job.log"
+          python - <<'PY'
+          import os,pathlib,re
+          root=pathlib.Path(os.environ['RUNNER_TEMP']);lines=(root/'production-job.log').read_text(encoding='utf-8-sig').splitlines()
+          active=False;selected=[]
+          for line in lines:
+            if '##[group]Run node scripts/sync-cloud-evidence-assets.mjs' in line:active=True
+            if active:selected.append(line)
+            if 'SYNC COST:' in line or 'SYNC BATCH BUDGET' in line:selected.append(line)
+          if not active:selected=lines[-250:]
+          text='\n'.join(selected);(root/'cpu-failure-excerpt.log').write_text(text)
+          print(text[-25000:])
+          PY
+          gh api repos/coldiceh/ocg-ruling-assistant/actions/runs/35552958499/artifacts > "$RUNNER_TEMP/artifacts.json"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cpu-failure-diagnostic-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/production-job.log
+            ${{ runner.temp }}/cpu-failure-excerpt.log
+            ${{ runner.temp }}/artifacts.json
+          retention-days: 3
+          if-no-files-found: warn
