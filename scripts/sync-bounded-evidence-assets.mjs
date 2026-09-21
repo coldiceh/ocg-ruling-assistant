@@ -279,6 +279,7 @@ export async function runBoundedEvidenceAssetSync(options = {}, dependencies = {
         embedBatch ||= createGeminiEmbeddingTransport({
           apiKey: normalized.env.GEMINI_RULE_QA_API_KEY || normalized.env.GEMINI_API_KEY,
           fetchImpl: dependencies.fetchImpl || globalThis.fetch,
+          onRetry: diagnostic => onProgress({ stage: "embedding_rate_limit_wait", retry: diagnostic }),
         });
         return embedBatch(...args);
       },
@@ -323,6 +324,7 @@ export async function runBoundedEvidenceAssetSync(options = {}, dependencies = {
     }
     report.error = error?.message || String(error);
     if (error?.responseDiagnostic) report.responseDiagnostic = error.responseDiagnostic;
+    if (error?.embeddingReport) report.embeddings = error.embeddingReport;
     if (costReporter) report.cost = await costReporter.finish(report.status);
     await writeJsonAtomic(reportPath, report).catch(() => {});
     throw error;

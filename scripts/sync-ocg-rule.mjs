@@ -1,3 +1,5 @@
+import { preserveFetchTimestamp } from "./lib/sync-input-stability.mjs";
+import { setTimeout as delay } from "node:timers/promises";
 import { createHash } from "node:crypto";
 import { exportReadableSources } from "./export-readable-sources.mjs";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
@@ -34,7 +36,8 @@ async function main() {
   assertCompleteOcgRuleFetch({ enumeratedDocs, maxPages, pageResults });
   const previousRecords = Array.isArray(previousCorpus.records) ? previousCorpus.records : [];
   const previousOwnedRecords = previousRecords.filter((record) => String(record?.id || "").startsWith(OWNED_RECORD_PREFIX));
-  const records = mergeOwnedOcgRuleRecords(refreshedRecords, fixedRecords);
+  const previousById = new Map(previousRecords.map(r => [r.id, r]));
+  const records = mergeOwnedOcgRuleRecords(refreshedRecords.map(r => preserveFetchTimestamp(r, previousById.get(r.id))), fixedRecords);
   const tests = refreshedRecords.filter((record) => testKeywordPattern.test(`${record.docname} ${record.title}`));
   const generatedAt = new Date().toISOString();
   const sync = validateOcgRuleSnapshot({
@@ -237,15 +240,25 @@ function findAppliedSourceEditRange(rawText, sourcePolicy) {
   return { start, end };
 }
 
-async function fetchText(url) {
-  const response = await fetch(url, {
-    headers: {
-      accept: "text/html,application/javascript,text/plain,*/*",
-      "user-agent": userAgent,
-    },
-  });
-  if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
-  return response.text();
+export async function fetchText(url, { fetchImpl = globalThis.fetch, sleep = delay } = {}) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const response = await fetchImpl(url, {
+        headers: { accept: "text/html,application/javascript,text/plain,*/*", "user-agent": userAgent },
+        signal: AbortSignal.timeout(30000),
+      });
+      if (!response.ok) {
+        const error = Object.assign(new Error(`${response.status} ${response.statusText}`), {
+          retryable: response.status === 429 || response.status >= 500,
+        });
+        await response.body?.cancel?.(); throw error;
+      }
+      return await response.text();
+    } catch (error) {
+      if (attempt >= 2 || error.retryable === false) throw error;
+      await sleep(1000 * 2 ** attempt);
+    }
+  }
 }
 
 function extractMainHtml(html) {

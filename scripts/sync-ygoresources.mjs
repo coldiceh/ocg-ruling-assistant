@@ -1,4 +1,5 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { preserveFetchTimestamp } from "./lib/sync-input-stability.mjs";
 import { exportReadableSources } from "./export-readable-sources.mjs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -87,6 +88,7 @@ async function main() {
   const rulingSync = await loadRulings(cards, cardPayloads, pendingChanges, {
     qaDiscoveryRecords,
     detailCursor: previousMeta.qaDetailCursor,
+    previousRulingRecords: previousRulings.records || [],
     unindexedQaIds,
   });
   let rulings = rulingSync.records;
@@ -95,7 +97,8 @@ async function main() {
   }
   cards = preserveBackfilledChineseNames(cards, previousCards.records || []);
   const chineseNameBackfill = await applyBaigeChineseNameBackfill(cards);
-  cards = chineseNameBackfill.records;
+  const previousCardById = new Map((previousCards.records || []).map(r => [r.id, r]));
+  cards = chineseNameBackfill.records.map(r => preserveFetchTimestamp(r, previousCardById.get(r.id)));
   rulings = mergeRulingsCumulatively(previousRulings.records || [], rulings, {
     removedQaIds: rulingSync.removedQaIds,
     authoritativeRecordTypes: cardSnapshotAuthoritative ? ["card-text", "card-faq"] : [],
@@ -125,7 +128,9 @@ async function main() {
       `Quarantined ${rulingQuarantine.droppedIds.length} ruling record(s) because no previous healthy value was available`,
     );
   }
-  rulings = rulingQuarantine.records;
+  const previousRulingById = new Map((previousRulings.records || []).map(r => [r.id, r]));
+  rulings = rulingQuarantine.records.map(r => ["qa", "card-text"].includes(r.recordType)
+    ? preserveFetchTimestamp(r, previousRulingById.get(r.id)) : r);
   const cardAliasIndex = buildCardAliasIndex(cards);
   const qaIndex = mergeQaIndexCumulatively(
     previousQaIndex.records || [],
@@ -422,13 +427,14 @@ async function loadRulings(cards, cardPayloads, changedQaIds = [], {
   qaDiscoveryRecords = [],
   detailCursor = 0,
   unindexedQaIds = [],
+  previousRulingRecords = [],
 } = {}) {
   const records = [];
   const removedQaIds = [];
   const completedQaIds = new Set();
   const failedQaIds = [];
   records.push(...buildCardTextRecords(cardPayloads));
-  records.push(...buildFaqRecords(cardPayloads));
+  records.push(...buildFaqRecords(cardPayloads, previousRulingRecords));
   let recentQaIds = [];
   try {
     const payload = await fetchJson("/data/meta/recent/ja/qa");
@@ -861,8 +867,9 @@ function buildCardTextRecords(cardPayloads) {
     }));
 }
 
-export function buildFaqRecords(cardPayloads) {
+export function buildFaqRecords(cardPayloads, previousRecords = []) {
   const records = [];
+  const previousById = new Map(previousRecords.map(r => [r.id, r]));
 
   for (const { record, payload } of cardPayloads) {
     for (const { entries, idMarker, titleMarker } of [
@@ -878,7 +885,8 @@ export function buildFaqRecords(cardPayloads) {
         }
         if (!lines.length) continue;
 
-        records.push({
+        const sourceDate = payload?.faqData?.meta?.ja?.date || payload?.faqData?.meta?.en?.date;
+        const faq = {
           id: `card-faq-${record.id}${idMarker}-${effectNo}`,
           recordType: "card-faq",
           title: `${record.name} ${titleMarker}FAQ ${effectNo}`,
@@ -896,8 +904,9 @@ export function buildFaqRecords(cardPayloads) {
               detail: record.sourceUrl,
             },
           ],
-          updatedAt: payload?.faqData?.meta?.ja?.date || payload?.faqData?.meta?.en?.date || record.updatedAt,
-        });
+          updatedAt: sourceDate || record.updatedAt,
+        };
+        records.push(sourceDate ? faq : preserveFetchTimestamp(faq, previousById.get(faq.id)));
       }
     }
   }

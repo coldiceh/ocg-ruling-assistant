@@ -6,7 +6,7 @@ export function createSyncProgress({enabled=false,log=console.log,intervalMs=300
   log(`SYNC PROGRESS ${JSON.stringify({...state,elapsedSeconds:Math.round((Date.now()-start)/1000),...(c?{newRequests:c.requestsAttempted,knownCostUsd:c.knownCostUsd,unknownCostRequests:c.unknownCostRequests}:{})})}`);
  }
  const timer=enabled?setInterval(()=>emit(true),intervalMs):null;timer?.unref();
- return {update(p){const changed=p.stage&&p.stage!==state.stage;if(changed){delete state.completed;delete state.total;delete state.kind;}state={...state,...p};emit(Boolean(changed||p.completed===p.total));},finish(){if(timer)clearInterval(timer);emit(true);}};
+ return {update(p){const changed=p.stage&&p.stage!==state.stage;if(changed){delete state.completed;delete state.total;delete state.kind;}const next={...p};if(next.navigation){next.navigation={...next.navigation};delete next.navigation.preparation;}state={...state,...next};emit(Boolean(changed||p.completed===p.total));},finish(){if(timer)clearInterval(timer);emit(true);}};
 }
 export function memoizePreprocessCache(base){
  const nav=new Map(),rows=new Map();const out={...base};

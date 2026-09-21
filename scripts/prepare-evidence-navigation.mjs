@@ -649,7 +649,7 @@ async function generateOneNavigation({ row, cache, contract, budget, countTokens
         }
         throw error;
       }
-      const reserve = budget.quoteNavigation ? budget.quoteNavigation(contract) : estimateGenerationUpperBoundUsd({ measurement, contract }).amountUsd;
+      const reserve = budget.quoteNavigation ? budget.quoteNavigation(contract, { body, measurement }) : estimateGenerationUpperBoundUsd({ measurement, contract }).amountUsd;
       const requestTicket = `nav-request-${randomUUID()}`;
       try {
         await budget.reserve({ ticket: requestTicket, amountUsd: reserve, providerId: contract.providerId, modelId: contract.modelId });

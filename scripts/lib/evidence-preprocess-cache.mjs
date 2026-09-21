@@ -530,8 +530,8 @@ export async function settleLocalPreprocessBudget({ ledgerPath, ticket, spentUsd
       return ledger;
     }
     if (row.state !== "reserved" || spentUsd > row.reservedUsd) throw new Error("evidence_preprocess_ticket_conflict");
-    ledger.reservedUsd -= row.reservedUsd;
-    ledger.stageReservedUsd = Number(ledger.stageReservedUsd || 0) - row.reservedUsd;
+    ledger.reservedUsd = Number((ledger.reservedUsd - row.reservedUsd).toFixed(12));
+    ledger.stageReservedUsd = Number((Number(ledger.stageReservedUsd || 0) - row.reservedUsd).toFixed(12));
     ledger.spentUsd += spentUsd;
     ledger.stageSpentUsd = Number(ledger.stageSpentUsd || 0) + spentUsd;
     row.state = "settled";

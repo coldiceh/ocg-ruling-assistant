@@ -646,3 +646,24 @@ test('130 dense misses use 6 batched reads; repeat planning adds zero network re
  const cache=memoizePreprocessCache({readResult:async()=>{single++;return null;},readResultBatch:async(_kind,keys)=>{batches++;assert.ok(keys.length<=64);return keys.map(()=>null);}});
  const first=await planEmbeddingRefresh({denseInputs:dense,dataDir:source.dataDir,cache});assert.equal(first.rule.rows.filter(r=>r.state==='generation_miss').length,130);assert.equal(batches,6);assert.equal(single,0);await planEmbeddingRefresh({denseInputs:dense,dataDir:source.dataDir,cache});assert.equal(batches,6);assert.equal(single,0);
 });
+
+test('confirmed 429 rejection releases only its reservation and resumes without regenerating paid navigation',async t=>{
+ const source=await fixture(t);await changeRule(source);const redis=fakeBatchRedis(),counter={calls:0},cache=createLocalEvidencePreprocessCache({cacheDir:join(source.directory,'rejection-cache')});const deps=cappedDependencies(source,redis,counter,cache),original=deps.embedBatch;
+ deps.embedBatch=async()=>{throw Object.assign(Error('gemini_embedding_http_429'),{requestRejected:true,responseDiagnostic:{httpStatus:429,status:'RESOURCE_EXHAUSTED'}});};
+ await assert.rejects(runBoundedEvidenceAssetSync(cappedOptions(source,'reject-first'),deps),/http_429/);
+ const report=JSON.parse(await readFile(join(source.directory,'reject-first','bounded-evidence-sync-report.json'),'utf8'));
+ assert.equal(report.batchBudget.reservedUsd,0);assert.equal(report.cost.unknownCostRequests,0);assert.equal(report.publishable,false);assert.equal(counter.calls,1);
+ deps.embedBatch=original;const resumed=await runBoundedEvidenceAssetSync(cappedOptions(source,'reject-resume'),deps);
+ assert.equal(resumed.report.publishable,true);assert.equal(resumed.report.cost.requestsAttempted,1);assert.equal(counter.calls,1);assert.equal(resumed.report.batchBudget.reservedUsd,0);
+});
+
+test('raw vectors survive settlement interruption and replay without another provider request',async t=>{
+ const source=await fixture(t);await changeRule(source);const redis=fakeBatchRedis(),counter={calls:0},cache=createLocalEvidencePreprocessCache({cacheDir:join(source.directory,'raw-first-cache')});const deps=cappedDependencies(source,redis,counter,cache);
+ let fail=false,embeddingCalls=0;const original=deps.embedBatch;
+ deps.embedBatch=async(...args)=>{embeddingCalls++;const r=await original(...args);fail=true;return r;};
+ deps.createCloudResources=async()=>({cache,command:async args=>{if(fail&&args[4]==='settle'){fail=false;throw Error('fixture_settlement_unavailable');}return redis.command(args);}});
+ await assert.rejects(runBoundedEvidenceAssetSync(cappedOptions(source,'raw-first'),deps),/settlement_unavailable/);
+ deps.createCloudResources=async()=>({cache,command:redis.command});deps.embedBatch=async()=>{throw Error('paid_result_must_replay');};
+ const resumed=await runBoundedEvidenceAssetSync(cappedOptions(source,'raw-resume'),deps);
+ assert.equal(resumed.report.publishable,true);assert.equal(embeddingCalls,1);assert.equal(counter.calls,1);assert.equal(resumed.report.cost.requestsAttempted,0);assert.equal(resumed.report.batchBudget.reservedUsd,0);
+});
