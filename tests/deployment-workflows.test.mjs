@@ -122,7 +122,8 @@ test("data sync rebuilds and commits the versioned RAG runtime before synchroniz
   assert.ok(refresh > revision && refresh < promotion && promotion < geminiVerify && geminiVerify < runtime,
     "source sync must refresh navigation and vectors, promote the complete asset set, then verify before building runtime");
   assert.match(workflow, /--cloud[\s\S]*?--execute/u);
-  assert.match(workflow, /vars\.EVIDENCE_PREPROCESS_MAX_USD/u);
+  assert.match(workflow, /--batch-budget-usd 1/u);
+  assert.doesNotMatch(workflow, /--report-only-cost|vars\.EVIDENCE_PREPROCESS_MAX_USD/u);
   assert.match(workflow, /secrets\.GEMINI_RULE_QA_API_KEY/u);
   assert.match(workflow, /secrets\.BAI_API_KEY/u);
   assert.match(workflow, /report\.publishable !== true/u);
