@@ -87,6 +87,7 @@ export function createLocalEvidencePreprocessCache({ cacheDir, ownerId = randomU
     navKey: (key) => `${NAV_PREFIX}${key}`,
     denseKey: (key) => `${DENSE_PREFIX}${key}`,
     readResult,
+    readResultBatch: (kind, keys, variant = "result") => Promise.all(keys.map(key => readResult(kind, key, variant))),
     claim,
     releaseClaim,
     writeRaw,
@@ -278,6 +279,12 @@ export function createRedisEvidencePreprocessCache({
     navKey: (inputKey) => `${NAV_PREFIX}${inputKey}`,
     denseKey: (inputKey) => `${DENSE_PREFIX}${inputKey}`,
     readResult: async (kind, inputKey, variant = "result") => parseMaybeJson(await command(["GET", key(kind, inputKey, variant)])),
+    async readResultBatch(kind, inputKeys, variant = "result") {
+      if (!inputKeys.length) return [];
+      const values = await command(["MGET", ...inputKeys.map(inputKey => key(kind, inputKey, variant))]);
+      if (!Array.isArray(values) || values.length !== inputKeys.length) throw new Error("evidence_preprocess_redis_invalid_response");
+      return values.map(parseMaybeJson);
+    },
     claim: (kind, inputKey, ticket) => operate(kind, inputKey, ticket),
     adoptClaim,
     releaseClaim,

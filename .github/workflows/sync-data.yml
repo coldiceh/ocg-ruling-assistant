@@ -2,8 +2,8 @@ name: Sync ruling data
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "0 19 * * *"
+  # Scheduled synchronization is paused pending capped manual verification.
+  # Do not restore the cron without an explicit decision.
 
 permissions: {}
 
@@ -44,7 +44,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Test navigation output recovery (no provider calls)
-        run: node --test tests/evidence-navigation-output-recovery.test.mjs tests/evidence-generation-transport.test.mjs tests/evidence-preprocess-navigation.test.mjs tests/evidence-preprocess-cloud.test.mjs tests/sync-bounded-evidence-assets.test.mjs tests/bai-evidence-generation-profile.test.mjs tests/evidence-preprocess-run-cost.test.mjs
+        run: node --test tests/evidence-navigation-output-recovery.test.mjs tests/evidence-generation-transport.test.mjs tests/evidence-preprocess-navigation.test.mjs tests/evidence-preprocess-cloud.test.mjs tests/sync-bounded-evidence-assets.test.mjs tests/bai-evidence-generation-profile.test.mjs tests/evidence-preprocess-run-cost.test.mjs tests/evidence-sync-budget-speed.test.mjs
 
       - name: Sync YGOResources snapshot
         env:
@@ -90,6 +90,10 @@ jobs:
       - name: Incrementally refresh current navigation and Gemini vectors
         id: bounded_sync
         env:
+          # Carry the last saved usage report from cancelled run 35544091500 once.
+          # This does not count it again as a new request or reset on retry.
+          EVIDENCE_SYNC_CARRY_BASELINE: "64198715d3c7819a53a7128bba8998eac5915ab33ee82874148fefec16591d1c"
+          EVIDENCE_SYNC_CARRY_USD: "0.66364875"
           EVIDENCE_PREPROCESS_CACHE_NAMESPACE: ${{ vars.EVIDENCE_PREPROCESS_CACHE_NAMESPACE }}
           GEMINI_RULE_QA_API_KEY: ${{ secrets.GEMINI_RULE_QA_API_KEY }}
           RAG_EVIDENCE_BAI_API_KEY: ${{ secrets.RAG_EVIDENCE_BAI_API_KEY }}
@@ -97,13 +101,15 @@ jobs:
           UPSTASH_BUDGET_KV_REST_API_URL: ${{ secrets.UPSTASH_BUDGET_KV_REST_API_URL }}
           UPSTASH_BUDGET_KV_REST_API_TOKEN: ${{ secrets.UPSTASH_BUDGET_KV_REST_API_TOKEN }}
         run: |
-          # Report-only costs: no cumulative budget or Redis ledger access.
+          # USD 1 per unpublished batch; no automatic top-up or reset on retry.
           node scripts/sync-bounded-evidence-assets.mjs \
             --data-dir data \
             --out-dir "$RUNNER_TEMP/bounded-evidence-stage" \
             --cache-dir "$RUNNER_TEMP/bounded-evidence-cache" \
             --generation-profile config/evidence-generation/bai-gpt-5.6-luna-medium-theoretical.json \
-            --report-only-cost \
+            --batch-budget-usd 1 \
+            --navigation-concurrency 4 \
+            --progress \
             --cloud \
             --execute
 

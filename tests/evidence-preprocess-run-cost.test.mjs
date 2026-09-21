@@ -113,10 +113,10 @@ test("summary is available on failure and unavailable reports never claim zero",
   assert.doesNotMatch(missing[0], /USD 0/);
 });
 
-test("workflow uses report-only instead of ledger initialization or maximum spend", async () => {
+test("workflow uses batch admission while retaining per-run cost reporting", async () => {
   const text = await readFile(new URL("../.github/workflows/sync-data.yml", import.meta.url), "utf8");
   const paidStep = text.split("id: bounded_sync")[1].split("- name: Promote")[0];
-  assert.match(paidStep, /--report-only-cost/);
+  assert.match(paidStep, /--batch-budget-usd 1/);
   assert.match(paidStep, /EVIDENCE_PREPROCESS_CACHE_NAMESPACE/);
   assert.doesNotMatch(paidStep, /initializeCloudEvidencePreprocessLedger|readCloudEvidencePreprocessLedger|--max-usd|EVIDENCE_PREPROCESS_LEDGER_KEY|EVIDENCE_PREPROCESS_MAX_USD/);
   assert.match(paidStep, /always\(\)/);

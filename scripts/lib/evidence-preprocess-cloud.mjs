@@ -18,6 +18,7 @@ export function createUpstashRedisCommand({ url, token, fetchImpl = globalThis.f
       method: "POST",
       headers: { authorization: `Bearer ${bearer}`, "content-type": "application/json" },
       body: JSON.stringify(args),
+      signal: AbortSignal.timeout(30000),
     });
     const payload = await response.json().catch(() => null);
     if (!response.ok) throw new Error(`evidence_preprocess_redis_http_${response.status}`);

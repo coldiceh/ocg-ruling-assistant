@@ -599,3 +599,50 @@ test("report-only rejects incomplete response, preserves known failed-call cost 
   assert.equal(report.cost.totalCostUsd, 0.000044);
   assert.equal(report.cost.requestsAttempted, 1);
 });
+
+// Capped integration tests use source fixtures and no external services.
+import { cp } from 'node:fs/promises';
+import { fakeBatchRedis } from './helpers/evidence-sync-budget-fixture.mjs';
+import { createLocalEvidencePreprocessCache } from '../scripts/lib/evidence-preprocess-cache.mjs';
+import { planEmbeddingRefresh } from '../scripts/refresh-gemini-source-embeddings.mjs';
+import { memoizePreprocessCache } from '../scripts/lib/evidence-sync-progress.mjs';
+function cappedDependencies(source,redis,counter,cache){return {
+ createCloudResources:async()=>({command:redis.command,cache}),
+ navigationTransportFactory:contract=>navigationTransport(contract,counter),
+ embedBatch:async texts=>({embeddings:texts.map(()=>({values:Array(EMBEDDING_DIMENSION).fill(0.5)})),usageMetadata:{promptTokenCount:texts.length}}),
+ fetchImpl:async()=>{throw new Error('unexpected_real_network');},
+};}
+function cappedOptions(source,name,limit=1){return {dataDir:source.dataDir,outDir:join(source.directory,name),execute:true,cloud:true,batchBudgetUsd:limit,navigationConcurrency:4,env:{EVIDENCE_PREPROCESS_CACHE_NAMESPACE:'fixture-only'}};}
+async function changeRule(source,text='changed rule body'){const p=join(source.dataDir,'ocg-rule-corpus.json');const r=JSON.parse(await readFile(p,'utf8'));r.records[0].text=text;await writeFile(p,JSON.stringify(r));}
+test('capped unchanged synchronization has no paid calls and preserves navigation',async t=>{
+ const source=await fixture(t),redis=fakeBatchRedis(),counter={calls:0};const cache=createLocalEvidencePreprocessCache({cacheDir:join(source.directory,'capped-cache')});const deps=cappedDependencies(source,redis,counter,cache);
+ deps.embedBatch=async()=>{throw new Error('unchanged_must_not_embed');};const result=await runBoundedEvidenceAssetSync(cappedOptions(source,'capped-unchanged'),deps);
+ assert.equal(counter.calls,0);assert.equal(result.report.cost.requestsAttempted,0);assert.equal(result.report.cost.totalCostUsd,0);assert.equal(result.report.publishable,true);assert.deepEqual(await readReleasedNavigation(result.outputDir),source.navigationRecords);
+});
+test('budget pause retains the old published bundle and retries do not reset allowance',async t=>{
+ const source=await fixture(t);await changeRule(source);const redis=fakeBatchRedis(),counter={calls:0},cache=createLocalEvidencePreprocessCache({cacheDir:join(source.directory,'capped-cache')});const deps=cappedDependencies(source,redis,counter,cache);
+ const before=await readFile(join(source.dataDir,'gemini-rule-qa-v1','manifest.json'),'utf8');
+ for(const name of ['pause-first','pause-retry']){const options=cappedOptions(source,name,0.001);await assert.rejects(runBoundedEvidenceAssetSync(options,deps),{code:'evidence_preprocess_budget_exceeded'});const report=JSON.parse(await readFile(join(options.outDir,'bounded-evidence-sync-report.json'),'utf8'));assert.equal(report.status,'paused_budget');assert.equal(report.publishable,false);assert.equal(report.cost.totalCostUsd,0);assert.equal(report.batchBudget.limitUsd,0.001);}
+ assert.equal(counter.calls,0);assert.equal(redis.states.size,1);assert.equal(await readFile(join(source.dataDir,'gemini-rule-qa-v1','manifest.json'),'utf8'),before);
+});
+test('newer unpublished target does not grant a fresh budget',async t=>{
+ const source=await fixture(t);await changeRule(source,'first changed body');const redis=fakeBatchRedis(),counter={calls:0},cache=createLocalEvidencePreprocessCache({cacheDir:join(source.directory,'capped-cache')});const deps=cappedDependencies(source,redis,counter,cache);
+ await assert.rejects(runBoundedEvidenceAssetSync(cappedOptions(source,'target-one',0.001),deps),/budget_exceeded/);await changeRule(source,'newer changed body');await assert.rejects(runBoundedEvidenceAssetSync(cappedOptions(source,'target-two',0.001),deps),/budget_exceeded/);assert.equal(redis.states.size,1);assert.equal(counter.calls,0);
+});
+test('paid navigation survives embedding interruption; unknown submitted vector is not rebilled',async t=>{
+ const source=await fixture(t);await changeRule(source);const redis=fakeBatchRedis(),counter={calls:0},cache=createLocalEvidencePreprocessCache({cacheDir:join(source.directory,'capped-cache')});const deps=cappedDependencies(source,redis,counter,cache),original=deps.embedBatch;
+ deps.embedBatch=async()=>{throw new Error('fixture_embedding_interrupted');};await assert.rejects(runBoundedEvidenceAssetSync(cappedOptions(source,'paid-first'),deps),/fixture_embedding_interrupted/);assert.equal(counter.calls,1);
+ const first=JSON.parse(await readFile(join(source.directory,'paid-first','run-cost.json'),'utf8'));assert.equal(first.requestsAttempted,2);assert.equal(first.unknownCostRequests,1);
+ deps.embedBatch=original;await assert.rejects(runBoundedEvidenceAssetSync(cappedOptions(source,'paid-retry'),deps),/claim_busy|existing_request/);assert.equal(counter.calls,1);assert.equal(redis.states.size,1);assert.equal(JSON.parse(await readFile(join(source.directory,'paid-retry','run-cost.json'),'utf8')).requestsAttempted,0);
+});
+test('successful capped publication followed by unchanged data pays zero on the second run',async t=>{
+ const source=await fixture(t);await changeRule(source);const redis=fakeBatchRedis(),counter={calls:0},cache=createLocalEvidencePreprocessCache({cacheDir:join(source.directory,'capped-cache')});const deps=cappedDependencies(source,redis,counter,cache);
+ const result=await runBoundedEvidenceAssetSync(cappedOptions(source,'publish-first'),deps);assert.equal(result.report.publishable,true);assert.equal(counter.calls,1);assert.equal(result.report.cost.requestsAttempted,2);
+ for(const name of ['gemini-rule-qa-v1','rule-embedding-v1','qa-embedding-v1']){await rm(join(source.dataDir,name),{recursive:true,force:true});await cp(join(result.outputDir,name),join(source.dataDir,name),{recursive:true});}
+ deps.embedBatch=async()=>{throw new Error('must_reuse_published_vectors');};const second=await runBoundedEvidenceAssetSync(cappedOptions(source,'publish-repeat'),deps);assert.equal(counter.calls,1);assert.equal(second.report.cost.requestsAttempted,0);assert.equal(second.report.cost.totalCostUsd,0);assert.equal(second.report.publishable,true);
+});
+test('130 dense misses use 6 batched reads; repeat planning adds zero network requests',async t=>{
+ const source=await fixture(t),dense={schemaVersion:1,qa:[],rule:Array.from({length:130},(_,i)=>({embeddingInput:`changed ${i}`,embeddingInputSha256:sha256(`changed ${i}`),denseUnitId:`new${i}`}))};let batches=0,single=0;
+ const cache=memoizePreprocessCache({readResult:async()=>{single++;return null;},readResultBatch:async(_kind,keys)=>{batches++;assert.ok(keys.length<=64);return keys.map(()=>null);}});
+ const first=await planEmbeddingRefresh({denseInputs:dense,dataDir:source.dataDir,cache});assert.equal(first.rule.rows.filter(r=>r.state==='generation_miss').length,130);assert.equal(batches,6);assert.equal(single,0);await planEmbeddingRefresh({denseInputs:dense,dataDir:source.dataDir,cache});assert.equal(batches,6);assert.equal(single,0);
+});

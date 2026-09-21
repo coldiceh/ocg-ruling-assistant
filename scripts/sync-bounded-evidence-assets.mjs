@@ -35,6 +35,9 @@ import {
 import { createCloudEvidencePreprocessResources } from "./lib/evidence-preprocess-cloud.mjs";
 import { createEvidenceRunCostReporter, formatEvidenceRunCost } from "./lib/evidence-preprocess-run-cost.mjs";
 
+import { createSyncBatchBudget } from "./lib/evidence-sync-batch-budget.mjs";
+import { createSyncProgress, memoizePreprocessCache } from "./lib/evidence-sync-progress.mjs";
+
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const rootDir = join(scriptDir, "..");
 const CANONICAL_MANIFEST = "canonical-manifest.json";
@@ -52,9 +55,12 @@ export async function runBoundedEvidenceAssetSync(options = {}, dependencies = {
   await assertFreshOutputDirectory(normalized.outDir);
   const assetDir = join(normalized.outDir, GEMINI_RULE_QA_ASSET_DIRECTORY);
   const reportPath = join(normalized.outDir, REPORT_FILE);
-  const costReporter = normalized.reportOnlyCost && normalized.execute
+  const costReporter = (normalized.reportOnlyCost || normalized.batchBudgetUsd > 0) && normalized.execute
     ? createEvidenceRunCostReporter({ reportPath: join(normalized.outDir, "run-cost.json") })
     : null;
+  const progress = createSyncProgress({ enabled: normalized.progress, cost: () => costReporter?.summary() });
+  const onProgress = patch => { progress.update(patch); dependencies.onProgress?.(patch); };
+  let batchBudget = null;
   const report = {
     schemaVersion: 1,
     kind: "bounded-evidence-asset-sync",
@@ -70,6 +76,7 @@ export async function runBoundedEvidenceAssetSync(options = {}, dependencies = {
   try {
     if (costReporter) await costReporter.persist();
     const builder = dependencies.buildGeminiRuleQaAssets || buildGeminiRuleQaAssets;
+    onProgress({ stage: "canonical_build" });
     const canonical = await builder({
       dataDir: normalized.dataDir,
       outputDir: assetDir,
@@ -97,14 +104,30 @@ export async function runBoundedEvidenceAssetSync(options = {}, dependencies = {
       mechanicalReuseInvariant: "stable-json-full-input-row-and-bound-record-identity-v1",
     };
 
-    const preliminaryCache = dependencies.cache || createLocalEvidencePreprocessCache({
+    onProgress({ stage: "increment_plan", navigation: report.navigation });
+    let preliminaryCache = dependencies.cache || createLocalEvidencePreprocessCache({
       cacheDir: normalized.cacheDir,
     });
+    if (normalized.batchBudgetUsd > 0 && normalized.execute) {
+      if (!previous.bundleRevision) throw codedError("sync_batch_published_baseline_required", 2);
+      const factory = dependencies.createCloudResources || createCloudEvidencePreprocessResources;
+      const cloud = await factory({ env: normalized.env, fetchImpl: dependencies.fetchImpl || globalThis.fetch,
+        reportOnlyCost: true, costReporter });
+      preliminaryCache = cloud.cache;
+      const initialSpentUsd = normalized.env.EVIDENCE_SYNC_CARRY_BASELINE === previous.bundleRevision
+        ? Number(normalized.env.EVIDENCE_SYNC_CARRY_USD) : 0;
+      batchBudget = await createSyncBatchBudget({ command: cloud.command,
+        namespace: normalized.env.EVIDENCE_PREPROCESS_CACHE_NAMESPACE,
+        batchId: previous.bundleRevision, limitUsd: normalized.batchBudgetUsd, initialSpentUsd, costReporter, onProgress });
+      report.batchBudget = batchBudget.snapshot();
+    }
+    preliminaryCache = memoizePreprocessCache(preliminaryCache);
     const embeddingDry = await runEmbeddingRefresh({
       denseInputs,
       dataDir: normalized.dataDir,
       cache: preliminaryCache,
       execute: false,
+      onProgress,
     });
     report.embeddings = embeddingDry.report;
 
@@ -125,11 +148,13 @@ export async function runBoundedEvidenceAssetSync(options = {}, dependencies = {
         cache: preliminaryCache,
         contract: navigationContract,
         ruleGenerationContract: ruleNavigationContract,
+        onProgress,
       });
       report.navigation.cacheReadyRecords = generatedRecordCount(navigationDry.records);
       report.navigation.preparation = navigationDry.report;
     }
 
+    await writeJsonAtomic(reportPath, report);
     if (!normalized.execute) {
       report.status = "dry_run_complete";
       await writeJsonAtomic(reportPath, report);
@@ -141,10 +166,12 @@ export async function runBoundedEvidenceAssetSync(options = {}, dependencies = {
       : false;
     const preliminaryNeedsEmbeddingWork = embeddingNeedsBudget(embeddingDry);
     let cache = preliminaryCache;
-    let budget = costReporter || dependencies.budget || null;
+    let budget = batchBudget || costReporter || dependencies.budget || null;
     if (preliminaryNeedsNavigationWork || preliminaryNeedsEmbeddingWork) {
       if (!normalized.reportOnlyCost && !(normalized.maxUsd > 0)) throw codedError("bounded_sync_max_usd_required_for_changes", 2);
-      if (dependencies.cache && budget) {
+      if (batchBudget) {
+        cache = preliminaryCache;
+      } else if (dependencies.cache && budget) {
         cache = dependencies.cache;
       } else if (dependencies.budget && !normalized.reportOnlyCost) {
         cache = preliminaryCache;
@@ -157,7 +184,7 @@ export async function runBoundedEvidenceAssetSync(options = {}, dependencies = {
           reportOnlyCost: normalized.reportOnlyCost,
           costReporter,
         });
-        cache = cloud.cache;
+        cache = memoizePreprocessCache(cloud.cache);
         budget = cloud.budget;
       } else if (!normalized.reportOnlyCost) {
         if (!normalized.ledgerPath) throw codedError("bounded_sync_local_ledger_required_for_changes", 2);
@@ -177,6 +204,7 @@ export async function runBoundedEvidenceAssetSync(options = {}, dependencies = {
           cache,
           contract: navigationContract,
           ruleGenerationContract: ruleNavigationContract,
+          onProgress,
         });
       changedRecords = currentDry.records;
       if (generatedRecordCount(changedRecords) !== navigationPlan.generationInputs.length) {
@@ -199,6 +227,8 @@ export async function runBoundedEvidenceAssetSync(options = {}, dependencies = {
           contract: navigationContract,
           ruleGenerationContract: ruleNavigationContract,
           execute: true,
+          concurrency: normalized.navigationConcurrency,
+          onProgress,
           maxUsd: normalized.maxUsd,
           budget,
           coverageScope: { selectedUnitKeys: navigationPlan.generationInputs.map((row) => row.unitKey) },
@@ -218,7 +248,11 @@ export async function runBoundedEvidenceAssetSync(options = {}, dependencies = {
           rawUsage: (response, contract) => transportFor(contract).rawUsage(response),
           validateResponse: (response, contract) => transportFor(contract).validateResponse(response),
         });
-        if (!generated.report.complete) throw codedError("bounded_sync_navigation_incomplete", 4);
+        if (!generated.report.complete) {
+          report.navigation.preparation = generated.report;
+          if (batchBudget?.snapshot().blocked) throw Object.assign(codedError("evidence_preprocess_budget_exceeded", 3), { code: "evidence_preprocess_budget_exceeded" });
+          throw codedError("bounded_sync_navigation_incomplete", 4);
+        }
         changedRecords = generated.records;
       }
     }
@@ -240,6 +274,7 @@ export async function runBoundedEvidenceAssetSync(options = {}, dependencies = {
       maxUsd: normalized.maxUsd,
       budget,
       batchSize: normalized.batchSize,
+      onProgress,
       embedBatch: (...args) => {
         embedBatch ||= createGeminiEmbeddingTransport({
           apiKey: normalized.env.GEMINI_RULE_QA_API_KEY || normalized.env.GEMINI_API_KEY,
@@ -250,6 +285,7 @@ export async function runBoundedEvidenceAssetSync(options = {}, dependencies = {
     });
     report.embeddings = embedding.report;
 
+    onProgress({ stage: "release_build" });
     const released = await builder({
       dataDir: normalized.dataDir,
       outputDir: assetDir,
@@ -258,6 +294,7 @@ export async function runBoundedEvidenceAssetSync(options = {}, dependencies = {
       ruleDenseDir: join(normalized.outDir, "rule-embedding-v1"),
       qaDenseDir: join(normalized.outDir, "qa-embedding-v1"),
     });
+    onProgress({ stage: "release_verify" });
     const verified = await builder({
       dataDir: normalized.dataDir,
       outputDir: assetDir,
@@ -266,6 +303,10 @@ export async function runBoundedEvidenceAssetSync(options = {}, dependencies = {
     if (verified.manifest.bundleRevision !== released.manifest.bundleRevision) {
       throw codedError("bounded_sync_release_verify_revision_mismatch", 5);
     }
+    if (batchBudget) {
+      report.batchBudget = await batchBudget.refresh();
+      if (report.batchBudget.spentUsd > report.batchBudget.limitUsd) throw codedError("sync_batch_recorded_rate_overrun", 3);
+    }
     report.status = "ready_to_publish";
     report.publishable = true;
     report.bundleRevision = verified.manifest.bundleRevision;
@@ -273,14 +314,22 @@ export async function runBoundedEvidenceAssetSync(options = {}, dependencies = {
     await writeJsonAtomic(reportPath, report);
     return { report, reportPath, outputDir: normalized.outDir, manifest: verified.manifest };
   } catch (error) {
-    report.status = "failed";
+    report.status = error?.code === "evidence_preprocess_budget_exceeded" ? "paused_budget" : "failed";
+    if (batchBudget) report.batchBudget = batchBudget.snapshot();
+    if (report.status === "paused_budget") {
+      report.publishable = false;
+      report.resume = "Completed paid results remain cached; retries keep the batch limit. NEW DATA NOT PUBLISHED. No automatic top-up.";
+      console.error("SYNC PAUSED: budget insufficient for next safe reservation; NEW DATA NOT PUBLISHED.");
+    }
     report.error = error?.message || String(error);
     if (error?.responseDiagnostic) report.responseDiagnostic = error.responseDiagnostic;
-    if (costReporter) report.cost = await costReporter.finish("failed");
+    if (costReporter) report.cost = await costReporter.finish(report.status);
     await writeJsonAtomic(reportPath, report).catch(() => {});
     throw error;
   } finally {
+    if (batchBudget) console.log(`SYNC BATCH BUDGET ${JSON.stringify(batchBudget.snapshot())}`);
     if (costReporter) console.log(formatEvidenceRunCost(costReporter.summary()));
+    progress.finish();
   }
 }
 
@@ -365,13 +414,14 @@ function generatedRecordCount(records) {
   return records.filter((record) => record?.navigationStatus === "generated" && record.generator).length;
 }
 
-async function dryNavigation({ inputs, cache, contract, ruleGenerationContract }) {
+async function dryNavigation({ inputs, cache, contract, ruleGenerationContract, onProgress }) {
   return runNavigationPreparation({
     inputs,
     cache,
     contract,
     ruleGenerationContract,
     execute: false,
+    onProgress,
     coverageScope: { selectedUnitKeys: inputs.map((row) => row.unitKey) },
   });
 }
@@ -408,7 +458,7 @@ async function loadPreviousNavigation(dataDir) {
       || records.some((record, index) => record.unitKey !== inputs[index].unitKey)) {
     throw codedError("bounded_sync_previous_navigation_order_invalid", 5);
   }
-  return { inputs, records };
+  return { inputs, records, bundleRevision: release.bundleRevision };
 }
 
 async function readBoundJsonAsset(directory, descriptor) {
@@ -432,6 +482,11 @@ function normalizeOptions(options) {
   const outDir = options.outDir ? resolve(options.outDir) : "";
   if (!outDir) throw codedError("bounded_sync_out_dir_required", 2);
   if (isWithin(dataDir, outDir)) throw codedError("bounded_sync_staging_must_not_overwrite_data_dir", 2);
+  const batchBudgetUsd = Number(options.batchBudgetUsd || 0);
+  if (!Number.isFinite(batchBudgetUsd) || batchBudgetUsd < 0 || batchBudgetUsd > 1
+      || (batchBudgetUsd > 0 && (!options.cloud || options.reportOnlyCost))) throw codedError("sync_batch_options_invalid", 2);
+  const navigationConcurrency = options.navigationConcurrency ?? 2;
+  if (!Number.isInteger(navigationConcurrency) || navigationConcurrency < 1 || navigationConcurrency > 4) throw codedError("navigation_concurrency_invalid", 2);
   const batchSize = options.batchSize ?? 100;
   if (!Number.isInteger(batchSize) || batchSize < 1 || batchSize > 100) {
     throw codedError("bounded_sync_batch_size_invalid", 2);
@@ -448,7 +503,8 @@ function normalizeOptions(options) {
     cloud: Boolean(options.cloud),
     reportOnlyCost: Boolean(options.reportOnlyCost),
     execute: Boolean(options.execute),
-    maxUsd: Number(options.maxUsd),
+    maxUsd: batchBudgetUsd || Number(options.maxUsd),
+    batchBudgetUsd, navigationConcurrency, progress: Boolean(options.progress),
     batchSize,
     env: options.env || process.env,
   };
@@ -474,6 +530,9 @@ function parseArguments(argv) {
     else if (argument === "--rule-generation-profile") options.ruleGenerationProfile = take(index++);
     else if (argument === "--ledger") options.ledgerPath = take(index++);
     else if (argument === "--max-usd") options.maxUsd = Number(take(index++));
+    else if (argument === "--batch-budget-usd") options.batchBudgetUsd = Number(take(index++));
+    else if (argument === "--navigation-concurrency") options.navigationConcurrency = Number(take(index++));
+    else if (argument === "--progress") options.progress = true;
     else if (argument === "--batch-size") options.batchSize = Number(take(index++));
     else if (argument === "--cloud") options.cloud = true;
     else if (argument === "--report-only-cost") options.reportOnlyCost = true;

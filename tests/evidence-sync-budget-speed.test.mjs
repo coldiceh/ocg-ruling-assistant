@@ -1,0 +1,51 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import {setTimeout as delay} from 'node:timers/promises';
+import {readFile} from 'node:fs/promises';
+import {createSyncBatchBudget,BATCH_SCRIPT,quoteNavigation} from '../scripts/lib/evidence-sync-batch-budget.mjs';
+import {createSyncProgress,memoizePreprocessCache} from '../scripts/lib/evidence-sync-progress.mjs';
+import {createEvidenceRunCostReporter} from '../scripts/lib/evidence-preprocess-run-cost.mjs';
+import {createRedisEvidencePreprocessCache,sha256,stableJson} from '../scripts/lib/evidence-preprocess-cache.mjs';
+import {loadEvidenceGenerationContract} from '../backend/evidenceGenerationContract.mjs';
+import {planNavigationMisses} from '../scripts/prepare-evidence-navigation.mjs';
+import {fakeBatchRedis} from './helpers/evidence-sync-budget-fixture.mjs';
+const batchId='a'.repeat(64),namespace='fixture-only';
+const make=(r,opts={})=>createSyncBatchBudget({command:r.command,batchId,namespace,...opts});
+const reserve=(b,t,a)=>b.reserve({ticket:t,amountUsd:a,providerId:'fixture',modelId:'fixture'});
+const profileUrl=new URL('../config/evidence-generation/bai-gpt-5.6-luna-medium-theoretical.json',import.meta.url);
+test('same batch retry retains spending and unresolved reservations',async()=>{
+ const r=fakeBatchRedis(),b=await make(r);await reserve(b,'a',0.3);await b.settle({ticket:'a',spentUsd:0.1});await reserve(b,'b',0.4);await b.markRequestUnknown('b');
+ const next=await make(r);assert.equal(next.snapshot().spentUsd,0.1);assert.equal(next.snapshot().reservedUsd,0.4);assert.equal(next.snapshot().remainingUsd,0.5);
+ await assert.rejects(reserve(next,'c',0.6),{code:'evidence_preprocess_budget_exceeded'});assert.equal(r.states.size,1);
+});
+test('parallel admission waits for a live request to settle without overspending',async()=>{
+ const b=await make(fakeBatchRedis());await Promise.all(['a','b','c'].map(t=>reserve(b,t,0.3)));
+ let admitted=false;const next=reserve(b,'d',0.3).then(()=>{admitted=true;});await delay(20);assert.equal(admitted,false);assert.equal(b.snapshot().reservedUsd,0.9);
+ await b.settle({ticket:'a',spentUsd:0.01});await next;assert.equal(b.snapshot().spentUsd+b.snapshot().reservedUsd,0.91);
+});
+test('unknown usage never frees spending headroom',async()=>{const b=await make(fakeBatchRedis());await reserve(b,'a',0.8);await b.recordUsage({ticket:'a',usage:{billableCost:{status:'unknown'}}});await assert.rejects(reserve(b,'b',0.3),{code:'evidence_preprocess_budget_exceeded'});assert.equal(b.snapshot().reservedUsd,0.8);});
+test('provider exception retains the pending reservation',async()=>{const b=await make(fakeBatchRedis());await reserve(b,'a',0.8);await b.markRequestUnknown('a');await assert.rejects(reserve(b,'b',0.3),{code:'evidence_preprocess_budget_exceeded'});});
+test('historical response reconciliation does not become a new request',async()=>{const r=fakeBatchRedis(),b=await make(r);await reserve(b,'old',0.4);const reporter=createEvidenceRunCostReporter();const retry=await make(r,{costReporter:reporter});await retry.settle({ticket:'old',spentUsd:0.2});assert.equal(retry.snapshot().spentUsd,0.2);assert.equal(reporter.summary().requestsAttempted,0);});
+test('untracked historical settlement is not fabricated as a new charge',async()=>{const b=await make(fakeBatchRedis());await b.settle({ticket:'old',spentUsd:0.9});assert.equal(b.snapshot().spentUsd,0);});
+test('duplicate reservation cannot resubmit the same paid request',async()=>{const b=await make(fakeBatchRedis());await reserve(b,'a',0.2);await assert.rejects(reserve(b,'a',0.2),/existing_request/);assert.equal(b.snapshot().reservedUsd,0.2);});
+test('settlements are idempotent and conflicting settlements fail closed',async()=>{const b=await make(fakeBatchRedis());await reserve(b,'a',0.2);await b.settle({ticket:'a',spentUsd:0.1});await b.settle({ticket:'a',spentUsd:0.1});await assert.rejects(b.settle({ticket:'a',spentUsd:0.11}),/settlement_conflict/);await assert.rejects(reserve(b,'b',0.1),/sync_batch_stopped/);});
+test('changed limit cannot reset existing spending or grant an automatic top-up',async()=>{const r=fakeBatchRedis();await make(r,{limitUsd:0.5});await assert.rejects(make(r,{limitUsd:1}),/config_conflict/);await assert.rejects(make(r,{limitUsd:5}),/configuration_invalid/);});
+test('only a changed published baseline selects a new batch',async()=>{const r=fakeBatchRedis(),b=await make(r);await reserve(b,'a',0.5);await b.settle({ticket:'a',spentUsd:0.5});const next=await make(r,{batchId:'b'.repeat(64)});assert.equal(next.snapshot().spentUsd,0);assert.equal(r.states.size,2);});
+test('admission quote includes full model input capacity and reasoning output cap',()=>{const c=loadEvidenceGenerationContract('navigation',{profileUrl});assert.equal(quoteNavigation(c),(1050000*0.25+2048*1.2)/1e6);});
+test('unexpected charged overrun is recorded and blocks further requests',async()=>{const b=await make(fakeBatchRedis());await reserve(b,'a',0.8);await b.recordUsage({ticket:'a',usage:{billableCost:{status:'known',amountUsd:1.1}}});assert.equal(b.snapshot().spentUsd,1.1);await assert.rejects(reserve(b,'b',0.01),{code:'evidence_preprocess_budget_exceeded'});});
+test('negative, nonfinite and NaN reservation values cannot bypass admission',async()=>{const b=await make(fakeBatchRedis());for(const a of [-1,NaN,Infinity])await assert.rejects(reserve(b,'invalid',a),/invalid/);});
+test('130 navigation lookups use 3 MGETs, repeated scan uses no additional reads',async()=>{
+ let calls=0;const cache=memoizePreprocessCache(createRedisEvidencePreprocessCache({namespace,command:async args=>{assert.equal(args[0],'MGET');calls++;return args.slice(1).map(()=>null);}}));
+ const inputs=Array.from({length:130},(_,i)=>{const input={sourceKind:'rule',unitText:`rule ${i}`,titlePath:[]};return {unitKey:`r${i}`,sourceId:`r${i}`,canonicalBodySha256:sha256(input.unitText),contextInputSha256:sha256(stableJson(input)),contextRefs:[],explicitRefs:[],input};});
+ const options={inputs,cache,contract:loadEvidenceGenerationContract('navigation',{profileUrl}),coverageScope:{selectedUnitKeys:inputs.map(r=>r.unitKey)}};
+ assert.equal((await planNavigationMisses(options)).rows.length,130);assert.equal(calls,3);await planNavigationMisses(options);assert.equal(calls,3);
+});
+test('writes invalidate memoized result and navigation reads',async()=>{
+ let value=null,reads=0;const cache=memoizePreprocessCache({readResult:async()=>{reads++;return value;},readNavigation:async()=>({normalized:value}),writeResult:async(_k,_id,row)=>{value=row.value;},saveNavigationNormalized:async(_id,_v,row)=>{value=row;}});
+ await cache.readResult('dense','key');await cache.readResult('dense','key');assert.equal(reads,1);await cache.writeResult('dense','key',{value:{vector:[1]}});assert.deepEqual(await cache.readResult('dense','key'),{vector:[1]});assert.equal(reads,2);
+ await cache.readNavigation('key','v');await cache.saveNavigationNormalized('key','v',{ok:true});assert.deepEqual(await cache.readNavigation('key','v'),{normalized:{ok:true}});
+});
+test('progress includes stage counts and known versus unknown costs',()=>{const logs=[];const p=createSyncProgress({enabled:true,log:s=>logs.push(s),cost:()=>({requestsAttempted:3,knownCostUsd:0.1,unknownCostRequests:1})});p.update({stage:'navigation_generation',completed:0,total:2});p.update({completed:2,total:2});p.finish();assert.ok(logs.some(s=>s.includes('"completed":2')));assert.ok(logs.every(s=>s.includes('"unknownCostRequests":1')));});
+test('workflow remains unscheduled and uses the capped path with live progress',async()=>{const s=await readFile(new URL('../.github/workflows/sync-data.yml',import.meta.url),'utf8');assert.ok(!/^  schedule:/m.test(s));assert.ok(s.includes('--batch-budget-usd 1'));assert.ok(s.includes('--navigation-concurrency 4'));assert.ok(s.includes('--progress'));assert.ok(!s.includes('--report-only-cost'));assert.ok(s.includes('0.66364875'));});
+test('cancelled-run cost is carried exactly once, leaving only the original remainder',async()=>{const r=fakeBatchRedis(),b=await make(r,{initialSpentUsd:0.66364875});assert.equal(b.snapshot().remainingUsd,0.33635125);await reserve(b,'a',0.2);await b.settle({ticket:'a',spentUsd:0.1});const retry=await make(r,{initialSpentUsd:0.66364875});assert.equal(retry.snapshot().spentUsd,0.76364875);await assert.rejects(make(r,{initialSpentUsd:0}),/config_conflict/);});
+test('Redis transport failure wakes pending workers and stops further paid admission',async()=>{const r=fakeBatchRedis();let broken=false;const b=await make({...r,command:async args=>{if(broken)throw new Error('fixture Redis unavailable');return r.command(args);}});await reserve(b,'a',0.8);const pending=reserve(b,'b',0.3);await delay(20);broken=true;await assert.rejects(b.settle({ticket:'a',spentUsd:0.1}),/unavailable/);await assert.rejects(pending,/stopped/);});

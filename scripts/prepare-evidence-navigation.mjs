@@ -98,6 +98,7 @@ export function selectNavigationCoverage(inputs, { seed = NAVIGATION_COVERAGE_SE
 
 export async function planNavigationMisses({
   inputs, cache, contract, ruleGenerationContract = null, coverageScope = selectNavigationCoverage(inputs),
+  onProgress = () => {},
 }) {
   const contractHash = generationContractSha256(contract);
   const ruleContractHash = ruleGenerationContract ? generationContractSha256(ruleGenerationContract) : null;
@@ -117,11 +118,21 @@ export async function planNavigationMisses({
       rows.push({ input, key, contract: rowContract, contractHash: rowContractHash, state: "not_generated_in_scope" });
       continue;
     }
-    const cached = await cache.readNavigation(key, NAVIGATION_NORMALIZER_VERSION);
-    rows.push(await resolveOutputRecoveryRow({
-      input, key, contract: rowContract, contractHash: rowContractHash,
-      state: navigationCacheState(cached, rowContract), cached,
-    }, cache));
+    rows.push({ input, key, contract: rowContract, contractHash: rowContractHash, state: "pending_cache" });
+  }
+  const pending = rows.filter(row => row.state === "pending_cache");
+  onProgress({ stage: "navigation_cache", completed: 0, total: pending.length });
+  for (let offset = 0; offset < pending.length; offset += 64) {
+    const batch = pending.slice(offset, offset + 64);
+    const values = cache.readNavigationBatch
+      ? await cache.readNavigationBatch(batch.map(row => row.key), NAVIGATION_NORMALIZER_VERSION)
+      : await Promise.all(batch.map(row => cache.readNavigation(row.key, NAVIGATION_NORMALIZER_VERSION)));
+    if (!Array.isArray(values) || values.length !== batch.length) throw codedError("navigation_cache_batch_invalid", 5);
+    for (let i = 0; i < batch.length; i++) {
+      const row = batch[i], cached = values[i];
+      Object.assign(row, await resolveOutputRecoveryRow({ ...row, cached, state: navigationCacheState(cached, row.contract) }, cache));
+    }
+    onProgress({ stage: "navigation_cache", completed: offset + batch.length, total: pending.length });
   }
   return { contractHash, ruleContractHash, coverageScope, rows };
 }
@@ -194,7 +205,10 @@ export async function runNavigationPreparation({
   runtimeLimitMs = null,
   resumeCursor = null,
   now = Date.now,
+  concurrency = 2,
+  onProgress = () => {},
 } = {}) {
+  if (!Number.isInteger(concurrency) || concurrency < 1 || concurrency > 4) throw codedError("navigation_concurrency_invalid", 2);
   const resolvedMeasureInput = measureInput || (({
     body, contract: currentContract, countTokens: currentCountTokens,
   }) => buildEvidenceInputMeasurement({ body, contract: currentContract, countTokens: currentCountTokens }));
@@ -203,7 +217,7 @@ export async function runNavigationPreparation({
   const counts = countInputKinds(inputs);
 
   if (!execute) {
-    const plan = await planNavigationMisses({ inputs, cache, contract, ruleGenerationContract, coverageScope });
+    const plan = await planNavigationMisses({ inputs, cache, contract, ruleGenerationContract, coverageScope, onProgress });
     const historicalCosts = knownHistoricalCosts(plan.rows);
     const generationMisses = plan.rows.filter((row) => row.state === "generation_miss").length;
     const report = baseNavigationReport({
@@ -239,7 +253,8 @@ export async function runNavigationPreparation({
   let stoppedAtDeadline = false;
   let firstFailure = null;
 
-  const workers = Array.from({ length: Math.min(2, Math.max(0, inputs.length - startOffset)) }, async () => {
+  onProgress({ stage: "navigation_generation", completed: startOffset, total: inputs.length, concurrency });
+  const workers = Array.from({ length: Math.min(concurrency, Math.max(0, inputs.length - startOffset)) }, async () => {
     while (!stopNewWork) {
       if (now() >= deadlineMs) {
         stoppedAtDeadline = true;
@@ -273,6 +288,7 @@ export async function runNavigationPreparation({
           validateResponse,
         });
         outcomes.set(index, outcome);
+        onProgress({ stage: "navigation_generation", completed: startOffset + outcomes.size, total: inputs.length, concurrency });
         if (outcome.budgetBlocked || outcome.record.navigationStatus === "blocked_before_attempt") {
           stopNewWork = true;
         }
@@ -633,7 +649,7 @@ async function generateOneNavigation({ row, cache, contract, budget, countTokens
         }
         throw error;
       }
-      const reserve = estimateGenerationUpperBoundUsd({ measurement, contract }).amountUsd;
+      const reserve = budget.quoteNavigation ? budget.quoteNavigation(contract) : estimateGenerationUpperBoundUsd({ measurement, contract }).amountUsd;
       const requestTicket = `nav-request-${randomUUID()}`;
       try {
         await budget.reserve({ ticket: requestTicket, amountUsd: reserve, providerId: contract.providerId, modelId: contract.modelId });
@@ -643,7 +659,9 @@ async function generateOneNavigation({ row, cache, contract, budget, countTokens
         claimReleased = true;
         return { status: "blocked_before_attempt", record: emptyNavigationRecord(row.input, "blocked_before_attempt", "budget_exceeded") };
       }
-      const providerResponse = await generateContent(body, contract, { measurement });
+      let providerResponse;
+      try { providerResponse = await generateContent(body, contract, { measurement }); }
+      catch (error) { await budget.markRequestUnknown?.(requestTicket); throw error; }
       // Capture usage even when persistence or response validation later fails.
       if (budget.recordUsage) await budget.recordUsage({ ticket: requestTicket,
         usage: normalizeUsage(rawUsage(providerResponse, contract), contract) });

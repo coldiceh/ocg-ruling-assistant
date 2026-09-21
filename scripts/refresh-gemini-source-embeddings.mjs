@@ -59,7 +59,7 @@ function validateCollection(rows, sourceKind) {
   });
 }
 
-export async function planEmbeddingRefresh({ denseInputs, dataDir, cache }) {
+export async function planEmbeddingRefresh({ denseInputs, dataDir, cache, onProgress = () => {} }) {
   const plans = {};
   for (const kind of ["rule", "qa"]) {
     const oldIndex = await loadExistingVectorIndex(join(dataDir, `${kind}-embedding-v1`));
@@ -73,8 +73,8 @@ export async function planEmbeddingRefresh({ denseInputs, dataDir, cache }) {
         embeddingInputTextHash: item.embeddingInputSha256,
       });
       const oldEntry = oldIndex.entries.get(item.embeddingInputSha256) || null;
-      const cached = oldEntry ? null : await cache.readResult("dense", key);
-      const rawPointer = oldEntry || cached ? null : await cache.readResult("dense", key, "raw");
+      const cached = null;
+      const rawPointer = null;
       rows.push({
         item,
         key,
@@ -83,6 +83,23 @@ export async function planEmbeddingRefresh({ denseInputs, dataDir, cache }) {
         cached,
         rawPointer,
       });
+    }
+    const pending = rows.filter(row => !row.oldEntry);
+    onProgress({ stage: "embedding_cache", kind, completed: 0, total: pending.length });
+    for (let offset = 0; offset < pending.length; offset += 64) {
+      const batch = pending.slice(offset, offset + 64);
+      const readBatch = async (items, variant) => cache.readResultBatch
+        ? cache.readResultBatch("dense", items.map(row => row.key), variant)
+        : Promise.all(items.map(row => cache.readResult("dense", row.key, variant)));
+      const results = await readBatch(batch, "result");
+      if (!Array.isArray(results) || results.length !== batch.length) throw codedError("dense_cache_batch_invalid", 5);
+      batch.forEach((row,i) => { row.cached = results[i]; });
+      const missing = batch.filter(row => !row.cached);
+      const raw = await readBatch(missing, "raw");
+      if (!Array.isArray(raw) || raw.length !== missing.length) throw codedError("dense_cache_batch_invalid", 5);
+      missing.forEach((row,i) => { row.rawPointer = raw[i]; });
+      batch.forEach(row => { row.state = row.cached ? "cache_hit" : row.rawPointer ? "raw_reusable" : "generation_miss"; });
+      onProgress({ stage: "embedding_cache", kind, completed: offset + batch.length, total: pending.length });
     }
     plans[kind] = {
       kind,
@@ -106,8 +123,9 @@ export async function runEmbeddingRefresh({
   budget = null,
   embedBatch,
   batchSize = 100,
+  onProgress = () => {},
 } = {}) {
-  const plans = await planEmbeddingRefresh({ denseInputs, dataDir, cache });
+  const plans = await planEmbeddingRefresh({ denseInputs, dataDir, cache, onProgress });
   const resolvedBudget = budget || (ledgerPath
     ? createLocalEvidencePreprocessBudget({ ledgerPath, maxUsd: maxUsd > 0 ? maxUsd : Number.MAX_VALUE })
     : null);
@@ -148,16 +166,22 @@ export async function runEmbeddingRefresh({
     for (const row of plans[kind].rows.filter((candidate) => candidate.state === "raw_reusable")) {
       await materializeDenseRaw({ row, cache, budget: resolvedBudget });
     }
-    await fillEmbeddingMisses({ plan: plans[kind], cache, embedBatch, budget: resolvedBudget, batchSize });
+    await fillEmbeddingMisses({ plan: plans[kind], cache, embedBatch, budget: resolvedBudget, batchSize, onProgress });
+    onProgress({ stage: "embedding_assembly", kind });
     await assembleEmbeddingIndex({ plan: plans[kind], destination: join(outDir, `${kind}-embedding-v1`) });
   }
   return { report, plans, exitCode: 0 };
 }
 
-async function fillEmbeddingMisses({ plan, cache, embedBatch, budget, batchSize }) {
+async function fillEmbeddingMisses({ plan, cache, embedBatch, budget, batchSize, onProgress }) {
   const misses = plan.rows.filter((row) => row.state === "generation_miss");
-  for (let offset = 0; offset < misses.length; offset += batchSize) {
-    const candidates = misses.slice(offset, offset + batchSize);
+  onProgress({ stage: "embedding_generation", kind: plan.kind, completed: 0, total: misses.length });
+  for (let offset = 0; offset < misses.length;) {
+    const snapshot = budget.snapshot?.();
+    const perInputQuote = EMBEDDING_MAX_INPUT_TOKENS * EMBEDDING_PRICE_USD_PER_MILLION / 1_000_000;
+    const fitting = snapshot ? Math.max(1, Math.floor(snapshot.remainingUsd / perInputQuote)) : batchSize;
+    const candidates = misses.slice(offset, offset + Math.min(batchSize, fitting));
+    offset += candidates.length;
     const requestKey = sha256(stableJson({
       kind: plan.kind,
       model: EMBEDDING_MODEL,
@@ -232,12 +256,10 @@ async function fillEmbeddingMisses({ plan, cache, embedBatch, budget, batchSize 
       if (batchClaimOwned) await cache.releaseClaim("dense-batch", requestKey, requestTicket);
       throw error;
     }
-    const raw = await embedBatch(claimed.map((row) => row.item.embeddingInput), {
-      model: EMBEDDING_MODEL,
-      dimension: EMBEDDING_DIMENSION,
-      autoTruncate: false,
-      requestTicket,
-    });
+    let raw;
+    try { raw = await embedBatch(claimed.map((row) => row.item.embeddingInput), {
+      model: EMBEDDING_MODEL, dimension: EMBEDDING_DIMENSION, autoTruncate: false, requestTicket,
+    }); } catch (error) { await budget.markRequestUnknown?.(requestTicket); throw error; }
     const vectors = raw?.embeddings?.map((embedding) => embedding?.values);
     const tokens = raw?.usageMetadata?.promptTokenCount;
     const spentUsd = Number.isSafeInteger(tokens) && tokens >= 0
@@ -279,6 +301,7 @@ async function fillEmbeddingMisses({ plan, cache, embedBatch, budget, batchSize 
       row.state = "cache_hit";
     }
     if (spentUsd !== null) await budget.settle({ ticket: requestTicket, spentUsd });
+    onProgress({ stage: "embedding_generation", kind: plan.kind, completed: offset, total: misses.length });
   }
 }
 
