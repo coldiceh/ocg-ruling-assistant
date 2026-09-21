@@ -1,0 +1,148 @@
+name: Repair saved CPU checkpoint bridge
+
+on:
+  push:
+    branches: [fix/cpu-bridge-escape-20260921]
+    paths: [.github/workflows/maintenance-cpu-resume-20260921.yml]
+
+permissions: {}
+concurrency:
+  group: cpu-bridge-repair-35555797334
+  cancel-in-progress: false
+
+jobs:
+  bridge:
+    if: github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: f0c9a411077f87bc84c3738cf0bd35f9b179ee51
+          fetch-depth: 1
+          persist-credentials: false
+          sparse-checkout: scripts
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Validate saved progress and dispatch exactly one CPU-only recovery
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs/promises';
+          import path from 'node:path';
+          import { execFileSync } from 'node:child_process';
+          import { stripVTControlCharacters } from 'node:util';
+          import { pathToFileURL } from 'node:url';
+          import assert from 'node:assert/strict';
+          
+          function checkpointFromLog(raw) {
+            // Capture CLI output in a pipe and remove terminal controls before parsing.
+            // Never print the raw log or attach execFileSync's complete error object.
+            const text = stripVTControlCharacters(raw);
+            const last = [...text.matchAll(/missing-cloud-embeddings:(\d+)\/(\d+)/g)].at(-1);
+            const computedRows = Number(last?.[1]);
+            const pendingAtStart = Number(last?.[2]);
+            if (!text.includes('cloud_sync_embedding_checkpoint_saved:resume_next_run')
+                || !text.includes('cloud_sync_embedder_exit_75')
+                || !Number.isSafeInteger(computedRows) || !Number.isSafeInteger(pendingAtStart)
+                || computedRows <= 0 || computedRows >= pendingAtStart) {
+              throw Error('not_a_positive_cpu_time_checkpoint');
+            }
+            return { computedRows, pendingAtStart, remainingRows: pendingAtStart - computedRows };
+          }
+          const markers = '\ncloud_sync_embedding_checkpoint_saved:resume_next_run\nError: cloud_sync_embedder_exit_75';
+          assert.deepEqual(checkpointFromLog('missing-cloud-embeddings:2/10' + markers), {computedRows:2,pendingAtStart:10,remainingRows:8});
+          assert.deepEqual(checkpointFromLog('\x1b[36;1mmissing-cloud-embeddings:2/10\x1b[0m\nmissing-cloud-embeddings:4/10' + markers), {computedRows:4,pendingAtStart:10,remainingRows:6});
+          for (const text of ['missing-cloud-embeddings:0/10' + markers, 'missing-cloud-embeddings:10/10' + markers,
+            'missing-cloud-embeddings:11/10' + markers, 'missing-cloud-embeddings:2/10', markers,
+            'missing-cloud-embeddings:NaN/10' + markers]) {
+            assert.throws(() => checkpointFromLog(text), /not_a_positive_cpu_time_checkpoint/);
+          }
+          console.log('BRIDGE_SELF_TESTS: 8 passed; no model calls.');
+          if (process.argv.includes('--self-test')) process.exit(0);
+          
+          const repo = 'coldiceh/ocg-ruling-assistant';
+          const sourceRunId = '35555797334';
+          const reviewedMain = 'f0c9a411077f87bc84c3738cf0bd35f9b179ee51';
+          const sourceHead = '848ce8d4ed2506982f97665a8012a2c110929fd2';
+          const out = path.join(process.env.RUNNER_TEMP, 'cpu-bridge-repair');
+          await fs.mkdir(out, { recursive: true });
+          const report = { sourceRunId, reviewedMain, paidModelCallsInBridge: 0, action: 'validating' };
+          const save = () => fs.writeFile(path.join(out, 'bridge-summary.json'), JSON.stringify(report, null, 2));
+          function gh(args) {
+            try {
+              return execFileSync('gh', args, { encoding: 'utf8', maxBuffer: 32*1024*1024,
+                timeout: 120000, stdio: ['ignore', 'pipe', 'pipe'] });
+            } catch (error) {
+              const safe = stripVTControlCharacters(String(error.stderr || '')).slice(0, 600);
+              throw Error(`github_command_failed:${error.status ?? error.code ?? 'unknown'}:${safe}`);
+            }
+          }
+          const api = suffix => JSON.parse(gh(['api', `repos/${repo}/${suffix}`]));
+          try {
+            assert.equal(process.env.GITHUB_REPOSITORY, repo);
+            assert.equal(process.env.GITHUB_RUN_ATTEMPT, '1', 'do_not_rerun_one_time_dispatch');
+            assert.equal(api('branches/main').commit.sha, reviewedMain, 'main_changed_reinspect_before_dispatch');
+            const run = api(`actions/runs/${sourceRunId}`);
+            assert.equal(run.head_sha, sourceHead, 'unexpected_source_head');
+            const jobs = api(`actions/runs/${sourceRunId}/attempts/${run.run_attempt}/jobs?per_page=100`);
+            const {validateCheckpointRun} = await import(pathToFileURL(path.join(process.cwd(),'scripts/restore-sync-checkpoint.mjs')));
+            const proof = validateCheckpointRun(run, jobs, {repo, runId: sourceRunId, currentRunId: process.env.GITHUB_RUN_ID});
+            const job = jobs.jobs.find(j => j.name === 'sync');
+            for (const name of ['Preserve completed vectors even after an interrupted increment',
+              'Preserve unpublished source and derived assets after downstream failure']) {
+              assert.equal(job.steps.find(s => s.name === name)?.conclusion, 'success', `checkpoint_not_preserved:${name}`);
+            }
+            // The previous bridge failed here. Opt in only for this captured raw-log read.
+            const logs = gh(['api', `repos/${repo}/actions/jobs/${job.id}/logs`, '--allow-escape-sequences']);
+            report.cpu = checkpointFromLog(logs);
+            const artifacts = api(`actions/runs/${sourceRunId}/artifacts?per_page=100`).artifacts;
+            const snapshots = artifacts.filter(a => a.name === proof.artifactName && !a.expired
+              && String(a.workflow_run?.id) === sourceRunId);
+            assert.equal(snapshots.length, 1, 'snapshot_missing_or_ambiguous');
+            report.snapshotArtifactId = snapshots[0].id;
+            const cacheKey = `cloud-embedding-rows-v1-Linux-${sourceRunId}-${run.run_attempt}`;
+            const caches = api(`actions/caches?key=${cacheKey}&per_page=100`).actions_caches;
+            const savedCaches = caches.filter(c => c.key === cacheKey && c.ref === 'refs/heads/main');
+            assert.ok(savedCaches.length > 0, 'saved_cpu_cache_unavailable_do_not_recompute_blindly');
+            report.cpuCache = savedCaches.map(c => ({id:c.id,key:c.key,sizeInBytes:c.size_in_bytes}));
+            const costs = path.join(out, 'costs');
+            await fs.mkdir(costs, {recursive:true});
+            gh(['run','download',sourceRunId,'--repo',repo,'--name',`bounded-daily-report-${sourceRunId}-${run.run_attempt}`,'--dir',costs]);
+            const costText = execFileSync('node',['scripts/lib/evidence-preprocess-run-cost.mjs',path.join(costs,'run-cost.json')],{encoding:'utf8',stdio:['ignore','pipe','pipe'],maxBuffer:1024*1024});
+            report.originalCostSummary = stripVTControlCharacters(costText).trim();
+            // Refuse duplicates, including completed newer runs that must be investigated instead.
+            const recent = api(`actions/workflows/${run.workflow_id}/runs?per_page=100`).workflow_runs;
+            const newer = recent.filter(r => r.head_branch === 'main' && Number(r.id) > Number(sourceRunId));
+            assert.equal(newer.length, 0, `newer_sync_exists:${newer.map(r=>r.id).join(',')}`);
+            assert.equal(api('branches/main').commit.sha, reviewedMain, 'main_changed_before_dispatch');
+            report.action = 'dispatch_started';
+            await save();
+            // Exactly one POST, no automatic retry: a lost response must not duplicate work.
+            gh(['api','--method','POST',`repos/${repo}/actions/workflows/${run.workflow_id}/dispatches`,
+              '-f','ref=main','-f',`inputs[resume_run_id]=${sourceRunId}`,'-f','inputs[resume_sequence]=1']);
+            report.action = 'dispatched_one_cpu_only_resume';
+            report.completedAt = new Date().toISOString();
+            await save();
+            console.log('CPU_BRIDGE_REPAIR ' + JSON.stringify(report));
+          } catch (error) {
+            report.error = stripVTControlCharacters(String(error.message)).slice(0, 1500);
+            await save();
+            console.error('CPU_BRIDGE_REPAIR_STOP ' + JSON.stringify(report));
+            process.exitCode = 1;
+          }
+          NODE
+      - name: Preserve repair and source cost proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cpu-bridge-repair-${{ github.run_id }}
+          path: ${{ runner.temp }}/cpu-bridge-repair
+          if-no-files-found: error
+          retention-days: 3
