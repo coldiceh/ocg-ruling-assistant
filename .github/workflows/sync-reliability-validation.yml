@@ -1,0 +1,82 @@
+name: Validate sync reliability repair
+on:
+  push:
+    branches: [fix/sync-reliability-20260921]
+    paths: [.github/workflows/sync-reliability-validation.yml]
+permissions: {}
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: fix/sync-reliability-20260921
+          fetch-depth: 1
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - name: Apply exact reviewed source patch
+        run: |
+          set -euo pipefail
+          cat maintenance/sync-reliability.part1 maintenance/sync-reliability.part2 | base64 -d | gzip -d > "$RUNNER_TEMP/repair.patch"
+          echo "07e68bf085e50cdb39ee091a16b2c664b7cea6736ed1dbaf1c2b89d0bbf1d5a5  $RUNNER_TEMP/repair.patch" | sha256sum -c -
+          git apply --check "$RUNNER_TEMP/repair.patch"
+          git apply "$RUNNER_TEMP/repair.patch"
+          git apply --numstat "$RUNNER_TEMP/repair.patch" | cut -f3 > "$RUNNER_TEMP/changed-paths.txt"
+          while IFS= read -r file; do node --check "$file"; done < "$RUNNER_TEMP/changed-paths.txt"
+          git diff --check
+      - name: Run repair and publication regressions with no provider credentials
+        run: |
+          set -euo pipefail
+          node --test --test-concurrency=1 tests/sync-reliability.test.mjs tests/evidence-navigation-output-recovery.test.mjs tests/evidence-generation-transport.test.mjs tests/evidence-preprocess-navigation.test.mjs tests/evidence-preprocess-cloud.test.mjs tests/sync-bounded-evidence-assets.test.mjs tests/bai-evidence-generation-profile.test.mjs tests/evidence-preprocess-run-cost.test.mjs tests/evidence-sync-budget-speed.test.mjs tests/sync-ygoresources-selection.test.mjs tests/sync-ocg-rule.test.mjs tests/sync-ygoresources-cursor.test.mjs tests/data-index-rich-qa.test.mjs tests/gemini-rule-qa-assets.test.mjs tests/gemini-qa-tools.test.mjs tests/gemini-focused-qa-hash-reuse.test.mjs tests/cloud-evidence-incremental-sync.test.mjs tests/sync-snapshot-publication.test.mjs | tee "$RUNNER_TEMP/tests.log"
+      - name: Verify repeated actual-source stability without model calls
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/audit"
+          gh api --allow-escape-sequences repos/coldiceh/ocg-ruling-assistant/actions/artifacts/10618204360/zip > "$RUNNER_TEMP/audit.zip"
+          unzip -q "$RUNNER_TEMP/audit.zip" -d "$RUNNER_TEMP/audit"
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';import z from 'node:zlib';
+          import {stableJson} from './scripts/lib/evidence-preprocess-cache.mjs';
+          import {preserveFetchTimestamp,stableQaSelection} from './scripts/lib/sync-input-stability.mjs';
+          const out=process.env.RUNNER_TEMP+'/audit';const gz=p=>JSON.parse(z.gunzipSync(fs.readFileSync(p)));
+          const r=(stage,file)=>gz(out+'/'+stage+'-'+file+'.json.gz').records;
+          const published=gz('data/gemini-rule-qa-v1/qa-records.json.gz');
+          const first=stableQaSelection(r('first','qa-index'),r('first','rulings'),published,r('first','cards'));
+          const second=stableQaSelection(r('second','qa-index'),r('second','rulings'),first,r('second','cards'));
+          const compare=(a,b)=>{const map=new Map(a.map(x=>[x.id,x]));let unchanged=0,changed=0,added=0;const fields={};for(const n of b){const o=map.get(n.id);if(!o){added++;continue;}if(stableJson(o)===stableJson(n)){unchanged++;continue;}changed++;for(const k of new Set([...Object.keys(o),...Object.keys(n)]))if(stableJson(o[k]??null)!==stableJson(n[k]??null))fields[k]=(fields[k]||0)+1;}return {old:a.length,current:b.length,unchanged,changed,added,fields};};
+          const report={original:JSON.parse(fs.readFileSync(out+'/repeat-source-diff.json')),repairedQa:compare(first.filter(x=>x.recordType==='qa'),second.filter(x=>x.recordType==='qa'))};
+          for(const file of ['cards','ocg-rule-corpus']){const a=r('first',file),b=r('second',file),old=new Map(a.map(x=>[x.id,x]));const stable=b.map(x=>preserveFetchTimestamp(x,old.get(x.id)));report[file]=compare(a,stable);if(report[file].changed!==0)throw Error('unexpected_actual_source_content_change');}
+          const third=stableQaSelection(r('second','qa-index'),r('second','rulings').map(x=>x.recordType==='qa'?{...x,updatedAt:'fixture-repeat-scan'}:x),second,r('second','cards'));
+          report.identicalSourceReplayQa=compare(second.filter(x=>x.recordType==='qa'),third.filter(x=>x.recordType==='qa'));
+          if(report.identicalSourceReplayQa.changed!==0||report.identicalSourceReplayQa.added!==0)throw Error('unchanged_qa_input_regenerated');
+          fs.writeFileSync(process.env.RUNNER_TEMP+'/actual-input-stability.json',JSON.stringify(report,null,2));console.log('ACTUAL_INPUT_STABILITY '+JSON.stringify(report));
+          NODE
+      - name: Commit only tested source and regression files to the repair branch
+        run: |
+          set -euo pipefail
+          test "$(wc -l < "$RUNNER_TEMP/changed-paths.txt")" -eq 16
+          while IFS= read -r file; do case "$file" in scripts/*.mjs|scripts/lib/*.mjs|tests/*.mjs) git add -- "$file";; *) exit 1;; esac; done < "$RUNNER_TEMP/changed-paths.txt"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'fix(sync): recover rate limits, preserve exact inputs and cache paid results before settlement'
+          git push origin HEAD:fix/sync-reliability-20260921
+          git rev-parse HEAD | tee "$RUNNER_TEMP/tested-commit.txt"
+          while IFS= read -r file; do git ls-files --stage -- "$file"; done < "$RUNNER_TEMP/changed-paths.txt" | tee "$RUNNER_TEMP/source-blobs.txt"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sync-reliability-validation-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/tests.log
+            ${{ runner.temp }}/actual-input-stability.json
+            ${{ runner.temp }}/tested-commit.txt
+            ${{ runner.temp }}/source-blobs.txt
+          if-no-files-found: warn
+          retention-days: 3
