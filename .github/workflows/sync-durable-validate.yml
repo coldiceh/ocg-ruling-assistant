@@ -20,11 +20,15 @@ jobs:
           node-version: '24'
       - name: Apply byte-verified isolated patch
         run: |
+          set -euo pipefail
           mkdir -p "$RUNNER_TEMP/continuation-validation"
           cp .sync-durability.patch.gz.b64 "$RUNNER_TEMP/continuation-validation/transfer.b64"
           python - <<'PY'
           import base64,gzip,hashlib,pathlib
-          b=pathlib.Path('.sync-durability.patch.gz.b64').read_text()
+          b=pathlib.Path('.sync-durability.patch.gz.b64').read_text().strip()
+          assert len(b)==11401 and b[354]=='J' and b[10635]=='6'
+          b=b[:10635]+b[10636:]
+          b=b[:354]+'N'+b[355:]
           patch=gzip.decompress(base64.b64decode(b))
           assert hashlib.sha256(patch).hexdigest()=='eac743ac23eb70b886f27680d49bb9b67e4dedcbb7c4c27fc6810c90351bc4bc'
           pathlib.Path('/tmp/sync-durability.patch').write_bytes(patch)
@@ -34,6 +38,7 @@ jobs:
           git apply /tmp/sync-durability.patch
       - name: Test complete synchronization and CPU continuation gates without providers
         run: |
+          set -euo pipefail
           node --test --test-concurrency=1 tests/sync-cpu-continuation.test.mjs tests/cloud-sync-resume.test.mjs tests/cloud-evidence-incremental-sync.test.mjs tests/deployment-workflows.test.mjs tests/sync-snapshot-publication.test.mjs tests/sync-official-reference.test.mjs tests/evidence-navigation-output-recovery.test.mjs tests/evidence-generation-transport.test.mjs tests/evidence-preprocess-navigation.test.mjs tests/evidence-preprocess-cloud.test.mjs tests/sync-bounded-evidence-assets.test.mjs tests/bai-evidence-generation-profile.test.mjs tests/evidence-preprocess-run-cost.test.mjs tests/evidence-sync-budget-speed.test.mjs | tee "$RUNNER_TEMP/continuation-validation/tests.txt"
           python -m unittest discover -s tests -p 'test_cloud_embedding*.py'
           node --check scripts/restore-sync-checkpoint.mjs
