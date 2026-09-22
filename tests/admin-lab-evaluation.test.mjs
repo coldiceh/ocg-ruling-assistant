@@ -1,0 +1,292 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import {
+  ADMIN_LAB_AUTOMATED_ASSESSMENT_DISCLAIMER,
+  evaluateAdminLabCorpusResults,
+  evaluateAdminLabResult,
+  loadAdminLabEvaluationCorpus,
+  validateEvaluationCase,
+} from "../backend/adminLabEvaluation.mjs";
+
+test("default loader exposes no built-in evaluation cases and reads no file", async () => {
+  const corpus = await loadAdminLabEvaluationCorpus({ readFileImpl: async () => { throw new Error("unexpected read"); } });
+  assert.deepEqual(corpus.cases, []);
+  assert.equal(Object.isFrozen(corpus), true);
+  assert.equal(Object.isFrozen(corpus.cases), true);
+});
+
+test("explicit corpus is read and validated without weakening the non-empty contract", async () => {
+  const corpusUrl = new URL("file:///private/synthetic-corpus.json");
+  const corpus = await loadAdminLabEvaluationCorpus({ corpusUrl, readFileImpl: async (url, encoding) => {
+    assert.equal(url, corpusUrl);
+    assert.equal(encoding, "utf8");
+    return JSON.stringify({ schemaVersion: 1, cases: [strictCase()] });
+  } });
+  assert.equal(corpus.cases.length, 1);
+  assert.equal(Object.isFrozen(corpus.cases[0].expectedAssertions), true);
+  await assert.rejects(loadAdminLabEvaluationCorpus({ corpusUrl, readFileImpl: async () => JSON.stringify({ schemaVersion: 1, cases: [] }) }), /must contain cases/u);
+});
+
+test("passes only when verdict, claim, ordered timeline, and visible packet evidence agree", () => {
+  const result = evaluateAdminLabResult({
+    testCase: strictCase(),
+    structuredResult: correctRuling(),
+    evidenceSnapshot: visiblePacket(),
+  });
+
+  assert.equal(result.schemaVersion, 2);
+  assert.equal(result.answerPassed, true);
+  assert.equal(result.evidencePassed, true);
+  assert.equal(result.pipelinePassed, true);
+  assert.equal(result.passed, true);
+  assert.equal(result.humanTruth, false);
+  assert.equal(result.disclaimer, ADMIN_LAB_AUTOMATED_ASSESSMENT_DISCLAIMER);
+  assert.equal(result.expectedVerdict.referenceText, "SYNTHETIC_REFERENCE_MARKER");
+  assert.equal(result.expectedVerdict.automaticallyCompared, false);
+  assert.equal(result.summary.structuredAssertionCoverage, 1);
+  assert.equal(result.summary.evidenceCoverage, 1);
+  assert.equal(result.summary.cardEvidenceCoverage, 1);
+  assert.ok(result.checks.structuredAssertions.every((item) => item.passed));
+  assert.equal(result.checks.decisionPacket.available, true);
+});
+
+test("wrong structured verdict fails even when every legacy key phrase is present", () => {
+  const ruling = correctRuling();
+  ruling.verdicts[0].value = "FALSE";
+  ruling.conciseAnswer = strictCase().expectedAnswerKeyPoints.join("。");
+  const result = evaluateAdminLabResult({
+    testCase: strictCase(),
+    structuredResult: ruling,
+    evidenceSnapshot: visiblePacket(),
+  });
+
+  assert.equal(result.summary.keyPointCoverage, 1);
+  assert.equal(result.answerPassed, false);
+  assert.equal(result.evidencePassed, true);
+  assert.equal(result.pipelinePassed, false);
+  assert.equal(result.passed, false);
+  assert.equal(
+    result.checks.structuredAssertions.find((item) => item.assertionType === "verdict").passed,
+    false,
+  );
+});
+
+test("evidence present only in the full snapshot cannot satisfy final-model coverage", () => {
+  const snapshot = visiblePacket({ includeFaq: false });
+  snapshot.evidence.evidenceArchive = {
+    evidenceIndex: [{ evidenceId: "card-faq-a" }],
+  };
+  const result = evaluateAdminLabResult({
+    testCase: strictCase(),
+    structuredResult: correctRuling(),
+    evidenceSnapshot: snapshot,
+  });
+
+  assert.equal(result.answerPassed, true);
+  assert.equal(result.evidencePassed, false);
+  assert.equal(result.pipelinePassed, false);
+  assert.equal(result.passed, result.pipelinePassed);
+  assert.equal(result.checks.evidenceCoverage[0].found, false);
+  assert.match(result.checks.evidenceCoverage[0].explanation, /decision packet/u);
+});
+
+test("missing decision packet fails even if archive and resolved cards contain all ids", () => {
+  const result = evaluateAdminLabResult({
+    testCase: strictCase(),
+    structuredResult: correctRuling(),
+    evidenceSnapshot: {
+      evidence: {
+        evidenceArchive: { evidenceIndex: [{ evidenceId: "card-faq-a" }] },
+        cards: [{ cardId: "900000001" }],
+      },
+    },
+  });
+
+  assert.equal(result.answerPassed, true);
+  assert.equal(result.evidencePassed, false);
+  assert.equal(result.pipelinePassed, false);
+  assert.equal(result.passed, result.pipelinePassed);
+  assert.equal(result.summary.packetAvailable, false);
+  assert.equal(result.summary.evidenceCoverage, 0);
+  assert.equal(result.summary.cardEvidenceCoverage, 0);
+});
+
+test("expected evidence rank is enforced against visible packet item order", () => {
+  const testCase = strictCase();
+  testCase.expectedEvidenceMaxRank = 2;
+  const result = evaluateAdminLabResult({
+    testCase,
+    structuredResult: correctRuling(),
+    evidenceSnapshot: visiblePacket(),
+  });
+
+  assert.equal(result.answerPassed, true);
+  assert.equal(result.evidencePassed, false);
+  assert.equal(result.pipelinePassed, false);
+  assert.equal(result.passed, result.pipelinePassed);
+  assert.equal(result.checks.evidenceCoverage[0].bestRank, 3);
+  assert.equal(result.checks.evidenceCoverage[0].withinRank, false);
+});
+
+test("legacy substring probes are diagnostic-only and cannot veto structured truth", () => {
+  const testCase = strictCase();
+  testCase.expectedAnswerKeyPoints = ["完全不同的参考措辞"];
+  testCase.mustNotInclude = ["错误说法"];
+  const ruling = correctRuling();
+  ruling.conciseAnswer = "结论成立；以下只是反例文字：错误说法。";
+  const result = evaluateAdminLabResult({
+    testCase,
+    structuredResult: ruling,
+    evidenceSnapshot: visiblePacket(),
+  });
+
+  assert.equal(result.summary.keyPointCoverage, 0);
+  assert.equal(result.summary.forbiddenHitCount, 1);
+  assert.equal(result.checks.keyPoints[0].gating, false);
+  assert.equal(result.checks.forbiddenPhrases[0].gating, false);
+  assert.equal(result.passed, true);
+});
+
+test("validation retains evidence expectations and rejects unsafe assertion shapes", () => {
+  const normalized = validateEvaluationCase(strictCase());
+  assert.deepEqual(normalized.expectedEvidenceIds, ["card-faq-a"]);
+  assert.equal(normalized.expectedEvidenceMaxRank, 3);
+  assert.equal(normalized.expectedAssertions.verdicts[0].value, "TRUE");
+
+  assert.throws(
+    () => validateEvaluationCase({ ...strictCase(), expectedAssertions: {} }),
+    /expectedAssertions must contain/u,
+  );
+  assert.throws(
+    () => validateEvaluationCase({ ...strictCase(), expectedEvidenceMaxRank: 0 }),
+    /positive integer/u,
+  );
+  assert.throws(
+    () => validateEvaluationCase({ ...strictCase(), expectedEvidenceIds: undefined }),
+    /expectedEvidenceIds must be an array/u,
+  );
+});
+
+test("suite reports missing results and never labels automation as human truth", () => {
+  const testCase = strictCase();
+  const report = evaluateAdminLabCorpusResults({
+    corpus: {
+      schemaVersion: 1,
+      fixtureName: "small-suite",
+      purpose: "unit test",
+      cases: [testCase, { ...strictCase(), id: "missing-case" }],
+    },
+    resultsByCaseId: {
+      [testCase.id]: {
+        structuredResult: correctRuling(),
+        evidenceSnapshot: visiblePacket(),
+      },
+    },
+  });
+
+  assert.equal(report.totalCount, 2);
+  assert.equal(report.answerPassed, false);
+  assert.equal(report.evidencePassed, false);
+  assert.equal(report.pipelinePassed, false);
+  assert.equal(report.passed, report.pipelinePassed);
+  assert.equal(report.answerPassedCount, 1);
+  assert.equal(report.evidencePassedCount, 1);
+  assert.equal(report.pipelinePassedCount, 1);
+  assert.equal(report.passedCount, 1);
+  assert.equal(report.humanTruth, false);
+  assert.equal(report.cases.filter((item) => item.missingResult).length, 1);
+  const missing = report.cases.find((item) => item.missingResult);
+  assert.equal(missing.answerPassed, false);
+  assert.equal(missing.evidencePassed, false);
+  assert.equal(missing.pipelinePassed, false);
+});
+
+function strictCase() {
+  return {
+    id: "structured-evaluation-case",
+    mechanisms: ["fixture-contract", "fixture-order"],
+    question: "SYNTHETIC_QUESTION",
+    expectedCardIds: ["900000001"],
+    expectedEvidenceIds: ["card-faq-a"],
+    expectedEvidenceMaxRank: 3,
+    expectedVerdict: "SYNTHETIC_REFERENCE_MARKER",
+    expectedAssertions: {
+      verdicts: [{ questionId: "q1", value: "TRUE" }],
+      claims: [{
+        assertionId: "fixture-claim",
+        questionId: "q1",
+        status: "TRUE",
+        evidenceIdsAll: ["card-faq-a"],
+        proposition: {
+          allOf: [["AT_END"], ["SKIP", "OMIT"], ["RESULT"]],
+          noneOf: ["FORBIDDEN_RESULT"],
+        },
+      }],
+      timelineOrder: [{
+        assertionId: "fixture-sequence",
+        steps: [
+          { action: { allOf: [["START", "BEGIN"], ["COST", "COST"]] } },
+          { result: { allOf: [["SKIP", "OMIT"], ["RESULT"]] } },
+        ],
+      }],
+    },
+    expectedAnswerKeyPoints: ["ALLOWED", "SKIPRESULT"],
+    mustNotInclude: ["FORBIDDEN_RESULT"],
+  };
+}
+function correctRuling() {
+  return {
+    conciseAnswer: "SYNTHETIC_RESPONSE",
+    verdicts: [{
+      questionId: "q1",
+      value: "TRUE",
+      conclusion: "SYNTHETIC_VERDICT",
+      conditions: [],
+    }],
+    claims: [{
+      questionId: "q1",
+      claimId: "claim-1",
+      proposition: "AT_END SKIP RESULT",
+      status: "TRUE",
+      decisive: true,
+      evidenceIds: ["card-faq-a"],
+      inferenceType: "TIMING",
+    }],
+    timeline: [
+      { order: 1, action: "START COST", result: "UPDATED", evidenceIds: ["card-faq-a"] },
+      { order: 2, action: "FINISH", result: "SKIPRESULT", evidenceIds: ["card-faq-a"] },
+    ],
+  };
+}
+
+function visiblePacket({ includeFaq = true } = {}) {
+  const evidenceItems = [{
+    packetItemId: "packet-card",
+    evidenceId: "900000001",
+    evidenceIds: ["900000001"],
+    category: "parsed_card_text",
+    body: "SYNTHETIC_CARD_BODY",
+  }, {
+    packetItemId: "packet-prior-faq",
+    evidenceId: "card-faq-prior",
+    evidenceIds: ["card-faq-prior"],
+    category: "faq",
+    body: "同类但非预期的先行 FAQ。",
+  }];
+  if (includeFaq) {
+    evidenceItems.push({
+      packetItemId: "packet-faq",
+      evidenceId: "card-faq-a",
+      evidenceIds: ["card-faq-a"],
+      category: "faq",
+      body: "AT_ENDSKIPRESULT。",
+    });
+  }
+  return {
+    evidence: {
+      evidenceDecisionPacket: {
+        modelPacket: { evidenceItems },
+      },
+    },
+  };
+}

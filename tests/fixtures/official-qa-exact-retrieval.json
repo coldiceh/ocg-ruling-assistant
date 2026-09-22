@@ -1,0 +1,239 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Synthetic identity and source serialization fixture; no real ruling answers.",
+  "cards": [
+    {
+      "id": "900001",
+      "jaName": "合成カードA",
+      "aliases": [
+        "合成カードA"
+      ]
+    },
+    {
+      "id": "900002",
+      "jaName": "合成カードB",
+      "aliases": [
+        "合成カードB"
+      ]
+    },
+    {
+      "id": "900003",
+      "jaName": "合成カードC",
+      "aliases": [
+        "合成カードC"
+      ]
+    },
+    {
+      "id": "900004",
+      "jaName": "合成カードD",
+      "aliases": [
+        "合成カードD"
+      ]
+    },
+    {
+      "id": "900005",
+      "jaName": "合成カードE",
+      "aliases": [
+        "合成カードE"
+      ]
+    },
+    {
+      "id": "900006",
+      "jaName": "合成カードF",
+      "aliases": [
+        "合成カードF"
+      ]
+    },
+    {
+      "id": "900007",
+      "jaName": "合成カードG",
+      "aliases": [
+        "合成カードG"
+      ]
+    },
+    {
+      "id": "900008",
+      "jaName": "合成カードH",
+      "aliases": [
+        "合成カードH"
+      ]
+    },
+    {
+      "id": "900009",
+      "jaName": "合成カードI",
+      "aliases": [
+        "合成カードI"
+      ]
+    },
+    {
+      "id": "900010",
+      "jaName": "合成カードJ",
+      "aliases": [
+        "合成カードJ"
+      ]
+    },
+    {
+      "id": "900011",
+      "jaName": "合成カードK",
+      "aliases": [
+        "合成カードK"
+      ]
+    }
+  ],
+  "discovery": {
+    "complete": true,
+    "sourceRevision": "fixture-current",
+    "records": [
+      {
+        "cardId": "900001",
+        "qaIds": [
+          "910001"
+        ]
+      },
+      {
+        "cardId": "900002",
+        "qaIds": [
+          "910001"
+        ]
+      },
+      {
+        "cardId": "900003",
+        "qaIds": [
+          "910002"
+        ]
+      },
+      {
+        "cardId": "900004",
+        "qaIds": [
+          "910002"
+        ]
+      },
+      {
+        "cardId": "900005",
+        "qaIds": [
+          "910002"
+        ]
+      },
+      {
+        "cardId": "900006",
+        "qaIds": [
+          "910003",
+          "910004"
+        ]
+      },
+      {
+        "cardId": "900007",
+        "qaIds": [
+          "910005"
+        ]
+      },
+      {
+        "cardId": "900008",
+        "qaIds": [
+          "910005"
+        ]
+      },
+      {
+        "cardId": "900009",
+        "qaIds": [
+          "910006"
+        ]
+      },
+      {
+        "cardId": "900010",
+        "qaIds": [
+          "910006"
+        ]
+      },
+      {
+        "cardId": "900011",
+        "qaIds": [
+          "910006"
+        ]
+      }
+    ]
+  },
+  "records": [
+    {
+      "id": "ygoresources-qa-910001",
+      "sourceId": "910001",
+      "recordType": "qa",
+      "status": "current",
+      "title": "「<<900001>>」、「<<900002>>」 の記録一ですか？",
+      "rawDetailedQuestion": "参照文字列 910001。\n「<<900001>>」、「<<900002>>」 の記録一ですか？",
+      "rawAnswer": "合成回答 記録一。\nこの文字列は裁定ではありません。"
+    },
+    {
+      "id": "ygoresources-qa-910002",
+      "sourceId": "910002",
+      "recordType": "qa",
+      "status": "current",
+      "title": "「<<900003>>」、「<<900004>>」、「<<900005>>」 の記録二ですか？",
+      "rawDetailedQuestion": "参照文字列 910002。\n「<<900003>>」、「<<900004>>」、「<<900005>>」 の記録二ですか？",
+      "rawAnswer": "合成回答 記録二。\nこの文字列は裁定ではありません。"
+    },
+    {
+      "id": "ygoresources-qa-910003",
+      "sourceId": "910003",
+      "recordType": "qa",
+      "status": "current",
+      "title": "「<<900006>>」 の記録三ですか？",
+      "rawDetailedQuestion": "参照文字列 910003。\n「<<900006>>」 の記録三ですか？",
+      "rawAnswer": "合成回答 記録三。\nこの文字列は裁定ではありません。"
+    },
+    {
+      "id": "ygoresources-qa-910004",
+      "sourceId": "910004",
+      "recordType": "qa",
+      "status": "current",
+      "title": "「<<900006>>」 の記録四ですか？",
+      "rawDetailedQuestion": "参照文字列 910004。\n「<<900006>>」 の記録四ですか？",
+      "rawAnswer": "合成回答 記録四。\nこの文字列は裁定ではありません。"
+    },
+    {
+      "id": "ygoresources-qa-910005",
+      "sourceId": "910005",
+      "recordType": "qa",
+      "status": "current",
+      "title": "「<<900007>>」、「<<900008>>」 の記録五ですか？",
+      "rawDetailedQuestion": "参照文字列 910005。\n「<<900007>>」、「<<900008>>」 の記録五ですか？",
+      "rawAnswer": "合成回答 記録五。\nこの文字列は裁定ではありません。"
+    },
+    {
+      "id": "ygoresources-qa-910006",
+      "sourceId": "910006",
+      "recordType": "qa",
+      "status": "current",
+      "title": "「<<900009>>」、「<<900010>>」、「<<900011>>」 の記録六ですか？",
+      "rawDetailedQuestion": "参照文字列 910006。\n「<<900009>>」、「<<900010>>」、「<<900011>>」 の記録六ですか？",
+      "rawAnswer": "合成回答 記録六。\nこの文字列は裁定ではありません。"
+    }
+  ],
+  "positiveCases": [
+    {
+      "name": "synthetic identity 910001",
+      "qaId": "910001",
+      "question": "参照文字列 910001。\n「合成カードA」、「合成カードB」 の記録一ですか？"
+    },
+    {
+      "name": "synthetic identity 910002",
+      "qaId": "910002",
+      "question": "参照文字列 910002。\n「合成カードC」、「合成カードD」、「合成カードE」 の記録二ですか？"
+    },
+    {
+      "name": "synthetic identity 910004",
+      "qaId": "910004",
+      "question": "参照文字列 910004。\n「合成カードF」 の記録四ですか？"
+    },
+    {
+      "name": "synthetic identity 910005",
+      "qaId": "910005",
+      "question": "参照文字列 910005。\n「合成カードG」、「合成カードH」 の記録五ですか？"
+    },
+    {
+      "name": "synthetic identity 910006",
+      "qaId": "910006",
+      "question": "「合成カードI」、「合成カードJ」、「合成カードK」 の記録六ですか？"
+    }
+  ]
+}

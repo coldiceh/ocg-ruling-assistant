@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 const DEFAULT_KEY = "rag-query-audit:v1";
 const DEFAULT_MAX_ENTRIES = 100;
@@ -34,6 +34,45 @@ export function queryAuditStorageStatus(env = globalThis.process?.env || {}) {
     return { enabled: false, storage: "unconfigured", persistent: false };
   }
   return { enabled: true, storage: "redis", persistent: true };
+}
+
+// Private Redis records, separate from the query-history list and all HTTP
+// projections. Each key expires independently under the existing audit policy.
+// These are diagnostic-copy limits, never model/evidence limits.
+export async function saveSelectionIdentityDiagnostic({ event, requestId,
+  env = globalThis.process?.env || {}, fetchImpl = globalThis.fetch } = {}) {
+  if (event?.type !== 'selection_identity_failure' || !queryAuditStorageStatus(env).enabled) {
+    return { stored: false };
+  }
+  try {
+    const scalarFields = ['attempt', 'retryAvailable', 'model', 'providerId', 'reasoningEffort',
+      'requestSha256', 'responseId'];
+    const record = { type: event.type, requestId: requestId || randomUUID(),
+      createdAt: new Date().toISOString(),
+      ...Object.fromEntries(scalarFields.filter(key => ['string', 'number', 'boolean'].includes(typeof event[key]))
+        .map(key => [key, event[key]])),
+      rawSelectedIds: event.rawSelectedIds, selectedIds: event.selectedIds, unknownIds: event.unknownIds,
+      offered: (event.offered || []).map(entry => Object.fromEntries(
+        ['alias', 'id', 'kind', 'bodySha256'].filter(key => typeof entry[key] === 'string').map(key => [key, entry[key]]))),
+      revisions: Object.fromEntries(['dataRevision', 'bundleRevision', 'ruleRevision', 'qaRevision',
+        'navigationRevision', 'structureMappingRevision', 'ruleDenseRevision', 'qaDenseRevision']
+        .filter(key => typeof event.revisions?.[key] === 'string').map(key => [key, event.revisions[key]])),
+    };
+    let serialized = JSON.stringify(record);
+    const originalBytes = Buffer.byteLength(serialized);
+    if (originalBytes > 256 * 1024) serialized = JSON.stringify({
+      type: record.type, requestId: record.requestId, createdAt: record.createdAt, attempt: record.attempt,
+      incomplete: true, originalBytes,
+      diagnosticSha256: createHash('sha256').update(serialized).digest('hex'),
+      selectedCount: record.selectedIds?.length, unknownCount: record.unknownIds?.length,
+      offeredCount: record.offered.length,
+    });
+    const prefix = String(env.QUERY_AUDIT_REDIS_KEY || DEFAULT_KEY).trim() || DEFAULT_KEY;
+    const retentionSeconds = boundedInteger(env.QUERY_AUDIT_RETENTION_DAYS, DEFAULT_RETENTION_DAYS, 1, 90) * 86400;
+    await redisCommand(env, fetchImpl, ['SET', `${prefix}:selection-identity:${record.requestId}:${record.attempt}`,
+      serialized, 'EX', String(retentionSeconds)]);
+    return { stored: true };
+  } catch { return { stored: false }; }
 }
 
 export async function appendQueryAudit({

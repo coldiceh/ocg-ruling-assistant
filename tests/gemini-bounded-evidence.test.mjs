@@ -9,6 +9,7 @@ import { createFocusedQaView } from "../backend/geminiFocusedQaView.mjs";
 import { createQaTools } from "../backend/geminiQaTools.mjs";
 import { buildRuleContext } from "../backend/geminiRuleContext.mjs";
 import { computeGeminiSelectionPackingBudget } from "../backend/geminiRuleQaPacking.mjs";
+import { publicAnswerHttpError } from '../backend/publicAnswerService.mjs';
 
 const digest = value => createHash("sha256").update(value).digest("hex");
 const rule = { id: "rule", recordType: "rule-doc", title: "fixture source",
@@ -78,29 +79,36 @@ test('removing generation limits still rejects a final evidence prompt over 1500
 });
 
 function fixture({ assets = schema3Assets(), plan, select, countTokens = 500,
-  denseRules, denseQa } = {}) {
+  denseRules, denseQa, remainingBudget, onEvent } = {}) {
   const requests = [];
   const provider = createGeminiBoundedEvidenceProvider({
     loadAssets: async () => assets,
     loadDenseSearch: async ({ rules }) => ({ searchAsync: async () => denseRules || [...rules.units.values()] }),
     loadQaSearch: async ({ items }) => ({ searchAsync: async () => denseQa || items }),
     budgetedRequest: request => request.invoke(),
+    ...(remainingBudget ? { remainingBudget } : {}),
+    ...(onEvent ? { onEvent } : {}),
     fetchImpl: async (url, init) => {
       const body = JSON.parse(init.body);
-      if (url.endsWith(":countTokens")) return Response.json({ totalTokens: countTokens });
+      if (url.endsWith(":countTokens")) return Response.json({ totalTokens: typeof countTokens === 'function' ? countTokens(body) : countTokens });
       if (url.endsWith(":embedContent")) return Response.json({ embedding: { values: Array(768).fill(1) },
         usageMetadata: { promptTokenCount: 100 } });
       if (url.endsWith(":batchEmbedContents")) return Response.json({
         embeddings: body.requests.map(() => ({ values: Array(768).fill(1) })),
         usageMetadata: { promptTokenCount: 100 } });
       requests.push(body);
-      const delivered = JSON.parse(body.contents[0].parts[1].text);
+      const delivered = JSON.parse(body.contents ? body.contents[0].parts[1].text
+        : body.input.find(message => message.role === 'user').content.split('\n').at(-1));
       const output = requests.length === 1
         ? (plan || { needs: [{ id: "source-id", question: "fixture relation",
           ruleQuery: "fixture rule search", qaQuery: "fixture qa search" }] })
         : (typeof select === "function" ? select(delivered) : select || { selectedIds: delivered.groups.flatMap(group => [
           ...(group.units || []).map(row => row[0]), ...(group.items || []).map(item => item.handle),
         ]).slice(0, 2), unableToSelect: false, note: "" });
+      if (output instanceof Response) return output;
+      if (body.input) return Response.json({ id: 'fixture-response', model: body.model, status: 'completed',
+        output: [{ type: 'message', content: [{ type: 'output_text', text: JSON.stringify(output) }] }],
+        usage: { input_tokens: 500, output_tokens: 100, total_tokens: 600 } });
       return Response.json({ candidates: [{ content: { parts: [{ text: JSON.stringify(output) }] } }],
         usageMetadata: { promptTokenCount: 500, candidatesTokenCount: 80,
           thoughtsTokenCount: 20, totalTokenCount: 600 } });
@@ -285,6 +293,148 @@ test("original and both planned query variants stay as independent retrieval lan
 test("a selection cannot name an alias that was not actually offered", async () => {
   const { provider } = fixture({ select: { selectedIds: ["A999"], unableToSelect: false, note: "" } });
   await assert.rejects(provider.retrieve(input), /gemini_bounded_selected_identity_not_offered/u);
+});
+
+test('unknown selection aliases get one measured reselection using the identical offered material', async () => {
+  let attempts = 0;
+  const events = [];
+  const { provider, requests } = fixture({ onEvent: event => events.push(event),
+    select: delivered => ({ selectedIds: ++attempts === 1 ? ['A999']
+      : [delivered.groups.flatMap(group => group.units || [])[0][0]],
+    unableToSelect: false, note: '' }) });
+  const result = await provider.retrieve(input);
+  assert.equal(attempts, 2);
+  assert.equal(requests.length, 3, 'planning happens only once');
+  assert.deepEqual(requests[2].contents[0], requests[1].contents[0]);
+  const diagnostic = events.find(event => event.type === 'selection_identity_failure');
+  assert.deepEqual(diagnostic.unknownIds, ['A999']);
+  const feedback = JSON.parse(requests[2].contents.at(-1).parts[0].text);
+  assert.deepEqual(feedback.validSelectedIds, diagnostic.offered.map(entry => entry.alias));
+  assert.deepEqual(feedback.previousSelectedIds, ['A999']);
+  const selections = result.telemetry.bounded.calls.filter(row => row.stage === 'selection');
+  assert.deepEqual(selections.map(row => [row.status, row.retry]), [['failed', false], ['success', true]]);
+  assert.ok(selections.every(row => row.accountedUsd > 0), 'both completed model responses are charged');
+  assert.notEqual(selections[0].requestSha256, selections[1].requestSha256);
+  assert.equal(result.telemetry.estimatedCostUsd.toFixed(12),
+    result.telemetry.bounded.calls.reduce((sum, row) => sum + row.accountedUsd, 0).toFixed(12));
+  assert.equal(result.telemetry.bounded.calls.filter(row => row.stage === 'planned_query_embedding').length, 1);
+  assert.equal(Object.hasOwn(result.telemetry.bounded, 'unknownIds'), false);
+});
+
+test('selection retries share the same two attempts across identity, JSON and HTTP errors', async () => {
+  for (const sequence of [['http', 'identity'], ['identity', 'http'], ['identity', 'json']]) {
+    let attempts = 0;
+    const { provider, requests } = fixture({ select: () => {
+      const fault = sequence[attempts++];
+      if (fault === 'http') return Response.json({}, { status: 503 });
+      return fault === 'json' ? {} : { selectedIds: ['A999'], unableToSelect: false, note: '' };
+    } });
+    await assert.rejects(provider.retrieve(input));
+    assert.equal(attempts, 2, sequence.join(' -> '));
+    assert.equal(requests.length, 3);
+  }
+});
+
+test('B.AI Luna reselects from the same input and accepts only the second complete selection', async () => {
+  let attempts = 0;
+  let expected;
+  const events = [];
+  const { provider, requests } = fixture({ onEvent: event => events.push(event), select: delivered => {
+    const ids = delivered.groups.flatMap(group => (group.units || []).map(row => row[0]));
+    expected = ids.at(-1);
+    return { selectedIds: ++attempts === 1 ? [ids[0], 'Q999'] : [expected], unableToSelect: false, note: '' };
+  } });
+  const result = await provider.retrieve({ ...input, env: { ...unrestrictedEvidenceEnv, BAI_API_KEY: 'fixture',
+    EVIDENCE_SELECTION_PROFILE: 'bai-gpt-5.6-luna-high-theoretical' } });
+  assert.equal(attempts, 2);
+  assert.deepEqual(requests[2].input.slice(0, requests[1].input.length), requests[1].input);
+  assert.deepEqual(result.telemetry.bounded.selectedIds, [expected]);
+  const failure = events.find(event => event.type === 'selection_identity_failure');
+  assert.equal(failure.responseId, 'fixture-response');
+  assert.equal(failure.model, 'gpt-5.6-luna');
+  assert.equal(failure.reasoningEffort, 'high');
+  assert.deepEqual(failure.unknownIds, ['Q999']);
+  assert.equal(JSON.stringify(result).includes('Q999'), false);
+});
+
+test('an unknown alias after an output-contract retry cannot start a third selection', async () => {
+  let attempts = 0;
+  const { provider, requests } = fixture({ select: () => ++attempts === 1 ? {}
+    : { selectedIds: ['A999'], unableToSelect: false, note: '' } });
+  await assert.rejects(provider.retrieve(input), /gemini_bounded_selected_identity_not_offered/u);
+  assert.equal(attempts, 2);
+  assert.equal(requests.length, 3);
+});
+
+test('unknown selection aliases still fail after one correction and stay out of public diagnostics', async () => {
+  const events = [];
+  const { provider, requests } = fixture({ onEvent: event => events.push(event),
+    select: { selectedIds: ['A999'], unableToSelect: false, note: '' } });
+  await assert.rejects(provider.retrieve(input), error => {
+    assert.equal(error.code, 'gemini_bounded_selected_identity_not_offered');
+    assert.equal(JSON.stringify(error.boundedRetrieval).includes('A999'), false);
+    return true;
+  });
+  assert.equal(requests.length, 3);
+  const failures = events.filter(event => event.type === 'selection_identity_failure');
+  assert.deepEqual(failures.map(event => [event.attempt, event.retryAvailable]), [[1, true], [2, false]]);
+});
+
+test('identity feedback exceeding model capacity stops without reducing candidates or a second send', async () => {
+  const { provider, requests } = fixture({ countTokens: body => body.generateContentRequest?.contents.length > 1 ? 2000000 : 500,
+    select: { selectedIds: ['A999'], unableToSelect: false, note: '' } });
+  await assert.rejects(provider.retrieve(input), /capacity_exceeded/u);
+  assert.equal(requests.length, 2);
+});
+
+test('private arbitrary unknown text never enters the actual HTTP error projection', async () => {
+  const marker = 'private fixture text\nunknown identifier';
+  const { provider, requests } = fixture({ select: { selectedIds: [marker], unableToSelect: false, note: '' } });
+  await assert.rejects(provider.retrieve(input), error => {
+    const payload = JSON.stringify(publicAnswerHttpError(error));
+    assert.equal(payload.includes('private fixture text'), false);
+    assert.equal(payload.includes('unknownIds'), false);
+    return true;
+  });
+  assert.equal(requests.length, 3);
+});
+
+test('reselection retains the final package limit and cannot trigger a third selection', async () => {
+  let attempts = 0;
+  const { provider, requests } = fixture({ assets: schema3Assets([rule], [{ ...qa, answer: 'complete fixture body '.repeat(900) }]),
+    select: delivered => ({ selectedIds: ++attempts === 1 ? ['Q999']
+      : delivered.groups.flatMap(group => group.items || []).map(item => item.handle), unableToSelect: false, note: '' }) });
+  await assert.rejects(provider.retrieve({ ...input, env: { ...unrestrictedEvidenceEnv,
+    GEMINI_EVIDENCE_READING_TARGET_CHARS: '100000' } }), /pack_capacity_exceeded/u);
+  assert.equal(requests.length, 3);
+});
+
+test('identity correction respects remaining budget and cancellation without resending the selection', async () => {
+  for (const stop of ['budget', 'abort']) {
+    const controller = new AbortController();
+    let selectionReturned = false;
+    const { provider, requests } = fixture({
+      remainingBudget: async () => stop === 'budget' && selectionReturned ? 0 : 100,
+      select: () => {
+        selectionReturned = true;
+        if (stop === 'abort') controller.abort(new Error('fixture_abort'));
+        return { selectedIds: ['A999'], unableToSelect: false, note: '' };
+      },
+    });
+    await assert.rejects(provider.retrieve({ ...input, signal: controller.signal }),
+      stop === 'budget' ? /evidence_request_budget_exceeded/u : /fixture_abort/u);
+    assert.equal(requests.length, 2);
+  }
+});
+
+test('an unavailable private diagnostic sink does not prevent a valid correction', async () => {
+  let attempts = 0;
+  const { provider } = fixture({ onEvent: async event => {
+    if (event.type === 'selection_identity_failure') throw new Error('fixture_log_unavailable');
+  }, select: delivered => ({ selectedIds: ++attempts === 1 ? ['A999']
+    : [delivered.groups.flatMap(group => group.units || [])[0][0]], unableToSelect: false, note: '' }) });
+  await provider.retrieve(input);
+  assert.equal(attempts, 2);
 });
 
 test("counted planning input over the generation contract stops before generation", async () => {

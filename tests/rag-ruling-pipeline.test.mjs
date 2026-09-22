@@ -1,0 +1,6249 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { buildAliasIndex, extractQuotedMentions, extractRagCards, extractUnquotedCardMentionCandidates, extractUserProvidedCardTextBlocks, normalizeCardKey } from "../backend/ragCardExtractor.mjs";
+import { createLocalCardDataProvider } from "../backend/cardDataProvider.mjs";
+import { retrieveRagEvidence } from "../backend/ragEvidenceRetriever.mjs";
+import {
+  buildRagRulingPromptBundle,
+  extractPromptAllowedEvidenceIds,
+} from "../backend/ragRulingPrompt.mjs";
+import { callCardNameExtractionModel, callDeepSeekJsonTask, callOfficialQaApplicabilityModel, callRagModel, callRuleQueryExtractionModel, capPublicChatGptBudget, createPublicAnswerModelEnv, estimateDeepSeekCostCny, estimateGlmCostCny, getRagBudgetStatus, parseCardNameExtractionOutput, resetRagBudget, resolveRagProvider } from "../backend/ragModelClient.mjs";
+import {
+  answerRagRulingQuestion,
+} from "../backend/ragRulingPipeline.mjs";
+
+const cards = [
+  {
+    id: "100",
+    name: "测试龙",
+    cnName: "测试龙",
+    jaName: "テスト・ドラゴン",
+    enName: "Test Dragon",
+    cardType: "monster",
+    effectText: "①：自己主要阶段可以发动。抽1张卡。",
+    aliases: ["测试龙", "Test Dragon", "テスト・ドラゴン"],
+    sourceUrl: "https://example.test/card/100",
+  },
+];
+
+const secondCard = {
+  id: "200",
+  name: "未收录测试卡",
+  cnName: "未收录测试卡",
+  jaName: "未収録テストカード",
+  enName: "Unlisted Test Card",
+  cardType: "monster",
+  effectText: "①：对方怪兽攻击宣言时可以发动。那次攻击无效。",
+  aliases: ["未收录测试卡", "未収録テストカード", "Unlisted Test Card"],
+  sourceUrl: "https://example.test/card/200",
+};
+
+const dogmatikaCard = {
+  id: "18176",
+  name: "凶教导之天底 阿尔白・佐亚",
+  cnName: "凶教导之天底 阿尔白・佐亚",
+  jaName: "凶導の白き天底",
+  enName: "Dogmatika Alba Zoa",
+  cardType: "monster",
+  effectText: "仪式/效果文本。",
+  aliases: ["凶導の白き天底"],
+};
+
+const records = [
+  {
+    id: "faq-test-dragon-1",
+    recordType: "card-faq",
+    title: "测试龙 FAQ 1",
+    cards: ["测试龙"],
+    cardIds: ["100"],
+    text: "【①の効果について】自己主要阶段可以发动的起动效果。",
+    sourceUrl: "https://example.test/faq/100/1",
+  },
+  {
+    id: "raw-chain-note",
+    recordType: "related",
+    title: "连锁处理资料",
+    text: "连锁处理中对象离场时，需要按效果处理时的状态确认。",
+  },
+];
+
+const qaRecords = [
+  {
+    id: "qa-related-test-dragon",
+    recordType: "qa",
+    title: "测试龙相似问答",
+    question: "「测试龙」在主要阶段可以发动吗？",
+    answer: "可以发动。",
+    text: "「测试龙」在主要阶段可以发动吗？ 可以发动。",
+    cards: ["测试龙"],
+    cardIds: ["100"],
+  },
+];
+
+test("user-provided card text reaches the final model as raw evidence without a local verdict", async () => {
+  let finalPrompt = "";
+  await answerRagRulingQuestion({
+    question: [
+      "【匿名原文接口卡】",
+      "①：USER_TEXT_BODY_ALPHA：这是第一段原始输入。USER_TEXT_BODY_OMEGA：这是末段原始输入。",
+      "请读取此接口样例附带的完整正文。",
+    ].join("\n"),
+    cards: [],
+    records: [],
+    qaRecords: [],
+    env: { RAG_MODEL_PROVIDER: "mock", RAG_AUTO_ENGINE_SIMULATION: "false" },
+    fetchImpl: async () => {
+      throw new Error("anonymous user text must not trigger a remote card-name lookup");
+    },
+    modelInvoker: async ({ prompt }) => {
+      finalPrompt = prompt;
+      return JSON.stringify({
+        answerLevel: "rule_analysis",
+        shortAnswer: "仅用于验证用户卡文作为原始证据进入最终提示。",
+        reasoning: ["依据用户提供的匿名卡文分析。"],
+        usedCards: ["匿名原文接口卡"],
+        usedEvidence: [],
+        missingInfo: [],
+        riskFlags: [],
+        confidenceSelfEstimate: "medium",
+      });
+    },
+  });
+  assert.match(finalPrompt, /user-card-text-/u);
+  assert.match(finalPrompt, /USER_TEXT_BODY_ALPHA/u);
+  assert.doesNotMatch(finalPrompt, /create_lingering_restriction/u);
+  assert.doesNotMatch(finalPrompt, /irreversible_on_first_condition_failure/u);
+});
+
+test("rag_pipeline_returns_answer_with_mock_model", async () => {
+  const answer = await answerRagRulingQuestion({
+    question: "「测试龙」可以发动①效果吗？",
+    cards,
+    records,
+    qaRecords,
+    modelInvoker: async () => JSON.stringify({
+      answerLevel: "rule_analysis",
+      shortAnswer: "可以给出未确认分析。",
+      reasoning: ["检索到了卡片文本和相关 FAQ。"],
+      usedCards: ["测试龙"],
+      usedEvidence: [{ id: "card-text-100", type: "card_text", title: "测试龙 的卡片文本" }],
+      missingInfo: [],
+      riskFlags: ["no_official_direct_qa"],
+      confidenceSelfEstimate: "medium",
+    }),
+  });
+  assert.equal(answer.mode, "rag_baseline");
+  assert.equal(answer.answerLevel, "rule_analysis");
+  assert.match(answer.shortAnswer, /未确认分析/u);
+  assert.equal(answer.debug.dryRun, false);
+});
+
+test("quoted_card_mentions_extract_all", () => {
+  const resolution = extractRagCards("「测试龙」攻击宣言时，能否连锁「未知卡名」？", { cards, maxCards: 6 });
+  const totalMentions = resolution.resolvedCards.length + resolution.unresolvedMentions.length + resolution.ambiguousMentions.length;
+  assert.equal(totalMentions >= 2, true);
+  assert.equal(resolution.resolvedCards[0].name, "测试龙");
+  assert.equal(resolution.unresolvedMentions[0].input, "未知卡名");
+});
+
+test("extracts_user_provided_card_text_block", () => {
+  const blocks = extractUserProvidedCardTextBlocks("【未发售测试龙】\n①：自己主要阶段可以发动。抽1张卡。\n②：这张卡被送去墓地的场合可以发动。");
+  assert.equal(blocks.length, 1);
+  assert.equal(blocks[0].name, "未发售测试龙");
+  assert.match(blocks[0].text, /①：自己主要阶段/u);
+  assert.match(blocks[0].text, /②：这张卡/u);
+  assert.equal(blocks[0].source, "user_provided_text");
+  assert.equal(blocks[0].official, false);
+  const bundle = buildRagRulingPromptBundle({
+    userQuery: "未发售测试龙如何处理？",
+    evidence: {
+      cardTexts: [],
+      userProvidedCardTexts: [{
+        id: "user-card-text-test",
+        type: "user_provided_text",
+        title: "未发售测试龙 的用户提供文本",
+        cards: ["未发售测试龙"],
+        text: blocks[0].text,
+        source: "user_provided_text",
+        official: false,
+        isDirect: false,
+      }],
+      officialQaDirectCandidates: [],
+      officialQaRelated: [],
+      faqRelated: [],
+      rawRelatedEvidence: [],
+      retrievalWarnings: [],
+    },
+  });
+  assert.match(bundle.prompt, /userProvidedCardTexts/u);
+  assert.match(bundle.prompt, /不得把.*user_provided_text.*称为官方直接 Q&A/u);
+});
+
+test("rag prompts require the model to answer every user subquestion", () => {
+  const bundle = buildRagRulingPromptBundle({
+    userQuery: "这个效果可以发动吗，后续怎么处理？",
+    cardResolution: { resolvedCards: cards },
+    evidence: {
+      cardTexts: [{ id: "card-text-summary", type: "card_text", title: "测试卡文本", text: "舍弃1张手牌可以发动。那之后，进行处理。" }],
+      officialQaDirectCandidates: [],
+      officialQaRelated: [],
+      faqRelated: [],
+      rawRelatedEvidence: [],
+      retrievalWarnings: [],
+    },
+  });
+  assert.match(bundle.prompt, /逐个子问题给出直接结论/u);
+  assert.match(bundle.prompt, /不要漏答/u);
+  assert.equal(bundle.recoveryPrompt, "");
+});
+
+test("quoted_mentions_all_preserved", () => {
+  const mentions = extractQuotedMentions("【A卡】《B卡》「C卡」『D卡』[E卡]“F卡”\"G卡\"'H卡'");
+  assert.deepEqual(mentions, ["A卡", "B卡", "C卡", "D卡", "E卡", "F卡", "G卡", "H卡"]);
+});
+
+test("temporal follow-up phrases are not treated as unquoted card names", () => {
+  assert.deepEqual(
+    extractUnquotedCardMentionCandidates("原效果被改写。之后能否发动④效果？"),
+    [],
+  );
+  assert.deepEqual(
+    extractUnquotedCardMentionCandidates("控制权改变，随后是否还可以发动效果？"),
+    [],
+  );
+  assert.deepEqual(
+    extractUnquotedCardMentionCandidates("原效果处理。那之后能否发动④效果？"),
+    [],
+  );
+  assert.deepEqual(
+    extractUnquotedCardMentionCandidates("这只怪兽被破坏后，它的④能否发动？"),
+    [],
+  );
+  assert.deepEqual(
+    extractUnquotedCardMentionCandidates("将1只怪兽特殊召唤。"),
+    [],
+  );
+  assert.deepEqual(
+    extractUnquotedCardMentionCandidates("将2只怪兽特殊召唤。"),
+    [],
+  );
+  assert.deepEqual(
+    extractUnquotedCardMentionCandidates("将3张魔法卡送去墓地。"),
+    [],
+  );
+  assert.deepEqual(
+    extractUnquotedCardMentionCandidates("成功后双方各有哪些诱发效果可以发动，连锁顺序是什么？"),
+    [],
+  );
+});
+
+test("quoted effect and restriction clauses are not treated as card names", () => {
+  const query = [
+    "『本回合自己已经发动过魔法卡的效果』",
+    "『自己不是「星群」怪兽不能从额外卡组特殊召唤』",
+    "『这个回合自己只能特殊召唤恶魔族怪兽』",
+    "《处理到不能处理为止》",
+    "《对象丢失，不进行处理》",
+  ].join("；");
+  const localCards = [
+    { id: "series-a", name: "星群先锋", aliases: ["星群先锋", "星群"] },
+    { id: "series-b", name: "星群后卫", aliases: ["星群后卫", "星群"] },
+  ];
+  const resolution = extractRagCards(query, {
+    cards: localCards,
+    modelCardNameCandidates: [{ name: "星群", originalText: "星群", confidence: "high" }],
+  });
+
+  assert.deepEqual(extractQuotedMentions(query), []);
+  assert.deepEqual(resolution.resolvedCards, []);
+  assert.deepEqual(resolution.unresolvedMentions, []);
+  assert.deepEqual(resolution.ambiguousMentions, []);
+  assert.deepEqual(resolution.modelCardNameCandidates, []);
+});
+
+test("Japanese and English resolution propositions are not treated as card names", () => {
+  const query = [
+    "『対象が存在しないため処理できない』",
+    "『処理できるところまで処理する』",
+    "《the target is no longer present, so the effect cannot resolve》",
+    "《process as far as possible》",
+  ].join("；");
+  const resolution = extractRagCards(query, { cards: [] });
+
+  assert.deepEqual(extractQuotedMentions(query), []);
+  assert.deepEqual(resolution.resolvedCards, []);
+  assert.deepEqual(resolution.unresolvedMentions, []);
+  assert.deepEqual(resolution.ambiguousMentions, []);
+});
+
+test("past-action grammar does not leave a generic card category as an unquoted name", () => {
+  const query = "本回合自己已经发动过魔法卡的效果。";
+  const resolution = extractRagCards(query, { cards: [] });
+
+  assert.deepEqual(extractUnquotedCardMentionCandidates(query), []);
+  assert.deepEqual(resolution.unresolvedMentions, []);
+});
+
+test("long card names, abbreviations, and localized parentheses remain quoted mentions", () => {
+  const mentions = extractQuotedMentions("《不能停止的机械巨龙》、（跨语种测试长卡名）、(AB龙)");
+  assert.deepEqual(mentions, ["不能停止的机械巨龙", "跨语种测试长卡名", "AB龙"]);
+});
+
+test("unquoted_card_mentions_seed_retrieval_candidates", () => {
+  const resolution = extractRagCards("对方发动了手卡破械童子童的效果，要将场上的破械神露天阙序破坏，对方的破械童子罗安能特殊召唤吗？", { cards: [], maxCards: 8 });
+  assert.ok(resolution.unresolvedMentions.some((item) => item.input === "破械童子童"));
+  assert.ok(resolution.unresolvedMentions.some((item) => item.input === "破械神露天阙序"));
+  assert.ok(resolution.unresolvedMentions.some((item) => item.input === "破械童子罗安"));
+});
+
+test("sentence-initial unquoted ruling subject becomes an external card lookup seed", () => {
+  const question = "破械焰魔天可以用对方场上的混沌之三幻魔代破吗？是消耗混沌之三幻魔不会被破坏的次数吗？";
+  const candidates = extractUnquotedCardMentionCandidates(question);
+  const resolution = extractRagCards(question, { cards: [], maxCards: 8 });
+
+  assert.ok(candidates.includes("破械焰魔天"));
+  assert.ok(candidates.includes("混沌之三幻魔"));
+  assert.ok(!candidates.some((item) => item.includes("代破")));
+  assert.ok(resolution.unresolvedMentions.some((item) => item.input === "破械焰魔天"));
+  assert.ok(resolution.unresolvedMentions.some((item) => item.input === "混沌之三幻魔"));
+});
+
+test("ordinary sentence subjects are not promoted to unquoted card names", () => {
+  const questions = [
+    "双方卡组和手卡均不存在能被特殊召唤的怪兽，这种情况下可以发动吗？",
+    "这个效果可以在伤害步骤发动吗？",
+    "处理后能否发动诱发效果？",
+    "召唤成功后这个效果可以发动吗？",
+    "伤害步骤中这个效果可以发动吗？",
+    "对方回合这个效果可以发动吗？",
+    "效果无效状态下可以发动吗？",
+    "没有其他魔法陷阱时可以发动吗？",
+    "怪兽被战斗破坏的场合可以特殊召唤吗？",
+    "炎属性怪兽可以用作融合素材吗？",
+  ];
+
+  for (const question of questions) {
+    assert.deepEqual(extractUnquotedCardMentionCandidates(question), []);
+  }
+});
+
+test("an unknown unquoted card name containing attack is not truncated", () => {
+  assert.ok(extractUnquotedCardMentionCandidates("高速攻击战士可以发动吗？").includes("高速攻击战士"));
+});
+
+test("traditional_unquoted_card_name_resolves_to_local_card", () => {
+  const resolution = extractRagCards("对方发动破械雙王神來迎的效果。", {
+    cards: [{
+      id: "300",
+      name: "破械双王神 来迎",
+      cnName: "破械双王神 来迎",
+      jaName: "破械雙王神ライゴウ",
+      aliases: ["破械双王神 来迎", "破械雙王神ライゴウ"],
+      effectText: "效果文本。",
+    }],
+    maxCards: 4,
+  });
+  assert.equal(resolution.resolvedCards[0].name, "破械双王神 来迎");
+});
+
+test("ocg_name_normalization_resolves_common_variants", () => {
+  const resolution = extractRagCards("「凶导的白天底」攻击宣言时触发「测试龙」效果。", { cards: [...cards, dogmatikaCard], maxCards: 6 });
+  assert.ok(resolution.resolvedCards.some((card) => card.name === "凶教导之天底 阿尔白・佐亚"));
+  assert.ok(resolution.resolvedCards.some((card) => card.name === "测试龙"));
+});
+
+test("ocg_name_normalization_treats 喰 and 食 as the same character variant", () => {
+  const localCards = [{ id: "variant-1", name: "吞喰测试之龙", aliases: ["吞喰测试之龙"] }];
+  const resolution = extractRagCards("「吞食测试之龙」的效果可以发动吗？", { cards: localCards });
+
+  assert.equal(normalizeCardKey("吞喰测试之龙"), normalizeCardKey("吞食测试之龙"));
+  assert.equal(resolution.resolvedCards[0]?.id, "variant-1");
+  assert.deepEqual(resolution.unresolvedMentions, []);
+});
+
+test("ocg_name_normalization binds Japanese glyph variants to a unique localized identity", () => {
+  const localCards = [{
+    id: "glyph-variant-1",
+    name: "架空独歩の義賊",
+    aliases: ["架空独歩の義賊"],
+  }];
+  const resolution = extractRagCards("「架空独步的义贼」①能否发动？", { cards: localCards });
+
+  assert.equal(normalizeCardKey("架空独歩の義賊"), normalizeCardKey("架空独步的义贼"));
+  assert.equal(resolution.resolvedCards[0]?.id, "glyph-variant-1");
+  assert.deepEqual(resolution.unresolvedMentions, []);
+});
+
+test("glyph normalization collisions remain ambiguous instead of selecting a card", () => {
+  const localCards = [{
+    id: "glyph-collision-a",
+    name: "架空独歩の義賊",
+    aliases: ["架空独歩の義賊"],
+  }, {
+    id: "glyph-collision-b",
+    name: "架空独步的义贼",
+    aliases: ["架空独步的义贼"],
+  }];
+  const resolution = extractRagCards("「架空独步的义贼」①能否发动？", { cards: localCards });
+
+  assert.equal(resolution.resolvedCards.length, 0);
+  assert.equal(resolution.ambiguousMentions[0]?.candidateCards.length, 2);
+});
+
+test("a unique one-character card-name difference resolves with high confidence", () => {
+  const localCards = [{ id: "edit-1", name: "深渊测试魔龙", aliases: ["深渊测试魔龙"] }];
+  const resolution = extractRagCards("「深渊测试魔凤」的效果可以发动吗？", { cards: localCards });
+  const providerMatch = createLocalCardDataProvider({ cards: localCards }).searchCardByName("深渊测试魔凤", 2)[0];
+
+  assert.equal(resolution.resolvedCards[0]?.id, "edit-1");
+  assert.ok(resolution.resolvedCards[0]?.confidence >= 0.9);
+  assert.equal(providerMatch?.id, "edit-1");
+  assert.ok(providerMatch?.confidence >= 0.9);
+});
+
+test("multiple one-character card-name neighbours remain below automatic resolution confidence", () => {
+  const localCards = [
+    { id: "edit-a", name: "深渊测试魔龙", aliases: ["深渊测试魔龙"] },
+    { id: "edit-b", name: "深渊测试魔王", aliases: ["深渊测试魔王"] },
+  ];
+  const resolution = extractRagCards("「深渊测试魔神」的效果可以发动吗？", { cards: localCards });
+  const providerMatches = createLocalCardDataProvider({ cards: localCards }).searchCardByName("深渊测试魔神", 2);
+
+  assert.equal(resolution.resolvedCards.length, 0);
+  assert.equal(resolution.unresolvedMentions[0]?.input, "深渊测试魔神");
+  assert.equal(providerMatches.length, 2);
+  assert.ok(providerMatches.every((card) => card.confidence < 0.72));
+});
+
+test("a unique short localized spelling resolves, while an ungrounded short two-edit name fails closed", () => {
+  const localCards = [
+    { id: "localized-short", name: "尤贝尔", aliases: ["尤贝尔"], sourceUrl: "https://db.ygoresources.com/data/card/localized-short" },
+    { id: "localized-two-edit", name: "纳祭魔鬼莲", aliases: ["纳祭魔鬼莲"], sourceUrl: "https://db.ygoresources.com/data/card/localized-two-edit" },
+  ];
+  const resolution = extractRagCards("「于贝尔」与「献祭魔界莲」的效果如何处理？", { cards: localCards });
+
+  assert.deepEqual(new Set(resolution.resolvedCards.map((card) => card.id)), new Set(["localized-short"]));
+  assert.ok(resolution.resolvedCards.every((card) => card.confidence >= 0.9));
+  assert.deepEqual(resolution.unresolvedMentions.map((item) => item.input), ["献祭魔界莲"]);
+});
+
+test("multiple two-edit neighbours remain unresolved instead of guessing", () => {
+  const localCards = [
+    { id: "near-two-a", name: "纳祭魔鬼莲", aliases: ["纳祭魔鬼莲"] },
+    { id: "near-two-b", name: "奉祭魔界花", aliases: ["奉祭魔界花"] },
+  ];
+  const resolution = extractRagCards("「献祭魔界莲」的效果如何处理？", { cards: localCards });
+
+  assert.equal(resolution.resolvedCards.length, 0);
+  assert.equal(resolution.unresolvedMentions[0]?.input, "献祭魔界莲");
+});
+
+test("extra-deck context resolves a legacy localized name only with unique material evidence", () => {
+  const localCards = [
+    {
+      id: "context-source",
+      name: "始源融合者",
+      aliases: ["始源融合者"],
+      effectText: "将包含此卡在内的场上怪兽作为融合素材进行融合召唤。",
+    },
+    {
+      id: "context-target",
+      name: "星铠龙 正式终焉",
+      aliases: ["星铠龙 正式终焉"],
+      effectText: "“始源融合者”＋融合怪兽",
+    },
+    {
+      id: "context-unrelated",
+      name: "星铠龙 无关守卫",
+      aliases: ["星铠龙 无关守卫"],
+      effectText: "这张卡召唤成功时可以发动。抽1张卡。",
+    },
+  ];
+  const positive = extractRagCards(
+    "我方额外卡组有「星铠龙 旧版幻影」，召唤「始源融合者」时发动其效果。",
+    { cards: localCards },
+  );
+  const noExtraDeckContext = extractRagCards(
+    "「星铠龙 旧版幻影」的效果可以发动吗？",
+    { cards: localCards },
+  );
+  const noResolvedMaterial = extractRagCards(
+    "我方额外卡组有「星铠龙 旧版幻影」。",
+    { cards: localCards },
+  );
+
+  assert.equal(positive.resolvedCards.some((card) => card.id === "context-target"), true);
+  assert.equal(positive.unresolvedMentions.some((item) => item.input === "星铠龙 旧版幻影"), false);
+  assert.equal(noExtraDeckContext.resolvedCards.some((card) => card.id === "context-target"), false);
+  assert.equal(noExtraDeckContext.unresolvedMentions.some((item) => item.input === "星铠龙 旧版幻影"), true);
+  assert.equal(noResolvedMaterial.resolvedCards.some((card) => card.id === "context-target"), false);
+  assert.equal(noResolvedMaterial.unresolvedMentions.some((item) => item.input === "星铠龙 旧版幻影"), true);
+});
+
+test("extra-deck contextual name resolution stays unresolved when material evidence is ambiguous", () => {
+  const localCards = [
+    {
+      id: "ambiguous-source",
+      name: "通用融合者",
+      aliases: ["通用融合者"],
+      effectText: "将包含此卡在内的场上怪兽作为融合素材进行融合召唤。",
+    },
+    {
+      id: "ambiguous-target-a",
+      name: "星铠龙 正式终焉",
+      aliases: ["星铠龙 正式终焉"],
+      effectText: "“通用融合者”＋融合怪兽",
+    },
+    {
+      id: "ambiguous-target-b",
+      name: "星铠龙 正式黎明",
+      aliases: ["星铠龙 正式黎明"],
+      effectText: "“通用融合者”＋同步怪兽",
+    },
+  ];
+  const resolution = extractRagCards(
+    "我方额外卡组有「星铠龙 旧版幻影」，召唤「通用融合者」时发动其效果。",
+    { cards: localCards },
+  );
+
+  assert.equal(resolution.resolvedCards.some((card) => /^ambiguous-target-/u.test(card.id)), false);
+  assert.equal(resolution.unresolvedMentions.some((item) => item.input === "星铠龙 旧版幻影"), true);
+});
+
+test("numbered identities require a token boundary and validate an explicit name suffix", () => {
+  const numberedCards = [
+    {
+      id: "no41",
+      name: "编号41 泥睡测试兽 原名",
+      jaName: "No.41 泥睡テスト獣",
+      aliases: ["编号41 泥睡测试兽 原名", "No.41 泥睡テスト獣"],
+    },
+    {
+      id: "cno41",
+      name: "混沌编号41 泥睡测试兽",
+      jaName: "CNo.41 泥睡テスト獣",
+      aliases: ["混沌编号41 泥睡测试兽", "CNo.41 泥睡テスト獣"],
+    },
+  ];
+
+  const bareNo = extractRagCards("对方场上的no.41防守表示存在。", { cards: numberedCards });
+  const bareCNo = extractRagCards("对方场上的CNo.41防守表示存在。", { cards: numberedCards });
+  const compatibleVariant = extractRagCards("「No.41 泥睡测试兽 别名」的效果可以发动吗？", { cards: numberedCards });
+  const wrongSuffix = extractRagCards("「No.41 青眼白龙」的效果可以发动吗？", { cards: numberedCards });
+  const misleadingSharedPrefix = extractRagCards("「No.41 泥睡测试兽 青眼白龙」的效果可以发动吗？", { cards: numberedCards });
+  const correctNameWithWrongTail = extractRagCards("「No.41 泥睡测试兽 原名 青眼白龙」的效果可以发动吗？", { cards: numberedCards });
+  const barePlusWrongDetail = extractRagCards("No.41在场，另有「No.41 青眼白龙」的效果。", { cards: numberedCards });
+  const embeddedLatinToken = extractRagCards("「Techno41」的效果可以发动吗？", { cards: numberedCards });
+  const unknownBareNumber = extractRagCards("对方场上的CNo.42防守表示存在。", { cards: numberedCards });
+
+  assert.deepEqual(bareNo.resolvedCards.map((card) => card.id), ["no41"]);
+  assert.deepEqual(bareCNo.resolvedCards.map((card) => card.id), ["cno41"]);
+  assert.deepEqual(compatibleVariant.resolvedCards.map((card) => card.id), ["no41"]);
+  assert.equal(wrongSuffix.resolvedCards.some((card) => card.id === "no41"), false);
+  assert.equal(wrongSuffix.unresolvedMentions.some((item) => item.input === "No.41 青眼白龙"), true);
+  assert.equal(misleadingSharedPrefix.resolvedCards.some((card) => card.id === "no41"), false);
+  assert.equal(misleadingSharedPrefix.unresolvedMentions.some((item) => item.input === "No.41 泥睡测试兽 青眼白龙"), true);
+  assert.equal(correctNameWithWrongTail.resolvedCards.some((card) => card.id === "no41"), false);
+  assert.equal(correctNameWithWrongTail.unresolvedMentions.some((item) => item.input === "No.41 泥睡测试兽 原名 青眼白龙"), true);
+  assert.equal(barePlusWrongDetail.resolvedCards.some((card) => card.id === "no41"), true);
+  assert.equal(barePlusWrongDetail.unresolvedMentions.some((item) => item.input === "No.41 青眼白龙"), true);
+  assert.equal(embeddedLatinToken.resolvedCards.some((card) => card.id === "no41"), false);
+  assert.equal(unknownBareNumber.unresolvedMentions.some((item) => item.input === "CNo.42"), true);
+});
+
+test("card alias indexes and local providers are cached by source data objects", () => {
+  const localCards = [{ id: "cache-1", name: "缓存测试龙", aliases: ["缓存测试龙"] }];
+  const localRecords = [];
+  const localQaRecords = [];
+
+  assert.equal(buildAliasIndex(localCards), buildAliasIndex(localCards));
+  assert.notEqual(buildAliasIndex(localCards), buildAliasIndex([...localCards]));
+  assert.equal(
+    createLocalCardDataProvider({ cards: localCards, records: localRecords, qaRecords: localQaRecords }),
+    createLocalCardDataProvider({ cards: localCards, records: localRecords, qaRecords: localQaRecords }),
+  );
+  assert.notEqual(
+    createLocalCardDataProvider({ cards: localCards, records: localRecords, qaRecords: localQaRecords }),
+    createLocalCardDataProvider({ cards: [...localCards], records: localRecords, qaRecords: localQaRecords }),
+  );
+});
+
+test("unresolved_new_card_with_text_can_be_analyzed", async () => {
+  const question = "【未发售测试龙】\n①：对方怪兽攻击宣言时可以发动。那次攻击无效。\n此时这张卡的效果能否处理？";
+  const answer = await answerRagRulingQuestion({
+    question,
+    cards: [],
+    records: [],
+    qaRecords: [],
+    modelInvoker: async () => JSON.stringify({
+      answerLevel: "rule_analysis",
+      shortAnswer: "可以基于用户提供文本给出未确认分析。",
+      reasoning: ["题目中提供了完整效果文本。"],
+      usedCards: ["未发售测试龙"],
+      usedEvidence: [],
+      missingInfo: [],
+      riskFlags: [],
+      confidenceSelfEstimate: "medium",
+    }),
+  });
+  assert.equal(answer.answerLevel, "rule_analysis");
+  assert.match(answer.shortAnswer, /用户提供文本/u);
+  assert.ok(answer.usedEvidence.some((item) => item.type === "user_provided_text"));
+  assert.equal(answer.debug.retrievalCounts.userProvidedCardTexts, 1);
+  assert.equal(answer.debug.unresolvedMentions[0].input, "未发售测试龙");
+});
+
+test("user_provided_text_not_official_confirmed", async () => {
+  const answer = await answerRagRulingQuestion({
+    question: "《未发售仪式怪兽》\n效果：①：这张卡特殊召唤成功的场合可以发动。对方场上的卡全部破坏。",
+    cards: [],
+    records: [],
+    qaRecords: [],
+    modelInvoker: async () => JSON.stringify({
+      answerLevel: "official_confirmed",
+      shortAnswer: "模型错误地声称官方确认。",
+      reasoning: ["只有用户提供文本。"],
+      usedCards: ["未发售仪式怪兽"],
+      usedEvidence: [],
+      missingInfo: [],
+      riskFlags: [],
+      confidenceSelfEstimate: "high",
+    }),
+  });
+  assert.notEqual(answer.answerLevel, "official_confirmed");
+  assert.ok(answer.usedEvidence.every((item) => item.type !== "official_qa"));
+});
+
+test("rag_does_not_require_database_match_when_user_text_present", async () => {
+  const answer = await answerRagRulingQuestion({
+    question: "未收录新卡：\n①：自己主要阶段可以发动。从卡组把1张卡加入手卡。\n这个效果能否在主要阶段2发动？",
+    cards: [],
+    records: [],
+    qaRecords: [],
+    dryRun: true,
+    env: {},
+  });
+  assert.equal(answer.answerLevel, "rule_analysis");
+  assert.ok(answer.resolvedCards.some((card) => card.name === "未收录新卡" && card.source === "user_provided_text"));
+  assert.ok(answer.usedEvidence.some((item) => item.type === "user_provided_text"));
+  assert.ok(!answer.riskFlags.includes("card_name_not_resolved"));
+});
+
+test("ordinary final text stays server-classified as rule analysis without an output validator", async () => {
+  const answer = await answerRagRulingQuestion({
+    question: "「测试龙」可以发动①效果吗？",
+    cards,
+    records,
+    qaRecords: [],
+    modelInvoker: async () => JSON.stringify({
+      answerLevel: "low_confidence_analysis",
+      shortAnswer: "没有模板也不会直接 insufficient。",
+      reasoning: ["RAG baseline 只依赖检索资料。"],
+      usedCards: ["测试龙"],
+      usedEvidence: [{ id: "card-text-100", type: "card_text", title: "测试龙 的卡片文本" }],
+      missingInfo: [],
+      riskFlags: ["card_text_only"],
+      confidenceSelfEstimate: "low",
+    }),
+  });
+  assert.notEqual(answer.shortAnswer, "insufficient");
+  assert.equal(answer.answerLevel, "rule_analysis");
+  assert.ok(!answer.riskFlags.includes("low_confidence_upgraded_to_rule_analysis_with_card_text"));
+});
+
+test("rag_pipeline_includes_card_text_when_card_resolved", async () => {
+  const answer = await answerRagRulingQuestion({
+    question: "Test Dragon 的效果能发动吗？",
+    cards,
+    records,
+    qaRecords: [],
+    dryRun: true,
+    env: {},
+  });
+  assert.equal(answer.resolvedCards[0].name, "测试龙");
+  assert.ok(answer.usedEvidence.some((item) => item.id === "card-text-100"));
+  assert.ok(answer.usedEvidence.some((item) => item.sourceUrl === "https://example.test/card/100"));
+  assert.equal(answer.debug.retrievalCounts.cardTexts > 0, true);
+  assert.equal(typeof answer.debug.promptChars, "number");
+});
+
+test("card name extractor uses Relay Sol low", async () => {
+  const calls = [];
+  const now = new Date("2048-07-10T00:00:00.000Z");
+  const env = relayAuxEnv();
+  await resetRagBudget({ env, now });
+  const result = await callCardNameExtractionModel({
+    userQuery: "测式龙的①效果可以发动吗？",
+    dataRevision: "relay-sol-low-card-name-20480710",
+    env,
+    now,
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options, body: JSON.parse(options.body) });
+      return relaySseResponse({
+        cardNames: [{ name: "测试龙", originalText: "测式龙", confidence: "high" }],
+      }, { prompt_tokens: 30, completion_tokens: 10, total_tokens: 40 });
+    },
+  });
+  assert.equal(result.providerUsed, "relay");
+  assert.equal(result.modelUsed, "gpt-5.6-sol");
+  assert.equal(calls[0].body.model, "gpt-5.6-sol");
+  assert.equal(calls[0].body.reasoning_effort, "low");
+  assert.equal(calls[0].body.max_completion_tokens, 800);
+  assert.deepEqual(result.candidates.map((item) => item.name), ["测试龙"]);
+});
+
+test("rule query extractor uses Relay Sol low", async () => {
+  const calls = [];
+  const now = new Date("2048-07-10T00:01:00.000Z");
+  const env = relayAuxEnv();
+  await resetRagBudget({ env, now });
+  const result = await callRuleQueryExtractionModel({
+    userQuery: "场上只有正在处理的陷阱时，返回魔法陷阱的效果能否处理？",
+    resolvedCards: [{
+      name: "匿名响应者",
+      cardType: "效果怪兽",
+      effectText: "ANONYMOUS_COMPLETE_EFFECT_TEXT：特殊召唤。那之后，进行后续处理。",
+    }],
+    candidateQuestions: [{
+      id: "qa-question-only-candidate",
+      question: "QUESTION_ONLY_CANDIDATE_MARKER：连续处理的前一步没有完成时，后一步如何处理？",
+      answer: "CANDIDATE_ANSWER_MUST_NOT_REACH_QUERY_MODEL",
+      fullText: "CANDIDATE_FULL_TEXT_MUST_NOT_REACH_QUERY_MODEL",
+    }],
+    dataRevision: "relay-sol-low-rule-query-20480710",
+    env,
+    now,
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options, body: JSON.parse(options.body) });
+      return relaySseRaw([
+        "处理中的陷阱 当前区域 | 処理中の罠 現在の領域 | resolving trap current zone",
+        "连续处理 前一步完成 后一步依赖 | 連続処理 前段完了 後段依存 | sequential resolution prior step dependency",
+      ].join("\n"), { prompt_tokens: 25, completion_tokens: 8, total_tokens: 33 });
+    },
+  });
+  assert.equal(result.providerUsed, "relay");
+  assert.equal(result.modelUsed, "gpt-5.6-sol");
+  assert.equal(calls[0].body.model, "gpt-5.6-sol");
+  assert.equal(calls[0].body.reasoning_effort, "low");
+  assert.deepEqual(result.queries.map((item) => item.query), [
+    "处理中的陷阱 当前区域 | 処理中の罠 現在の領域 | resolving trap current zone",
+    "连续处理 前一步完成 后一步依赖 | 連続処理 前段完了 後段依存 | sequential resolution prior step dependency",
+  ], JSON.stringify(result));
+  assert.equal(result.queries[0].subclaim, "");
+  assert.equal(result.queries[0].checkpoint, "");
+  const requestPrompt = calls[0].body.messages.map((item) => item.content).join("\n");
+  assert.match(requestPrompt, /彼此独立、尚待证实的规则子命题/u);
+  assert.match(requestPrompt, /输出必须是单个 JSON 对象/u);
+  assert.match(requestPrompt, /ruleQueries 和 candidateAssessments/u);
+  assert.match(requestPrompt, /忠实保留玩家明确给出的事件、区域、表示形式、顺序和状态/u);
+  assert.match(requestPrompt, /某一步不能执行时前序结果是否保留/u);
+  assert.match(requestPrompt, /多个实体、数值或方向之间选择/u);
+  assert.match(requestPrompt, /然后／那之后／根据……适用/u);
+  assert.match(requestPrompt, /不得为了达到条数加入无关机制/u);
+  assert.match(requestPrompt, /中文、日文和英文三个可独立检索/u);
+  assert.match(requestPrompt, /不得使用未展开的缩写、单字母或无法独立理解的代词/u);
+  assert.match(requestPrompt, /匿名响应者/u);
+  assert.match(requestPrompt, /效果怪兽/u);
+  assert.match(requestPrompt, /ANONYMOUS_COMPLETE_EFFECT_TEXT/u);
+  assert.match(requestPrompt, /QUESTION_ONLY_CANDIDATE_MARKER/u);
+  assert.doesNotMatch(requestPrompt, /CANDIDATE_(?:ANSWER|FULL_TEXT)_MUST_NOT_REACH_QUERY_MODEL/u);
+  assert.match(requestPrompt, /candidateAssessments/u);
+  assert.deepEqual(result.candidateAssessments, []);
+  assert.deepEqual(calls[0].body.response_format, { type: "json_object" });
+  assert.equal(calls.length, 1);
+});
+
+test("rule query plain-text protocol mechanically cleans lines and keeps fail-closed sentinel empty", async () => {
+  const now = new Date("2048-07-10T00:01:30.000Z");
+  const env = relayAuxEnv();
+  await resetRagBudget({ env, now });
+  const calls = [];
+  const result = await callRuleQueryExtractionModel({
+    userQuery: "匿名连锁处理需要检索什么规则？",
+    dataRevision: "relay-rule-query-plain-lines-20480710",
+    env,
+    now,
+    fetchImpl: async (_url, options) => {
+      calls.push(JSON.parse(options.body));
+      return relaySseRaw([
+        "```",
+        "- 查询：处理时对象控制权改变 原效果如何处理 | 処理時 対象 コントロール変更 | target control changed during resolution",
+        "2. 连锁处理中对象仍须满足什么条件 | チェーン処理中 対象 条件 | target requirements during chain resolution",
+        "```",
+      ].join("\n"));
+    },
+  });
+
+  assert.deepEqual(calls[0].response_format, { type: "json_object" });
+  assert.deepEqual(result.queries.map((item) => item.query), [
+    "处理时对象控制权改变 原效果如何处理 | 処理時 対象 コントロール変更 | target control changed during resolution",
+    "连锁处理中对象仍须满足什么条件 | チェーン処理中 対象 条件 | target requirements during chain resolution",
+  ], JSON.stringify(result));
+  assert.deepEqual(result.candidateAssessments, []);
+
+  const noQuery = await callRuleQueryExtractionModel({
+    userQuery: "无法生成查询的匿名输入",
+    dataRevision: "relay-rule-query-no-query-20480710",
+    env,
+    now,
+    fetchImpl: async () => relaySseRaw("NO_QUERY"),
+  });
+  assert.deepEqual(noQuery.queries, []);
+  assert.ok(noQuery.warnings.includes("rule_query_model_not_cached:no_valid_items"));
+});
+
+test("rule query lenient parsing keeps structured metadata and candidate soft ranking", async () => {
+  const now = new Date("2048-07-10T00:01:45.000Z");
+  const env = relayAuxEnv();
+  await resetRagBudget({ env, now });
+  const result = await callRuleQueryExtractionModel({
+    userQuery: "匿名对象在处理时改变控制权后如何处理？",
+    candidateQuestions: [{
+      id: "candidate-soft-rank",
+      question: "处理时对象的控制权改变时，效果如何处理？",
+    }],
+    dataRevision: "relay-rule-query-lenient-wrapper-20480710",
+    env,
+    now,
+    fetchImpl: async () => relaySseRaw([
+      "以下是检索计划：",
+      JSON.stringify({
+        result: {
+          ruleQueries: [{
+            subclaim: "确认处理时对象改变控制权后的适用性",
+            checkpoint: "resolution_snapshot",
+            query: "处理时 对象 控制权改变 | 処理時 対象 コントロール変更 | target control changes during resolution",
+            reason: "检索处理时快照",
+            confidence: "high",
+          }],
+          candidateAssessments: [{
+            id: "candidate-soft-rank",
+            relevance: "high",
+            premise: "same",
+            difference: "",
+          }],
+        },
+      }),
+    ].join("\n")),
+  });
+
+  assert.equal(result.queries.length, 1);
+  assert.equal(result.queries[0].checkpoint, "resolution_snapshot");
+  assert.equal(result.queries[0].subclaim, "确认处理时对象改变控制权后的适用性");
+  assert.deepEqual(result.candidateAssessments, [{
+    id: "candidate-soft-rank",
+    relevance: "high",
+    premise: "same",
+    difference: "",
+    source: "model_rule_query_soft_ranker",
+  }]);
+});
+
+test("rule query accepts useful fallback shapes and only tolerates missing finish on a complete SSE", async () => {
+  const now = new Date("2048-07-10T00:01:50.000Z");
+  const env = relayAuxEnv();
+  await resetRagBudget({ env, now });
+  const single = await callRuleQueryExtractionModel({
+    userQuery: "匿名发动时是否必须有合法对象？",
+    dataRevision: "relay-rule-query-single-shape-20480710",
+    env,
+    now,
+    fetchImpl: async () => relaySseRaw(JSON.stringify({
+      query: "发动时 合法对象 | 発動時 適法な対象 | legal target at activation",
+      subclaim: "确认发动时必须存在合法对象",
+      checkpoint: "operation_legality",
+      reason: "检索发动条件",
+      confidence: "high",
+    })),
+  });
+  assert.equal(single.queries[0].checkpoint, "operation_legality");
+
+  const bracketed = await callRuleQueryExtractionModel({
+    userQuery: "匿名方括号查询如何解析？",
+    dataRevision: "relay-rule-query-bracketed-text-20480710",
+    env,
+    now,
+    fetchImpl: async () => relaySseRaw("[发动时] 是否必须存在合法对象 | [発動時] 適法な対象が必要か | [activation] legal target required"),
+  });
+  assert.equal(bracketed.queries.length, 1);
+  assert.match(bracketed.queries[0].query, /^\[发动时\]/u);
+
+  const missingFinish = await callRuleQueryExtractionModel({
+    userQuery: "匿名完整流缺少 finish reason 如何处理？",
+    dataRevision: "relay-rule-query-missing-finish-20480710",
+    env,
+    now,
+    fetchImpl: async () => new Response([
+      `data: ${JSON.stringify({
+        model: "gpt-5.6-sol",
+        choices: [{
+          index: 0,
+          delta: { content: JSON.stringify({ ruleQueries: ["完整 SSE 中的有效查询"] }) },
+        }],
+      })}\n\n`,
+      "data: [DONE]\n\n",
+    ].join(""), {
+      status: 200,
+      headers: { "content-type": "text/event-stream" },
+    }),
+  });
+  assert.deepEqual(missingFinish.queries.map((item) => item.query), ["完整 SSE 中的有效查询"]);
+  assert.ok(missingFinish.warnings.includes("rule_query_missing_finish_reason_accepted"));
+});
+
+test("rule query normalization preserves independently bounded pipe and newline language branches", async () => {
+  const calls = [];
+  const now = new Date("2048-07-10T00:02:00.000Z");
+  const env = relayAuxEnv();
+  await resetRagBudget({ env, now });
+  const chinese = `中文完整问题${"甲".repeat(180)}`;
+  const japanese = `日本語の完全な質問${"乙".repeat(180)}`;
+  const english = `Complete English ruling question ${"z".repeat(180)}`;
+  const fourth = `第四语言分支${"丁".repeat(180)}`;
+  const ignored = "第五个分支必须被忽略";
+  const result = await callRuleQueryExtractionModel({
+    userQuery: "请生成多语言检索问题。",
+    dataRevision: "relay-rule-query-branch-normalization-20480710",
+    env,
+    now,
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options, body: JSON.parse(options.body) });
+      return relaySseResponse({
+        ruleQueries: [{
+          subclaim: "确认多语言分支不会互相截断",
+          checkpoint: "operation_legality",
+          query: `${chinese}\n${japanese} ｜ ${english}\n${fourth} | ${ignored}`,
+          reason: "检索同一个未决子问题",
+          confidence: "high",
+        }],
+        candidateAssessments: [],
+      }, { prompt_tokens: 20, completion_tokens: 20, total_tokens: 40 });
+    },
+  });
+
+  const branches = result.queries[0].query.split(" | ");
+  assert.equal(calls.length, 1);
+  assert.equal(branches.length, 4);
+  assert.deepEqual(branches, [
+    chinese.slice(0, 160),
+    japanese.slice(0, 160),
+    english.slice(0, 160),
+    fourth.slice(0, 160),
+  ]);
+  assert.doesNotMatch(result.queries[0].query, /第五个分支/u);
+});
+
+test("rule query extraction defaults the independent Relay planner to low and a correctness-first output budget", async () => {
+  const calls = [];
+  const now = new Date("2048-07-11T00:00:00.000Z");
+  const env = {
+    RAG_RULE_MODEL_PROVIDER: "relay",
+    RAG_RULE_MODEL_RELAY_API_KEY: "relay-rule-query-key",
+    RAG_RULE_MODEL_RELAY_BASE_URL: "https://relay.example.test/v1",
+    RELAY_RULE_MODEL: "gpt-5.6-terra",
+    RAG_MODEL: "gpt-5.6-sol",
+    RAG_REASONING_EFFORT: "low",
+    API_CHATGPT_DAILY_BUDGET_USD: "10",
+    API_BUDGET_TIMEZONE: "UTC",
+  };
+  await resetRagBudget({ env, now });
+  const result = await callRuleQueryExtractionModel({
+    userQuery: "匿名连续处理场景需要检索哪条规则？",
+    dataRevision: "relay-terra-rule-query-20480711",
+    env,
+    now,
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options, body: JSON.parse(options.body) });
+      const content = JSON.stringify({
+        ruleQueries: [{
+          subclaim: "确认后一处理是否依赖前一处理实际完成",
+          checkpoint: "step_dependency",
+          query: "连续处理 前一步完成 后一步依赖 | 連続処理 前段完了 後段依存 | sequential resolution prior step dependency",
+          reason: "检索连续处理的依赖关系",
+          confidence: "high",
+        }],
+      });
+      return new Response(`data: ${JSON.stringify({
+        model: "gpt-5.6-terra",
+        choices: [{ index: 0, finish_reason: "stop", delta: { content } }],
+        usage: { prompt_tokens: 40, completion_tokens: 20, total_tokens: 60 },
+      })}\n\ndata: [DONE]\n\n`, {
+        status: 200,
+        headers: { "content-type": "text/event-stream" },
+      });
+    },
+  });
+
+  assert.equal(calls.length, 1);
+  assert.match(calls[0].url, /\/chat\/completions$/u);
+  assert.equal(calls[0].body.model, "gpt-5.6-terra");
+  assert.equal(calls[0].body.reasoning_effort, "low");
+  assert.equal(calls[0].body.max_completion_tokens, 32000);
+  assert.deepEqual(calls[0].body.response_format, { type: "json_object" });
+  assert.equal(result.providerUsed, "relay");
+  assert.equal(result.modelUsed, "gpt-5.6-terra");
+  assert.equal(result.requestedModel, "gpt-5.6-terra");
+  assert.equal(result.returnedModel, "gpt-5.6-terra");
+  assert.equal(result.reasoningEffort, "low");
+  assert.equal(result.costCurrency, "USD");
+  assert.ok(result.estimatedCostUsd > 0);
+  assert.equal(result.budgetStatus.bucket.id, "final_ruling:relay");
+  assert.equal(result.queries[0].checkpoint, "step_dependency");
+  assert.equal(env.RAG_MODEL, "gpt-5.6-sol");
+  assert.equal(env.RAG_REASONING_EFFORT, "low");
+});
+
+test("rule query extraction applies its 120-second default provider deadline", async () => {
+  const originalSetTimeout = globalThis.setTimeout;
+  let observedDefaultTimeout = false;
+  globalThis.setTimeout = (callback, delay, ...args) => {
+    if (delay === 120_000) {
+      observedDefaultTimeout = true;
+      return originalSetTimeout(callback, 0, ...args);
+    }
+    return originalSetTimeout(callback, delay, ...args);
+  };
+
+  try {
+    const result = await callRuleQueryExtractionModel({
+      userQuery: "匿名默认超时场景需要检索哪条规则？",
+      dataRevision: "rule-default-timeout-20480712",
+      env: {
+        RAG_RULE_MODEL_PROVIDER: "relay",
+        RAG_RULE_MODEL_RELAY_API_KEY: "relay-rule-key",
+        RAG_RULE_MODEL_RELAY_BASE_URL: "https://relay.example.test/v1",
+        API_CHATGPT_DAILY_BUDGET_USD: "10",
+        API_BUDGET_TIMEZONE: "UTC",
+      },
+      now: new Date("2048-07-12T00:00:00.000Z"),
+      fetchImpl: async (_url, options) => new Promise((_resolve, reject) => {
+        options.signal.addEventListener("abort", () => reject(options.signal.reason), { once: true });
+      }),
+    });
+
+    assert.equal(observedDefaultTimeout, true);
+    assert.ok(result.warnings.includes("rule_query_model_failed:rule_query_model_timeout"));
+  } finally {
+    globalThis.setTimeout = originalSetTimeout;
+  }
+});
+
+test("ordinary pipeline stops before final generation when Relay rule preparation is empty or times out", async () => {
+  const scenarios = [{
+    label: "empty",
+    invoke: async () => JSON.stringify({ ruleQueries: [] }),
+    code: "rule_query_model_empty",
+  }, {
+    label: "structured-no-query",
+    invoke: async () => JSON.stringify({ ruleQueries: ["NO_QUERY"] }),
+    code: "rule_query_model_empty",
+  }, {
+    label: "timeout",
+    invoke: async () => {
+      throw new Error("rule_query_model_timeout");
+    },
+    code: "rule_query_model_timeout",
+  }];
+
+  for (const [index, scenario] of scenarios.entries()) {
+    let finalCalls = 0;
+    await assert.rejects(answerRagRulingQuestion({
+      question: `匿名 Relay ${scenario.label} 场景如何处理？`,
+      cards: [],
+      records: [],
+      qaRecords: [],
+      officialQaExactAlreadyChecked: true,
+      env: relayAuxEnv({
+        MODEL_PROVIDER: "mock",
+        RAG_MODEL_PROVIDER: "mock",
+        RAG_CARD_MODEL_PROVIDER: "mock",
+      }),
+      now: new Date(`2056-01-0${index + 1}T00:00:00.000Z`),
+      ruleModelInvoker: scenario.invoke,
+      modelInvoker: async () => {
+        finalCalls += 1;
+        return JSON.stringify(modelJson("不应生成最终裁定。"));
+      },
+    }), (error) => {
+      assert.equal(error.code, scenario.code);
+      assert.equal(error.statusCode, 503);
+      return true;
+    });
+    assert.equal(finalCalls, 0);
+  }
+});
+
+test("a usable candidate assessment is a valid evidence plan but a negative assessment is not", async () => {
+  const focusCard = {
+    id: "relay-plan-card",
+    name: "匿名阶段卡",
+    cnName: "匿名阶段卡",
+    effectText: "①：可以发动。进行第一步。那之后，进行第二步。",
+    aliases: ["匿名阶段卡"],
+  };
+  const candidateQa = {
+    id: "qa-relay-plan-candidate",
+    recordType: "qa",
+    question: "匿名阶段卡的效果分两步处理时，第一步无法处理的场合，第二步如何处理？",
+    answer: "第一步无法处理的场合，第二步不处理。",
+    text: "匿名阶段卡的效果分两步处理时，第一步无法处理的场合，第二步如何处理？ 第一部无法处理的场合，第二步不处理。",
+    cardIds: [focusCard.id],
+    cards: [focusCard.name],
+  };
+  const base = {
+    question: "「匿名阶段卡」在连续处理时应该怎样判断每一步？",
+    cards: [focusCard],
+    records: [],
+    qaRecords: [candidateQa],
+    officialQaExactAlreadyChecked: true,
+    env: relayAuxEnv({
+      MODEL_PROVIDER: "mock",
+      RAG_MODEL_PROVIDER: "mock",
+      RAG_CARD_MODEL_PROVIDER: "mock",
+    }),
+  };
+
+  let positiveFinalCalls = 0;
+  const positive = await answerRagRulingQuestion({
+    ...base,
+    now: new Date("2056-01-10T00:00:00.000Z"),
+    ruleModelInvoker: async () => JSON.stringify({
+      ruleQueries: [],
+      candidateAssessments: [{
+        id: candidateQa.id,
+        relevance: "high",
+        premise: "same",
+        difference: "",
+      }],
+    }),
+    modelInvoker: async () => {
+      positiveFinalCalls += 1;
+      return "已有候选资料足以进入最终裁定。";
+    },
+  });
+  assert.equal(positiveFinalCalls, 1);
+  assert.equal(positive.debug.modelRuleCandidateAssessments[0].id, candidateQa.id);
+
+  let negativeFinalCalls = 0;
+  await assert.rejects(answerRagRulingQuestion({
+    ...base,
+    now: new Date("2056-01-11T00:00:00.000Z"),
+    ruleModelInvoker: async () => JSON.stringify({
+      ruleQueries: [],
+      candidateAssessments: [{
+        id: candidateQa.id,
+        relevance: "low",
+        premise: "different",
+        difference: "前提不同。",
+      }],
+    }),
+    modelInvoker: async () => {
+      negativeFinalCalls += 1;
+      return "不应生成最终裁定。";
+    },
+  }), (error) => error.code === "rule_query_model_empty" && error.statusCode === 503);
+  assert.equal(negativeFinalCalls, 0);
+});
+
+test("ordinary pipeline fails closed when Relay rule preparation was required but is misconfigured", async () => {
+  const scenarios = [{
+    label: "missing",
+    env: { RAG_RULE_MODEL_PROVIDER: "relay" },
+  }, {
+    label: "invalid-url",
+    env: {
+      RAG_RULE_MODEL_PROVIDER: "relay",
+      RAG_RULE_MODEL_RELAY_API_KEY: "relay-rule-key",
+      RAG_RULE_MODEL_RELAY_BASE_URL: "http://relay.example.test/v1",
+    },
+  }, {
+    label: "deepseek-redirect",
+    env: { RAG_RULE_MODEL_PROVIDER: "deepseek" },
+  }];
+
+  for (const [index, scenario] of scenarios.entries()) {
+    let finalCalls = 0;
+    await assert.rejects(answerRagRulingQuestion({
+      question: `匿名 Relay 配置 ${scenario.label} 场景如何处理？`,
+      cards: [],
+      records: [],
+      qaRecords: [],
+      officialQaExactAlreadyChecked: true,
+      env: {
+        MODEL_PROVIDER: "mock",
+        RAG_MODEL_PROVIDER: "mock",
+        RAG_CARD_MODEL_PROVIDER: "mock",
+        ...scenario.env,
+      },
+      now: new Date(`2056-02-0${index + 1}T00:00:00.000Z`),
+      modelInvoker: async () => {
+        finalCalls += 1;
+        return JSON.stringify(modelJson("不应生成最终裁定。"));
+      },
+    }), (error) => {
+      assert.equal(error.code, "rule_query_model_unavailable");
+      assert.equal(error.statusCode, 503);
+      assert.match(error.message, /Relay 证据准备模型不可用/u);
+      return true;
+    });
+    assert.equal(finalCalls, 0);
+  }
+});
+
+test("Relay rule-query fail-closed guard remains disabled for explicit and environment dry-runs", async () => {
+  const dryRunModes = [{
+    label: "explicit",
+    dryRun: true,
+    env: {},
+  }, {
+    label: "environment",
+    dryRun: false,
+    env: { RAG_DRY_RUN: "true" },
+  }];
+
+  for (const [index, mode] of dryRunModes.entries()) {
+    const answer = await answerRagRulingQuestion({
+      question: `Relay ${mode.label} dry-run should not be blocked.`,
+      cards: [],
+      records: [],
+      qaRecords: [],
+      officialQaExactAlreadyChecked: true,
+      dryRun: mode.dryRun,
+      env: relayAuxEnv({
+        MODEL_PROVIDER: "mock",
+        RAG_MODEL_PROVIDER: "mock",
+        RAG_CARD_MODEL_PROVIDER: "mock",
+        ...mode.env,
+      }),
+      now: new Date(`2056-03-0${index + 1}T00:00:00.000Z`),
+    });
+    assert.equal(answer.debug.dryRun, true, mode.label);
+    assert.ok(
+      answer.debug.ruleQueryWarnings.includes("rule_query_model_dry_run_skipped"),
+      mode.label,
+    );
+  }
+});
+
+test("official QA applicability review uses Relay Sol low once and never sends candidate answers", async () => {
+  const calls = [];
+  const candidate = {
+    id: "anonymous-related-applicability-a",
+    type: "related",
+    isDirect: false,
+    question: "QUESTION_ONLY_MARKER：某公开区域效果在相同时点能否发动？",
+    answer: "ANSWER_MUST_NOT_REACH_CLASSIFIER_MARKER",
+    fullText: "FULL_TEXT_MUST_NOT_REACH_CLASSIFIER_MARKER",
+    questionType: "activation_legality",
+    matchedQuestionCardIds: ["71001"],
+  };
+  const result = await callOfficialQaApplicabilityModel({
+    userQuery: "当前问题询问同一发动窗口中的发动资格。",
+    candidates: [candidate],
+    resolvedCards: [{ id: "71001", name: "匿名卡甲" }],
+    dataRevision: "anonymous-applicability-relay-v1",
+    env: {
+      RAG_EVIDENCE_APPLICABILITY_ENABLED: "true",
+      RAG_EVIDENCE_APPLICABILITY_PROVIDER: "relay",
+      RELAY_EVIDENCE_APPLICABILITY_MODEL: "gpt-5.6-sol",
+      RAG_EVIDENCE_APPLICABILITY_REASONING_EFFORT: "low",
+    },
+    modelInvoker: async (input) => {
+      calls.push(input);
+      return {
+        assessments: [{
+          id: candidate.id,
+          verdict: "APPLICABLE",
+          sharedConditions: ["相同发动窗口"],
+          missingConditions: [],
+          conflictingConditions: [],
+          reason: "问题前提兼容。",
+        }],
+        usage: { prompt_tokens: 20, completion_tokens: 8, total_tokens: 28 },
+        requestModel: "gpt-5.6-sol",
+        responseModel: "gpt-5.6-sol",
+      };
+    },
+  });
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].provider, "relay");
+  assert.equal(calls[0].modelName, "gpt-5.6-sol");
+  assert.equal(calls[0].reasoningEffort, "low");
+  assert.match(calls[0].prompt, /QUESTION_ONLY_MARKER/u);
+  assert.doesNotMatch(calls[0].prompt, /ANSWER_MUST_NOT_REACH_CLASSIFIER_MARKER|FULL_TEXT_MUST_NOT_REACH_CLASSIFIER_MARKER/u);
+  assert.equal(result.status, "completed");
+  assert.equal(result.providerUsed, "relay");
+  assert.equal(result.requestedModel, "gpt-5.6-sol");
+  assert.equal(result.returnedModel, "gpt-5.6-sol");
+  assert.equal(result.assessments[0].verdict, "APPLICABLE");
+});
+
+test("official QA applicability real adapter shares the Relay USD budget and sends low reasoning effort", async () => {
+  const calls = [];
+  const candidateId = "anonymous-related-relay-adapter-20480701";
+  const now = new Date("2048-07-01T00:00:00.000Z");
+  const env = {
+    RAG_EVIDENCE_APPLICABILITY_ENABLED: "true",
+    RAG_EVIDENCE_APPLICABILITY_PROVIDER: "relay",
+    RELAY_EVIDENCE_APPLICABILITY_MODEL: "gpt-5.6-sol",
+    RAG_EVIDENCE_APPLICABILITY_REASONING_EFFORT: "low",
+    RAG_EVIDENCE_APPLICABILITY_MAX_OUTPUT_TOKENS: "256",
+    RELAY_API_KEY: "relay-test-key",
+    RELAY_BASE_URL: "https://relay.example.test/v1",
+    API_CHATGPT_DAILY_BUDGET_USD: "10",
+    API_BUDGET_TIMEZONE: "UTC",
+  };
+  await resetRagBudget({ env, now });
+  const result = await callOfficialQaApplicabilityModel({
+    userQuery: "这个匿名场景能否采用该相关问答？",
+    candidates: [{
+      id: candidateId,
+      type: "related",
+      isDirect: false,
+      question: "匿名相关问答的场景前提。",
+    }],
+    dataRevision: "anonymous-relay-adapter-20480701",
+    env,
+    now,
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options, body: JSON.parse(options.body) });
+      const content = JSON.stringify({
+        assessments: [{
+          id: candidateId,
+          verdict: "UNKNOWN",
+          sharedConditions: [],
+          missingConditions: ["需要额外场景事实"],
+          conflictingConditions: [],
+          reason: "不能仅凭候选问题确认。",
+        }],
+      });
+      return new Response(`data: ${JSON.stringify({
+        model: "gpt-5.6-sol",
+        choices: [{ index: 0, finish_reason: "stop", delta: { content } }],
+        usage: { prompt_tokens: 30, completion_tokens: 20, total_tokens: 50 },
+      })}\n\ndata: [DONE]\n\n`, {
+        status: 200,
+        headers: { "content-type": "text/event-stream" },
+      });
+    },
+  });
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, "https://relay.example.test/v1/chat/completions");
+  assert.equal(calls[0].options.headers.authorization, "Bearer relay-test-key");
+  assert.equal(calls[0].body.model, "gpt-5.6-sol");
+  assert.equal(calls[0].body.reasoning_effort, "low");
+  assert.equal(calls[0].body.response_format.type, "json_object");
+  assert.equal(calls[0].body.stream, true);
+  assert.deepEqual(calls[0].body.stream_options, { include_usage: true });
+  assert.equal(result.status, "completed");
+  assert.equal(result.returnedModel, "gpt-5.6-sol");
+  assert.equal(result.costCurrency, "USD");
+  assert.equal(result.estimatedCostUsd > 0, true);
+  assert.equal(result.budgetStatus.bucket.id, "final_ruling:relay");
+  assert.equal(result.budgetStatus.bucket.spentTodayUsd, result.estimatedCostUsd);
+});
+
+test("applicability cache hits do not charge twice and final Relay calls share the same USD ledger", async () => {
+  const candidateId = "anonymous-related-shared-ledger-20480702";
+  const now = new Date("2048-07-02T00:00:00.000Z");
+  const env = {
+    MODEL_PROVIDER: "relay",
+    RAG_MODEL: "gpt-5.6-sol",
+    RAG_REASONING_EFFORT: "low",
+    RAG_EVIDENCE_APPLICABILITY_ENABLED: "true",
+    RAG_EVIDENCE_APPLICABILITY_PROVIDER: "relay",
+    RELAY_EVIDENCE_APPLICABILITY_MODEL: "gpt-5.6-sol",
+    RAG_EVIDENCE_APPLICABILITY_REASONING_EFFORT: "low",
+    RELAY_API_KEY: "relay-test-key",
+    RELAY_BASE_URL: "https://relay.example.test/v1",
+    API_BUDGET_TIMEZONE: "UTC",
+  };
+  await resetRagBudget({ env, now });
+  let fetchCount = 0;
+  const fetchImpl = async (_url, options) => {
+    fetchCount += 1;
+    const prompt = JSON.parse(options.body).messages[0].content;
+    const content = prompt.includes("CANDIDATE_QUESTIONS_JSON")
+      ? JSON.stringify({
+          assessments: [{
+            id: candidateId,
+            verdict: "UNKNOWN",
+            sharedConditions: [],
+            missingConditions: ["需要更多事实"],
+            conflictingConditions: [],
+            reason: "资料不足。",
+          }],
+        })
+      : JSON.stringify(modelJson("Shared Relay ledger OK"));
+    return new Response(`data: ${JSON.stringify({
+      model: "gpt-5.6-sol",
+      choices: [{ index: 0, finish_reason: "stop", delta: { content } }],
+      usage: { prompt_tokens: 40, completion_tokens: 20, total_tokens: 60 },
+    })}\n\ndata: [DONE]\n\n`, {
+      status: 200,
+      headers: { "content-type": "text/event-stream" },
+    });
+  };
+  const input = {
+    userQuery: "共享预算与缓存测试。",
+    candidates: [{ id: candidateId, type: "related", isDirect: false, question: "匿名候选问题。" }],
+    dataRevision: "anonymous-shared-ledger-20480702",
+    env,
+    now,
+    fetchImpl,
+  };
+
+  const first = await callOfficialQaApplicabilityModel(input);
+  const cached = await callOfficialQaApplicabilityModel(input);
+  const final = await callRagModel({ prompt: "输出最终裁定 JSON", env, now, fetchImpl });
+
+  assert.equal(fetchCount, 2);
+  assert.equal(first.cacheHit, false);
+  assert.equal(cached.cacheHit, true);
+  assert.equal(cached.estimatedCostUsd, 0);
+  assert.equal(
+    final.budgetStatus.bucket.spentTodayUsd,
+    Number((first.estimatedCostUsd + final.estimatedCostUsd).toFixed(8)),
+  );
+});
+
+test("public profiles hard-disable the independent applicability stage even if deployment config is stale", async () => {
+  const candidateId = "anonymous-non-relay-final-applicability-20480703";
+  const publicEnv = createPublicAnswerModelEnv({
+    DEEPSEEK_API_KEY: "deepseek-final-key",
+    RELAY_API_KEY: "relay-applicability-key",
+    RELAY_BASE_URL: "https://relay.example.test/v1",
+    API_BUDGET_TIMEZONE: "UTC",
+    RAG_EVIDENCE_APPLICABILITY_ENABLED: "true",
+  }, "deepseek-v4-flash-low");
+  const now = new Date("2048-07-03T00:00:00.000Z");
+  await resetRagBudget({ env: publicEnv, now });
+  let call = null;
+  const result = await callOfficialQaApplicabilityModel({
+    userQuery: "非 Relay 最终模型也应筛选相关问答。",
+    candidates: [{ id: candidateId, type: "related", isDirect: false, question: "匿名候选问题。" }],
+    dataRevision: "anonymous-non-relay-final-applicability-20480703",
+    env: publicEnv,
+    now,
+    fetchImpl: async (url, options) => {
+      call = { url, options };
+      const content = JSON.stringify({
+        assessments: [{
+          id: candidateId,
+          verdict: "UNKNOWN",
+          sharedConditions: [],
+          missingConditions: ["需要更多场景事实"],
+          conflictingConditions: [],
+          reason: "无法确认。",
+        }],
+      });
+      return new Response(`data: ${JSON.stringify({
+        model: "gpt-5.6-sol",
+        choices: [{ index: 0, finish_reason: "stop", delta: { content } }],
+        usage: { prompt_tokens: 20, completion_tokens: 10, total_tokens: 30 },
+      })}\n\ndata: [DONE]\n\n`, {
+        status: 200,
+        headers: { "content-type": "text/event-stream" },
+      });
+    },
+  });
+
+  assert.equal(publicEnv.MODEL_PROVIDER, "deepseek");
+  assert.equal(publicEnv.RELAY_API_KEY, undefined);
+  assert.equal(publicEnv.RAG_RULE_MODEL_PROVIDER, "relay");
+  assert.equal(publicEnv.RAG_RULE_MODEL_RELAY_API_KEY, "relay-applicability-key");
+  assert.equal(publicEnv.RAG_RULE_MODEL_RELAY_BASE_URL, "https://relay.example.test/v1");
+  assert.equal(publicEnv.RELAY_RULE_MODEL, "gpt-5.6-sol");
+  assert.equal(publicEnv.RAG_RULE_MODEL_REASONING_EFFORT, "low");
+  assert.equal(publicEnv.RAG_EVIDENCE_APPLICABILITY_ENABLED, "false");
+  assert.equal(call, null);
+  assert.equal(result.status, "skipped");
+  assert.equal(result.complete, false);
+  assert.ok(result.warnings.includes("official_qa_applicability_disabled"));
+});
+
+test("public model environment keeps the independent reviewer off unless explicitly enabled", () => {
+  const publicEnv = createPublicAnswerModelEnv({
+    RELAY_API_KEY: "relay-final-key",
+    RELAY_BASE_URL: "https://relay.example.test/v1",
+  }, "relay-gpt-5.6-sol-low");
+
+  assert.equal(publicEnv.MODEL_PROVIDER, "relay");
+  assert.equal(publicEnv.RAG_MODEL, "gpt-5.6-sol");
+  assert.equal(publicEnv.RAG_REASONING_EFFORT, "low");
+  assert.equal(publicEnv.RAG_CARD_MODEL_PROVIDER, "relay");
+  assert.equal(publicEnv.RELAY_CARD_MODEL, "gpt-5.6-sol");
+  assert.equal(publicEnv.RAG_CARD_MODEL_REASONING_EFFORT, "low");
+  assert.equal(publicEnv.RAG_RULE_MODEL_PROVIDER, "relay");
+  assert.equal(publicEnv.RELAY_RULE_MODEL, "gpt-5.6-sol");
+  assert.equal(publicEnv.RAG_RULE_MODEL_REASONING_EFFORT, "low");
+  assert.equal(publicEnv.RAG_EVIDENCE_APPLICABILITY_ENABLED, "false");
+});
+
+test("failed official QA applicability review passes every related candidate through", async () => {
+  const candidates = [{
+    id: "anonymous-related-passthrough",
+    type: "related",
+    isDirect: false,
+    question: "某个效果在处理时是否适用？",
+  }];
+  const result = await callOfficialQaApplicabilityModel({
+    userQuery: "当前问题需要比较这个处理前提。",
+    candidates,
+    dataRevision: "anonymous-applicability-failure-v1",
+    env: {
+      RAG_EVIDENCE_APPLICABILITY_ENABLED: "true",
+      RAG_EVIDENCE_APPLICABILITY_PROVIDER: "relay",
+    },
+    modelInvoker: async () => {
+      const error = new Error("synthetic relay failure");
+      error.usage = { prompt_tokens: 999, completion_tokens: 999, total_tokens: 1998 };
+      error.estimatedCostUsd = 9.99;
+      throw error;
+    },
+  });
+  assert.equal(result.status, "failed");
+  assert.ok(result.warnings.includes("official_qa_applicability_passthrough"));
+  assert.equal(result.estimatedCostUsd, 0);
+  assert.deepEqual(result.tokenUsage, {});
+});
+
+test("applicability review is disabled by default even when Relay transport is configured", async () => {
+  let fetchCalled = false;
+  const result = await callOfficialQaApplicabilityModel({
+    userQuery: "禁用时保持候选。",
+    candidates: [{
+      id: "anonymous-related-disabled",
+      type: "related",
+      isDirect: false,
+      question: "禁用分类器时不应发送这个问题。",
+    }],
+    env: {
+      RAG_EVIDENCE_APPLICABILITY_PROVIDER: "relay",
+      RELAY_API_KEY: "must-not-be-used",
+      RELAY_BASE_URL: "https://relay.example.test/v1",
+    },
+    fetchImpl: async () => {
+      fetchCalled = true;
+      throw new Error("paid call must not run");
+    },
+  });
+
+  assert.equal(fetchCalled, false);
+  assert.equal(result.status, "skipped");
+  assert.ok(result.warnings.includes("official_qa_applicability_disabled"));
+  assert.equal(result.estimatedCostUsd, 0);
+});
+
+test("an insecure applicability Relay endpoint fails before fetch or budget reservation", async () => {
+  let fetchCalled = false;
+  const result = await callOfficialQaApplicabilityModel({
+    userQuery: "不安全端点不得发送。",
+    candidates: [{
+      id: "anonymous-related-insecure-endpoint",
+      type: "related",
+      isDirect: false,
+      question: "匿名候选问题。",
+    }],
+    dataRevision: "anonymous-insecure-endpoint-v1",
+    env: {
+      RAG_EVIDENCE_APPLICABILITY_ENABLED: "true",
+      RAG_EVIDENCE_APPLICABILITY_PROVIDER: "relay",
+      RELAY_API_KEY: "must-not-be-used",
+      RELAY_BASE_URL: "http://relay.example.test/v1",
+    },
+    fetchImpl: async () => {
+      fetchCalled = true;
+      throw new Error("insecure endpoint must not fetch");
+    },
+  });
+
+  assert.equal(fetchCalled, false);
+  assert.equal(result.status, "failed");
+  assert.equal(result.estimatedCostUsd, 0);
+  assert.equal(result.budgetStatus, null);
+  assert.ok(result.warnings.includes("official_qa_applicability_passthrough"));
+});
+
+test("official QA applicability cache reuses a complete batch without another model call", async () => {
+  let calls = 0;
+  const input = {
+    userQuery: "匿名缓存问题 2040-06-01",
+    candidates: [{
+      id: "anonymous-related-cache-20400601",
+      type: "related",
+      isDirect: false,
+      question: "缓存候选的前提是否适用于当前问题？",
+    }],
+    dataRevision: "anonymous-applicability-cache-20400601",
+    env: {
+      RAG_EVIDENCE_APPLICABILITY_ENABLED: "true",
+      RAG_EVIDENCE_APPLICABILITY_PROVIDER: "relay",
+      RELAY_EVIDENCE_APPLICABILITY_MODEL: "gpt-5.6-sol",
+      RAG_EVIDENCE_APPLICABILITY_REASONING_EFFORT: "low",
+    },
+    modelInvoker: async () => {
+      calls += 1;
+      return {
+        assessments: [{
+          id: "anonymous-related-cache-20400601",
+          verdict: "UNKNOWN",
+          sharedConditions: [],
+          missingConditions: ["缺少一个场景事实"],
+          conflictingConditions: [],
+          reason: "保留给最终模型核对。",
+        }],
+        usage: { prompt_tokens: 12, completion_tokens: 5, total_tokens: 17 },
+      };
+    },
+  };
+  const first = await callOfficialQaApplicabilityModel(input);
+  const second = await callOfficialQaApplicabilityModel(input);
+
+  assert.equal(calls, 1);
+  assert.equal(first.cacheHit, false);
+  assert.equal(second.cacheHit, true);
+  assert.deepEqual(second.tokenUsage, {});
+  assert.equal(second.estimatedCostUsd, 0);
+});
+
+test("rag_pipeline_uses_model_card_name_candidates_before_retrieval", async () => {
+  const answer = await answerRagRulingQuestion({
+    question: "测式龙的①效果可以发动吗？",
+    cards,
+    records,
+    qaRecords: [],
+    cardModelInvoker: async () => JSON.stringify({
+      cardNames: [{ name: "测试龙", originalText: "测式龙", confidence: "high" }],
+    }),
+    modelInvoker: async () => JSON.stringify(modelJson("根据测试龙文本可以分析。")),
+  });
+  assert.ok(answer.resolvedCards.some((card) => card.name === "测试龙"));
+  assert.ok(answer.debug.modelCardNameCandidates.some((item) => item.name === "测试龙"));
+  assert.equal(answer.debug.cardNameModelUsed, "mock-card-extractor");
+  assert.ok(answer.usedEvidence.some((item) => item.id === "card-text-100"));
+});
+
+test("rag_pipeline_uses_model_rule_queries_for_related_rules", async () => {
+  const answer = await answerRagRulingQuestion({
+    question: "查询 SYNTHETIC_QUERY_ALPHA 的测试正文。",
+    env: { RAG_MODEL_PROVIDER: "mock", RAG_CARD_MODEL_PROVIDER: "mock" },
+    fetchImpl: async () => { throw new Error("synthetic fixture must not use network"); },
+    cards: [],
+    records: [{
+      id: "rule-synthetic-query-alpha",
+      recordType: "related",
+      title: "SYNTHETIC_QUERY_ALPHA",
+      text: "SYNTHETIC_QUERY_ALPHA：完整合成资料正文。",
+      sourceUrl: "https://example.test/rules/synthetic-query-alpha",
+    }],
+    qaRecords: [],
+    ruleModelInvoker: async () => JSON.stringify({
+      ruleQueries: [{
+        subclaim: "记录合成查询字段",
+        checkpoint: "resolution_snapshot",
+        query: "SYNTHETIC_QUERY_ALPHA",
+        reason: "检索规则资料",
+        confidence: "high",
+      }],
+    }),
+    modelInvoker: async () => JSON.stringify({
+      answerLevel: "low_confidence_analysis",
+      shortAnswer: "SYNTHETIC_QUERY_OUTPUT",
+      reasoning: ["读取合成接口资料。"],
+      usedCards: [],
+      usedEvidence: [{ id: "rule-synthetic-query-alpha", type: "related", title: "SYNTHETIC_QUERY_ALPHA" }],
+      missingInfo: [],
+      riskFlags: ["no_official_direct_qa"],
+      confidenceSelfEstimate: "medium",
+    }),
+  });
+  assert.ok(answer.debug.modelRuleSearchQueries.some((item) => item.query.includes("SYNTHETIC_QUERY_ALPHA")));
+  assert.equal(answer.debug.retrievalCounts.rawRelatedEvidence > 0, true);
+  assert.ok(answer.usedEvidence.some((item) => item.id === "rule-synthetic-query-alpha"));
+  assert.ok(answer.debug.selectedEvidenceDiagnostics.some(
+    (item) => item.id === "rule-synthetic-query-alpha",
+  ));
+  assert.deepEqual(answer.debug.ruleQueryPlanDiagnostics, [{
+    subclaim: "记录合成查询字段",
+    checkpoint: "resolution_snapshot",
+    confidence: "high",
+    source: "model_rule_query_extractor",
+  }]);
+});
+
+test("rag pipeline resolves cards before building rule queries from their full text", async () => {
+  let cardExtractionFinished = false;
+  let rulePrompt = "";
+  await answerRagRulingQuestion({
+    question: "测式龙的①效果可以发动吗？",
+    cards,
+    records: [],
+    qaRecords: [],
+    cardModelInvoker: async () => {
+      cardExtractionFinished = true;
+      return JSON.stringify({
+        cardNames: [{ name: "测试龙", originalText: "测式龙", confidence: "high" }],
+      });
+    },
+    ruleModelInvoker: async ({ prompt }) => {
+      assert.equal(cardExtractionFinished, true);
+      rulePrompt = prompt;
+      return JSON.stringify({ ruleQueries: [] });
+    },
+    modelInvoker: async () => JSON.stringify(modelJson("根据完整卡文回答。")),
+  });
+
+  assert.match(rulePrompt, /测试龙/u);
+  assert.match(rulePrompt, /①：自己主要阶段可以发动。抽1张卡。/u);
+});
+
+test("rag pipeline gives user-provided new-card text to the rule-query model", async () => {
+  let rulePrompt = "";
+  await answerRagRulingQuestion({
+    question: "「匿名新卡」\n卡片文本：USER_PROVIDED_COMPLETE_TEXT：进行一项处理。\n这个效果如何处理？",
+    cards: [],
+    records: [],
+    qaRecords: [],
+    ruleModelInvoker: async ({ prompt }) => {
+      rulePrompt = prompt;
+      return JSON.stringify({ ruleQueries: [] });
+    },
+    modelInvoker: async () => JSON.stringify(modelJson("根据用户提供的完整卡文回答。")),
+  });
+
+  assert.match(rulePrompt, /匿名新卡/u);
+  assert.match(rulePrompt, /USER_PROVIDED_COMPLETE_TEXT/u);
+});
+
+const syntheticForwardingRule = {
+  id: "rule-synthetic-forwarding",
+  recordType: "rule-doc",
+  title: "SYNTHETIC_RULE_MARKER",
+  text: "SYNTHETIC_RULE_MARKER：正文段落甲。SYNTHETIC_SOURCE_TAIL：正文段落乙。",
+  sourceUrl: "https://example.test/rule/synthetic-forwarding",
+};
+
+test("synthetic final output is preserved without locally deriving a verdict", async () => {
+  const expected = "SYNTHETIC_FINAL_OUTPUT_ALPHA";
+  const answer = await answerRagRulingQuestion({
+    question: "「测试龙」的接口测试请求。",
+    env: { RAG_MODEL_PROVIDER: "mock", RAG_CARD_MODEL_PROVIDER: "mock", RAG_RULE_MODEL_PROVIDER: "mock" },
+    fetchImpl: async () => { throw new Error("synthetic fixture must not use network"); },
+    cards, records: [], qaRecords: [],
+    modelInvoker: async () => JSON.stringify(modelJson(expected)),
+  });
+  assert.equal(answer.shortAnswer, expected);
+  assert.equal(answer.debug.retrievalCounts.operationLegalityChecks, 0);
+  assert.ok(!answer.riskFlags.includes("operation_legality_blocker_applied"));
+  assert.ok(!answer.riskFlags.includes("model_answer_overridden_by_operation_legality"));
+});
+
+test("synthetic source body and identity reach the final model without a preparation verdict", async () => {
+  let finalPrompt = "";
+  let preparationCalls = 0;
+  const expected = "SYNTHETIC_FINAL_OUTPUT_BETA";
+  const passageId = syntheticForwardingRule.id + "#p1-1";
+  const answer = await answerRagRulingQuestion({
+    question: "「测试龙」与 SYNTHETIC_RULE_MARKER 的接口测试请求。",
+    env: { RAG_MODEL_PROVIDER: "mock", RAG_CARD_MODEL_PROVIDER: "mock", RAG_RULE_MODEL_PROVIDER: "mock" },
+    fetchImpl: async () => { throw new Error("synthetic fixture must not use network"); },
+    cards,
+    records: [syntheticForwardingRule],
+    qaRecords: [],
+    ruleModelInvoker: async () => JSON.stringify({ ruleQueries: ["SYNTHETIC_RULE_MARKER"] }),
+    rulebookModelInvoker: async () => {
+      preparationCalls += 1;
+      return JSON.stringify({ operationChecks: [], overallConclusion: "SYNTHETIC_PREPARED_OUTPUT" });
+    },
+    modelInvoker: async ({ prompt }) => {
+      finalPrompt = prompt;
+      return JSON.stringify({ ...modelJson(expected), usedEvidence: [
+        { id: passageId, type: "rulebook", title: syntheticForwardingRule.title },
+      ] });
+    },
+  });
+  assert.equal(preparationCalls, 0);
+  assert.ok(finalPrompt.includes(syntheticForwardingRule.text));
+  assert.ok(finalPrompt.includes(passageId));
+  assert.equal(answer.shortAnswer, expected);
+  assert.ok(answer.usedEvidence.some(item => item.id === passageId));
+  assert.equal(answer.debug.retrievalCounts.operationLegalityChecks, 0);
+  assert.ok(!answer.riskFlags.includes("operation_legality_blocker_applied"));
+  assert.ok(!answer.riskFlags.includes("model_answer_overridden_by_operation_legality"));
+});
+
+test("empty final-model output does not display a synthetic prepared answer", async () => {
+  const answer = await answerRagRulingQuestion({
+    question: "「测试龙」的空输出接口测试请求。",
+    env: { RAG_MODEL_PROVIDER: "mock", RAG_CARD_MODEL_PROVIDER: "mock", RAG_RULE_MODEL_PROVIDER: "mock" },
+    fetchImpl: async () => { throw new Error("synthetic fixture must not use network"); },
+    cards, records: [], qaRecords: [],
+    rulebookModelInvoker: async () => JSON.stringify({
+      operationChecks: [], overallConclusion: "SYNTHETIC_PREPARED_OUTPUT",
+    }),
+    modelInvoker: async () => "",
+  });
+  assert.doesNotMatch(answer.shortAnswer, /SYNTHETIC_PREPARED_OUTPUT/u);
+  assert.match(answer.shortAnswer, /模型服务未返回正文/u);
+  assert.ok(answer.riskFlags.includes("model_output_not_displayable"));
+  assert.ok(answer.riskFlags.includes("model_plain_text_empty"));
+  assert.ok(!answer.riskFlags.includes("final_model_failed_using_grounded_operation_analysis"));
+});
+
+test("card text does not replace the final model's displayed plain text", async () => {
+  const answer = await answerRagRulingQuestion({
+    question: "「测试龙」在没有官方直接裁定时怎么处理？",
+    cards,
+    records: [],
+    qaRecords: [],
+    modelInvoker: async () => JSON.stringify({
+      answerLevel: "needs_more_info",
+      shortAnswer: "当前资料不足，无法给出可靠裁定分析。",
+      reasoning: [],
+      usedCards: [],
+      usedEvidence: [],
+      missingInfo: [],
+      riskFlags: [],
+      confidenceSelfEstimate: "low",
+    }),
+  });
+  assert.equal(answer.answerLevel, "rule_analysis");
+  assert.match(answer.shortAnswer, /资料不足/u);
+  assert.ok(!answer.riskFlags.includes("needs_more_info_upgraded_to_rule_analysis_with_card_text"));
+  assert.ok(answer.usedEvidence.some((item) => item.type === "card_text"));
+});
+
+test("rag_preserves_card_dossier_data", async () => {
+  const answer = await answerRagRulingQuestion({
+    question: "「测试龙」和「未收录测试卡」如何互动？",
+    cards: [...cards, secondCard],
+    records: [],
+    qaRecords: [],
+    dryRun: true,
+    env: {},
+  });
+  assert.equal(answer.resolvedCards.length >= 2, true);
+  assert.ok(answer.resolvedCards.some((card) => card.name === "测试龙" && card.id === "100" && card.effectText));
+  assert.ok(answer.resolvedCards.some((card) => card.name === "未收录测试卡" && card.sourceUrl));
+});
+
+test("rag_pipeline_raw_query_fallback", async () => {
+  const answer = await answerRagRulingQuestion({
+    question: "对象离场时连锁处理中怎么处理？",
+    cards,
+    records,
+    qaRecords: [],
+    dryRun: true,
+    env: {},
+  });
+  assert.equal(answer.resolvedCards.length, 0);
+  assert.equal(answer.debug.retrievalCounts.rawRelatedEvidence > 0, true);
+  assert.ok(answer.debug.retrievalWarnings.includes("card_name_not_resolved_raw_query_fallback_used"));
+});
+
+test("partial related evidence does not replace the final model's displayed plain text", async () => {
+  const answer = await answerRagRulingQuestion({
+    question: "对象离场时连锁处理中怎么处理？",
+    cards: [],
+    records,
+    qaRecords: [],
+    modelInvoker: async () => JSON.stringify({
+      answerLevel: "needs_more_info",
+      shortAnswer: "当前资料不足，无法给出可靠裁定分析。",
+      reasoning: [],
+      usedCards: [],
+      usedEvidence: [],
+      missingInfo: [],
+      riskFlags: [],
+      confidenceSelfEstimate: "low",
+    }),
+  });
+  assert.equal(answer.answerLevel, "rule_analysis");
+  assert.ok(!answer.riskFlags.includes("needs_more_info_downgraded_to_low_confidence_with_evidence"));
+});
+
+test("no evidence does not let local code replace the model's ruling", async () => {
+  const answer = await answerRagRulingQuestion({
+    question: "完全没有资料的问题如何处理？",
+    cards: [],
+    records: [],
+    qaRecords: [],
+    modelInvoker: async () => JSON.stringify({
+      answerLevel: "rule_analysis",
+      shortAnswer: "模型试图无资料分析。",
+      reasoning: ["没有资料。"],
+      usedCards: [],
+      usedEvidence: [],
+      missingInfo: [],
+      riskFlags: [],
+      confidenceSelfEstimate: "medium",
+    }),
+  });
+  assert.equal(answer.answerLevel, "rule_analysis");
+  assert.equal(answer.shortAnswer, "模型试图无资料分析。");
+});
+
+test("rag_pipeline_distinguishes_related_from_official", async () => {
+  const answer = await answerRagRulingQuestion({
+    question: "「测试龙」可以发动①效果吗？",
+    cards,
+    records,
+    qaRecords,
+    modelInvoker: async () => JSON.stringify({
+      answerLevel: "official_confirmed",
+      shortAnswer: "模型试图把相关资料说成官方确认。",
+      reasoning: ["但没有 official direct evidence。"],
+      usedCards: ["测试龙"],
+      usedEvidence: [{ id: "qa-related-test-dragon", type: "related", title: "测试龙相似问答" }],
+      missingInfo: [],
+      riskFlags: [],
+      confidenceSelfEstimate: "high",
+    }),
+  });
+  assert.equal(answer.answerLevel, "rule_analysis");
+  assert.ok(answer.usedEvidence.some((item) => item.type === "related"));
+});
+
+test("non-JSON model text is the normal final output without a validator or repair call", async () => {
+  const answer = await answerRagRulingQuestion({
+    question: "「测试龙」可以发动①效果吗？",
+    cards,
+    records,
+    qaRecords,
+    modelInvoker: async () => "not JSON",
+  });
+  assert.equal(answer.answerLevel, "rule_analysis");
+  assert.equal(answer.shortAnswer, "not JSON");
+  assert.deepEqual(answer.riskFlags, []);
+  assert.equal(answer.debug.publicFinalValidation, null);
+});
+
+test("model_natural_language_output_is_wrapped_as_low_confidence", async () => {
+  const result = await callRagModel({
+    prompt: "输出裁定分析",
+    env: {},
+    modelInvoker: async () => "没有官方直接资料，但根据卡片文本只能给出未确认分析：该效果是否成功结算取决于处理时攻击是否仍可被无效。",
+  });
+  assert.equal(result.answer.answerLevel, "low_confidence_analysis");
+  assert.ok(result.answer.riskFlags.includes("model_json_parse_failed"));
+  assert.ok(result.warnings.includes("model_natural_language_wrapped"));
+});
+
+test("plain-text final mode preserves the complete body and omits Relay JSON mode", async () => {
+  const calls = [];
+  const bodyText = `结论：可以继续处理。\n\n${"完整理由。".repeat(120)}`;
+  const now = new Date("2052-01-01T00:00:00.000Z");
+  const env = relayAuxEnv();
+  await resetRagBudget({ env, now });
+  const result = await callRagModel({
+    prompt: "直接输出中文裁定正文",
+    outputMode: "plain_text",
+    env,
+    now,
+    fetchImpl: async (_url, options) => {
+      calls.push(JSON.parse(options.body));
+      return relaySseRaw(bodyText, {
+        prompt_tokens: 20,
+        completion_tokens: 200,
+        total_tokens: 220,
+      });
+    },
+  });
+
+  assert.equal(calls.length, 1);
+  assert.equal(Object.hasOwn(calls[0], "response_format"), false);
+  assert.equal(result.answer.shortAnswer, bodyText);
+  assert.equal(result.answer.shortAnswer.length > 500, true);
+  assert.deepEqual(result.answer.reasoning, []);
+  assert.deepEqual(result.answer.riskFlags, []);
+});
+
+test("plain-text final mode does not display text from an incomplete Relay finish", async () => {
+  const now = new Date("2052-01-02T00:00:00.000Z");
+  const env = relayAuxEnv();
+  await resetRagBudget({ env, now });
+  const result = await callRagModel({
+    prompt: "直接输出中文裁定正文",
+    outputMode: "plain_text",
+    env,
+    now,
+    fetchImpl: async () => new Response([
+      `data: ${JSON.stringify({
+        model: "gpt-5.6-sol",
+        choices: [{ index: 0, finish_reason: "length", delta: { content: "这只是被截断的部分答案" } }],
+        usage: { prompt_tokens: 20, completion_tokens: 20, total_tokens: 40 },
+      })}\n\n`,
+      "data: [DONE]\n\n",
+    ].join(""), {
+      status: 200,
+      headers: { "content-type": "text/event-stream" },
+    }),
+  });
+
+  assert.doesNotMatch(result.answer.shortAnswer, /这只是被截断的部分答案/u);
+  assert.ok(result.warnings.includes("model_plain_text_incomplete:length"));
+});
+
+test("plain-text final mode accepts a complete Relay SSE when finish reason is omitted", async () => {
+  const now = new Date("2052-01-03T00:00:00.000Z");
+  const env = relayAuxEnv();
+  await resetRagBudget({ env, now });
+  const bodyText = "结论：可以处理。完整理由已经返回。";
+  const result = await callRagModel({
+    prompt: "直接输出中文裁定正文",
+    outputMode: "plain_text",
+    env,
+    now,
+    fetchImpl: async () => new Response([
+      `data: ${JSON.stringify({
+        model: "gpt-5.6-sol",
+        choices: [{ index: 0, delta: { content: bodyText } }],
+      })}\n\n`,
+      "data: [DONE]\n\n",
+    ].join(""), {
+      status: 200,
+      headers: { "content-type": "text/event-stream" },
+    }),
+  });
+
+  assert.equal(result.answer.shortAnswer, bodyText);
+  assert.ok(result.warnings.includes("model_plain_text_missing_finish_reason_accepted"));
+});
+
+test("generic final-answer JSON envelopes are mechanically unwrapped without a repair call", async () => {
+  const result = await callRagModel({
+    prompt: "输出 JSON",
+    env: {},
+    modelInvoker: async () => JSON.stringify({
+      arbitraryTransportEnvelope: {
+        payload: [{
+          answerLevel: "rule_analysis",
+          shortAnswer: "连锁按当前状态继续处理。",
+          reasoning: ["先处理连锁2。", "再按处理时状态处理连锁1。"],
+          usedCards: [],
+          usedEvidence: [],
+          missingInfo: [],
+          riskFlags: [],
+          confidenceSelfEstimate: "medium",
+        }],
+      },
+    }),
+  });
+
+  assert.equal(result.answer.answerLevel, "rule_analysis");
+  assert.equal(result.answer.shortAnswer, "连锁按当前状态继续处理。");
+  assert.deepEqual(result.answer.reasoning, ["先处理连锁2。", "再按处理时状态处理连锁1。"]);
+  assert.ok(result.warnings.includes("model_json_structure_normalized"));
+  assert.ok(!result.warnings.includes("model_json_invalid_schema"));
+});
+
+test("generic conclusion aliases remain low-confidence when answerLevel is omitted", async () => {
+  const result = await callRagModel({
+    prompt: "输出 JSON",
+    env: {},
+    modelInvoker: async () => JSON.stringify({
+      output: {
+        conclusion: "模型给出了可展示的裁定结论。",
+        analysis: ["该文本来自同一次模型输出。"],
+      },
+    }),
+  });
+
+  assert.equal(result.answer.answerLevel, "low_confidence_analysis");
+  assert.equal(result.answer.shortAnswer, "模型给出了可展示的裁定结论。");
+  assert.deepEqual(result.answer.reasoning, ["该文本来自同一次模型输出。"]);
+  assert.ok(result.warnings.includes("model_json_structure_normalized"));
+});
+
+test("a single top-level answer array is unwrapped but multiple entries stay fail-closed", async () => {
+  const single = await callRagModel({
+    prompt: "输出 JSON",
+    env: {},
+    modelInvoker: async () => JSON.stringify([{
+      answerLevel: "rule_analysis",
+      shortAnswer: "单一答案可以机械拆包。",
+      reasoning: ["数组中只有一个完整答案对象。"],
+    }]),
+  });
+  assert.equal(single.answer.shortAnswer, "单一答案可以机械拆包。");
+  assert.ok(!single.warnings.includes("model_json_invalid_schema"));
+
+  const multiple = await callRagModel({
+    prompt: "输出 JSON",
+    env: {},
+    modelInvoker: async () => JSON.stringify([
+      { answerLevel: "rule_analysis", shortAnswer: "候选一。", reasoning: ["理由一。"] },
+      { answerLevel: "rule_analysis", shortAnswer: "候选二。", reasoning: ["理由二。"] },
+    ]),
+  });
+  assert.ok(multiple.warnings.includes("model_json_invalid_schema"));
+});
+
+test("a lone nested conclusion without reasoning is not promoted to a ruling", async () => {
+  const result = await callRagModel({
+    prompt: "输出 JSON",
+    env: {},
+    modelInvoker: async () => JSON.stringify({
+      metadata: { conclusion: "这只是元数据摘要。" },
+    }),
+  });
+  assert.ok(result.warnings.includes("model_json_invalid_schema"));
+  assert.doesNotMatch(result.answer.shortAnswer, /元数据摘要/u);
+});
+
+test("ambiguous envelopes and explicit illegal answer levels stay fail-closed", async () => {
+  const ambiguous = await callRagModel({
+    prompt: "输出 JSON",
+    env: {},
+    modelInvoker: async () => JSON.stringify({
+      answer: { conclusion: "候选一。", analysis: ["理由一。"] },
+      result: { conclusion: "候选二。", analysis: ["理由二。"] },
+    }),
+  });
+  assert.ok(ambiguous.warnings.includes("model_json_invalid_schema"));
+
+  const illegal = await callRagModel({
+    prompt: "输出 JSON",
+    env: {},
+    modelInvoker: async () => JSON.stringify({
+      result: {
+        answerLevel: "certain_yes",
+        conclusion: "不得采用这个非法枚举下的结论。",
+        reasoning: ["非法枚举。"],
+      },
+    }),
+  });
+  assert.ok(illegal.warnings.includes("model_json_invalid_schema"));
+  assert.doesNotMatch(illegal.answer.shortAnswer, /不得采用/u);
+});
+
+test("model_truncated_json_output_is_repaired_without_raw_json_answer", async () => {
+  const result = await callRagModel({
+    prompt: "输出 JSON",
+    env: {},
+    modelInvoker: async () => "{\"answerLevel\":\"rule_analysis\",\"shortAnswer\":\"根据卡片文本可以继续分析，但不是官方确认。\",\"reasoning\":[\"已读取卡片文本。\",\"没有官方直接 Q&A。\"],\"usedCards\":[\"测试龙\"],\"usedEvidence\":[{\"id\":\"card-text-100\",\"type\":\"card_text\"",
+  });
+  assert.equal(result.answer.answerLevel, "rule_analysis");
+  assert.equal(result.answer.shortAnswer, "根据卡片文本可以继续分析，但不是官方确认。");
+  assert.doesNotMatch(result.answer.shortAnswer, /^\s*\{/u);
+  assert.ok(result.answer.reasoning.length >= 2);
+  assert.ok(result.answer.riskFlags.includes("model_json_repaired"));
+  assert.ok(result.warnings.includes("model_json_repaired"));
+});
+
+test("broken_json_without_short_answer_does_not_display_raw_json", async () => {
+  const result = await callRagModel({
+    prompt: "输出 JSON",
+    env: {},
+    modelInvoker: async () => "{\"answerLevel\":\"rule_analysis\",\"usedEvidence\":[",
+  });
+  assert.equal(result.answer.answerLevel, "rule_analysis");
+  assert.doesNotMatch(result.answer.shortAnswer, /^\s*\{/u);
+});
+
+test("no_api_key_uses_mock", async () => {
+  const answer = await answerRagRulingQuestion({
+    question: "「测试龙」可以发动①效果吗？",
+    cards,
+    records,
+    qaRecords: [],
+    env: {},
+  });
+  assert.equal(answer.debug.dryRun, true);
+  assert.equal(answer.debug.providerUsed, "mock");
+  assert.equal(answer.debug.modelUsed, "mock-rag");
+  assert.ok(answer.shortAnswer);
+});
+
+test("deepseek_empty_truncated_output_retries_with_compact_prompt", async () => {
+  const calls = [];
+  const result = await callRagModel({
+    prompt: "原始长提示词",
+    recoveryPrompt: "紧凑恢复提示词",
+    env: {
+      MODEL_PROVIDER: "deepseek",
+      DEEPSEEK_API_KEY: "test-deepseek-key",
+      RAG_MAX_OUTPUT_TOKENS: "321",
+      API_DAILY_BUDGET_CNY: "10",
+    },
+    fetchImpl: async (_url, options) => {
+      calls.push(JSON.parse(options.body));
+      if (calls.length === 1) {
+        return jsonResponse({
+          choices: [{ message: { content: "", reasoning_content: "内部推理已耗尽首轮输出额度" }, finish_reason: "length" }],
+          usage: { prompt_tokens: 100, completion_tokens: 321, total_tokens: 421 },
+        });
+      }
+      return jsonResponse({
+        choices: [{ message: { content: JSON.stringify(modelJson("恢复后的答案")) }, finish_reason: "stop" }],
+        usage: { prompt_tokens: 40, completion_tokens: 60, total_tokens: 100 },
+      });
+    },
+  });
+
+  assert.equal(calls.length, 2);
+  assert.equal(calls[1].messages[0].content, "紧凑恢复提示词");
+  assert.equal(calls[1].max_tokens, 4096);
+  assert.deepEqual(calls[1].thinking, { type: "disabled" });
+  assert.deepEqual(calls[1].response_format, { type: "json_object" });
+  assert.equal(Object.hasOwn(calls[1], "reasoning_effort"), false);
+  assert.equal(calls[1].temperature, 0);
+  assert.equal(result.answer.shortAnswer, "恢复后的答案");
+  assert.equal(result.tokenUsage.prompt_tokens, 140);
+  assert.equal(result.tokenUsage.completion_tokens, 381);
+  assert.ok(result.warnings.includes("deepseek_compact_recovery_succeeded"));
+  assert.equal(result.warnings.some((warning) => warning.startsWith("deepseek_empty_content:")), false);
+  assert.equal(result.warnings.includes("deepseek_output_truncated_by_token_limit"), false);
+  assert.deepEqual(result.generationAttempts.map((item) => item.finishReason), ["length", "stop"]);
+  assert.equal(result.generationAttempts[0].reasoningContentPresent, true);
+  assert.equal(result.generationAttempts[0].reasoningContentChars > 0, true);
+  assert.equal("reasoningContent" in result.generationAttempts[0], false);
+  assert.deepEqual(result.generationAttempts.map((item) => item.thinkingMode), ["enabled", "disabled"]);
+});
+
+test("deepseek_thinking_invalid_json_retries_with_non_thinking_json_recovery", async () => {
+  const calls = [];
+  const result = await callRagModel({
+    prompt: "原始推理提示词",
+    recoveryPrompt: "只整理为合法 RAG JSON",
+    env: {
+      MODEL_PROVIDER: "deepseek",
+      DEEPSEEK_API_KEY: "test-deepseek-key",
+      RAG_MAX_OUTPUT_TOKENS: "500",
+      API_DAILY_BUDGET_CNY: "10",
+    },
+    fetchImpl: async (_url, options) => {
+      calls.push(JSON.parse(options.body));
+      if (calls.length === 1) {
+        return jsonResponse({
+          choices: [{ message: { content: "可以发动，但这是自然语言而不是 RAG JSON。" }, finish_reason: "stop" }],
+          usage: { prompt_tokens: 70, completion_tokens: 30, total_tokens: 100 },
+        });
+      }
+      return jsonResponse({
+        choices: [{ message: { content: JSON.stringify(modelJson("恢复后的结构化答案")) }, finish_reason: "stop" }],
+        usage: { prompt_tokens: 40, completion_tokens: 20, total_tokens: 60 },
+      });
+    },
+  });
+
+  assert.equal(calls.length, 2);
+  assert.deepEqual(calls[0].thinking, { type: "enabled" });
+  assert.equal(Object.hasOwn(calls[0], "response_format"), false);
+  assert.deepEqual(calls[1].thinking, { type: "disabled" });
+  assert.deepEqual(calls[1].response_format, { type: "json_object" });
+  assert.equal(Object.hasOwn(calls[1], "reasoning_effort"), false);
+  assert.equal(calls[1].temperature, 0);
+  assert.equal(result.answer.shortAnswer, "恢复后的结构化答案");
+  assert.equal(result.tokenUsage.prompt_tokens, 110);
+  assert.equal(result.tokenUsage.completion_tokens, 50);
+  assert.ok(result.warnings.includes("deepseek_primary_invalid_json"));
+  assert.ok(result.warnings.includes("deepseek_compact_recovery_attempted"));
+  assert.ok(result.warnings.includes("deepseek_compact_recovery_succeeded"));
+  assert.deepEqual(result.generationAttempts.map((item) => item.thinkingMode), ["enabled", "disabled"]);
+});
+
+test("deepseek valid JSON is deterministically normalized before public raw validation", async () => {
+  const calls = [];
+  const result = await callRagModel({
+    prompt: "输出 RAG JSON",
+    recoveryPrompt: "不应调用恢复",
+    env: {
+      MODEL_PROVIDER: "deepseek",
+      DEEPSEEK_API_KEY: "test-deepseek-key",
+      API_DAILY_BUDGET_CNY: "10",
+    },
+    fetchImpl: async (_url, options) => {
+      calls.push(JSON.parse(options.body));
+      return jsonResponse({
+        choices: [{
+          message: {
+            content: JSON.stringify({
+              answerLevel: "rule_analysis",
+              shortAnswer: "结构可确定性补全。",
+              reasoning: "单条理由转换为数组。",
+              usedEvidence: [null, { id: "" }],
+            }),
+          },
+          finish_reason: "stop",
+        }],
+        usage: { prompt_tokens: 20, completion_tokens: 20, total_tokens: 40 },
+      });
+    },
+  });
+
+  assert.equal(calls.length, 1);
+  assert.equal(Object.hasOwn(calls[0], "response_format"), false);
+  assert.ok(result.warnings.includes("model_json_structure_normalized"));
+  assert.deepEqual(JSON.parse(result.rawText), {
+    answerLevel: "rule_analysis",
+    shortAnswer: "结构可确定性补全。",
+    reasoning: ["单条理由转换为数组。"],
+    usedCards: [],
+    usedEvidence: [],
+    missingInfo: [],
+    riskFlags: [],
+    confidenceSelfEstimate: "low",
+  });
+});
+
+test("deepseek illegal answerLevel is never normalized into an accepted semantic core", async () => {
+  const result = await callRagModel({
+    prompt: "输出 RAG JSON",
+    env: {
+      MODEL_PROVIDER: "deepseek",
+      DEEPSEEK_API_KEY: "test-deepseek-key",
+      API_DAILY_BUDGET_CNY: "10",
+    },
+    fetchImpl: async () => jsonResponse({
+      choices: [{
+        message: {
+          content: JSON.stringify({
+            answerLevel: "certain_yes",
+            shortAnswer: "不得采用此结论。",
+            reasoning: ["非法枚举不能被升级。"],
+          }),
+        },
+        finish_reason: "stop",
+      }],
+      usage: {},
+    }),
+  });
+
+  assert.equal(result.answer.answerLevel, "needs_more_info");
+  assert.doesNotMatch(result.answer.shortAnswer, /不得采用此结论/u);
+  assert.ok(result.warnings.includes("deepseek_primary_invalid_schema"));
+  assert.ok(result.warnings.includes("model_json_invalid_schema"));
+});
+
+test("deepseek_compact_recovery_accepts_minimal_normalizable_json", async () => {
+  const calls = [];
+  const result = await callRagModel({
+    prompt: "原始长提示词",
+    recoveryPrompt: "紧凑恢复提示词",
+    env: {
+      MODEL_PROVIDER: "deepseek",
+      DEEPSEEK_API_KEY: "test-deepseek-key",
+      RAG_MAX_OUTPUT_TOKENS: "500",
+      API_DAILY_BUDGET_CNY: "10",
+    },
+    fetchImpl: async (_url, options) => {
+      calls.push(JSON.parse(options.body));
+      if (calls.length === 1) {
+        return jsonResponse({
+          choices: [{ message: { content: "" }, finish_reason: "length" }],
+          usage: { prompt_tokens: 30, completion_tokens: 500, total_tokens: 530 },
+        });
+      }
+      return jsonResponse({
+        choices: [{
+          message: {
+            content: JSON.stringify({
+              answerLevel: "rule_analysis",
+              shortAnswer: "恢复后的最小答案",
+              reasoning: "紧凑恢复仍保留了结论依据。",
+            }),
+          },
+          finish_reason: "stop",
+        }],
+        usage: { prompt_tokens: 20, completion_tokens: 40, total_tokens: 60 },
+      });
+    },
+  });
+
+  assert.equal(calls.length, 2);
+  assert.equal(result.answer.shortAnswer, "恢复后的最小答案");
+  assert.deepEqual(result.answer.reasoning, ["紧凑恢复仍保留了结论依据。"]);
+  assert.deepEqual(result.answer.usedEvidence, []);
+  assert.ok(result.warnings.includes("deepseek_compact_recovery_succeeded"));
+  assert.ok(result.warnings.includes("model_json_structure_normalized"));
+  assert.deepEqual(JSON.parse(result.rawText), {
+    answerLevel: "rule_analysis",
+    shortAnswer: "恢复后的最小答案",
+    reasoning: ["紧凑恢复仍保留了结论依据。"],
+    usedCards: [],
+    usedEvidence: [],
+    missingInfo: [],
+    riskFlags: [],
+    confidenceSelfEstimate: "low",
+  });
+});
+
+test("an aborted compact recovery is not dispatched and still records the completed primary response", async () => {
+  const now = new Date("2026-08-01T03:00:00.000Z");
+  const controller = new AbortController();
+  const env = {
+    MODEL_PROVIDER: "deepseek",
+    DEEPSEEK_API_KEY: "test-deepseek-key",
+    API_DAILY_BUDGET_CNY: "10",
+    API_BUDGET_TIMEZONE: "UTC",
+    DEEPSEEK_INPUT_CNY_PER_MTOK: "1",
+    DEEPSEEK_OUTPUT_CNY_PER_MTOK: "2",
+  };
+  await resetRagBudget({ env, now });
+  let callCount = 0;
+  const result = await callRagModel({
+    prompt: "primary paid response",
+    recoveryPrompt: "aborted recovery",
+    env,
+    now,
+    signal: controller.signal,
+    fetchImpl: async (_url, options) => {
+      callCount += 1;
+      assert.equal(options.signal, controller.signal);
+      if (callCount === 1) {
+        const message = {};
+        Object.defineProperty(message, "content", {
+          enumerable: true,
+          get() {
+            controller.abort(new DOMException("client disconnected", "AbortError"));
+            return "";
+          },
+        });
+        return jsonResponse({
+          choices: [{ message, finish_reason: "length" }],
+          usage: { prompt_tokens: 1_000, completion_tokens: 500 },
+        });
+      }
+      throw controller.signal.reason;
+    },
+  });
+  const status = await getRagBudgetStatus({ env, now });
+
+  assert.equal(callCount, 1);
+  assert.ok(result.warnings.some((warning) => warning.startsWith("deepseek_compact_recovery_call_failed:")));
+  assert.equal(result.warnings.includes("budget_reservation_retained_after_ambiguous_remote_failure"), false);
+  assert.equal(result.estimatedCostCny, estimateDeepSeekCostCny({
+    prompt_tokens: 1_000,
+    completion_tokens: 500,
+  }, env));
+  assert.equal(status.spentTodayCny, result.estimatedCostCny);
+});
+
+test("deepseek_primary_and_compact_recovery_both_empty_fail_safely", async () => {
+  const calls = [];
+  const result = await callRagModel({
+    prompt: "原始长提示词",
+    recoveryPrompt: "紧凑恢复提示词",
+    env: {
+      MODEL_PROVIDER: "deepseek",
+      DEEPSEEK_API_KEY: "test-deepseek-key",
+      RAG_MAX_OUTPUT_TOKENS: "500",
+      API_DAILY_BUDGET_CNY: "10",
+    },
+    fetchImpl: async (_url, options) => {
+      calls.push(JSON.parse(options.body));
+      return jsonResponse({
+        choices: [{ message: { content: "", reasoning_content: "只产生了内部推理" }, finish_reason: "length" }],
+        usage: { prompt_tokens: 30, completion_tokens: calls.length === 1 ? 500 : 4096, total_tokens: calls.length === 1 ? 530 : 4126 },
+      });
+    },
+  });
+
+  assert.equal(calls.length, 2);
+  assert.equal(calls[1].max_tokens, 4096);
+  assert.ok(result.warnings.includes("deepseek_compact_recovery_attempted"));
+  assert.ok(result.warnings.includes("deepseek_compact_recovery_failed"));
+  assert.ok(result.warnings.includes("deepseek_compact_recovery_empty"));
+  assert.equal(result.warnings.includes("deepseek_compact_recovery_succeeded"), false);
+  assert.ok(result.answer.riskFlags.includes("model_json_parse_failed"));
+  assert.deepEqual(result.generationAttempts.map((item) => item.finishReason), ["length", "length"]);
+  assert.equal(result.generationAttempts.every((item) => item.reasoningContentPresent), true);
+});
+
+test("deepseek_compact_recovery_rejects_incomplete_json_even_when_nonempty", async () => {
+  const calls = [];
+  const result = await callRagModel({
+    prompt: "原始长提示词",
+    recoveryPrompt: "紧凑恢复提示词",
+    env: {
+      MODEL_PROVIDER: "deepseek",
+      DEEPSEEK_API_KEY: "test-deepseek-key",
+      RAG_MAX_OUTPUT_TOKENS: "500",
+      API_DAILY_BUDGET_CNY: "10",
+    },
+    fetchImpl: async (_url, options) => {
+      calls.push(JSON.parse(options.body));
+      if (calls.length === 1) {
+        return jsonResponse({
+          choices: [{ message: { content: "" }, finish_reason: "length" }],
+          usage: { prompt_tokens: 30, completion_tokens: 500, total_tokens: 530 },
+        });
+      }
+      return jsonResponse({
+        choices: [{
+          message: { content: "{\"answerLevel\":\"rule_analysis\",\"shortAnswer\":\"这段残缺结果不得采用\",\"reasoning\":[" },
+          finish_reason: "stop",
+        }],
+        usage: { prompt_tokens: 20, completion_tokens: 40, total_tokens: 60 },
+      });
+    },
+  });
+
+  assert.equal(calls.length, 2);
+  assert.ok(result.warnings.includes("deepseek_compact_recovery_failed"));
+  assert.ok(result.warnings.includes("deepseek_compact_recovery_invalid_json"));
+  assert.equal(result.warnings.includes("deepseek_compact_recovery_succeeded"), false);
+  assert.doesNotMatch(result.answer.shortAnswer, /这段残缺结果不得采用/u);
+});
+
+test("deepseek thinking requests omit incompatible JSON response mode without retrying HTTP 400", async () => {
+  const calls = [];
+  const result = await callRagModel({
+    prompt: "输出 JSON",
+    env: {
+      MODEL_PROVIDER: "deepseek",
+      DEEPSEEK_API_KEY: "test-deepseek-key",
+      API_DAILY_BUDGET_CNY: "10",
+    },
+    fetchImpl: async (_url, options) => {
+      calls.push(JSON.parse(options.body));
+      return jsonResponse({ error: { message: "bad request" } }, false, 400);
+    },
+  });
+
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0].thinking, { type: "enabled" });
+  assert.equal(Object.hasOwn(calls[0], "response_format"), false);
+  assert.ok(result.warnings.includes("model_call_failed:deepseek 400"));
+});
+
+test("deepseek_provider_builds_request", async () => {
+  const calls = [];
+  const result = await callRagModel({
+    prompt: "输出 JSON",
+    env: {
+      MODEL_PROVIDER: "deepseek",
+      DEEPSEEK_API_KEY: "test-deepseek-key",
+      DEEPSEEK_BASE_URL: "https://api.deepseek.com",
+      RAG_MODEL_TIER: "flash",
+      DEEPSEEK_FLASH_MODEL: "deepseek-test",
+      RAG_MAX_OUTPUT_TOKENS: "321",
+      API_DAILY_BUDGET_CNY: "10",
+    },
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options, body: JSON.parse(options.body) });
+      return jsonResponse({
+        choices: [{ message: { content: JSON.stringify(modelJson("DeepSeek OK")) } }],
+        usage: { prompt_tokens: 100, completion_tokens: 20, total_tokens: 120 },
+      });
+    },
+  });
+  assert.equal(result.providerUsed, "deepseek");
+  assert.equal(result.dryRun, false);
+  assert.equal(calls[0].url, "https://api.deepseek.com/chat/completions");
+  assert.equal(calls[0].body.model, "deepseek-test");
+  assert.deepEqual(calls[0].body.messages, [{ role: "user", content: "输出 JSON" }]);
+  assert.equal(Object.hasOwn(calls[0].body, "response_format"), false);
+  assert.equal(calls[0].body.max_tokens, 321);
+  assert.equal(calls[0].body.stream, false);
+  assert.deepEqual(calls[0].body.thinking, { type: "enabled" });
+  assert.equal(calls[0].body.reasoning_effort, "high");
+  assert.equal(Object.hasOwn(calls[0].body, "temperature"), false);
+});
+
+test("deepseek response extraction accepts structured text content parts", async () => {
+  const result = await callRagModel({
+    prompt: "输出 JSON",
+    env: {
+      MODEL_PROVIDER: "deepseek",
+      DEEPSEEK_API_KEY: "test-deepseek-key",
+      API_DAILY_BUDGET_CNY: "10",
+    },
+    fetchImpl: async () => jsonResponse({
+      choices: [{
+        message: {
+          content: [{ type: "text", content: JSON.stringify(modelJson("Structured content OK")) }],
+        },
+        finish_reason: "stop",
+      }],
+      usage: {},
+    }),
+  });
+
+  assert.equal(result.answer.shortAnswer, "Structured content OK");
+  assert.equal(result.warnings.some((warning) => warning.includes("empty_content")), false);
+});
+
+test("deepseek_final_generation_uses_configured_primary_model", async () => {
+  const calls = [];
+  await callRagModel({
+    prompt: "输出 JSON",
+    env: {
+      MODEL_PROVIDER: "deepseek",
+      DEEPSEEK_API_KEY: "test-deepseek-key",
+      DEEPSEEK_MODEL: "deepseek-pro-tier",
+      DEEPSEEK_FLASH_MODEL: "deepseek-flash-tier",
+      API_DAILY_BUDGET_CNY: "10",
+    },
+    fetchImpl: async (url, options) => {
+      calls.push(JSON.parse(options.body));
+      return jsonResponse({ choices: [{ message: { content: JSON.stringify(modelJson("Flash OK")) } }], usage: {} });
+    },
+  });
+  assert.equal(calls[0].model, "deepseek-pro-tier");
+  assert.equal(calls[0].max_tokens, 32000);
+  assert.deepEqual(calls[0].thinking, { type: "enabled" });
+  assert.equal(calls[0].reasoning_effort, "high");
+  assert.equal(Object.hasOwn(calls[0], "temperature"), false);
+});
+
+test("deepseek_explicit_flash_tier_uses_flash_model_and_budget", async () => {
+  const calls = [];
+  await callRagModel({
+    prompt: "输出 JSON",
+    env: {
+      MODEL_PROVIDER: "deepseek",
+      RAG_MODEL_TIER: "flash",
+      DEEPSEEK_API_KEY: "test-deepseek-key",
+      DEEPSEEK_MODEL: "deepseek-pro-tier",
+      DEEPSEEK_FLASH_MODEL: "deepseek-flash-tier",
+      API_DAILY_BUDGET_CNY: "10",
+    },
+    fetchImpl: async (_url, options) => {
+      calls.push(JSON.parse(options.body));
+      return jsonResponse({ choices: [{ message: { content: JSON.stringify(modelJson("Flash OK")) } }], usage: {} });
+    },
+  });
+  assert.equal(calls[0].model, "deepseek-flash-tier");
+  assert.equal(calls[0].max_tokens, 32000);
+  assert.deepEqual(calls[0].thinking, { type: "enabled" });
+});
+
+test("deepseek flash tier never falls through to a configured Pro model", async () => {
+  let invokedModel = "";
+  await callRagModel({
+    prompt: "输出 JSON",
+    env: {
+      MODEL_PROVIDER: "deepseek",
+      RAG_MODEL_TIER: "flash",
+      DEEPSEEK_API_KEY: "test-deepseek-key",
+      DEEPSEEK_MODEL: "deepseek-v4-pro",
+    },
+    modelInvoker: async ({ modelName }) => {
+      invokedModel = modelName;
+      return modelJson("Flash selection is isolated");
+    },
+  });
+  assert.equal(invokedModel, "deepseek-v4-flash");
+});
+
+test("deepseek_flash_non-thinking_mode uses a smaller answer budget and no reasoning effort", async () => {
+  const calls = [];
+  const result = await callRagModel({
+    prompt: "输出 JSON",
+    thinkingMode: "disabled",
+    reasoningEffort: "max",
+    env: {
+      MODEL_PROVIDER: "deepseek",
+      RAG_MODEL_TIER: "flash",
+      DEEPSEEK_API_KEY: "test-deepseek-key",
+      DEEPSEEK_FLASH_MODEL: "deepseek-v4-flash",
+      API_DAILY_BUDGET_CNY: "10",
+    },
+    fetchImpl: async (_url, options) => {
+      calls.push(JSON.parse(options.body));
+      return jsonResponse({
+        id: "request-1",
+        model: "deepseek-v4-flash",
+        system_fingerprint: "fp-test",
+        choices: [{ message: { content: JSON.stringify(modelJson("Flash no-think OK")) }, finish_reason: "stop" }],
+        usage: {
+          prompt_tokens: 20,
+          completion_tokens: 30,
+          total_tokens: 50,
+          completion_tokens_details: { reasoning_tokens: 0 },
+        },
+      });
+    },
+  });
+  assert.deepEqual(calls[0].thinking, { type: "disabled" });
+  assert.deepEqual(calls[0].response_format, { type: "json_object" });
+  assert.equal(calls[0].max_tokens, 8000);
+  assert.equal(calls[0].temperature, 0);
+  assert.equal(Object.hasOwn(calls[0], "reasoning_effort"), false);
+  assert.equal(result.generationConfig.thinkingMode, "disabled");
+  assert.equal(result.generationAttempts[0].requestModel, "deepseek-v4-flash");
+  assert.equal(result.generationAttempts[0].responseModel, "deepseek-v4-flash");
+  assert.equal(result.generationAttempts[0].systemFingerprint, "fp-test");
+  assert.equal(result.generationAttempts[0].usage.reasoning_tokens, 0);
+});
+
+test("deepseek flash thinking mode passes through the supported low effort", async () => {
+  const result = await callRagModel({
+    prompt: "输出 JSON",
+    thinkingMode: "enabled",
+    reasoningEffort: "low",
+    env: {
+      MODEL_PROVIDER: "deepseek",
+      RAG_MODEL_TIER: "flash",
+      DEEPSEEK_API_KEY: "test-deepseek-key",
+      DEEPSEEK_FLASH_MODEL: "deepseek-v4-flash",
+      API_DAILY_BUDGET_CNY: "10",
+    },
+    fetchImpl: async (_url, options) => {
+      const body = JSON.parse(options.body);
+      assert.deepEqual(body.thinking, { type: "enabled" });
+      assert.equal(body.reasoning_effort, "low");
+      return jsonResponse({
+        model: "deepseek-v4-flash",
+        choices: [{
+          message: { content: JSON.stringify(modelJson("Flash low OK")) },
+          finish_reason: "stop",
+        }],
+        usage: { prompt_tokens: 20, completion_tokens: 30, total_tokens: 50 },
+      });
+    },
+  });
+  assert.equal(result.generationConfig.thinkingMode, "enabled");
+  assert.equal(result.generationConfig.reasoningEffort, "low");
+});
+
+test("deepseek flash low fails closed when the upstream rejects it without changing effort", async () => {
+  const calls = [];
+  const result = await callRagModel({
+    prompt: "输出 JSON",
+    thinkingMode: "enabled",
+    reasoningEffort: "low",
+    env: {
+      MODEL_PROVIDER: "deepseek",
+      RAG_MODEL_TIER: "flash",
+      DEEPSEEK_API_KEY: "test-deepseek-key",
+      DEEPSEEK_FLASH_MODEL: "deepseek-v4-flash",
+      API_DAILY_BUDGET_CNY: "10",
+    },
+    fetchImpl: async (_url, options) => {
+      calls.push(JSON.parse(options.body));
+      return jsonResponse({ error: { message: "low effort rejected" } }, false, 400);
+    },
+  });
+
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0].thinking, { type: "enabled" });
+  assert.equal(calls[0].reasoning_effort, "low");
+  assert.equal(result.providerUsed, "deepseek");
+  assert.equal(result.dryRun, false);
+  assert.equal(result.answer.answerLevel, "needs_more_info");
+  assert.ok(result.answer.riskFlags.includes("model_call_failed"));
+  assert.ok(result.warnings.includes("model_call_failed:deepseek 400"));
+  assert.equal(result.generationConfig.reasoningEffort, "low");
+});
+
+test("deepseek thinking mode accepts max effort and records reasoning usage without exposing content", async () => {
+  const result = await callRagModel({
+    prompt: "输出 JSON",
+    thinkingMode: "enabled",
+    reasoningEffort: "max",
+    env: {
+      MODEL_PROVIDER: "deepseek",
+      RAG_MODEL_TIER: "pro",
+      DEEPSEEK_API_KEY: "test-deepseek-key",
+      DEEPSEEK_PRO_MODEL: "deepseek-v4-pro",
+      API_DAILY_BUDGET_CNY: "10",
+    },
+    fetchImpl: async (_url, options) => {
+      const body = JSON.parse(options.body);
+      assert.deepEqual(body.thinking, { type: "enabled" });
+      assert.equal(body.reasoning_effort, "max");
+      assert.equal(body.max_tokens, 32000);
+      assert.equal(Object.hasOwn(body, "response_format"), false);
+      assert.equal(Object.hasOwn(body, "temperature"), false);
+      return jsonResponse({
+        id: "request-2",
+        model: "deepseek-v4-pro",
+        choices: [{
+          message: {
+            reasoning_content: "private reasoning that must not enter debug",
+            content: JSON.stringify(modelJson("Pro think OK")),
+          },
+          finish_reason: "stop",
+        }],
+        usage: {
+          prompt_tokens: 40,
+          completion_tokens: 80,
+          total_tokens: 120,
+          completion_tokens_details: { reasoning_tokens: 50 },
+        },
+      });
+    },
+  });
+  assert.equal(result.generationConfig.thinkingMode, "enabled");
+  assert.equal(result.generationConfig.reasoningEffort, "max");
+  assert.equal(result.generationAttempts[0].reasoningContentPresent, true);
+  assert.equal(result.generationAttempts[0].reasoningContentChars > 0, true);
+  assert.equal(result.generationAttempts[0].usage.reasoning_tokens, 50);
+  assert.equal("reasoningContent" in result.generationAttempts[0], false);
+});
+
+test("model_reasoning_string_is_preserved", async () => {
+  const result = await callRagModel({
+    prompt: "输出 JSON",
+    env: { MODEL_PROVIDER: "mock" },
+    modelInvoker: async () => ({
+      answerLevel: "rule_analysis",
+      shortAnswer: "不能发动。",
+      reasoning: "卡片文本要求存在合法对象；当前场面没有合法对象。",
+      usedCards: [],
+      usedEvidence: [],
+      missingInfo: [],
+      riskFlags: [],
+      confidenceSelfEstimate: "medium",
+    }),
+  });
+  assert.deepEqual(result.answer.reasoning, ["卡片文本要求存在合法对象；当前场面没有合法对象。"]);
+  assert.doesNotMatch(result.answer.reasoning.join(" "), /RAG baseline/u);
+});
+
+test("reasoning_is_recovered_or_explicitly_marked_missing", async () => {
+  const recovered = await callRagModel({
+    prompt: "输出 JSON",
+    env: { MODEL_PROVIDER: "mock" },
+    modelInvoker: async () => ({
+      answerLevel: "rule_analysis",
+      shortAnswer: "不能。该效果只能直接连锁符合条件的发动。",
+      usedEvidence: [],
+      riskFlags: [],
+    }),
+  });
+  assert.match(recovered.answer.reasoning.join(" "), /只能直接连锁/u);
+  assert.ok(recovered.answer.riskFlags.includes("model_reasoning_recovered_from_short_answer"));
+
+  const missing = await callRagModel({
+    prompt: "输出 JSON",
+    env: { MODEL_PROVIDER: "mock" },
+    modelInvoker: async () => ({
+      answerLevel: "rule_analysis",
+      shortAnswer: "可以发动。",
+      usedEvidence: [],
+      riskFlags: [],
+    }),
+  });
+  assert.match(missing.answer.reasoning.join(" "), /没有提供可核对的理由/u);
+  assert.ok(missing.answer.riskFlags.includes("model_reasoning_missing"));
+  assert.doesNotMatch(missing.answer.reasoning.join(" "), /RAG baseline/u);
+});
+
+test("glm_high_provider_uses_the_public_chat_completions_endpoint_and_thinking_contract", async () => {
+  const calls = [];
+  const result = await callRagModel({
+    prompt: "输出 GLM JSON",
+    env: {
+      MODEL_PROVIDER: "glm",
+      GLM_API_KEY: "test-glm-key",
+      GLM_MODEL: "glm-5.2",
+      RAG_THINKING_MODE: "enabled",
+      RAG_REASONING_EFFORT: "high",
+      RAG_MAX_OUTPUT_TOKENS: "456",
+      API_DAILY_BUDGET_CNY: "10",
+      API_BUDGET_TIMEZONE: "UTC",
+    },
+    now: new Date("2038-02-01T00:00:00.000Z"),
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options, body: JSON.parse(options.body) });
+      return jsonResponse({
+        id: "glm-public-1",
+        model: "glm-5.2",
+        choices: [{
+          finish_reason: "stop",
+          message: { content: JSON.stringify(modelJson("GLM high OK")) },
+        }],
+        usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
+      });
+    },
+  });
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, "https://open.bigmodel.cn/api/paas/v4/chat/completions");
+  assert.equal(calls[0].options.headers.authorization, "Bearer test-glm-key");
+  assert.equal(calls[0].body.model, "glm-5.2");
+  assert.deepEqual(calls[0].body.messages, [{ role: "user", content: "输出 GLM JSON" }]);
+  assert.deepEqual(calls[0].body.response_format, { type: "json_object" });
+  assert.deepEqual(calls[0].body.thinking, { type: "enabled" });
+  assert.equal(calls[0].body.reasoning_effort, "high");
+  assert.equal(calls[0].body.max_tokens, 456);
+  assert.equal(calls[0].body.stream, false);
+  assert.equal(result.providerUsed, "glm");
+  assert.equal(result.modelUsed, "glm-5.2");
+  assert.equal(result.generationConfig.reasoningEffort, "high");
+  assert.equal(result.budgetStatus.bucket.id, "final_ruling:glm");
+});
+
+test("gemini_provider_builds_request", async () => {
+  const calls = [];
+  const result = await callRagModel({
+    prompt: "输出 JSON",
+    env: {
+      MODEL_PROVIDER: "gemini",
+      GEMINI_API_KEY: "test-gemini-key",
+      GEMINI_FLASH_MODEL: "gemini-test",
+      GEMINI_MAX_OUTPUT_TOKENS: "456",
+      API_DAILY_BUDGET_CNY: "10",
+    },
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options, body: JSON.parse(options.body) });
+      return jsonResponse({
+        candidates: [{ content: { parts: [{ text: JSON.stringify(modelJson("Gemini OK")) }] } }],
+        usageMetadata: { promptTokenCount: 50, candidatesTokenCount: 12, totalTokenCount: 62 },
+      });
+    },
+  });
+  assert.equal(result.providerUsed, "gemini");
+  assert.equal(result.dryRun, false);
+  assert.match(calls[0].url, /models\/gemini-test:generateContent/u);
+  assert.equal(calls[0].body.generationConfig.responseMimeType, "application/json");
+  assert.equal(calls[0].body.generationConfig.maxOutputTokens, 456);
+  assert.equal(calls[0].body.contents[0].parts[0].text, "输出 JSON");
+});
+
+test("auto_provider_prefers_deepseek", () => {
+  assert.equal(resolveRagProvider({ MODEL_PROVIDER: "auto", DEEPSEEK_API_KEY: "deepseek", GEMINI_API_KEY: "gemini" }).provider, "deepseek");
+});
+
+test("auto_provider_falls_back_to_gemini", () => {
+  assert.equal(resolveRagProvider({ MODEL_PROVIDER: "auto", GEMINI_API_KEY: "gemini" }).provider, "gemini");
+});
+
+test("budget_soft_limit_blocks_call_when_exceeded", async () => {
+  let fetchCount = 0;
+  const result = await callRagModel({
+    prompt: "很长的问题".repeat(1000),
+    env: {
+      MODEL_PROVIDER: "deepseek",
+      DEEPSEEK_API_KEY: "test-deepseek-key",
+      API_DAILY_BUDGET_CNY: "0.000001",
+      API_BUDGET_MODE: "soft",
+      RAG_MAX_OUTPUT_TOKENS: "1500",
+    },
+    fetchImpl: async () => {
+      fetchCount += 1;
+      return jsonResponse({});
+    },
+  });
+  assert.equal(fetchCount, 0);
+  assert.equal(result.answer.answerLevel, "budget_limited");
+  assert.equal(result.budgetStatus.limitEnforced, true);
+  assert.equal(result.budgetStatus.budgetStorage, "memory");
+});
+
+test("public final-call reservations survive ambiguous dispatch failures and only refund explicit 400 rejection", async () => {
+  const now = new Date("2026-08-01T00:10:00.000Z");
+  const env = {
+    MODEL_PROVIDER: "deepseek",
+    DEEPSEEK_API_KEY: "test-deepseek-key",
+    API_DAILY_BUDGET_CNY: "10",
+    API_BUDGET_TIMEZONE: "UTC",
+    DEEPSEEK_INPUT_CNY_PER_MTOK: "1",
+    DEEPSEEK_OUTPUT_CNY_PER_MTOK: "2",
+    RAG_MAX_OUTPUT_TOKENS: "100",
+  };
+  const cases = [
+    {
+      label: "abort after dispatch",
+      retained: true,
+      fetchImpl: async () => {
+        const error = new Error("client aborted after dispatch");
+        error.name = "AbortError";
+        throw error;
+      },
+    },
+    {
+      label: "network failure after dispatch",
+      retained: true,
+      fetchImpl: async () => {
+        throw new Error("socket reset after request write");
+      },
+    },
+    {
+      label: "HTTP 429",
+      retained: true,
+      fetchImpl: async () => jsonResponse({ error: { message: "rate limited" } }, false, 429),
+    },
+    {
+      label: "HTTP 500",
+      retained: true,
+      fetchImpl: async () => jsonResponse({ error: { message: "upstream failed" } }, false, 500),
+    },
+    {
+      label: "HTTP 200 malformed JSON",
+      retained: true,
+      fetchImpl: async () => ({
+        ok: true,
+        status: 200,
+        async json() {
+          throw new SyntaxError("malformed upstream JSON");
+        },
+      }),
+    },
+    {
+      label: "HTTP 400 explicit rejection",
+      retained: false,
+      fetchImpl: async () => jsonResponse({ error: { message: "invalid request" } }, false, 400),
+    },
+  ];
+
+  for (const item of cases) {
+    await resetRagBudget({ env, now });
+    let fetchCount = 0;
+    const result = await callRagModel({
+      prompt: `预算分类 ${item.label}`,
+      thinkingMode: "disabled",
+      env,
+      now,
+      fetchImpl: async (...args) => {
+        fetchCount += 1;
+        return item.fetchImpl(...args);
+      },
+    });
+    const status = await getRagBudgetStatus({ env, now });
+    assert.equal(fetchCount, 1, item.label);
+    assert.equal(status.spentTodayCny > 0, item.retained, item.label);
+    assert.equal(
+      result.warnings.includes("budget_reservation_retained_after_ambiguous_remote_failure"),
+      item.retained,
+      item.label,
+    );
+  }
+});
+
+test("Relay auxiliary calls obey the shared public USD ceiling", async () => {
+  const now = new Date("2026-08-01T00:20:00.000Z");
+  const env = relayAuxEnv({ API_CHATGPT_DAILY_BUDGET_USD: "0.000000001" });
+  await resetRagBudget({ env, now });
+  let fetchCount = 0;
+  const fetchImpl = async () => {
+    fetchCount += 1;
+    return relaySseResponse({ cardNames: [], queries: [] });
+  };
+
+  const card = await callCardNameExtractionModel({
+    userQuery: "Relay 辅助预算拦截卡名",
+    env,
+    now,
+    fetchImpl,
+  });
+  const rule = await callRuleQueryExtractionModel({
+    userQuery: "Relay 辅助预算拦截规则",
+    env,
+    now,
+    fetchImpl,
+  });
+
+  assert.equal(fetchCount, 0);
+  assert.equal(card.budgetStatus.limitEnforced, true);
+  assert.equal(rule.budgetStatus.limitEnforced, true);
+});
+
+test("DeepSeek compact recovery reserves both possible calls before any fetch", async () => {
+  const now = new Date("2026-08-01T00:30:00.000Z");
+  const env = {
+    MODEL_PROVIDER: "deepseek",
+    DEEPSEEK_API_KEY: "test-deepseek-key",
+    API_DAILY_BUDGET_CNY: "0.00015",
+    API_BUDGET_TIMEZONE: "UTC",
+    DEEPSEEK_INPUT_CNY_PER_MTOK: "0",
+    DEEPSEEK_OUTPUT_CNY_PER_MTOK: "1",
+    RAG_MAX_OUTPUT_TOKENS: "100",
+    RAG_RECOVERY_MAX_OUTPUT_TOKENS: "100",
+  };
+  await resetRagBudget({ env, now });
+  let fetchCount = 0;
+  const result = await callRagModel({
+    prompt: "主请求",
+    recoveryPrompt: "可能发生的第二次请求",
+    thinkingMode: "disabled",
+    env,
+    now,
+    fetchImpl: async () => {
+      fetchCount += 1;
+      return jsonResponse({});
+    },
+  });
+
+  assert.equal(fetchCount, 0);
+  assert.equal(result.answer.answerLevel, "budget_limited");
+  assert.equal(result.budgetStatus.limitEnforced, true);
+});
+
+test("persistent public budget requirement fails closed without Redis even in default soft mode", async () => {
+  for (const persistenceEnv of [
+    { VERCEL: "1" },
+    { API_BUDGET_REQUIRE_PERSISTENT_STORAGE: "true" },
+  ]) {
+    let fetchCount = 0;
+    const result = await callRagModel({
+      prompt: "持久预算缺失时不得联网",
+      thinkingMode: "disabled",
+      env: {
+        MODEL_PROVIDER: "deepseek",
+        DEEPSEEK_API_KEY: "test-deepseek-key",
+        API_DAILY_BUDGET_CNY: "10",
+        ...persistenceEnv,
+      },
+      fetchImpl: async () => {
+        fetchCount += 1;
+        return jsonResponse({});
+      },
+    });
+    assert.equal(fetchCount, 0);
+    assert.equal(result.answer.answerLevel, "budget_limited");
+    assert.equal(result.budgetStatus.budgetStorage, "unconfigured");
+    assert.equal(result.budgetStatus.limitEnforced, true);
+  }
+});
+
+
+test("Relay extraction helpers record usage in the shared public USD bucket", async () => {
+  const now = new Date("2026-08-01T01:00:00.000Z");
+  const env = relayAuxEnv();
+  await resetRagBudget({ env, now });
+  let callCount = 0;
+  const fetchImpl = async () => {
+    callCount += 1;
+    return relaySseResponse({
+      cardNames: callCount === 1 ? [{ name: "测试龙", originalText: "测试龙" }] : [],
+      queries: callCount === 2 ? ["发动条件"] : [],
+    }, { prompt_tokens: 1_000, completion_tokens: 500, total_tokens: 1_500 });
+  };
+
+  const card = await callCardNameExtractionModel({
+    userQuery: "Relay 辅助模型计费卡名",
+    dataRevision: "relay-budget-card-v1",
+    env,
+    fetchImpl,
+    now,
+  });
+  const rule = await callRuleQueryExtractionModel({
+    userQuery: "Relay 辅助模型计费规则",
+    dataRevision: "relay-budget-rule-v1",
+    env,
+    fetchImpl,
+    now,
+  });
+  const status = await getRagBudgetStatus({ env, now });
+  const relayBucket = status.buckets.find((bucket) => bucket.id === "final_ruling:relay");
+
+  assert.equal(callCount, 2);
+  assert.equal(card.costCurrency, "USD");
+  assert.equal(rule.costCurrency, "USD");
+  assert.equal(card.estimatedCostUsd > 0, true);
+  assert.equal(rule.estimatedCostUsd > 0, true);
+  assert.equal(relayBucket.spentTodayUsd > 0, true);
+});
+
+test("explicit DeepSeek card extraction is direct while rule extraction redirects to Relay Sol low", async () => {
+  const env = relayAuxEnv({
+    RAG_CARD_MODEL_PROVIDER: "deepseek",
+    RAG_RULE_MODEL_PROVIDER: "deepseek",
+    DEEPSEEK_API_KEY: "legacy-deepseek-key",
+  });
+  const urls = [];
+  const fetchImpl = async (url) => {
+    urls.push(String(url));
+    if (String(url) === "https://api.deepseek.com/chat/completions") {
+      return jsonResponse({
+        model: "deepseek-v4-flash",
+        choices: [{
+          finish_reason: "stop",
+          message: { content: JSON.stringify({ cardNames: [] }) },
+        }],
+        usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+      });
+    }
+    return relaySseResponse({ cardNames: [], queries: [] });
+  };
+  const card = await callCardNameExtractionModel({
+    userQuery: "旧配置卡名",
+    dataRevision: "legacy-relay-card-v1",
+    env,
+    fetchImpl,
+  });
+  const rule = await callRuleQueryExtractionModel({
+    userQuery: "旧配置规则",
+    dataRevision: "legacy-relay-rule-v1",
+    env,
+    fetchImpl,
+  });
+
+  assert.equal(card.providerUsed, "deepseek");
+  assert.equal(rule.providerUsed, "relay");
+  assert.deepEqual(urls, [
+    "https://api.deepseek.com/chat/completions",
+    "https://relay.example.test/v1/chat/completions",
+  ]);
+  assert.ok(rule.warnings.includes("deepseek_rule_query_model_disabled_redirected_to_relay"));
+});
+
+test("typed card extraction owns the mention set, including a successful empty set", async () => {
+  const typed = parseCardNameExtractionOutput(JSON.stringify({
+    cardNames: [
+      { name: "测试龙", originalText: "测试龙", confidence: "high" },
+      { name: "X", originalText: "X", confidence: "low" },
+    ],
+    groupMentions: ["未收录测试卡"],
+  }));
+  assert.equal(typed.typedMentionSetProvided, true);
+
+  const owned = extractRagCards("「测试龙」、X与「未收录测试卡」如何处理？", {
+    cards: [cards[0], secondCard, { id: "x", name: "X", aliases: ["X"] }],
+    modelCardNameCandidates: typed.candidates,
+    mentionSetSource: "typed_model",
+  });
+  assert.deepEqual(owned.resolvedCards.map((card) => card.id), ["100", "x"]);
+
+  const invalidTyped = parseCardNameExtractionOutput(JSON.stringify({
+    cardNames: [],
+    groupMentions: "not-an-array",
+  }));
+  assert.equal(invalidTyped.typedMentionSetProvided, false);
+
+  const emptyTyped = parseCardNameExtractionOutput(JSON.stringify({
+    cardNames: [],
+    groupMentions: [],
+  }));
+  assert.equal(emptyTyped.typedMentionSetProvided, true);
+  const emptyOwned = extractRagCards("「测试龙」如何处理？", {
+    cards,
+    modelCardNameCandidates: emptyTyped.candidates,
+    mentionSetSource: "typed_model",
+  });
+  assert.deepEqual(emptyOwned.resolvedCards, []);
+
+  const legacy = extractRagCards("「测试龙」如何处理？", { cards });
+  assert.deepEqual(legacy.resolvedCards.map((card) => card.id), ["100"]);
+});
+
+test("typed card extraction keeps valid entries and reports entries missing an original surface", () => {
+  const mixed = parseCardNameExtractionOutput(JSON.stringify({
+    cardNames: [
+      { name: "测试龙", originalText: "题面测试龙", confidence: "high" },
+      { name: "未收录测试卡", confidence: "high" },
+    ],
+    groupMentions: [],
+  }));
+  assert.equal(mixed.typedMentionSetProvided, true);
+  assert.deepEqual(mixed.candidates.map(({ name, originalText }) => ({ name, originalText })), [{
+    name: "测试龙",
+    originalText: "题面测试龙",
+  }]);
+  assert.deepEqual(mixed.invalidTypedMentions, [{
+    input: "cardNames[1].originalText",
+    reason: "typed_card_mention_missing_original_text",
+    source: "card_name_model_interface",
+  }]);
+  assert.ok(mixed.formatWarnings.includes("card_name_typed_item_missing_original_text:cardNames[1].originalText"));
+  assert.doesNotMatch(JSON.stringify(mixed.invalidTypedMentions), /未收录测试卡/u);
+
+  const stringEntry = parseCardNameExtractionOutput(JSON.stringify({
+    cardNames: ["测试龙"],
+    groupMentions: [],
+  }));
+  assert.equal(stringEntry.typedMentionSetProvided, true);
+  assert.deepEqual(stringEntry.candidates, []);
+  assert.equal(stringEntry.invalidTypedMentions[0]?.reason, "typed_card_mention_missing_original_text");
+});
+
+test("legacy card extraction response normalization preserves more than twelve candidates", () => {
+  const cardNames = Array.from({ length: 13 }, (_, index) => ({
+    name: `合成卡片${index + 1}`,
+    originalText: `题面卡片${index + 1}`,
+    confidence: "medium",
+  }));
+  const parsed = parseCardNameExtractionOutput({ cardNames });
+
+  assert.equal(parsed.typedMentionSetProvided, false);
+  assert.equal(parsed.candidates.length, 13);
+  assert.deepEqual(
+    parsed.candidates.map((item) => item.originalText),
+    cardNames.map((item) => item.originalText),
+  );
+});
+
+test("rag pipeline keeps typed ownership when one typed card entry lacks originalText", async () => {
+  const answer = await answerRagRulingQuestion({
+    question: "「测试龙」与「未收录测试卡」如何处理？",
+    cards: [cards[0], secondCard],
+    records: [],
+    qaRecords: [],
+    env: { RAG_LIVE_OFFICIAL_QA: "false" },
+    cardModelInvoker: async () => JSON.stringify({
+      cardNames: [
+        { name: "测试龙", originalText: "测试龙", confidence: "high" },
+        { name: "未收录测试卡", confidence: "high" },
+      ],
+      groupMentions: [],
+    }),
+    modelInvoker: async () => JSON.stringify(modelJson("只确认保留原始题面绑定的卡片。")),
+  });
+
+  assert.deepEqual(answer.resolvedCards.map((card) => card.id), ["100"]);
+  assert.ok(answer.debug.unresolvedMentions.some((item) => (
+    item.reason === "typed_card_mention_missing_original_text"
+      && item.input === "cardNames[1].originalText"
+  )));
+  assert.ok(answer.debug.cardNameWarnings.includes(
+    "card_name_typed_item_missing_original_text:cardNames[1].originalText",
+  ));
+  assert.doesNotMatch(JSON.stringify(answer.debug.unresolvedMentions), /未收录测试卡/u);
+});
+
+test("typed mention ownership preserves explicit user card text and stable identity deduplication", () => {
+  const resolution = extractRagCards([
+    "「测试龙」与测试龙如何处理？",
+    "未收录测试卡：①：可以发动。进行一项处理。",
+  ].join("\n"), {
+    cards: [cards[0], secondCard],
+    modelCardNameCandidates: [
+      { name: "测试龙", originalText: "「测试龙」", confidence: "high" },
+      { name: "测试龙", originalText: "测试龙", confidence: "medium" },
+    ],
+    mentionSetSource: "typed_model",
+  });
+  assert.deepEqual(resolution.resolvedCards.map((card) => card.id), ["100", "200"]);
+  assert.equal(resolution.resolvedCards.filter((card) => card.id === "100").length, 1);
+  assert.equal(resolution.userProvidedCardTexts[0]?.name, "未收录测试卡");
+});
+
+test("rag pipeline passes successful typed mention ownership even when cardNames is empty", async () => {
+  const answer = await answerRagRulingQuestion({
+    question: "「测试龙」如何处理？",
+    cards,
+    records: [],
+    qaRecords: [],
+    cardModelInvoker: async () => JSON.stringify({ cardNames: [], groupMentions: [] }),
+    modelInvoker: async () => JSON.stringify(modelJson("没有模型声明的单卡提及。")),
+  });
+  assert.deepEqual(answer.resolvedCards, []);
+});
+
+
+test("pipeline cost summary includes both Relay auxiliary extractors", async () => {
+  const now = new Date("2032-03-04T05:06:07.000Z");
+  const env = relayAuxEnv({
+    RAG_RULEBOOK_MODEL_PROVIDER: "mock",
+    RAG_LIVE_OFFICIAL_QA_ENABLED: "false",
+  });
+  await resetRagBudget({ env, now });
+
+  const result = await answerRagRulingQuestion({
+    question: "「测试龙」的效果可以发动吗？",
+    cards,
+    records: [],
+    qaRecords: [],
+    env,
+    now,
+    cardModelInvoker: async () => ({
+      cardNames: [],
+      usage: { prompt_tokens: 1_000, completion_tokens: 500, total_tokens: 1_500 },
+    }),
+    ruleModelInvoker: async () => ({
+      ruleQueries: [{
+        subclaim: "测试龙的效果发动条件",
+        checkpoint: "activation_snapshot",
+        query: "测试龙的效果在当前场面是否满足发动条件？",
+        reason: "验证规则查询模型费用会计。",
+        confidence: "high",
+      }],
+      usage: { prompt_tokens: 1_000, completion_tokens: 500, total_tokens: 1_500 },
+    }),
+    modelInvoker: async () => JSON.stringify(modelJson("需要结合完整局面判断。")),
+  });
+
+  assert.equal(result.debug.cardNameProviderUsed, "relay");
+  assert.equal(result.debug.ruleQueryProviderUsed, "relay");
+  assert.equal(result.debug.estimatedCostUsd > 0, true);
+});
+
+test("complete public pipeline response removes relay group names and request ids", async () => {
+  const now = new Date("2044-01-01T00:00:00.000Z");
+  const env = {
+    MODEL_PROVIDER: "relay",
+    RAG_MODEL_PROVIDER: "relay",
+    RAG_MODEL: "gpt-5.6-sol",
+    RELAY_API_KEY: "relay-test-key",
+    RELAY_BASE_URL: "https://relay.example.test/v1",
+    RAG_CARD_MODEL_PROVIDER: "mock",
+    RAG_RULE_MODEL_PROVIDER: "mock",
+    RAG_RULEBOOK_MODEL_PROVIDER: "mock",
+    RAG_LIVE_OFFICIAL_QA_ENABLED: "false",
+    RAG_AUTO_ENGINE_SIMULATION: "false",
+    API_DAILY_BUDGET_USD: "10",
+    API_BUDGET_TIMEZONE: "UTC",
+  };
+  await resetRagBudget({ env, now });
+  const result = await answerRagRulingQuestion({
+    question: "这个操作可以进行吗？",
+    cards: [],
+    records: [],
+    qaRecords: [],
+    env,
+    now,
+    cardModelInvoker: async () => ({ cardNames: [] }),
+    ruleModelInvoker: async () => ({ ruleQueries: [] }),
+    rulebookModelInvoker: async () => JSON.stringify({
+      operationChecks: [],
+      constraintReviews: [],
+    }),
+    fetchImpl: async () => jsonResponse({
+      error: {
+        message: "无权访问 private-routing-group (request id: sensitive-internal-id)",
+        code: "private-routing-group:sensitive-internal-id",
+      },
+    }, false, 403),
+  });
+  const serialized = JSON.stringify(result);
+
+  assert.equal(result.answerLevel, "needs_more_info");
+  assert.ok(result.riskFlags.includes("model_provider_call_failed"));
+  assert.ok(result.riskFlags.includes("model_provider_access_denied"));
+  assert.equal(result.debug.providerFailure.kind, "access_denied");
+  assert.equal(result.debug.providerFailure.code, "model_provider_access_denied");
+  assert.doesNotMatch(serialized, /private-routing-group|sensitive-internal-id/u);
+});
+
+test("Relay auxiliary extraction cache is keyed by the complete query", async () => {
+  const now = new Date("2033-04-05T06:07:08.000Z");
+  const env = relayAuxEnv();
+  await resetRagBudget({ env, now });
+  let fetchCount = 0;
+  const fetchImpl = async () => {
+    fetchCount += 1;
+    return relaySseResponse({ cardNames: [] });
+  };
+  const base = {
+    dataRevision: "relay-cache-revision-v1",
+    env,
+    now,
+    fetchImpl,
+  };
+
+  const first = await callCardNameExtractionModel({ ...base, userQuery: "同一问题" });
+  const cached = await callCardNameExtractionModel({ ...base, userQuery: "同一问题" });
+  await callCardNameExtractionModel({ ...base, userQuery: "不同问题" });
+
+  assert.equal(fetchCount, 2);
+  assert.equal(first.cacheHit, false);
+  assert.equal(cached.cacheHit, true);
+  assert.equal(cached.estimatedCostUsd, 0);
+});
+
+test("identical Relay auxiliary requests use one singleflight transport", async () => {
+  const env = relayAuxEnv();
+  const now = new Date("2033-04-06T06:07:08.000Z");
+  await resetRagBudget({ env, now });
+  let fetchCount = 0;
+  let releaseFetch;
+  const gate = new Promise((resolve) => { releaseFetch = resolve; });
+  const fetchImpl = async () => {
+    fetchCount += 1;
+    await gate;
+    return relaySseResponse({ cardNames: [] });
+  };
+  const input = {
+    userQuery: "relay-singleflight-card",
+    dataRevision: "relay-singleflight-v1",
+    env,
+    now,
+    fetchImpl,
+  };
+  const firstPromise = callCardNameExtractionModel(input);
+  const secondPromise = callCardNameExtractionModel(input);
+  releaseFetch();
+  const [first, second] = await Promise.all([firstPromise, secondPromise]);
+
+  assert.equal(fetchCount, 1);
+  assert.equal(first.singleflightHit, false);
+  assert.equal(second.singleflightHit, true);
+  assert.equal(second.estimatedCostUsd, 0);
+});
+
+test("Relay auxiliary extraction caches only complete valid JSON", async () => {
+  const env = relayAuxEnv();
+  const now = new Date("2033-04-08T06:07:08.000Z");
+  await resetRagBudget({ env, now });
+  let fetchCount = 0;
+  const fetchImpl = async () => {
+    fetchCount += 1;
+    return relaySseResponse({ cardNames: [] });
+  };
+  const input = {
+    userQuery: "relay-valid-empty-cache",
+    dataRevision: "relay-valid-empty-cache-v1",
+    env,
+    now,
+    fetchImpl,
+  };
+
+  const first = await callCardNameExtractionModel(input);
+  const second = await callCardNameExtractionModel(input);
+
+  assert.equal(fetchCount, 1);
+  assert.equal(first.cacheHit, false);
+  assert.equal(second.cacheHit, true);
+  assert.deepEqual(second.candidates, []);
+});
+
+test("typed extraction responses missing originalText are not written to the success cache", async () => {
+  const env = relayAuxEnv();
+  const now = new Date("2033-04-08T07:08:09.000Z");
+  await resetRagBudget({ env, now });
+  let fetchCount = 0;
+  const fetchImpl = async () => {
+    fetchCount += 1;
+    return relaySseResponse({
+      cardNames: [{ name: "缓存缺口测试卡" }],
+      groupMentions: [],
+    });
+  };
+  const input = {
+    userQuery: "typed-missing-originalText-cache",
+    dataRevision: "typed-missing-originalText-cache-v1",
+    env,
+    now,
+    fetchImpl,
+  };
+
+  const first = await callCardNameExtractionModel(input);
+  const second = await callCardNameExtractionModel(input);
+
+  assert.equal(fetchCount, 2);
+  assert.equal(first.cacheHit, false);
+  assert.equal(second.cacheHit, false);
+  assert.equal(first.typedMentionSetProvided, true);
+  assert.equal(first.invalidTypedMentions[0]?.reason, "typed_card_mention_missing_original_text");
+  assert.ok(first.warnings.includes("card_name_model_not_cached:invalid_typed_items"));
+});
+
+test("Relay singleflight isolates an aborted caller while one caller survives", async () => {
+  const env = relayAuxEnv();
+  const now = new Date("2033-04-09T06:07:08.000Z");
+  await resetRagBudget({ env, now });
+  let fetchCount = 0;
+  let releaseFetch;
+  const gate = new Promise((resolve) => { releaseFetch = resolve; });
+  const fetchImpl = async () => {
+    fetchCount += 1;
+    await gate;
+    return relaySseResponse({ cardNames: [] });
+  };
+  const controller = new AbortController();
+  const base = {
+    userQuery: "relay-singleflight-abort",
+    dataRevision: "relay-singleflight-abort-v1",
+    env,
+    now,
+    fetchImpl,
+  };
+  const aborted = callCardNameExtractionModel({ ...base, signal: controller.signal });
+  const surviving = callCardNameExtractionModel(base);
+  controller.abort("caller_cancelled");
+  releaseFetch();
+  const [abortedOutcome, survivingOutcome] = await Promise.allSettled([aborted, surviving]);
+
+  assert.equal(abortedOutcome.status, "rejected");
+  assert.equal(abortedOutcome.reason?.name, "AbortError");
+  assert.equal(survivingOutcome.status, "fulfilled");
+  assert.equal(fetchCount, 1);
+});
+
+test("a pre-aborted Relay auxiliary caller creates no request or charge", async () => {
+  const env = relayAuxEnv();
+  const now = new Date("2033-04-11T06:07:08.000Z");
+  await resetRagBudget({ env, now });
+  const controller = new AbortController();
+  controller.abort("cancelled_before_auxiliary_call");
+  let fetchCount = 0;
+
+  await assert.rejects(
+    callCardNameExtractionModel({
+      userQuery: "pre-aborted-relay-auxiliary",
+      dataRevision: "pre-aborted-relay-v1",
+      env,
+      now,
+      signal: controller.signal,
+      fetchImpl: async () => { fetchCount += 1; },
+    }),
+    (error) => error?.name === "AbortError",
+  );
+  const status = await getRagBudgetStatus({ env, now });
+  const relayBucket = status.buckets.find((bucket) => bucket.id === "final_ruling:relay");
+  assert.equal(fetchCount, 0);
+  assert.equal(relayBucket.spentTodayUsd, 0);
+});
+
+test("a pre-aborted final call does not reserve budget or reach transport", async () => {
+  const env = {
+    MODEL_PROVIDER: "relay",
+    RAG_MODEL: "gpt-5.6-sol",
+    RELAY_API_KEY: "relay-test-key",
+    RELAY_BASE_URL: "https://relay.example.test/v1",
+    API_CHATGPT_DAILY_BUDGET_USD: "10",
+    API_BUDGET_TIMEZONE: "UTC",
+  };
+  const now = new Date("2033-04-12T06:07:08.000Z");
+  await resetRagBudget({ env, now });
+  const before = await getRagBudgetStatus({ env, now });
+  const controller = new AbortController();
+  controller.abort("cancelled_before_final_call");
+  let fetchCount = 0;
+
+  await assert.rejects(
+    callRagModel({
+      prompt: "pre-aborted-final-20330412",
+      env,
+      now,
+      signal: controller.signal,
+      fetchImpl: async () => {
+        fetchCount += 1;
+        throw new Error("pre-aborted final call must not fetch");
+      },
+    }),
+    (error) => error?.name === "AbortError" && error?.code === "ABORT_ERR",
+  );
+  const after = await getRagBudgetStatus({ env, now });
+  assert.equal(fetchCount, 0);
+  assert.equal(after.buckets.find((item) => item.id === "final_ruling:relay")?.spentTodayUsd,
+    before.buckets.find((item) => item.id === "final_ruling:relay")?.spentTodayUsd);
+});
+
+test("cancellation during final budget preflight refunds both ledgers before transport", async () => {
+  const now = new Date("2033-04-13T06:07:08.000Z");
+  const redis = createRedisFetch();
+  const controller = new AbortController();
+  const env = {
+    MODEL_PROVIDER: "deepseek",
+    DEEPSEEK_API_KEY: "test-deepseek-key",
+    API_DAILY_BUDGET_CNY: "10",
+    API_BUDGET_TIMEZONE: "UTC",
+    KV_REST_API_URL: "https://kv.example.test",
+    KV_REST_API_TOKEN: "kv-token",
+  };
+  const before = await getRagBudgetStatus({ env, fetchImpl: redis.fetchImpl, now });
+  let providerCalls = 0;
+  let positiveReservations = 0;
+
+  await assert.rejects(
+    callRagModel({
+      prompt: "cancel-during-final-preflight-20330413",
+      env,
+      now,
+      signal: controller.signal,
+      fetchImpl: async (url, options) => {
+        if (url === "https://kv.example.test") {
+          const command = JSON.parse(options.body || "[]");
+          if (command[0] === "EVAL" && command[2] === "1" && Number(command[4]) > 0) {
+            positiveReservations += 1;
+            if (positiveReservations === 2) controller.abort("cancelled_during_final_preflight");
+          }
+          return redis.fetchImpl(url, options);
+        }
+        providerCalls += 1;
+        throw new Error("cancelled final call must not reach provider");
+      },
+    }),
+    (error) => error?.name === "AbortError" && error?.code === "ABORT_ERR",
+  );
+
+  const after = await getRagBudgetStatus({ env, fetchImpl: redis.fetchImpl, now });
+  const increments = redis.commands.filter((command) => command[0] === "EVAL" && command[2] === "1");
+  assert.equal(providerCalls, 0);
+  assert.deepEqual(after, before);
+  assert.equal(increments.filter((command) => Number(command[4]) > 0).length, 2);
+  assert.equal(increments.filter((command) => Number(command[4]) < 0).length, 2);
+});
+
+test("cancellation during Relay auxiliary budget preflight prevents provider dispatch", async () => {
+  const now = new Date("2033-04-14T06:07:08.000Z");
+  const redis = createRedisFetch();
+  const controller = new AbortController();
+  const env = relayAuxEnv({
+    KV_REST_API_URL: "https://kv.example.test",
+    KV_REST_API_TOKEN: "kv-token",
+  });
+  const before = await getRagBudgetStatus({ env, fetchImpl: redis.fetchImpl, now });
+  let invokerCalls = 0;
+  let positiveReservations = 0;
+  const result = await callCardNameExtractionModel({
+    userQuery: "cancel-during-relay-auxiliary-preflight",
+    dataRevision: "cancel-relay-preflight-v1",
+    env,
+    now,
+    signal: controller.signal,
+    modelInvoker: async () => {
+      invokerCalls += 1;
+      throw new Error("cancelled auxiliary call must not invoke model");
+    },
+    fetchImpl: async (url, options) => {
+      const command = JSON.parse(options.body || "[]");
+      const response = await redis.fetchImpl(url, options);
+      if (command[0] === "EVAL"
+          && command[2] === "2"
+          && String(command[3]).includes(":final_ruling:relay:")
+          && Number(command[5]) > 0) {
+        positiveReservations += 1;
+        controller.abort("cancelled_during_auxiliary_preflight");
+      }
+      return response;
+    },
+  });
+
+  const after = await getRagBudgetStatus({ env, fetchImpl: redis.fetchImpl, now });
+  assert.equal(invokerCalls, 0);
+  assert.ok(result.warnings.some((item) => item.startsWith("card_name_model_failed:")));
+  assert.deepEqual(after, before);
+  assert.equal(positiveReservations, 1);
+});
+
+test("legacy DeepSeek auxiliary JSON entry is disabled before budget or provider dispatch", async () => {
+  let providerCalls = 0;
+  await assert.rejects(
+    callDeepSeekJsonTask({
+      prompt: "不得发送",
+      env: { DEEPSEEK_API_KEY: "legacy-key" },
+      fetchImpl: async () => { providerCalls += 1; },
+    }),
+    (error) => error?.code === "deepseek_auxiliary_disabled",
+  );
+  assert.equal(providerCalls, 0);
+});
+
+test("forced dry-run skips injected model invokers and live invokers receive the caller signal", async () => {
+  let dryRunCalls = 0;
+  const dryRunResult = await callRagModel({
+    prompt: "dry-run must not invoke",
+    dryRun: true,
+    env: { MODEL_PROVIDER: "mock" },
+    modelInvoker: async () => {
+      dryRunCalls += 1;
+      return JSON.stringify(modelJson("不应调用"));
+    },
+  });
+  assert.equal(dryRunCalls, 0);
+  assert.equal(dryRunResult.dryRun, true);
+
+  const controller = new AbortController();
+  let receivedSignal = null;
+  await callRagModel({
+    prompt: "signal passthrough",
+    env: { MODEL_PROVIDER: "mock" },
+    signal: controller.signal,
+    modelInvoker: async (request) => {
+      receivedSignal = request.signal;
+      return JSON.stringify(modelJson("收到信号"));
+    },
+  });
+  assert.equal(receivedSignal, controller.signal);
+});
+
+test("auxiliary model dry-runs skip injected invokers and forward signals when enabled", async () => {
+  let dryRunCalls = 0;
+  const neverInvoke = async () => {
+    dryRunCalls += 1;
+    return "{}";
+  };
+  await Promise.all([
+    callCardNameExtractionModel({ userQuery: "辅助卡名 dry-run", dryRun: true, modelInvoker: neverInvoke, env: { MODEL_PROVIDER: "mock" } }),
+    callRuleQueryExtractionModel({ userQuery: "辅助规则 dry-run", dryRun: true, modelInvoker: neverInvoke, env: { MODEL_PROVIDER: "mock" } }),
+  ]);
+  assert.equal(dryRunCalls, 0);
+
+  const controller = new AbortController();
+  const receivedSignals = [];
+  const captureSignal = async (request) => {
+    receivedSignals.push(request.signal);
+    if (request.task === "card_name_extraction") return JSON.stringify({ cardNames: [] });
+    if (request.task === "rule_query_extraction") return JSON.stringify({ ruleQueries: [] });
+    throw new Error(`unexpected auxiliary task: ${request.task}`);
+  };
+  await callCardNameExtractionModel({ userQuery: "辅助卡名 signal", signal: controller.signal, modelInvoker: captureSignal, env: { MODEL_PROVIDER: "mock" } });
+  await callRuleQueryExtractionModel({ userQuery: "辅助规则 signal", signal: controller.signal, modelInvoker: captureSignal, env: { MODEL_PROVIDER: "mock" } });
+  assert.equal(receivedSignals.length, 2);
+  assert.ok(receivedSignals.every((value) => value === controller.signal));
+});
+
+test("public JSON providers stop waiting for a stalled response body when the caller aborts", async () => {
+  const providers = [
+    {
+      label: "deepseek",
+      call: ({ controller, fetchImpl }) => callRagModel({
+        prompt: "stalled-deepseek-body",
+        env: {
+          MODEL_PROVIDER: "deepseek",
+          DEEPSEEK_API_KEY: "test-deepseek-key",
+          API_DAILY_BUDGET_CNY: "10",
+        },
+        signal: controller.signal,
+        fetchImpl,
+      }),
+      readWarnings: (result) => result.warnings,
+      directSignal: true,
+    },
+    {
+      label: "glm",
+      call: ({ controller, fetchImpl }) => callRagModel({
+        prompt: "stalled-glm-body",
+        env: {
+          MODEL_PROVIDER: "glm",
+          GLM_API_KEY: "test-glm-key",
+          API_DAILY_BUDGET_CNY: "10",
+        },
+        signal: controller.signal,
+        fetchImpl,
+      }),
+      readWarnings: (result) => result.warnings,
+      directSignal: true,
+    },
+    {
+      label: "gemini",
+      call: ({ controller, fetchImpl }) => callCardNameExtractionModel({
+        userQuery: "stalled-gemini-body",
+        dataRevision: "stalled-gemini-body-v1",
+        env: {
+          MODEL_PROVIDER: "gemini",
+          RAG_CARD_MODEL_PROVIDER: "gemini",
+          GEMINI_API_KEY: "test-gemini-key",
+          RAG_CARD_MODEL_TIMEOUT_MS: "5000",
+          API_DAILY_BUDGET_CNY: "10",
+        },
+        signal: controller.signal,
+        fetchImpl,
+      }),
+      readWarnings: (result) => result.warnings,
+    },
+  ];
+
+  for (const provider of providers) {
+    const controller = new AbortController();
+    let bodyStarted = false;
+    let requestSignal = null;
+    const pending = provider.call({
+      controller,
+      fetchImpl: async (_url, options) => {
+        requestSignal = options.signal;
+        assert.equal(typeof requestSignal?.addEventListener, "function", provider.label);
+        if (provider.directSignal) assert.equal(requestSignal, controller.signal, provider.label);
+        return {
+          ok: true,
+          status: 200,
+          json: async () => {
+            bodyStarted = true;
+            return new Promise(() => {});
+          },
+        };
+      },
+    });
+    await waitFor(() => bodyStarted);
+    const abortReason = new DOMException(`${provider.label} body cancelled`, "AbortError");
+    controller.abort(abortReason);
+    const outcome = Promise.race([
+      pending,
+      new Promise((_, reject) => setTimeout(
+        () => reject(new Error(`${provider.label}_body_abort_did_not_settle`)),
+        250,
+      )),
+    ]);
+
+    assert.equal(requestSignal?.aborted, true, provider.label);
+    if (provider.label === "gemini") {
+      await assert.rejects(outcome, (error) => error === abortReason);
+      assert.equal(requestSignal.reason, "all_singleflight_waiters_aborted");
+      continue;
+    }
+    const result = await outcome;
+    assert.ok(
+      provider.readWarnings(result).some((warning) => (
+        warning.startsWith("model_call_failed:")
+        || warning.startsWith("card_name_model_failed:")
+      )),
+      provider.label,
+    );
+  }
+});
+
+test("Relay lightweight auxiliary timeout aborts stalled transport", async () => {
+  let requestSignal = null;
+  const result = await callCardNameExtractionModel({
+    userQuery: "relay-auxiliary-timeout",
+    dataRevision: "relay-auxiliary-timeout-v1",
+    env: relayAuxEnv({ RAG_CARD_MODEL_TIMEOUT_MS: "5" }),
+    fetchImpl: async (_url, options) => {
+      requestSignal = options.signal;
+      return new Promise(() => {});
+    },
+  });
+
+  assert.equal(requestSignal?.aborted, true);
+  assert.equal(requestSignal?.reason?.message, "card_name_model_timeout");
+  assert.ok(result.warnings.includes("card_name_model_failed:card_name_model_timeout"));
+});
+
+test("rule planning has its own timeout instead of inheriting the card extractor deadline", async () => {
+  let requestSignal = null;
+  const startedAt = Date.now();
+  const result = await callRuleQueryExtractionModel({
+    userQuery: "rule-timeout-independent-20400102",
+    dataRevision: "rule-timeout-independent-20400102",
+    env: {
+      RAG_RULE_MODEL_PROVIDER: "relay",
+      RAG_RULE_MODEL_RELAY_API_KEY: "relay-rule-key",
+      RAG_RULE_MODEL_RELAY_BASE_URL: "https://relay.example.test/v1",
+      RAG_CARD_MODEL_TIMEOUT_MS: "1",
+      RAG_RULE_MODEL_TIMEOUT_MS: "25",
+      API_CHATGPT_DAILY_BUDGET_USD: "10",
+    },
+    fetchImpl: async (_url, options) => {
+      requestSignal = options.signal;
+      return new Promise(() => {});
+    },
+  });
+
+  assert.equal(requestSignal?.aborted, true);
+  assert.equal(requestSignal?.reason?.message, "rule_query_model_timeout");
+  assert.ok(Date.now() - startedAt >= 10);
+  assert.ok(result.warnings.includes("rule_query_model_failed:rule_query_model_timeout"));
+});
+
+test("public DeepSeek budget also treats cached input as uncached", () => {
+  const cost = estimateDeepSeekCostCny({
+    prompt_tokens: 1000,
+    completion_tokens: 500,
+    prompt_cache_hit_tokens: 200,
+    prompt_cache_miss_tokens: 800,
+  }, {
+    RAG_MODEL_TIER: "flash",
+    DEEPSEEK_INPUT_CNY_PER_MTOK: "1",
+    DEEPSEEK_OUTPUT_CNY_PER_MTOK: "2",
+    DEEPSEEK_CACHE_HIT_INPUT_CNY_PER_MTOK: "0.02",
+  });
+  assert.equal(cost, 0.002);
+});
+
+test("usage_cost_estimation_uses_flash_prices", () => {
+  const cost = estimateDeepSeekCostCny({
+    prompt_tokens: 1000,
+    completion_tokens: 500,
+  }, {
+    RAG_MODEL_TIER: "flash",
+    DEEPSEEK_INPUT_CNY_PER_MTOK: "1",
+    DEEPSEEK_OUTPUT_CNY_PER_MTOK: "2",
+    DEEPSEEK_FLASH_INPUT_CNY_PER_MTOK: "3",
+    DEEPSEEK_FLASH_OUTPUT_CNY_PER_MTOK: "4",
+  });
+  assert.equal(cost, 0.005);
+});
+
+test("usage_cost_estimation_uses Pro prices when the Pro tier is selected", () => {
+  const cost = estimateDeepSeekCostCny({
+    prompt_tokens: 1_000_000,
+    completion_tokens: 1_000_000,
+  }, {
+    RAG_MODEL_TIER: "pro",
+    DEEPSEEK_FLASH_INPUT_CNY_PER_MTOK: "3",
+    DEEPSEEK_FLASH_OUTPUT_CNY_PER_MTOK: "4",
+    DEEPSEEK_PRO_INPUT_CNY_PER_MTOK: "8",
+    DEEPSEEK_PRO_OUTPUT_CNY_PER_MTOK: "9",
+    DEEPSEEK_INPUT_CNY_PER_MTOK: "1",
+    DEEPSEEK_OUTPUT_CNY_PER_MTOK: "2",
+  });
+  assert.equal(cost, 17);
+});
+
+test("usage_cost_estimation_glm_defaults_to_8_input_and_28_output_cny_per_million", () => {
+  const cost = estimateGlmCostCny({
+    prompt_tokens: 1_000_000,
+    completion_tokens: 1_000_000,
+  });
+  assert.equal(cost, 36);
+});
+
+test("daily budget meters Relay auxiliaries, GLM final, and DeepSeek final independently", async () => {
+  const now = new Date("2038-02-02T00:00:00.000Z");
+  const env = {
+    API_DAILY_BUDGET_CNY: "10",
+    API_EVIDENCE_DAILY_BUDGET_CNY: "0.01",
+    API_GLM_FINAL_DAILY_BUDGET_CNY: "0.03",
+    API_DEEPSEEK_FINAL_DAILY_BUDGET_CNY: "0.01",
+    API_CHATGPT_DAILY_BUDGET_USD: "10",
+    API_BUDGET_TIMEZONE: "UTC",
+    RAG_MAX_OUTPUT_TOKENS: "1000",
+    DEEPSEEK_API_KEY: "test-deepseek-key",
+    DEEPSEEK_INPUT_CNY_PER_MTOK: "1",
+    DEEPSEEK_OUTPUT_CNY_PER_MTOK: "2",
+    GLM_API_KEY: "test-glm-key",
+    RELAY_API_KEY: "relay-test-key",
+    RELAY_BASE_URL: "https://relay.example.test/v1",
+  };
+  await resetRagBudget({ env, now });
+
+  const preparation = await callCardNameExtractionModel({
+    userQuery: "三个分桶独立计量-资料准备-20380202",
+    env: { ...env, RAG_CARD_MODEL_PROVIDER: "relay" },
+    now,
+    fetchImpl: async () => relaySseResponse(
+      { cardNames: [] },
+      { prompt_tokens: 1_000, completion_tokens: 500, total_tokens: 1_500 },
+    ),
+  });
+
+  let glmFetchCount = 0;
+  const callGlmFinal = () => callRagModel({
+    prompt: "GLM bucket",
+    env: {
+      ...env,
+      MODEL_PROVIDER: "glm",
+      GLM_MODEL: "glm-5.2",
+      RAG_THINKING_MODE: "enabled",
+      RAG_REASONING_EFFORT: "high",
+    },
+    now,
+    fetchImpl: async () => {
+      glmFetchCount += 1;
+      return jsonResponse({
+        model: "glm-5.2",
+        choices: [{ message: { content: JSON.stringify(modelJson("GLM bucket OK")) }, finish_reason: "stop" }],
+        usage: { prompt_tokens: 1_000, completion_tokens: 500, total_tokens: 1_500 },
+      });
+    },
+  });
+  const glmFinal = await callGlmFinal();
+  const blockedSecondGlm = await callGlmFinal();
+
+  const deepSeekFinal = await callRagModel({
+    prompt: "DeepSeek bucket",
+    thinkingMode: "disabled",
+    env: {
+      ...env,
+      MODEL_PROVIDER: "deepseek",
+      RAG_MODEL_TIER: "flash",
+      DEEPSEEK_FLASH_MODEL: "deepseek-v4-flash",
+    },
+    now,
+    fetchImpl: async () => jsonResponse({
+      model: "deepseek-v4-flash",
+      choices: [{ message: { content: JSON.stringify(modelJson("DeepSeek bucket OK")) }, finish_reason: "stop" }],
+      usage: { prompt_tokens: 1_000, completion_tokens: 500, total_tokens: 1_500 },
+    }),
+  });
+  const status = await getRagBudgetStatus({ env, now });
+
+  assert.equal(glmFetchCount, 1, "the exhausted GLM bucket must block only the second GLM call");
+  assert.equal(blockedSecondGlm.answer.answerLevel, "budget_limited");
+  assert.equal(preparation.budgetStatus.bucket.id, "final_ruling:relay");
+  assert.equal(glmFinal.budgetStatus.bucket.id, "final_ruling:glm");
+  assert.equal(deepSeekFinal.budgetStatus.bucket.id, "final_ruling:deepseek");
+  assert.equal(status.spentTodayCny, 0.024);
+  assert.equal(status.remainingTodayCny, 9.976);
+  assert.equal(
+    status.buckets.find((bucket) => bucket.id === "evidence_preparation:deepseek").spentTodayCny,
+    0,
+  );
+  assert.equal(
+    status.buckets.find((bucket) => bucket.id === "final_ruling:relay").spentTodayUsd > 0,
+    true,
+  );
+});
+
+test("legacy total daily budget remains a ceiling above a larger provider bucket", async () => {
+  const now = new Date("2038-02-03T00:00:00.000Z");
+  const env = {
+    MODEL_PROVIDER: "deepseek",
+    RAG_MODEL_TIER: "flash",
+    RAG_MAX_OUTPUT_TOKENS: "1000",
+    DEEPSEEK_API_KEY: "test-deepseek-key",
+    DEEPSEEK_FLASH_MODEL: "deepseek-v4-flash",
+    DEEPSEEK_INPUT_CNY_PER_MTOK: "1",
+    DEEPSEEK_OUTPUT_CNY_PER_MTOK: "2",
+    API_DAILY_BUDGET_CNY: "0.001",
+    API_DEEPSEEK_FINAL_DAILY_BUDGET_CNY: "10",
+    API_BUDGET_TIMEZONE: "UTC",
+  };
+  await resetRagBudget({ env, now });
+  let fetchCount = 0;
+  const result = await callRagModel({
+    prompt: "the total ceiling is smaller than this call",
+    env,
+    now,
+    fetchImpl: async () => {
+      fetchCount += 1;
+      return jsonResponse({});
+    },
+  });
+
+  assert.equal(fetchCount, 0);
+  assert.equal(result.answer.answerLevel, "budget_limited");
+  assert.equal(result.budgetStatus.dailyBudgetCny, 0.001);
+  assert.equal(result.budgetStatus.spentTodayCny, 0);
+  assert.equal(result.budgetStatus.bucket.id, "final_ruling:deepseek");
+  assert.equal(result.budgetStatus.bucket.dailyBudgetCny, 10);
+  assert.equal(result.budgetStatus.bucket.spentTodayCny, 0);
+  assert.equal(result.budgetStatus.limitEnforced, true);
+});
+
+test("budget_status_can_be_reset", async () => {
+  const env = { API_DAILY_BUDGET_CNY: "10", API_BUDGET_TIMEZONE: "UTC" };
+  await resetRagBudget({ env, now: new Date("2026-07-09T00:00:00Z") });
+  let status = await getRagBudgetStatus({ env, now: new Date("2026-07-09T00:00:00Z") });
+  assert.equal(status.spentTodayCny, 0);
+  await callRagModel({
+    prompt: "输出 JSON",
+    env: {
+      ...env,
+      MODEL_PROVIDER: "deepseek",
+      DEEPSEEK_API_KEY: "test-deepseek-key",
+      DEEPSEEK_FLASH_MODEL: "deepseek-test",
+      DEEPSEEK_INPUT_CNY_PER_MTOK: "1",
+      DEEPSEEK_OUTPUT_CNY_PER_MTOK: "2",
+    },
+    now: new Date("2026-07-09T00:00:00Z"),
+    fetchImpl: async () => jsonResponse({
+      choices: [{ message: { content: JSON.stringify(modelJson("Budget OK")) } }],
+      usage: { prompt_tokens: 1000, completion_tokens: 500 },
+    }),
+  });
+  status = await getRagBudgetStatus({ env, now: new Date("2026-07-09T00:00:00Z") });
+  assert.equal(status.spentTodayCny > 0, true);
+  status = await resetRagBudget({ env, now: new Date("2026-07-09T00:00:00Z") });
+  assert.equal(status.spentTodayCny, 0);
+});
+
+test("budget_status_uses_kv_rest_aliases_for_persistent_storage", async () => {
+  const env = {
+    API_DAILY_BUDGET_CNY: "10",
+    API_BUDGET_TIMEZONE: "UTC",
+    KV_REST_API_URL: "https://kv.example.test",
+    KV_REST_API_TOKEN: "kv-token",
+  };
+  const redis = createRedisFetch();
+  let status = await getRagBudgetStatus({ env, fetchImpl: redis.fetchImpl, now: new Date("2026-07-09T00:00:00Z") });
+  assert.equal(status.budgetStorage, "redis");
+  status = await resetRagBudget({ env, fetchImpl: redis.fetchImpl, now: new Date("2026-07-09T00:00:00Z") });
+  assert.equal(status.buckets.length, 4);
+  const resetCommands = redis.commands.filter((command) => command[0] === "EVAL" && command[6] === "reset");
+  assert.deepEqual(resetCommands.map((command) => command[3]).sort(), [
+    "rag-api-budget:v3:2026-07-09:cny-total",
+    "rag-api-budget:v3:2026-07-09:evidence_preparation:deepseek:cny",
+    "rag-api-budget:v3:2026-07-09:final_ruling:deepseek:cny",
+    "rag-api-budget:v3:2026-07-09:final_ruling:glm:cny",
+  ]);
+  assert.ok(resetCommands.every((command) => command[2] === "3" && command[8] === "172800"));
+  const relayReset = redis.commands.find((command) => command[0] === "EVAL"
+    && command[2] === "4"
+    && command[3] === "rag-api-budget:v3:2026-07-09:final_ruling:relay:usd");
+  assert.ok(relayReset);
+  assert.equal(relayReset[6], "rag-api-budget:v3:2026-07-09:final_ruling:relay:manually-closed");
+  assert.equal(relayReset[7], "172800");
+});
+
+test("budget_status_accepts_the_named_Upstash_budget_integration_aliases", async () => {
+  const env = {
+    VERCEL: "1",
+    API_DAILY_BUDGET_CNY: "10",
+    API_BUDGET_TIMEZONE: "UTC",
+    UPSTASH_BUDGET_KV_REST_API_URL: "https://budget-kv.example.test",
+    UPSTASH_BUDGET_KV_REST_API_TOKEN: "budget-kv-token",
+  };
+  const redis = createRedisFetch({
+    url: "https://budget-kv.example.test",
+    token: "budget-kv-token",
+  });
+  const status = await getRagBudgetStatus({
+    env,
+    fetchImpl: redis.fetchImpl,
+    now: new Date("2026-07-10T00:00:00Z"),
+  });
+
+  assert.equal(status.budgetStorage, "redis");
+  assert.equal(status.budgetPersistent, true);
+});
+
+test("persistent budget increments and TTL use one atomic Redis command", async () => {
+  const now = new Date("2049-07-02T00:00:00.000Z");
+  const redis = createRedisFetch();
+  const env = {
+    MODEL_PROVIDER: "deepseek",
+    RAG_MODEL_TIER: "flash",
+    RAG_MAX_OUTPUT_TOKENS: "64",
+    DEEPSEEK_API_KEY: "deepseek-test-key",
+    DEEPSEEK_FLASH_MODEL: "deepseek-v4-flash",
+    API_BUDGET_TIMEZONE: "UTC",
+    KV_REST_API_URL: "https://kv.example.test",
+    KV_REST_API_TOKEN: "kv-token",
+  };
+  const result = await callRagModel({
+    prompt: "atomic budget ledger",
+    env,
+    now,
+    fetchImpl: async (url, options) => {
+      if (url === "https://kv.example.test") return redis.fetchImpl(url, options);
+      assert.equal(url, "https://api.deepseek.com/chat/completions");
+      return jsonResponse({
+        model: "deepseek-v4-flash",
+        choices: [{ message: { content: JSON.stringify(modelJson("Atomic budget OK")) }, finish_reason: "stop" }],
+        usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
+      });
+    },
+  });
+
+  const increments = redis.commands.filter(
+    (command) => command[0] === "EVAL" && command[2] === "1",
+  );
+  assert.ok(increments.length >= 2);
+  assert.ok(increments.every((command) => (
+    command.length === 6
+      && command[1].includes("INCRBYFLOAT")
+      && command[1].includes("EXPIRE")
+      && command[5] === "172800"
+  )));
+  assert.equal(redis.commands.some((command) => command[0] === "INCRBYFLOAT"), false);
+  assert.equal(redis.commands.some((command) => command[0] === "EXPIRE"), false);
+  assert.equal(result.budgetStatus.bucket.spentTodayCny, result.estimatedCostCny);
+});
+
+test("a stalled Redis budget backend fails closed within one total deadline", async () => {
+  let providerFetchCount = 0;
+  const startedAt = Date.now();
+  const result = await callRagModel({
+    prompt: "stalled budget backend",
+    env: {
+      VERCEL: "1",
+      MODEL_PROVIDER: "deepseek",
+      DEEPSEEK_API_KEY: "deepseek-test-key",
+      API_BUDGET_TIMEZONE: "UTC",
+      API_BUDGET_REDIS_TIMEOUT_MS: "20",
+      API_BUDGET_REDIS_TOTAL_TIMEOUT_MS: "30",
+      KV_REST_API_URL: "https://kv-stalled.example.test",
+      KV_REST_API_TOKEN: "kv-token",
+    },
+    now: new Date("2049-07-03T00:00:00.000Z"),
+    fetchImpl: async (url) => {
+      if (url === "https://kv-stalled.example.test") return new Promise(() => {});
+      providerFetchCount += 1;
+      return jsonResponse({});
+    },
+  });
+  const elapsedMs = Date.now() - startedAt;
+
+  assert.equal(providerFetchCount, 0);
+  assert.equal(result.answer.answerLevel, "budget_limited");
+  assert.ok(elapsedMs < 500, `expected bounded Redis failure, got ${elapsedMs}ms`);
+});
+
+test("a successful over-limit reservation receives a fresh bounded rollback deadline", async () => {
+  const redisUrl = "https://kv-rollback.example.test";
+  const commands = [];
+  let providerFetchCount = 0;
+  let delayedReservationResult = false;
+  const result = await callRagModel({
+    prompt: "anonymous concurrent budget rollback",
+    env: {
+      VERCEL: "1",
+      MODEL_PROVIDER: "deepseek",
+      DEEPSEEK_API_KEY: "deepseek-test-key",
+      API_DAILY_BUDGET_CNY: "100",
+      API_BUDGET_TIMEZONE: "UTC",
+      API_BUDGET_REDIS_TIMEOUT_MS: "200",
+      API_BUDGET_REDIS_TOTAL_TIMEOUT_MS: "50",
+      KV_REST_API_URL: redisUrl,
+      KV_REST_API_TOKEN: "kv-token",
+    },
+    now: new Date("2049-07-04T00:00:00.000Z"),
+    fetchImpl: async (url, options) => {
+      if (url !== redisUrl) {
+        providerFetchCount += 1;
+        return jsonResponse({});
+      }
+      const command = JSON.parse(options.body);
+      commands.push(command);
+      if (command[0] === "GET") return jsonResponse({ result: "0" });
+      if (command[0] === "EVAL" && command[2] === "3") {
+        // The production ledger reconciles its legacy key before reserving.
+        // Keep that migration neutral so this test reaches the reservation race.
+        return jsonResponse({ result: "0" });
+      }
+      if (command[0] === "EVAL" && Number(command[4]) > 0) {
+        return {
+          ok: true,
+          status: 200,
+          async json() {
+            const payload = {};
+            Object.defineProperty(payload, "result", {
+              get() {
+                // Consume the original aggregate deadline only after Redis has
+                // accepted the increment and returned a parseable response.
+                const until = Date.now() + 80;
+                while (Date.now() < until) {}
+                delayedReservationResult = true;
+                return "101";
+              },
+            });
+            return payload;
+          },
+        };
+      }
+      if (command[0] === "EVAL" && Number(command[4]) < 0) {
+        return jsonResponse({ result: "0" });
+      }
+      throw new Error(`unexpected Redis command: ${JSON.stringify(command)}`);
+    },
+  });
+
+  const increments = commands.filter((command) => command[0] === "EVAL" && command[2] === "1");
+  assert.equal(delayedReservationResult, true);
+  assert.equal(providerFetchCount, 0);
+  assert.equal(result.answer.answerLevel, "budget_limited");
+  assert.equal(increments.length, 2);
+  assert.ok(Number(increments[0][4]) > 0);
+  assert.ok(Number(increments[1][4]) < 0);
+});
+
+test("budget storage fails closed instead of mixing a URL and token from different aliases", async () => {
+  let fetchCount = 0;
+  const status = await getRagBudgetStatus({
+    env: {
+      VERCEL: "1",
+      API_DAILY_BUDGET_CNY: "10",
+      API_BUDGET_TIMEZONE: "UTC",
+      KV_REST_API_URL: "https://kv.example.test",
+      UPSTASH_REDIS_REST_TOKEN: "token-from-another-alias",
+    },
+    fetchImpl: async () => {
+      fetchCount += 1;
+      throw new Error("mixed credentials must not be used");
+    },
+    now: new Date("2026-07-10T00:00:00Z"),
+  });
+
+  assert.equal(fetchCount, 0);
+  assert.equal(status.budgetStorage, "unconfigured");
+  assert.equal(status.budgetPersistent, false);
+  assert.equal(status.spentTodayCny, null);
+});
+
+test("budget storage fails closed when two complete aliases point at different databases", async () => {
+  let fetchCount = 0;
+  const result = await callRagModel({
+    prompt: "conflicting redis aliases must block before model transport",
+    env: {
+      VERCEL: "1",
+      MODEL_PROVIDER: "deepseek",
+      DEEPSEEK_API_KEY: "test-deepseek-key",
+      API_DAILY_BUDGET_CNY: "10",
+      KV_REST_API_URL: "https://kv-a.example.test",
+      KV_REST_API_TOKEN: "kv-a-token",
+      UPSTASH_REDIS_REST_URL: "https://kv-b.example.test",
+      UPSTASH_REDIS_REST_TOKEN: "kv-b-token",
+    },
+    fetchImpl: async () => {
+      fetchCount += 1;
+      throw new Error("conflicting aliases must not be used");
+    },
+  });
+
+  assert.equal(fetchCount, 0);
+  assert.equal(result.answer.answerLevel, "budget_limited");
+  assert.ok(result.warnings.includes("redis_alias_pairs_conflict"));
+});
+
+test("v3 currency ledgers conservatively migrate same-day legacy spend without treating CNY as USD", async () => {
+  const env = {
+    API_DAILY_BUDGET_CNY: "10",
+    API_BUDGET_TIMEZONE: "UTC",
+    KV_REST_API_URL: "https://kv.example.test",
+    KV_REST_API_TOKEN: "kv-token",
+  };
+  const redis = createRedisFetch();
+  redis.store.set("rag-api-budget:2026-07-11", "4.001324");
+  redis.store.set("rag-api-budget:v2:2026-07-11:final_ruling:relay", "4");
+  const status = await getRagBudgetStatus({
+    env,
+    fetchImpl: redis.fetchImpl,
+    now: new Date("2026-07-11T00:00:00Z"),
+  });
+  const relay = status.buckets.find((bucket) => bucket.id === "final_ruling:relay");
+
+  assert.equal(status.spentTodayCny, 4.001324);
+  assert.equal(relay.spentTodayUsd, 10);
+  assert.equal(relay.dailyBudgetUsd, 10);
+  assert.equal(relay.remainingTodayUsd, 0);
+  assert.equal(redis.store.get("rag-api-budget:v3:2026-07-11:cny-total"), "4.001324");
+  assert.equal(redis.store.get("rag-api-budget:v3:2026-07-11:final_ruling:relay:usd"), "10");
+
+  const blocked = await callRagModel({
+    prompt: "same-day migrated relay spend must remain blocked",
+    env: {
+      ...env,
+      MODEL_PROVIDER: "relay",
+      RELAY_API_KEY: "relay-key",
+      RELAY_BASE_URL: "https://relay.example.test/v1",
+      RAG_MODEL: "gpt-5.6-sol",
+    },
+    fetchImpl: redis.fetchImpl,
+    now: new Date("2026-07-11T00:00:00Z"),
+  });
+  assert.equal(blocked.answer.answerLevel, "budget_limited");
+});
+
+test("v3 budget reconciliation imports legacy writes that arrive after the first migration read", async () => {
+  const date = "2033-04-11";
+  const env = {
+    API_DAILY_BUDGET_CNY: "10",
+    API_BUDGET_TIMEZONE: "UTC",
+    KV_REST_API_URL: "https://kv.example.test",
+    KV_REST_API_TOKEN: "kv-token",
+  };
+  const now = new Date(`${date}T06:07:08.000Z`);
+  const redis = createRedisFetch();
+  const legacyTotalKey = `rag-api-budget:${date}`;
+  const legacyEvidenceKey = `rag-api-budget:v2:${date}:evidence_preparation:deepseek`;
+  const legacyRelayKey = `rag-api-budget:v2:${date}:final_ruling:relay`;
+  redis.store.set(legacyTotalKey, "2");
+  redis.store.set(legacyEvidenceKey, "0.25");
+
+  const first = await getRagBudgetStatus({ env, fetchImpl: redis.fetchImpl, now });
+  assert.equal(first.spentTodayCny, 2);
+  assert.equal(
+    first.buckets.find((bucket) => bucket.id === "evidence_preparation:deepseek").spentTodayCny,
+    0.25,
+  );
+  assert.equal(
+    first.buckets.find((bucket) => bucket.id === "final_ruling:relay").spentTodayUsd,
+    0,
+  );
+
+  // Simulate an old rolling-deployment instance writing v1/v2 after a newer
+  // instance has already reconciled this day once.
+  redis.store.set(legacyTotalKey, "3.5");
+  redis.store.set(legacyEvidenceKey, "0.75");
+  redis.store.set(legacyRelayKey, "0.01");
+  const second = await getRagBudgetStatus({ env, fetchImpl: redis.fetchImpl, now });
+
+  assert.equal(second.spentTodayCny, 3.5);
+  assert.equal(
+    second.buckets.find((bucket) => bucket.id === "evidence_preparation:deepseek").spentTodayCny,
+    0.75,
+  );
+  assert.equal(
+    second.buckets.find((bucket) => bucket.id === "final_ruling:relay").spentTodayUsd,
+    10,
+  );
+  assert.equal(redis.store.get(`rag-api-budget:v3:${date}:cny-total`), "3.5");
+  assert.equal(
+    redis.store.get(`rag-api-budget:v3:${date}:evidence_preparation:deepseek:cny`),
+    "0.75",
+  );
+});
+
+test("budget_status_requires_persistent_storage_on_vercel", async () => {
+  const status = await getRagBudgetStatus({
+    env: {
+      VERCEL: "1",
+      API_DAILY_BUDGET_CNY: "10",
+      API_BUDGET_TIMEZONE: "UTC",
+    },
+    now: new Date("2026-07-09T00:00:00Z"),
+  });
+  assert.equal(status.budgetStorage, "unconfigured");
+  assert.equal(status.budgetPersistent, false);
+  assert.equal(status.spentTodayCny, null);
+  assert.match(status.storageWarning, /持久化预算存储/u);
+});
+
+test("configuring an engine does not change public card identity or trigger passcode hydration", async () => {
+  const cid = "24680";
+  const genericCard = {
+    id: cid,
+    cardId: cid,
+    // Reproduce the legacy local-provider shape that copied a CID here. It
+    // must never win over the verified Baige password.
+    passcode: cid,
+    name: "通用桥接测试卡",
+    cnName: "通用桥接测试卡",
+    cardType: "monster",
+    effectText: "①：自己主要阶段可以发动。抽1张卡。",
+    aliases: ["通用桥接测试卡"],
+  };
+  async function retrieveWithEnv(env) {
+    const baigeQueries = [];
+    const evidence = await retrieveRagEvidence({
+      userQuery: "通用桥接测试卡的效果如何处理？",
+      cardResolution: {
+        resolvedCards: [genericCard],
+        unresolvedMentions: [],
+        ambiguousMentions: [],
+        userProvidedCardTexts: [],
+      },
+      cards: [genericCard],
+      records: [],
+      qaRecords: [],
+      env,
+      fetchImpl: async (url) => {
+        baigeQueries.push(new URL(url).searchParams.get("search"));
+        return jsonResponse({ result: [] });
+      },
+    });
+    return { evidence, baigeQueries };
+  }
+
+  const plain = await retrieveWithEnv({ RAG_LIVE_OFFICIAL_QA: "false" });
+  const configured = await retrieveWithEnv({
+    OCG_ENGINE_URL: "https://engine.example.test",
+    RAG_AUTO_ENGINE_SIMULATION: "false",
+    RAG_LIVE_OFFICIAL_QA: "false",
+  });
+  assert.deepEqual(plain.baigeQueries, []);
+  assert.deepEqual(configured.baigeQueries, []);
+
+  const publicIdentity = ({ id, cardId, passcode, name, effectText }) => ({
+    id,
+    cardId,
+    passcode,
+    name,
+    effectText,
+  });
+  assert.deepEqual(
+    configured.evidence.retrievedCards.map(publicIdentity),
+    plain.evidence.retrievedCards.map(publicIdentity),
+  );
+  assert.equal(configured.evidence.retrievedCards.length, 1);
+  assert.equal(configured.evidence.retrievedCards[0].id, cid);
+  assert.equal(configured.evidence.retrievedCards[0].passcode, "");
+});
+
+test("owner cap stops only today's public ChatGPT bucket at the ten-dollar hard ceiling", async () => {
+  const now = new Date("2038-02-04T00:00:00.000Z");
+  const env = {
+    API_BUDGET_TIMEZONE: "UTC",
+    API_DAILY_BUDGET_CNY: "10",
+    API_CHATGPT_DAILY_BUDGET_USD: "100",
+  };
+  await resetRagBudget({ env, now });
+
+  const capped = await capPublicChatGptBudget({ env, now });
+  const status = await getRagBudgetStatus({ env, now });
+  const relay = status.buckets.find((bucket) => bucket.id === "final_ruling:relay");
+
+  assert.equal(capped.action, "cap_public_chatgpt");
+  assert.equal(relay.dailyBudgetUsd, 10);
+  assert.equal(relay.spentTodayUsd, 10);
+  assert.equal(relay.remainingTodayUsd, 0);
+  assert.equal(relay.manuallyClosed, true);
+  assert.equal(relay.limitEnforced, true);
+  assert.equal(status.spentTodayCny, 0);
+  assert.deepEqual(
+    status.buckets
+      .filter((bucket) => bucket.id !== "final_ruling:relay")
+      .map((bucket) => bucket.spentTodayCny),
+    [0, 0, 0],
+  );
+
+  let providerCalls = 0;
+  const blocked = await callRagModel({
+    prompt: "public calls stop after the owner cap",
+    env: {
+      ...env,
+      MODEL_PROVIDER: "relay",
+      RELAY_API_KEY: "test-key",
+      RELAY_BASE_URL: "https://relay.example.test/v1",
+      RAG_MODEL: "gpt-5.6-sol",
+      RELAY_MAX_COMPLETION_TOKENS: "64",
+    },
+    now,
+    fetchImpl: async () => {
+      providerCalls += 1;
+      return relaySseResponse({});
+    },
+  });
+  assert.equal(providerCalls, 0);
+  assert.equal(blocked.answer.answerLevel, "budget_limited");
+  assert.equal(
+    blocked.answer.shortAnswer,
+    "今日公开裁定额度已达到每日 10 美元上限，未调用模型。如需协助重置，请联系作者：B站 おmaginai，或 QQ 1195362230。",
+  );
+});
+
+test("paid loopback private evaluation uses an isolated finite memory budget", async () => {
+  const now = new Date("2038-02-04T04:00:00.000Z");
+  const runId = "1234567890-1-abcdef1234567890";
+  const publicEnv = {
+    API_BUDGET_TIMEZONE: "UTC",
+    API_CHATGPT_DAILY_BUDGET_USD: "10",
+  };
+  await resetRagBudget({ env: publicEnv, now });
+  await capPublicChatGptBudget({ env: publicEnv, now });
+  let providerCalls = 0;
+  const result = await callRagModel({
+    prompt: "isolated private evaluation budget",
+    env: {
+      ...publicEnv,
+      MODEL_PROVIDER: "relay",
+      RELAY_API_KEY: "test-key",
+      RELAY_BASE_URL: "https://relay.example.test/v1",
+      RAG_MODEL: "gpt-5.6-sol",
+      RELAY_MAX_COMPLETION_TOKENS: "64",
+      PRIVATE_EVALUATION_MODE: "true",
+      PRIVATE_EVALUATION_DIAGNOSTICS: "true",
+      PRIVATE_EVALUATION_RUN_ID: runId,
+      PRIVATE_EVALUATION_BUDGET_USD: "0.01",
+      HOST: "127.0.0.1",
+    },
+    now,
+    fetchImpl: async () => {
+      providerCalls += 1;
+      const content = JSON.stringify(modelJson("private evaluation completed"));
+      return new Response(`data: ${JSON.stringify({
+        model: "gpt-5.6-sol",
+        choices: [{ index: 0, finish_reason: "stop", delta: { content } }],
+        usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+      })}\n\ndata: [DONE]\n\n`, {
+        status: 200,
+        headers: { "content-type": "text/event-stream" },
+      });
+    },
+  });
+  const publicStatus = await getRagBudgetStatus({ env: publicEnv, now });
+  const publicRelay = publicStatus.buckets.find((bucket) => bucket.id === "final_ruling:relay");
+
+  assert.equal(providerCalls, 1);
+  assert.equal(result.answer.shortAnswer, "private evaluation completed");
+  assert.equal(result.budgetStatus.privateEvaluation, true);
+  assert.equal(result.budgetStatus.privateEvaluationRunId, runId);
+  assert.equal(result.budgetStatus.budgetStorage, "private_evaluation_memory");
+  assert.equal(result.budgetStatus.bucket.dailyBudgetUsd, 0.01);
+  assert.ok(result.warnings.includes("private_evaluation_budget_isolated"));
+  assert.equal(publicRelay.spentTodayUsd, 10);
+  assert.equal(publicRelay.manuallyClosed, true);
+});
+
+test("private evaluation budget gate fails closed to the public ledger unless every server-owned condition matches", async () => {
+  const now = new Date("2038-02-04T05:00:00.000Z");
+  const base = {
+    MODEL_PROVIDER: "relay",
+    RELAY_API_KEY: "test-key",
+    RELAY_BASE_URL: "https://relay.example.test/v1",
+    RAG_MODEL: "gpt-5.6-sol",
+    RELAY_MAX_COMPLETION_TOKENS: "64",
+    API_BUDGET_TIMEZONE: "UTC",
+    API_CHATGPT_DAILY_BUDGET_USD: "10",
+    PRIVATE_EVALUATION_MODE: "true",
+    PRIVATE_EVALUATION_DIAGNOSTICS: "true",
+    PRIVATE_EVALUATION_RUN_ID: "1234567890-1-abcdef1234567890",
+    PRIVATE_EVALUATION_BUDGET_USD: "40",
+    HOST: "127.0.0.1",
+  };
+  const variants = [
+    { PRIVATE_EVALUATION_MODE: "false" },
+    { PRIVATE_EVALUATION_DIAGNOSTICS: "false" },
+    { PRIVATE_EVALUATION_RUN_ID: "short" },
+    { HOST: "0.0.0.0" },
+    { VERCEL: "1" },
+  ];
+
+  for (const variant of variants) {
+    const env = { ...base, ...variant };
+    await resetRagBudget({ env, now });
+    await capPublicChatGptBudget({ env, now });
+    let providerCalls = 0;
+    const result = await callRagModel({
+      prompt: `reject private budget gate ${JSON.stringify(variant)}`,
+      env,
+      now,
+      fetchImpl: async () => {
+        providerCalls += 1;
+        throw new Error("provider must not be called");
+      },
+    });
+    assert.equal(providerCalls, 0);
+    assert.equal(result.answer.answerLevel, "budget_limited");
+    assert.notEqual(result.budgetStatus.privateEvaluation, true);
+  }
+});
+
+test("private evaluation budget clamps oversized configuration and enforces one shared run ledger", async () => {
+  let providerCalls = 0;
+  const env = {
+    MODEL_PROVIDER: "relay",
+    RELAY_API_KEY: "test-key",
+    RELAY_BASE_URL: "https://relay.example.test/v1",
+    RAG_MODEL: "gpt-5.6-sol",
+    RELAY_MAX_COMPLETION_TOKENS: "64",
+    PRIVATE_EVALUATION_MODE: "true",
+    PRIVATE_EVALUATION_DIAGNOSTICS: "true",
+    PRIVATE_EVALUATION_RUN_ID: "1234567890-1-abcdef1234567891",
+    PRIVATE_EVALUATION_BUDGET_USD: "9999",
+    HOST: "127.0.0.1",
+  };
+  const fetchImpl = async () => {
+    providerCalls += 1;
+    const content = JSON.stringify(modelJson("clamped private budget"));
+    return new Response(`data: ${JSON.stringify({
+      model: "gpt-5.6-sol",
+      choices: [{ index: 0, finish_reason: "stop", delta: { content } }],
+      usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+    })}\n\ndata: [DONE]\n\n`, {
+      status: 200,
+      headers: { "content-type": "text/event-stream" },
+    });
+  };
+  const first = await callRagModel({ prompt: "first private call", env, fetchImpl });
+  const blocked = await callRagModel({
+    prompt: "second private call",
+    env: { ...env, PRIVATE_EVALUATION_BUDGET_USD: "0.000001" },
+    fetchImpl,
+  });
+
+  assert.equal(providerCalls, 1);
+  assert.equal(first.budgetStatus.bucket.dailyBudgetUsd, 50);
+  assert.equal(first.budgetStatus.bucket.spentTodayUsd, first.estimatedCostUsd);
+  assert.equal(blocked.answer.answerLevel, "budget_limited");
+  assert.match(blocked.answer.shortAnswer, /私有评测额度.*0\.000001 美元硬上限/u);
+  assert.equal(blocked.budgetStatus.privateEvaluation, true);
+  assert.equal(blocked.budgetStatus.bucket.dailyBudgetUsd, 0.000001);
+});
+
+test("a definitely rejected private request releases its isolated reservation", async () => {
+  const env = {
+    MODEL_PROVIDER: "relay",
+    RELAY_API_KEY: "test-key",
+    RELAY_BASE_URL: "https://relay.example.test/v1",
+    RAG_MODEL: "gpt-5.6-sol",
+    RELAY_MAX_COMPLETION_TOKENS: "64",
+    PRIVATE_EVALUATION_MODE: "true",
+    PRIVATE_EVALUATION_DIAGNOSTICS: "true",
+    PRIVATE_EVALUATION_RUN_ID: "1234567890-1-abcdef1234567892",
+    // Sol's conservative reservation includes the full 64-token output
+    // envelope and is slightly above $0.001 at the checked-in price table.
+    PRIVATE_EVALUATION_BUDGET_USD: "0.01",
+    HOST: "127.0.0.1",
+  };
+  let calls = 0;
+  const first = await callRagModel({
+    prompt: "release private reservation",
+    env,
+    fetchImpl: async () => {
+      calls += 1;
+      return new Response(JSON.stringify({ error: { message: "bad request" } }), {
+        status: 400,
+        headers: { "content-type": "application/json" },
+      });
+    },
+  });
+  const second = await callRagModel({
+    prompt: "reuse released private reservation",
+    env,
+    fetchImpl: async () => {
+      calls += 1;
+      const content = JSON.stringify(modelJson("reservation was released"));
+      return new Response(`data: ${JSON.stringify({
+        model: "gpt-5.6-sol",
+        choices: [{ index: 0, finish_reason: "stop", delta: { content } }],
+        usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+      })}\n\ndata: [DONE]\n\n`, {
+        status: 200,
+        headers: { "content-type": "text/event-stream" },
+      });
+    },
+  });
+
+  assert.equal(calls, 2);
+  assert.equal(first.answer.answerLevel, "needs_more_info");
+  assert.equal(first.budgetStatus.bucket.spentTodayUsd, 0);
+  assert.equal(second.answer.shortAnswer, "reservation was released");
+  assert.equal(second.budgetStatus.privateEvaluation, true);
+});
+
+test("persistent owner cap atomically closes only the public Relay USD bucket", async () => {
+  const now = new Date("2038-02-05T00:00:00.000Z");
+  const redis = createRedisFetch();
+  const env = {
+    API_BUDGET_TIMEZONE: "UTC",
+    API_CHATGPT_DAILY_BUDGET_USD: "7.5",
+    KV_REST_API_URL: "https://kv.example.test",
+    KV_REST_API_TOKEN: "kv-token",
+  };
+  redis.store.set("rag-api-budget:v3:2038-02-05:cny-total", "2.5");
+  redis.store.set("admin-final-budget:test-pool", "99");
+  redis.store.set("rag-api-budget:v3:2038-02-05:final_ruling:relay:usd", "8.25");
+
+  const capped = await capPublicChatGptBudget({ env, fetchImpl: redis.fetchImpl, now });
+
+  assert.equal(redis.commands.length, 7);
+  assert.deepEqual(redis.commands[0].slice(0, 1), ["EVAL"]);
+  assert.match(String(redis.commands[0][1]), /math\.max\(current, limit\).*KEYS\[2\]/su);
+  assert.deepEqual(redis.commands[0].slice(2), [
+    "2",
+    "rag-api-budget:v3:2038-02-05:final_ruling:relay:usd",
+    "rag-api-budget:v3:2038-02-05:final_ruling:relay:manually-closed",
+    "7.5",
+    "172800",
+  ]);
+  assert.equal(redis.store.get("rag-api-budget:v3:2038-02-05:cny-total"), "2.5");
+  assert.equal(redis.store.get("admin-final-budget:test-pool"), "99");
+  const relay = capped.buckets.find((bucket) => bucket.id === "final_ruling:relay");
+  assert.equal(relay.dailyBudgetUsd, 7.5);
+  assert.equal(relay.spentTodayUsd, 8.25);
+  assert.equal(relay.manuallyClosed, true);
+  assert.equal(capped.buckets.length, 4);
+});
+
+test("persistent reset clears the Relay ledger and owner-close marker in one atomic command", async () => {
+  const now = new Date("2038-02-05T12:00:00.000Z");
+  const redis = createRedisFetch();
+  const env = {
+    API_BUDGET_TIMEZONE: "UTC",
+    API_CHATGPT_DAILY_BUDGET_USD: "10",
+    KV_REST_API_URL: "https://kv.example.test",
+    KV_REST_API_TOKEN: "kv-token",
+  };
+  const bucketKey = "rag-api-budget:v3:2038-02-05:final_ruling:relay:usd";
+  const legacyKey = "rag-api-budget:v2:2038-02-05:final_ruling:relay";
+  const watermarkKey = `${bucketKey}:legacy-watermark`;
+  const closeKey = "rag-api-budget:v3:2038-02-05:final_ruling:relay:manually-closed";
+  redis.store.set(bucketKey, "10");
+  redis.store.set(legacyKey, "3");
+  redis.store.set(watermarkKey, "1");
+  redis.store.set(closeKey, "1");
+
+  await resetRagBudget({ env, fetchImpl: redis.fetchImpl, now });
+
+  const relayReset = redis.commands.find((command) => command[0] === "EVAL"
+    && command[2] === "4"
+    && command[3] === bucketKey);
+  assert.ok(relayReset);
+  assert.deepEqual(relayReset.slice(2), [
+    "4",
+    bucketKey,
+    legacyKey,
+    watermarkKey,
+    closeKey,
+    "172800",
+  ]);
+  assert.equal(redis.commands.some((command) => command[0] === "DEL" && command[1] === closeKey), false);
+  assert.equal(redis.store.get(bucketKey), "0");
+  assert.equal(redis.store.get(watermarkKey), "3");
+  assert.equal(redis.store.has(closeKey), false);
+});
+
+test("an owner close between preflight reads and atomic reserve neither dispatches nor refunds an unmade reservation", async () => {
+  const now = new Date("2038-02-05T18:00:00.000Z");
+  const redis = createRedisFetch();
+  const env = {
+    MODEL_PROVIDER: "relay",
+    RELAY_API_KEY: "test-key",
+    RELAY_BASE_URL: "https://relay.example.test/v1",
+    RAG_MODEL: "gpt-5.6-sol",
+    RELAY_MAX_COMPLETION_TOKENS: "64",
+    API_BUDGET_TIMEZONE: "UTC",
+    API_CHATGPT_DAILY_BUDGET_USD: "10",
+    KV_REST_API_URL: "https://kv.example.test",
+    KV_REST_API_TOKEN: "kv-token",
+  };
+  const bucketKey = "rag-api-budget:v3:2038-02-05:final_ruling:relay:usd";
+  const closeKey = "rag-api-budget:v3:2038-02-05:final_ruling:relay:manually-closed";
+  redis.store.set(bucketKey, "0.1");
+  let providerCalls = 0;
+  let injectedClose = false;
+  const fetchImpl = async (url, options = {}) => {
+    if (url !== env.KV_REST_API_URL) {
+      providerCalls += 1;
+      throw new Error("provider must not be called after an owner close");
+    }
+    const command = JSON.parse(options.body || "[]");
+    if (!injectedClose && command[0] === "GET" && command[1] === closeKey) {
+      injectedClose = true;
+      const response = jsonResponse({ result: null });
+      redis.store.set(closeKey, "1");
+      redis.store.set(bucketKey, "11");
+      return response;
+    }
+    return redis.fetchImpl(url, options);
+  };
+
+  const blocked = await callRagModel({ prompt: "atomic close race", env, fetchImpl, now });
+
+  assert.equal(injectedClose, true);
+  assert.equal(providerCalls, 0);
+  assert.equal(blocked.answer.answerLevel, "budget_limited");
+  assert.equal(blocked.budgetStatus.bucket.manuallyClosed, true);
+  assert.equal(redis.store.get(bucketKey), "11");
+  assert.ok(redis.commands.some((command) => command[0] === "EVAL"
+    && command[2] === "2"
+    && String(command[1]).includes("return {'closed'")));
+});
+
+test("an in-flight public settlement cannot reopen an owner-closed ChatGPT day", async () => {
+  const now = new Date("2038-02-06T00:00:00.000Z");
+  const redis = createRedisFetch();
+  const env = {
+    API_BUDGET_TIMEZONE: "UTC",
+    API_CHATGPT_DAILY_BUDGET_USD: "10",
+    KV_REST_API_URL: "https://kv.example.test",
+    KV_REST_API_TOKEN: "kv-token",
+  };
+  const bucketKey = "rag-api-budget:v3:2038-02-06:final_ruling:relay:usd";
+  const closeKey = "rag-api-budget:v3:2038-02-06:final_ruling:relay:manually-closed";
+  // Simulate a request that reserved before the owner closed the public pool,
+  // then settled cheaply and refunded part of its reservation afterwards.
+  redis.store.set(bucketKey, "0.2");
+  await capPublicChatGptBudget({ env, fetchImpl: redis.fetchImpl, now });
+  redis.store.set(bucketKey, "9.85");
+  assert.equal(redis.store.get(closeKey), "1");
+
+  let providerCalls = 0;
+  const blocked = await callRagModel({
+    prompt: "anonymous request after an in-flight settlement",
+    env: {
+      ...env,
+      MODEL_PROVIDER: "relay",
+      RELAY_API_KEY: "test-key",
+      RELAY_BASE_URL: "https://relay.example.test/v1",
+      RAG_MODEL: "gpt-5.6-sol",
+      RELAY_MAX_COMPLETION_TOKENS: "64",
+    },
+    now,
+    fetchImpl: async (url, options) => {
+      if (url === env.KV_REST_API_URL) return redis.fetchImpl(url, options);
+      providerCalls += 1;
+      throw new Error("provider must not be called after an owner close");
+    },
+  });
+  assert.equal(providerCalls, 0);
+  assert.equal(blocked.answer.answerLevel, "budget_limited");
+  assert.equal(blocked.budgetStatus.bucket.limitEnforced, true);
+
+  const reset = await resetRagBudget({ env, fetchImpl: redis.fetchImpl, now });
+  const resetRelay = reset.buckets.find((bucket) => bucket.id === "final_ruling:relay");
+  assert.equal(redis.store.has(closeKey), false);
+  assert.equal(resetRelay.manuallyClosed, undefined);
+  assert.equal(resetRelay.spentTodayUsd, 0);
+});
+
+test("a saturated deterministic plan still retains all four model subclaims", async () => {
+  const focusCard = {
+    id: "saturated-query-focus-card",
+    name: "匿名多步骤卡",
+    cnName: "匿名多步骤卡",
+    effectText: "①：可以发动。抽1张卡。那之后，从手牌特殊召唤1只怪兽。然后，破坏场上1张卡并将墓地1张卡除外。最后，将场上1张魔法・陷阱卡回到手牌。",
+    aliases: ["匿名多步骤卡"],
+  };
+  const modelQueries = [{
+    subclaim: "发动时是否满足条件",
+    checkpoint: "operation_legality",
+    query: "效果发动时的合法条件 | 効果発動時の適法な条件 | legal conditions when activating an effect",
+    reason: "核对发动资格。",
+    confidence: "high",
+  }, {
+    subclaim: "抽卡后能否继续处理",
+    checkpoint: "step_dependency",
+    query: "抽卡后后续处理能否继续 | ドロー後に後続処理を続けるか | whether later resolution continues after drawing",
+    reason: "核对连续处理。",
+    confidence: "high",
+  }, {
+    subclaim: "特殊召唤失败时保留哪些处理",
+    checkpoint: "mandatory_step",
+    query: "特殊召唤失败时前序处理是否保留 | 特殊召喚できない場合に前の処理を保持するか | whether prior resolution remains when a special summon fails",
+    reason: "核对失败后的处理。",
+    confidence: "high",
+  }, {
+    subclaim: "发动中的卡能否回到手牌",
+    checkpoint: "resolution_snapshot",
+    query: "发动中的魔法陷阱卡能否回到手牌 | 発動中の魔法・罠カードを手札に戻せるか | whether an activated spell or trap can return to the hand",
+    reason: "核对处理时状态。",
+    confidence: "high",
+  }];
+
+  const evidence = await retrieveRagEvidence({
+    userQuery: "匿名多步骤卡的效果从发动到最后一步应如何处理？",
+    cardResolution: {
+      resolvedCards: [focusCard],
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+      userProvidedCardTexts: [],
+    },
+    cards: [focusCard],
+    records: [],
+    qaRecords: [],
+    ruleSearchQueryProvider: async () => ({
+      queries: modelQueries,
+      candidateAssessments: [],
+    }),
+    env: {
+      RAG_LIVE_OFFICIAL_QA: "false",
+      RAG_MAX_RULE_SEARCH_QUERIES: "6",
+    },
+  });
+
+  assert.equal(evidence.ruleSearchQueries.length, 6);
+  assert.equal(evidence.debug.supplementalRuleSearchQueryCount, 4);
+  for (const expected of modelQueries) {
+    assert.ok(evidence.ruleSearchQueries.some((actual) => actual.query === expected.query));
+  }
+});
+
+test("rule model candidate assessments only reorder official questions and never delete them", async () => {
+  const focusCard = {
+    id: "soft-rank-card",
+    name: "匿名阶段卡",
+    cnName: "匿名阶段卡",
+    effectText: "①：可以发动。进行第一步。那之后，进行第二步。",
+    aliases: ["匿名阶段卡"],
+  };
+  const qaA = {
+    id: "qa-soft-rank-a",
+    recordType: "qa",
+    question: "匿名阶段卡被破坏时是否可以发动效果？",
+    answer: "SOFT_RANK_ANSWER_A_MUST_NOT_REACH_QUERY_MODEL",
+    text: "匿名阶段卡被破坏时是否可以发动效果？ 可以。",
+    cardIds: [focusCard.id],
+    cards: [focusCard.name],
+  };
+  const qaB = {
+    id: "qa-soft-rank-b",
+    recordType: "qa",
+    question: "匿名阶段卡的效果分两步处理时，第一步无法处理的场合，第二步如何处理？",
+    answer: "SOFT_RANK_ANSWER_B_MUST_NOT_REACH_QUERY_MODEL",
+    text: "匿名阶段卡的效果分两步处理时，第一步无法处理的场合，第二步不处理。",
+    cardIds: [focusCard.id],
+    cards: [focusCard.name],
+  };
+  let candidatesSeen = [];
+  const evidence = await retrieveRagEvidence({
+    userQuery: "匿名阶段卡在连续处理时应该怎样判断每一步？",
+    cardResolution: {
+      resolvedCards: [focusCard],
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+      userProvidedCardTexts: [],
+    },
+    cards: [focusCard],
+    records: [],
+    qaRecords: [qaA, qaB],
+    ruleSearchQueryProvider: async ({ candidateQuestions }) => {
+      candidatesSeen = candidateQuestions;
+      return {
+        queries: [],
+        candidateAssessments: [{
+          id: qaB.id,
+          relevance: "high",
+          premise: "same",
+          difference: "前提相同。",
+        }, {
+          id: qaA.id,
+          relevance: "low",
+          premise: "different",
+          difference: "候选讨论破坏，不是连续处理。",
+        }],
+      };
+    },
+    env: { RAG_LIVE_OFFICIAL_QA: "false" },
+  });
+
+  assert.ok(candidatesSeen.some((item) => item.id === qaA.id));
+  assert.ok(candidatesSeen.some((item) => item.id === qaB.id));
+  assert.doesNotMatch(JSON.stringify(candidatesSeen), /SOFT_RANK_ANSWER/u);
+  const relatedIds = evidence.officialQaRelated.map((item) => item.id);
+  assert.ok(relatedIds.includes(qaA.id));
+  assert.ok(relatedIds.includes(qaB.id));
+  assert.ok(relatedIds.indexOf(qaB.id) < relatedIds.indexOf(qaA.id));
+  assert.equal(
+    evidence.officialQaRelated.find((item) => item.id === qaB.id)
+      ?.retrievalContext?.modelCandidateAssessment?.premise,
+    "same",
+  );
+});
+
+test("question-only planning exposes up to four bounded cross-card candidates", async () => {
+  const focusCard = {
+    id: "candidate-pool-focus-card",
+    name: "匿名候选卡",
+    cnName: "匿名候选卡",
+    effectText: "①：以场上1张卡为对象才能发动。处理该对象。",
+    aliases: ["匿名候选卡"],
+  };
+  const scopedQa = {
+    id: "qa-candidate-pool-scoped",
+    recordType: "qa",
+    question: "匿名候选卡被破坏时可以发动吗？",
+    answer: "可以发动。",
+    text: "匿名候选卡被破坏时可以发动吗？ 可以发动。",
+    cardIds: [focusCard.id],
+    cards: [focusCard.name],
+  };
+  const crossCardQa = Array.from({ length: 4 }, (_, index) => ({
+    id: `qa-candidate-pool-cross-${index + 1}`,
+    recordType: "qa",
+    question: `另一个效果处理时对象离开场上的场合，后续处理如何进行？（资料${index + 1}）`,
+    answer: `参照处理说明${index + 1}。`,
+    text: `另一个效果处理时对象离开场上的场合，后续处理如何进行？ 参照处理说明${index + 1}。`,
+    cardIds: [`candidate-pool-reference-${index + 1}`],
+    cards: [`匿名参照卡${index + 1}`],
+  }));
+  let candidatesSeen = [];
+
+  await retrieveRagEvidence({
+    userQuery: "匿名候选卡处理时对象离开场上的场合，后续处理如何进行？",
+    cardResolution: {
+      resolvedCards: [focusCard],
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+      userProvidedCardTexts: [],
+    },
+    cards: [focusCard],
+    records: [],
+    qaRecords: [scopedQa, ...crossCardQa],
+    ruleSearchQueryProvider: async ({ candidateQuestions }) => {
+      candidatesSeen = candidateQuestions;
+      return { queries: [], candidateAssessments: [] };
+    },
+    env: { RAG_LIVE_OFFICIAL_QA: "false" },
+  });
+
+  const crossIdsSeen = new Set(candidatesSeen.map((item) => item.id));
+  assert.ok(candidatesSeen.some((item) => item.id === scopedQa.id));
+  assert.equal(crossCardQa.every((item) => crossIdsSeen.has(item.id)), true);
+  assert.equal(candidatesSeen.length <= 12, true);
+  assert.equal(candidatesSeen.every((item) => item.question.length <= 280), true);
+});
+
+test("cross-card allocation balances a model-assessed premise with strict supplemental-query coverage", async () => {
+  const focusCard = {
+    id: "assessed-focus-card",
+    name: "匿名处理卡",
+    cnName: "匿名处理卡",
+    effectText: "①：以场上1张卡为对象才能发动。进行第一步，那之后进行第二步。",
+    aliases: ["匿名处理卡"],
+  };
+  const samePremise = {
+    id: "qa-assessed-same-premise",
+    recordType: "qa",
+    question: "另一个效果发动后，处理时场上的对象离开，后续处理是否继续？",
+    answer: "按照该效果的处理顺序处理。",
+    text: "另一个效果发动后，处理时场上的对象离开，后续处理是否继续？ 按照该效果的处理顺序处理。",
+    cardIds: ["reference-card-a"],
+    cards: ["匿名参照卡A"],
+  };
+  const partialPremise = {
+    id: "qa-assessed-partial-premise",
+    recordType: "qa",
+    question: "另一个效果处理时对象不在场上的场合，之后的处理是否适用？",
+    answer: "根据各段处理之间的关系判断。",
+    text: "另一个效果处理时对象不在场上的场合，之后的处理是否适用？ 根据各段处理之间的关系判断。",
+    cardIds: ["reference-card-b"],
+    cards: ["匿名参照卡B"],
+  };
+  const negateDistractor = {
+    id: "qa-supplemental-negate-distractor",
+    recordType: "qa",
+    question: "卡的发动被无效后，可以破坏对方场上的卡吗？",
+    answer: "可以破坏。",
+    text: "卡的发动被无效后，可以破坏对方场上的卡吗？ 可以破坏。",
+    cardIds: ["reference-card-c"],
+    cards: ["匿名参照卡C"],
+  };
+  const summonDistractor = {
+    id: "qa-supplemental-summon-distractor",
+    recordType: "qa",
+    question: "从手牌特殊召唤怪兽后，对方场上的卡如何处理？",
+    answer: "特殊召唤后进行后续处理。",
+    text: "从手牌特殊召唤怪兽后，对方场上的卡如何处理？ 特殊召唤后进行后续处理。",
+    cardIds: ["reference-card-d"],
+    cards: ["匿名参照卡D"],
+  };
+  let candidatesSeen = [];
+
+  const evidence = await retrieveRagEvidence({
+    userQuery: "匿名处理卡发动效果后，处理时场上的对象离开，后续处理是否继续？",
+    cardResolution: {
+      resolvedCards: [focusCard],
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+      userProvidedCardTexts: [],
+    },
+    cards: [focusCard],
+    records: [],
+    qaRecords: [samePremise, partialPremise, negateDistractor, summonDistractor],
+    ruleSearchQueryProvider: async ({ candidateQuestions }) => {
+      candidatesSeen = candidateQuestions;
+      return {
+        queries: [{
+          subclaim: "无效发动后的处理",
+          checkpoint: "negated-activation",
+          query: negateDistractor.question,
+          reason: "检索无效发动后的处理。",
+          confidence: "medium",
+        }, {
+          subclaim: "从手牌特殊召唤后的处理",
+          checkpoint: "special-summon-from-hand",
+          query: summonDistractor.question,
+          reason: "检索特殊召唤后的处理。",
+          confidence: "medium",
+        }],
+        candidateAssessments: [{
+          id: samePremise.id,
+          relevance: "high",
+          premise: "same",
+          difference: "关键处理前提相同。",
+        }, {
+          id: partialPremise.id,
+          relevance: "medium",
+          premise: "partial",
+          difference: "对象状态前提部分相同。",
+        }],
+      };
+    },
+    env: {
+      RAG_LIVE_OFFICIAL_QA: "false",
+      RAG_MAX_RELATED_EVIDENCE: "6",
+    },
+  });
+
+  assert.ok(candidatesSeen.some((item) => item.id === samePremise.id));
+  assert.ok(candidatesSeen.some((item) => item.id === partialPremise.id));
+  const crossCardRelated = evidence.officialQaRelated.filter(
+    (item) => item.retrievalContext?.scope === "cross_card_official_mechanism",
+  );
+  const crossCardRelatedIds = crossCardRelated.map((item) => item.id);
+  assert.ok(crossCardRelatedIds.includes(samePremise.id));
+  assert.ok(crossCardRelatedIds.includes(partialPremise.id));
+  assert.ok(crossCardRelatedIds.includes(negateDistractor.id));
+  assert.ok(crossCardRelatedIds.includes(summonDistractor.id));
+  assert.equal(crossCardRelated.length, 4);
+  for (const item of crossCardRelated) {
+    assert.equal(item.type, "related");
+    assert.equal(item.isDirect, false);
+    assert.equal(item.retrievalContext.relatedOnly, true);
+    assert.equal(item.official, true);
+  }
+  assert.ok(!evidence.officialQaDirectCandidates.some(
+    (item) => [samePremise.id, partialPremise.id].includes(item.id),
+  ));
+});
+
+test("general prompt rejects an oversized complete evidence record", () => {
+  assert.throws(
+    () => buildRagRulingPromptBundle({
+      userQuery: "测试问题",
+      cardResolution: { resolvedCards: cards },
+      evidence: {
+        cardTexts: [{ id: "card-text-long", type: "card_text", title: "长文本", text: "长".repeat(5000) }],
+        officialQaDirectCandidates: [],
+        officialQaRelated: [],
+        faqRelated: [],
+        rawRelatedEvidence: [],
+        retrievalWarnings: [],
+      },
+      env: {
+        RAG_MAX_CARD_TEXT_CHARS: "100",
+        RAG_MAX_PROMPT_CHARS: "1400",
+      },
+    }),
+    (error) => {
+      assert.equal(error.code, "evidence_prompt_budget_exceeded");
+      assert.equal(error.details?.reason, "complete_reference_does_not_fit");
+      assert.equal(error.details?.evidenceId, "card-text-long");
+      return true;
+    },
+  );
+});
+
+test("general prompt preserves more than six resolved card records", () => {
+  const resolvedCards = Array.from({ length: 7 }, (_, index) => ({
+    id: `resolved-${index + 1}`,
+    name: `已解析卡片${index + 1}`,
+    effectText: `卡片${index + 1}的完整短效果文本。`,
+  }));
+  const bundle = buildRagRulingPromptBundle({
+    userQuery: "测试多卡片提示词",
+    cardResolution: { resolvedCards },
+    evidence: {},
+    env: {
+      RAG_MAX_CARDS: "6",
+      RAG_MAX_PROMPT_CHARS: "60000",
+    },
+  });
+
+  for (const card of resolvedCards) {
+    assert.match(bundle.prompt, new RegExp(card.id, "u"));
+    assert.match(bundle.prompt, new RegExp(card.effectText, "u"));
+  }
+});
+
+test("general prompt fails explicitly when complete resolved card text cannot fit", () => {
+  assert.throws(
+    () => buildRagRulingPromptBundle({
+      userQuery: "测试超出提示词预算的卡片原文",
+      cardResolution: {
+        resolvedCards: [{
+          id: "resolved-too-long",
+          name: "超长卡片",
+          effectText: "效".repeat(4000),
+        }],
+      },
+      evidence: {},
+      env: { RAG_MAX_PROMPT_CHARS: "2000" },
+    }),
+    (error) => {
+      assert.equal(error.code, "evidence_prompt_budget_exceeded");
+      assert.equal(error.details?.reason, "fixed_envelope_does_not_fit");
+      return true;
+    },
+  );
+});
+
+test("general prompt applies one score-ranked reference budget and omits resolved-card text duplicates", () => {
+  const makeEvidence = (prefix, count, extras = {}) => Array.from({ length: count }, (_, index) => ({
+    id: `${prefix}-${index + 1}`,
+    type: prefix,
+    title: `${prefix} ${index + 1}`,
+    text: `${prefix} evidence ${index + 1}`,
+    ...extras,
+  }));
+  const bundle = buildRagRulingPromptBundle({
+    userQuery: "测试统一证据预算",
+    cardResolution: { resolvedCards: cards },
+    evidence: {
+      cardTexts: [{
+        id: "card-text-100",
+        type: "card_text",
+        title: "测试龙 的卡片文本",
+        text: cards[0].effectText,
+        cardIds: [cards[0].id],
+      }],
+      officialQaDirectCandidates: [],
+      faqRelated: makeEvidence("faq-budget", 8, { recordType: "card-faq", official: true })
+        .map((item, index) => ({ ...item, retrievalScore: index === 0 ? 0.9 : 0.09 - index * 0.005 })),
+      officialQaRelated: [
+        ...makeEvidence("qa-budget", 7, { recordType: "qa", official: true })
+          .map((item, index) => ({ ...item, retrievalScore: index < 2 ? 0.85 - index * 0.05 : 0.08 - index * 0.005 })),
+        ...makeEvidence("cross-budget", 1, {
+          recordType: "qa",
+          official: true,
+          retrievalScore: 0.99,
+          retrievalContext: { scope: "cross_card_official_mechanism", relatedOnly: true },
+        }),
+      ],
+      provisionalOfficialResponses: [],
+      rawRelatedEvidence: makeEvidence("rule-budget", 8, { type: "rulebook" })
+        .map((item, index) => ({ ...item, retrievalScore: index === 0 ? 0.95 : 0.07 - index * 0.005 })),
+      retrievalWarnings: [],
+    },
+    env: {
+      RAG_MAX_PROMPT_REFERENCE_ITEMS: "5",
+      RAG_MAX_PROMPT_CHARS: "60000",
+    },
+  });
+
+  assert.equal(bundle.allowedEvidenceIds.length, 5);
+  assert.ok(!bundle.allowedEvidenceIds.includes("card-text-100"));
+  assert.equal(bundle.prompt.split(cards[0].effectText).length - 1, 1);
+  assert.deepEqual(new Set(bundle.allowedEvidenceIds), new Set([
+    "cross-budget-1",
+    "rule-budget-1",
+    "faq-budget-1",
+    "qa-budget-1",
+    "qa-budget-2",
+  ]));
+  assert.ok(bundle.warnings.includes("prompt_reference_items_limited:24->5"));
+});
+
+test("general prompt keeps score-ranked references and hides private query metadata", () => {
+  const crossCardEvidence = Array.from({ length: 4 }, (_, index) => ({
+    id: `cross-branch-${index + 1}`,
+    type: "related",
+    recordType: "qa",
+    title: `cross branch ${index + 1}`,
+    text: `official mechanism branch ${index + 1}`,
+    official: true,
+    sourceAuthority: "official_database",
+    retrievalContext: {
+      scope: "cross_card_official_mechanism",
+      relatedOnly: true,
+      modelCandidateAssessment: {
+        premise: "different",
+        difference: `PRIVATE_QUERY_MODEL_DIFFERENCE_${index + 1}`,
+      },
+    },
+    retrievalSignals: {
+      strictSupplementalRuleQueryKeys: [`branch-${index + 1}`],
+      supplementalRuleQueryMechanisms: [`mechanism-${index + 1}`],
+    },
+    retrievalScore: 0.7 - index * 0.1,
+  }));
+  const bundle = buildRagRulingPromptBundle({
+    userQuery: "测试多分支证据选择",
+    cardResolution: { resolvedCards: cards },
+    evidence: {
+      cardTexts: [],
+      officialQaDirectCandidates: [],
+      faqRelated: [{
+        id: "faq-role",
+        type: "faq",
+        recordType: "card-faq",
+        title: "FAQ role",
+        text: "FAQ role evidence",
+        official: true,
+        retrievalScore: 0.95,
+      }],
+      officialQaRelated: [{
+        id: "same-card-role",
+        type: "related",
+        recordType: "qa",
+        title: "same card role",
+        text: "same card official evidence",
+        official: true,
+        retrievalScore: 0.9,
+      }, ...crossCardEvidence],
+      provisionalOfficialResponses: [],
+      rawRelatedEvidence: [{
+        id: "rule-role",
+        type: "rulebook",
+        recordType: "rule-doc",
+        title: "rule role",
+        text: "rule material",
+        retrievalScore: 0.85,
+      }],
+      ruleSearchQueries: [
+        ...Array.from({ length: 8 }, (_, index) => ({
+          query: `deterministic query ${index + 1}`,
+          source: "derived_rule_search_query",
+        })), {
+        subclaim: "核对发动时的合法选项",
+        checkpoint: "activation_snapshot",
+        query: "发动时 合法选项",
+        source: "model_rule_query",
+      }],
+    },
+    env: {
+      RAG_MAX_PROMPT_REFERENCE_ITEMS: "4",
+      RAG_MAX_PROMPT_CHARS: "60000",
+    },
+  });
+
+  assert.deepEqual(new Set(bundle.allowedEvidenceIds), new Set([
+    "faq-role",
+    "same-card-role",
+    "rule-role",
+    "cross-branch-1",
+  ]));
+  assert.match(bundle.prompt, /decisionChecklist/u);
+  assert.match(bundle.prompt, /activation_snapshot_legality_and_all_available_options/u);
+  assert.match(bundle.prompt, /resolution_snapshot_all_choice_directions_and_state_changes/u);
+  assert.match(bundle.prompt, /decisionPlan/u);
+  assert.match(bundle.prompt, /核对发动时的合法选项/u);
+  assert.doesNotMatch(bundle.prompt, /strictSupplementalRuleQueryKeys|mechanism-1/u);
+  assert.doesNotMatch(bundle.prompt, /modelCandidateAssessment|PRIVATE_QUERY_MODEL_DIFFERENCE/u);
+});
+
+test("private strict labels do not alter score-based reference selection", () => {
+  const weakCrossCardEvidence = Array.from({ length: 3 }, (_, index) => ({
+    id: `weak-cross-${index + 1}`,
+    type: "related",
+    recordType: "qa",
+    title: `weak cross ${index + 1}`,
+    text: `lexical-only cross-card candidate ${index + 1}`,
+    official: true,
+    sourceAuthority: "official_database",
+    retrievalContext: {
+      scope: "cross_card_official_mechanism",
+      relatedOnly: true,
+    },
+    retrievalSignals: {
+      ruleQueryMechanisms: [`weak-mechanism-${index + 1}`],
+    },
+    retrievalScore: 0.4 - index * 0.1,
+  }));
+  const strictCrossCardEvidence = {
+    id: "strict-cross",
+    type: "related",
+    recordType: "qa",
+    title: "strict cross",
+    text: "strict per-query official mechanism",
+    official: true,
+    sourceAuthority: "official_database",
+    retrievalContext: {
+      scope: "cross_card_official_mechanism",
+      relatedOnly: true,
+    },
+    retrievalSignals: {
+      strictSupplementalRuleQueryKeys: ["strict-branch"],
+      supplementalRuleQueryMechanisms: ["strict-mechanism"],
+    },
+    retrievalScore: 0.1,
+  };
+  const build = (officialQaRelated) => buildRagRulingPromptBundle({
+      userQuery: "测试私有检索标签不干预证据选择",
+      cardResolution: { resolvedCards: cards },
+      evidence: {
+        cardTexts: [],
+        officialQaDirectCandidates: [],
+        faqRelated: [{
+          id: "strict-floor-faq",
+          type: "faq",
+          recordType: "card-faq",
+          text: "faq floor",
+          official: true,
+          retrievalScore: 0.8,
+        }],
+        officialQaRelated: [{
+          id: "strict-floor-same-card",
+          type: "related",
+          recordType: "qa",
+          text: "same card floor",
+          official: true,
+          retrievalScore: 0.7,
+        }, ...officialQaRelated],
+        provisionalOfficialResponses: [],
+        rawRelatedEvidence: [{
+          id: "strict-floor-rule",
+          type: "rulebook",
+          recordType: "rule-doc",
+          text: "rule floor",
+          retrievalScore: 0.6,
+        }],
+      },
+      env: {
+        RAG_MAX_PROMPT_REFERENCE_ITEMS: "4",
+        RAG_MAX_PROMPT_CHARS: "60000",
+      },
+    });
+  const baseline = build([...weakCrossCardEvidence, strictCrossCardEvidence]);
+  const relabeled = build([
+    ...weakCrossCardEvidence.map((item) => ({
+      ...item,
+      retrievalSignals: {
+        strictSupplementalRuleQueryKeys: [`relabeled-${item.id}`],
+        supplementalRuleQueryMechanisms: [`relabeled-${item.id}`],
+      },
+    })),
+    {
+      ...strictCrossCardEvidence,
+      retrievalSignals: { ruleQueryMechanisms: ["relabeled-as-weak"] },
+    },
+  ]);
+
+  assert.deepEqual(baseline.allowedEvidenceIds, relabeled.allowedEvidenceIds);
+  assert.ok(baseline.allowedEvidenceIds.includes("weak-cross-1"));
+  assert.equal(baseline.allowedEvidenceIds.includes(strictCrossCardEvidence.id), false);
+  assert.doesNotMatch(baseline.prompt, /strictSupplementalRuleQueryKeys|strict-mechanism/u);
+});
+
+test("model premise labels do not hard-filter evidence before final reasoning", () => {
+  const differentPremise = Array.from({ length: 3 }, (_, index) => ({
+    id: `different-premise-${index + 1}`,
+    type: "related",
+    recordType: "qa",
+    title: `different premise ${index + 1}`,
+    text: `different event-node analogy ${index + 1}`,
+    official: true,
+    sourceAuthority: "official_database",
+    retrievalContext: {
+      scope: "cross_card_official_mechanism",
+      relatedOnly: true,
+      modelCandidateAssessment: { relevance: "high", premise: "different" },
+    },
+    retrievalSignals: {
+      strictSupplementalRuleQueryKeys: [`different-${index + 1}`],
+      supplementalRuleQueryMechanisms: [`different-mechanism-${index + 1}`],
+      modelCandidateAssessment: { relevance: "high", premise: "different" },
+    },
+    retrievalScore: 0.9 - index * 0.1,
+  }));
+  const samePremise = {
+    id: "same-premise-cross",
+    type: "related",
+    recordType: "qa",
+    title: "same premise",
+    text: "same event-node mechanism",
+    official: true,
+    sourceAuthority: "official_database",
+    retrievalContext: {
+      scope: "cross_card_official_mechanism",
+      relatedOnly: true,
+      modelCandidateAssessment: { relevance: "high", premise: "same" },
+    },
+    retrievalSignals: {
+      strictSupplementalRuleQueryKeys: ["same-premise"],
+      supplementalRuleQueryMechanisms: ["same-mechanism"],
+      modelCandidateAssessment: { relevance: "high", premise: "same" },
+    },
+    retrievalScore: 0.85,
+  };
+  const build = (items) => buildRagRulingPromptBundle({
+      userQuery: "测试事件节点标签不参与硬过滤",
+      cardResolution: { resolvedCards: cards },
+      evidence: {
+        cardTexts: [],
+        officialQaDirectCandidates: [],
+        faqRelated: [{
+          id: "premise-faq",
+          type: "faq",
+          text: "general boundary",
+          official: true,
+          retrievalScore: 0.2,
+        }],
+        officialQaRelated: items,
+        provisionalOfficialResponses: [],
+        rawRelatedEvidence: [{
+          id: "premise-rule",
+          type: "rulebook",
+          text: "general rule",
+          retrievalScore: 0.1,
+        }],
+      },
+      env: {
+        RAG_MAX_PROMPT_REFERENCE_ITEMS: "2",
+        RAG_MAX_PROMPT_CHARS: "60000",
+      },
+    });
+  const baseline = build([differentPremise[0], samePremise, ...differentPremise.slice(1)]);
+  const flipped = build([differentPremise[0], samePremise, ...differentPremise.slice(1)].map((item) => ({
+    ...item,
+    retrievalContext: {
+      ...item.retrievalContext,
+      modelCandidateAssessment: {
+        relevance: "high",
+        premise: item.id === samePremise.id ? "different" : "same",
+      },
+    },
+    retrievalSignals: {
+      ...item.retrievalSignals,
+      modelCandidateAssessment: {
+        relevance: "high",
+        premise: item.id === samePremise.id ? "different" : "same",
+      },
+    },
+  })));
+
+  assert.deepEqual(baseline.allowedEvidenceIds, flipped.allowedEvidenceIds);
+  assert.deepEqual(new Set(baseline.allowedEvidenceIds), new Set([
+    "different-premise-1",
+    samePremise.id,
+  ]));
+});
+
+test("public prompt retains card text, excludes semantic state output, and has no recovery prompt", () => {
+  const bundle = buildRagRulingPromptBundle({
+    userQuery: "这个效果可以发动吗，后续如何处理？",
+    cardResolution: {
+      resolvedCards: [{
+        id: "recovery-card",
+        name: "恢复测试龙",
+        cardType: "monster",
+        attribute: "WIND",
+        race: "Dragon",
+        atk: 2500,
+        def: 2000,
+        level: 8,
+        rank: null,
+        link: null,
+        effectText: "EFFECT_TEXT_RECOVERY_MARKER：舍弃1张手牌发动，处理时再检查场面。",
+      }],
+    },
+    evidence: {
+      cardTexts: [],
+      officialQaDirectCandidates: [],
+      officialQaRelated: [],
+      faqRelated: [],
+      rawRelatedEvidence: [],
+      retrievalWarnings: [],
+      semanticStateTransition: {
+        status: "resolved",
+        complete: true,
+        activation: { legal: true, conclusion: "发动合法" },
+        resolution: { legal: false, conclusion: "处理时后续步骤失败" },
+        trace: [{
+          phase: "resolution",
+          status: "blocked",
+          conclusion: "SEMANTIC_STATE_RECOVERY_MARKER：支付代价后重新计算持续效果。",
+          evidenceIds: ["rule-state-transition"],
+        }],
+        evidenceIds: ["rule-state-transition"],
+      },
+    },
+    env: { RAG_RECOVERY_PROMPT_CHARS: "12000" },
+  });
+
+  assert.match(bundle.prompt, /EFFECT_TEXT_RECOVERY_MARKER/u);
+  assert.equal(bundle.recoveryPrompt, "");
+  assert.doesNotMatch(bundle.recoveryPrompt, /SEMANTIC_STATE_RECOVERY_MARKER/u);
+  assert.doesNotMatch(bundle.recoveryPrompt, /semanticStateTransition/u);
+  assert.match(bundle.prompt, /allowedEvidenceIds 中真实存在的 id/u);
+  assert.match(bundle.prompt, /效果来源与效果类型/u);
+  assert.match(bundle.prompt, /实际受影响实体/u);
+  assert.match(bundle.prompt, /无论结果看似有利还是不利都使用同一检查/u);
+  assert.match(bundle.prompt, /发动快照/u);
+  assert.match(bundle.prompt, /处理快照/u);
+  assert.match(bundle.prompt, /处理后快照/u);
+  assert.match(bundle.prompt, /由哪个效果实际执行、是否完成/u);
+  assert.match(bundle.prompt, /没有明确依据不得默认把许可次数相加/u);
+  assert.match(bundle.prompt, /消除互相矛盾的前提、步骤和最终结论/u);
+});
+
+test("prompt bundle exposes evidence selection metadata without duplicating evidence text", () => {
+  const bundle = buildRagRulingPromptBundle({
+    userQuery: "匿名问题只用于构造提示。",
+    cardResolution: { resolvedCards: [] },
+    evidence: {
+      cardTexts: [{
+        id: "card-text-diagnostic",
+        type: "card_text",
+        title: "DIAGNOSTIC_TITLE_MUST_NOT_BE_COPIED",
+        text: "DIAGNOSTIC_BODY_MUST_NOT_BE_COPIED",
+        sourceAuthority: "official_database",
+        retrievalContext: { scope: "resolved_card", relatedOnly: false },
+      }],
+      officialQaDirectCandidates: [],
+      officialQaRelated: [],
+      faqRelated: [],
+      rawRelatedEvidence: [],
+      ruleSearchQueries: [{
+        subclaim: "确认处理时实际受影响的实体",
+        checkpoint: "affected_entity",
+        query: "RAW_QUERY_MUST_NOT_BE_COPIED",
+        confidence: "high",
+        source: "model_rule_query_extractor",
+      }],
+    },
+  });
+
+  assert.deepEqual(bundle.allowedEvidenceIds, ["card-text-diagnostic"]);
+  assert.deepEqual(bundle.evidenceSelectionDiagnostics, [{
+    id: "card-text-diagnostic",
+    type: "card_text",
+    bucket: "cardTexts",
+    sourceAuthority: "official_database",
+    isDirect: false,
+    matchLevel: "",
+    retrievalScope: "resolved_card",
+    relatedOnly: false,
+  }]);
+  assert.doesNotMatch(JSON.stringify(bundle.evidenceSelectionDiagnostics), /DIAGNOSTIC_(?:TITLE|BODY)_MUST_NOT_BE_COPIED/u);
+  assert.doesNotMatch(JSON.stringify(bundle.evidenceSelectionDiagnostics), /匿名问题只用于构造提示/u);
+  assert.deepEqual(bundle.ruleQueryPlanDiagnostics, [{
+    subclaim: "确认处理时实际受影响的实体",
+    checkpoint: "affected_entity",
+    confidence: "high",
+    source: "model_rule_query_extractor",
+  }]);
+  assert.doesNotMatch(JSON.stringify(bundle.ruleQueryPlanDiagnostics), /RAW_QUERY_MUST_NOT_BE_COPIED/u);
+});
+
+test("compacted prompt keeps one complete score-ranked evidence envelope with consistent ids", () => {
+  const longText = (marker) => `${marker} ${"证据内容".repeat(600)}`;
+  const bundle = buildRagRulingPromptBundle({
+    userQuery: "需要同时参考官方问答、卡文、规则书和FAQ的复杂问题",
+    cardResolution: { resolvedCards: cards },
+    evidence: {
+      officialQaDirectCandidates: [
+        { id: "direct-critical", type: "official_qa", title: "官方直答", text: longText("DIRECT_MARKER"), isDirect: true },
+        { id: "direct-critical-2", type: "official_qa", title: "第二条官方直答", text: longText("DIRECT_MARKER_2"), isDirect: true },
+      ],
+      userProvidedCardTexts: [{ id: "user-critical", type: "user_provided_text", title: "用户卡文", text: longText("USER_MARKER") }],
+      cardTexts: [{ id: "card-critical", type: "card_text", title: "卡片文本", text: longText("CARD_MARKER") }],
+      rawRelatedEvidence: [{ id: "rule-critical", type: "rulebook", title: "规则书", text: longText("RULE_MARKER"), retrievalScore: 0.95 }],
+      faqRelated: [{ id: "faq-critical", type: "faq", title: "卡片FAQ", text: longText("FAQ_MARKER"), retrievalScore: 0.8 }],
+      officialQaRelated: [{ id: "related-critical", type: "related", title: "相似问答", text: longText("RELATED_MARKER"), retrievalScore: 0.9 }],
+      retrievalWarnings: [],
+    },
+    env: { RAG_MAX_PROMPT_CHARS: "8000" },
+  });
+
+  assert.ok(bundle.warnings.some((warning) => warning.includes("compacted")));
+  assert.ok(bundle.prompt.length <= 8000);
+  assert.match(bundle.prompt, /CARD_MARKER/u);
+  assert.match(bundle.prompt, /allowedEvidenceIds 中真实存在的 id/u);
+  const serializedEvidenceIds = extractPromptAllowedEvidenceIds(bundle.prompt);
+  assert.deepEqual(bundle.allowedEvidenceIds, serializedEvidenceIds);
+  assert.ok(bundle.allowedEvidenceIds.length >= 1);
+});
+
+test("focused official QA prompt preserves the full-source tail without invalid JSON slicing", () => {
+  const sourceText = `问题？回答开头。${'中间内容 "引用" \\ 路径\n'.repeat(400)}（TAIL_MARKER：本回合不能再次宣言同名卡。）`;
+  const bundle = buildRagRulingPromptBundle({
+    userQuery: "可以发动这个效果吗？",
+    cardResolution: {
+      resolvedCards: [{ id: "92001", name: "长文本测试卡", aliases: ["长文本测试卡"] }],
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+    },
+    evidence: {
+      officialQaDirectCandidates: [{
+        id: "ygoresources-qa-long-tail",
+        type: "official_qa",
+        title: "长官方回答",
+        fullText: sourceText,
+        text: `${sourceText.slice(0, 100)}…`,
+        sourceUrl: "https://example.test/qa/long-tail",
+        isDirect: true,
+        matchLevel: "official_qa_exact",
+        matchedQuestionCardIds: ["92001"],
+        questionCardIdCoverage: 1,
+        questionCardIdCount: 1,
+        authoritativeSceneMatch: true,
+        authoritativeSceneMatchReason: "raw_or_normalized_query",
+      }],
+      officialQaRelated: [],
+      faqRelated: [],
+      cardTexts: [],
+      userProvidedCardTexts: [],
+      rawRelatedEvidence: [],
+      retrievalWarnings: [],
+    },
+    env: { RAG_MAX_PROMPT_CHARS: "1800", RAG_OFFICIAL_DIRECT_FOCUSED_PROMPT: "true" },
+  });
+
+  assert.equal(bundle.prompt.length <= 1800, true);
+  assert.equal(bundle.promptTruncated, true);
+  assert.match(bundle.prompt, /TAIL_MARKER/u);
+  assert.doesNotThrow(() => JSON.parse(bundle.prompt.split("\n").at(-1)));
+  assert.deepEqual(bundle.allowedEvidenceIds, ["ygoresources-qa-long-tail"]);
+  assert.deepEqual(
+    bundle.evidenceSelectionDiagnostics.map((item) => item.id),
+    ["ygoresources-qa-long-tail"],
+  );
+});
+
+test("focused official QA prompt keeps the ruling but omits a dense placeholder catalogue", () => {
+  const catalogue = Array.from({ length: 20 }, (_, index) => `「<<${94000 + index}>>」①`).join("\n");
+  const sourceText = [
+    "この効果を発動できますか？",
+    "発動できます。処理時には対象のカードを除外します。",
+    "ただし、対象が存在しない場合には除外する処理を行いません。",
+    "例として、以下のカードの効果についても同様です。",
+    "モンスター効果",
+    catalogue,
+    "ENUMERATION_END",
+  ].join("\n");
+  const bundle = buildRagRulingPromptBundle({
+    userQuery: "这个效果可以发动吗？",
+    cardResolution: {
+      resolvedCards: [{ id: "93001", name: "目录测试卡", aliases: ["目录测试卡"] }],
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+    },
+    evidence: {
+      officialQaDirectCandidates: [{
+        id: "ygoresources-qa-placeholder-catalogue",
+        type: "official_qa",
+        title: "带穷举目录的官方回答",
+        fullText: sourceText,
+        text: sourceText,
+        sourceUrl: "https://example.test/qa/placeholder-catalogue",
+        isDirect: true,
+        matchLevel: "official_qa_exact",
+        matchedQuestionCardIds: ["93001"],
+        questionCardIdCoverage: 1,
+        questionCardIdCount: 1,
+        authoritativeSceneMatch: true,
+        authoritativeSceneMatchReason: "raw_or_normalized_query",
+      }],
+      officialQaRelated: [],
+      faqRelated: [],
+      cardTexts: [],
+      userProvidedCardTexts: [],
+      rawRelatedEvidence: [],
+      retrievalWarnings: [],
+    },
+    env: { RAG_MAX_PROMPT_CHARS: "12000", RAG_OFFICIAL_DIRECT_FOCUSED_PROMPT: "true" },
+  });
+
+  assert.ok(bundle.warnings.includes("official_direct_focused_prompt"));
+  assert.match(bundle.prompt, /発動できます/u);
+  assert.match(bundle.prompt, /対象が存在しない場合/u);
+  assert.doesNotMatch(bundle.prompt, /<<94000>>/u);
+  assert.doesNotMatch(bundle.prompt, /ENUMERATION_END/u);
+  assert.match(bundle.prompt, /直接输出完整中文裁定正文/u);
+  assert.doesNotMatch(bundle.prompt, /usedEvidence 必须是对象数组/u);
+  const payload = JSON.parse(bundle.prompt.split("\n").at(-1));
+  assert.doesNotMatch(payload.officialQaDirectCandidate.text, /<<94000>>/u);
+});
+
+test("semantic or card-set subsumption remains related evidence instead of an official direct route", () => {
+  const candidate = {
+    id: "qa-semantic-superset",
+    type: "official_qa",
+    title: "合成来源记录",
+    fullText: "SYNTHETIC_RELATED_BODY_ALPHA。SYNTHETIC_RELATED_BODY_OMEGA。",
+    text: "SYNTHETIC_RELATED_BODY_ALPHA。",
+    isDirect: true,
+    matchLevel: "official_qa_exact",
+    matchedQuestionCardIds: ["93011"],
+    questionCardIdCoverage: 1,
+    questionCardIdCount: 8,
+    authoritativeSceneMatch: true,
+    authoritativeSceneMatchReason: "unique_semantic_question_subsumption",
+    scenarioPremiseCompatibility: "compatible",
+    subsumptionCandidatePoolComplete: true,
+    semanticSubsumptionCertified: true,
+    semanticSubsumptionScoreMargin: 0.2,
+  };
+  const cardResolution = {
+    resolvedCards: [{ id: "93011", name: "匿名记录甲" }],
+    unresolvedMentions: [],
+    ambiguousMentions: [],
+  };
+  const evidence = {
+    officialQaDirectCandidates: [candidate],
+    officialQaRelated: [],
+    faqRelated: [],
+    cardTexts: [],
+    userProvidedCardTexts: [],
+    rawRelatedEvidence: [],
+    retrievalWarnings: [],
+  };
+
+  const directEnv = { RAG_OFFICIAL_DIRECT_FOCUSED_PROMPT: "true" };
+  const accepted = buildRagRulingPromptBundle({ userQuery: "SYNTHETIC_SUBSUMPTION_QUERY", cardResolution, evidence, env: directEnv });
+  assert.equal(accepted.warnings.includes("official_direct_focused_prompt"), false);
+  assert.ok(accepted.warnings.includes("official_direct_candidates_downgraded_to_related:1"));
+  const acceptedPayload = JSON.parse(accepted.prompt.split("本次用户问题、卡片原文与检索资料如下：\n").at(-1));
+  assert.deepEqual(acceptedPayload.evidence.officialQaDirectCandidates, []);
+  assert.equal(acceptedPayload.evidence.officialQaRelated.length, 1);
+  assert.equal(acceptedPayload.evidence.officialQaRelated[0].id, candidate.id);
+  assert.equal(acceptedPayload.evidence.officialQaRelated[0].type, "related");
+  assert.equal(acceptedPayload.evidence.officialQaRelated[0].isDirect, false);
+  assert.equal(acceptedPayload.evidence.officialQaRelated[0].matchLevel, "official_qa_near");
+  assert.ok(acceptedPayload.allowedEvidenceIds.includes(candidate.id));
+
+  const rejected = buildRagRulingPromptBundle({
+    userQuery: "SYNTHETIC_SUBSUMPTION_QUERY",
+    cardResolution,
+    evidence: {
+      ...evidence,
+      officialQaDirectCandidates: [{ ...candidate, semanticSubsumptionCertified: false }],
+    },
+    env: directEnv,
+  });
+  assert.equal(rejected.warnings.includes("official_direct_focused_prompt"), false);
+
+  const incompletePoolRejected = buildRagRulingPromptBundle({
+    userQuery: "SYNTHETIC_SUBSUMPTION_QUERY",
+    cardResolution,
+    evidence: {
+      ...evidence,
+      officialQaDirectCandidates: [{ ...candidate, subsumptionCandidatePoolComplete: false }],
+    },
+    env: directEnv,
+  });
+  assert.equal(incompletePoolRejected.warnings.includes("official_direct_focused_prompt"), false);
+
+  const multiCardAccepted = buildRagRulingPromptBundle({
+    userQuery: "SYNTHETIC_TWO_RECORD_QUERY",
+    cardResolution: {
+      resolvedCards: [{ id: "93011", name: "目标卡" }, { id: "93012", name: "发动卡" }],
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+    },
+    evidence: {
+      ...evidence,
+      officialQaDirectCandidates: [{
+        ...candidate,
+        matchedQuestionCardIds: ["93011", "93012"],
+        questionCardIdCount: 2,
+        authoritativeSceneMatchReason: "unique_question_card_subsumption",
+        semanticSubsumptionCertified: false,
+        questionCardSubsumptionCertified: true,
+      }],
+    },
+    env: directEnv,
+  });
+  assert.equal(multiCardAccepted.warnings.includes("official_direct_focused_prompt"), false);
+
+  const duplicateRelated = buildRagRulingPromptBundle({
+    userQuery: "SYNTHETIC_TWO_RECORD_QUERY",
+    cardResolution: {
+      resolvedCards: [{ id: "93011", name: "目标卡" }, { id: "93012", name: "发动卡" }],
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+    },
+    evidence: {
+      ...evidence,
+      officialQaDirectCandidates: [{
+        ...candidate,
+        matchedQuestionCardIds: ["93011", "93012"],
+        questionCardIdCount: 2,
+        authoritativeSceneMatchReason: "unique_question_card_subsumption",
+        semanticSubsumptionCertified: false,
+        questionCardSubsumptionCertified: true,
+      }],
+      officialQaRelated: [{
+        ...candidate,
+        type: "related",
+        isDirect: false,
+        matchLevel: "official_qa_near",
+      }],
+    },
+    env: directEnv,
+  });
+  const duplicatePayload = JSON.parse(duplicateRelated.prompt.split("本次用户问题、卡片原文与检索资料如下：\n").at(-1));
+  assert.equal(duplicatePayload.evidence.officialQaRelated.filter((item) => item.id === candidate.id).length, 1);
+
+  const extraUnboundCardRejected = buildRagRulingPromptBundle({
+    userQuery: "SYNTHETIC_TWO_RECORD_QUERY",
+    cardResolution: {
+      resolvedCards: [{ id: "93011", name: "目标卡" }, { id: "93012", name: "发动卡" }],
+      unresolvedMentions: [],
+      ambiguousMentions: [],
+    },
+    evidence: {
+      ...evidence,
+      officialQaDirectCandidates: [{
+        ...candidate,
+        matchedQuestionCardIds: ["93011", "93012"],
+        questionCardIdCount: 3,
+        authoritativeSceneMatchReason: "unique_question_card_subsumption",
+        semanticSubsumptionCertified: false,
+        questionCardSubsumptionCertified: true,
+      }],
+    },
+    env: directEnv,
+  });
+  assert.equal(extraUnboundCardRejected.warnings.includes("official_direct_focused_prompt"), false);
+});
+
+test("non-exact or ambiguous official candidates do not enter the authoritative fast route", () => {
+  const baseEvidence = {
+    officialQaDirectCandidates: [{
+      id: "qa-not-exact",
+      type: "official_qa",
+      title: "相似问答",
+      fullText: "问题？可以发动。",
+      text: "问题？可以发动。",
+      isDirect: true,
+      matchLevel: "official_qa_near",
+    }],
+    officialQaRelated: [],
+    faqRelated: [],
+    cardTexts: [],
+    userProvidedCardTexts: [],
+    rawRelatedEvidence: [],
+    retrievalWarnings: [],
+  };
+  const nearBundle = buildRagRulingPromptBundle({
+    userQuery: "问题",
+    cardResolution: { resolvedCards: [], unresolvedMentions: [], ambiguousMentions: [] },
+    evidence: baseEvidence,
+  });
+  assert.equal(nearBundle.warnings.includes("official_direct_focused_prompt"), false);
+
+  const ambiguousBundle = buildRagRulingPromptBundle({
+    userQuery: "问题",
+    cardResolution: { resolvedCards: [], unresolvedMentions: [], ambiguousMentions: [{ input: "问题卡" }] },
+    evidence: {
+      ...baseEvidence,
+      officialQaDirectCandidates: [{
+        ...baseEvidence.officialQaDirectCandidates[0],
+        id: "qa-exact-but-ambiguous",
+        matchLevel: "official_qa_exact",
+      }],
+    },
+  });
+  assert.equal(ambiguousBundle.warnings.includes("official_direct_focused_prompt"), false);
+});
+
+test("secrets_not_returned_in_debug", async () => {
+  const answer = await answerRagRulingQuestion({
+    question: "「测试龙」可以发动①效果吗？",
+    cards,
+    records,
+    qaRecords: [],
+    env: {
+      MODEL_PROVIDER: "deepseek",
+      RAG_CARD_MODEL_PROVIDER: "mock",
+      RAG_RULE_MODEL_PROVIDER: "mock",
+      DEEPSEEK_API_KEY: "secret-key-that-must-not-leak",
+      DEEPSEEK_FLASH_MODEL: "deepseek-test",
+      API_DAILY_BUDGET_CNY: "10",
+    },
+    fetchImpl: async () => jsonResponse({
+      choices: [{ message: { content: JSON.stringify(modelJson("真实模型返回")) } }],
+      usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+    }),
+  });
+  assert.doesNotMatch(JSON.stringify(answer.debug), /secret-key-that-must-not-leak/u);
+  assert.equal(Object.hasOwn(answer.debug, "retrievalCandidateStages"), false);
+  assert.equal(answer.debug.providerUsed, "deepseek");
+  assert.equal(answer.debug.dryRun, false);
+});
+
+function modelJson(shortAnswer) {
+  return {
+    answerLevel: "rule_analysis",
+    shortAnswer,
+    reasoning: ["模型返回 JSON。"],
+    usedCards: ["测试龙"],
+    usedEvidence: [{ id: "card-text-100", type: "card_text", title: "测试龙 的卡片文本" }],
+    missingInfo: [],
+    riskFlags: [],
+    confidenceSelfEstimate: "medium",
+  };
+}
+
+async function waitFor(predicate, { timeoutMs = 1000 } = {}) {
+  const deadline = Date.now() + timeoutMs;
+  while (!predicate()) {
+    if (Date.now() >= deadline) throw new Error("condition_not_met_before_timeout");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+}
+
+function createRedisFetch({ url: expectedUrl = "https://kv.example.test", token: expectedToken = "kv-token" } = {}) {
+  const store = new Map();
+  const commands = [];
+  return {
+    commands,
+    store,
+    fetchImpl: async (url, options = {}) => {
+      assert.equal(url, expectedUrl);
+      assert.equal(String(options.headers?.authorization || ""), `Bearer ${expectedToken}`);
+      const command = JSON.parse(options.body || "[]");
+      commands.push(command);
+      const [op, key, value] = command;
+      if (op === "GET") return jsonResponse({ result: store.get(key) || null });
+      if (op === "EVAL") {
+        const keyCount = Number(command[2] || 0);
+        if (keyCount === 1) {
+          const currentKey = command[3];
+          const amount = Number(command[4] || 0);
+          const next = Math.max(0, Number(store.get(currentKey) || 0) + amount);
+          store.set(currentKey, String(next));
+          return jsonResponse({ result: String(next) });
+        }
+        if (keyCount === 2) {
+          const currentKey = command[3];
+          const closedKey = command[4];
+          if (String(command[1]).includes("return {'closed'")) {
+            const current = Number(store.get(currentKey) || 0);
+            if (store.get(closedKey) === "1") {
+              return jsonResponse({ result: ["closed", String(current)] });
+            }
+            const next = Math.max(0, current + Number(command[5] || 0));
+            store.set(currentKey, String(next));
+            return jsonResponse({ result: ["reserved", String(next)] });
+          }
+          const limit = Number(command[5] || 0);
+          const next = Math.max(Number(store.get(currentKey) || 0), limit);
+          store.set(currentKey, String(next));
+          store.set(closedKey, "1");
+          return jsonResponse({ result: String(next) });
+        }
+        if (keyCount === 4) {
+          const currentKey = command[3];
+          const legacyKey = command[4];
+          const watermarkKey = command[5];
+          const closedKey = command[6];
+          const legacy = Math.max(0, Number(store.get(legacyKey) || 0));
+          const watermark = Math.max(0, Number(store.get(watermarkKey) || 0));
+          store.set(currentKey, "0");
+          store.set(watermarkKey, String(Math.max(watermark, legacy)));
+          store.delete(closedKey);
+          return jsonResponse({ result: ["reset", "0"] });
+        }
+        assert.equal(keyCount, 3);
+        const currentKey = command[3];
+        const legacyKey = command[4];
+        const watermarkKey = command[5];
+        const mode = command[6];
+        const cap = Number(command[7] || 0);
+        let current = Math.max(0, Number(store.get(currentKey) || 0));
+        const legacy = Math.max(0, Number(store.get(legacyKey) || 0));
+        const watermark = Math.max(0, Number(store.get(watermarkKey) || 0));
+        if (mode === "reset") {
+          current = 0;
+        } else if (mode === "relay_cap") {
+          if (legacy > watermark && legacy > 0) current = Math.max(current, cap);
+        } else {
+          current += Math.max(0, legacy - watermark);
+        }
+        store.set(currentKey, String(current));
+        store.set(watermarkKey, String(Math.max(watermark, legacy)));
+        return jsonResponse({ result: String(current) });
+      }
+      if (op === "SET") {
+        store.set(key, value);
+        return jsonResponse({ result: "OK" });
+      }
+      if (op === "DEL") {
+        const removed = store.delete(key);
+        return jsonResponse({ result: removed ? 1 : 0 });
+      }
+      if (op === "INCRBYFLOAT") {
+        const next = Number(store.get(key) || 0) + Number(value || 0);
+        store.set(key, String(next));
+        return jsonResponse({ result: String(next) });
+      }
+      if (op === "EXPIRE") return jsonResponse({ result: 1 });
+      return jsonResponse({ result: null });
+    },
+  };
+}
+
+function jsonResponse(payload, ok = true, status = 200) {
+  return {
+    ok,
+    status,
+    json: async () => payload,
+  };
+}
+
+function relaySseResponse(payload, usage = {
+  prompt_tokens: 40,
+  completion_tokens: 5,
+  total_tokens: 45,
+}) {
+  return new Response([
+    `data: ${JSON.stringify({
+      model: "gpt-5.6-sol",
+      choices: [{
+        index: 0,
+        finish_reason: "stop",
+        delta: { content: JSON.stringify(payload) },
+      }],
+      usage,
+    })}\n\n`,
+    "data: [DONE]\n\n",
+  ].join(""), {
+    status: 200,
+    headers: { "content-type": "text/event-stream" },
+  });
+}
+
+function relaySseRaw(content, usage = {
+  prompt_tokens: 40,
+  completion_tokens: 5,
+  total_tokens: 45,
+}) {
+  return new Response([
+    `data: ${JSON.stringify({
+      model: "gpt-5.6-sol",
+      choices: [{
+        index: 0,
+        finish_reason: "stop",
+        delta: { content: String(content || "") },
+      }],
+      usage,
+    })}\n\n`,
+    "data: [DONE]\n\n",
+  ].join(""), {
+    status: 200,
+    headers: { "content-type": "text/event-stream" },
+  });
+}
+
+function relayAuxEnv(overrides = {}) {
+  return {
+    MODEL_PROVIDER: "relay",
+    RAG_CARD_MODEL_PROVIDER: "relay",
+    RAG_RULE_MODEL_PROVIDER: "relay",
+    RELAY_API_KEY: "relay-test-key",
+    RELAY_BASE_URL: "https://relay.example.test/v1",
+    RELAY_CARD_MODEL: "gpt-5.6-sol",
+    RELAY_RULE_MODEL: "gpt-5.6-sol",
+    RAG_CARD_MODEL_REASONING_EFFORT: "low",
+    RAG_RULE_MODEL_REASONING_EFFORT: "low",
+    API_CHATGPT_DAILY_BUDGET_USD: "10",
+    API_BUDGET_TIMEZONE: "UTC",
+    ...overrides,
+  };
+}

@@ -13,7 +13,7 @@ import {
   getPublicRulingModelCapabilities,
   resolvePublicRulingModelProfile,
 } from "./publicRulingModelConfig.mjs";
-import { appendQueryAudit, updateQueryAudit } from "./queryAuditStore.mjs";
+import { appendQueryAudit, updateQueryAudit, saveSelectionIdentityDiagnostic } from "./queryAuditStore.mjs";
 import { queryAuditAnswerPatch, queryAuditFailurePatch, saveQueryAuditUpdate } from "./publicQueryAudit.mjs";
 import {
   publicAnswerLatencyStorageStatus,
@@ -199,6 +199,7 @@ export async function answerPublicRulingQuestion({
   progress,
   appendAudit = appendQueryAudit,
   updateAudit = updateQueryAudit,
+  saveSelectionDiagnostic = saveSelectionIdentityDiagnostic,
   requestContext,
   readRiskControl = readPublicOfftopicRiskControl,
   classifyScope = classifyPublicQueryScope,
@@ -325,6 +326,8 @@ export async function answerPublicRulingQuestion({
       officialQaExactAlreadyChecked: true,
       progress,
       preloadedAssets,
+      onEvidenceEvent: event => event?.type === 'selection_identity_failure'
+        ? saveSelectionDiagnostic({ event, requestId: requestDiagnostics.requestId, env }) : undefined,
       nonCardElapsedBeforePipelineMs: Math.max(0, Date.now() - publicRequestStartedAt),
       ...(prepareForContinuation === true ? { prepareForContinuation: true } : {}),
     });

@@ -581,6 +581,7 @@ async function answerRagRulingQuestionInternal({
   officialQaExactAlreadyChecked = false,
   evidenceSelectionProvider,
   geminiEvidenceProvider,
+  onEvidenceEvent,
   frozenCardResolution,
   captureEvidenceOnly = false,
   prepareForContinuation = false,
@@ -725,6 +726,7 @@ async function answerRagRulingQuestionInternal({
     const geminiProvider = geminiRuleQaEnabled
       ? geminiEvidenceProvider || createGeminiRuleQaEvidenceProvider({
         fetchImpl: fetchImpl || globalThis.fetch,
+        onEvent: onEvidenceEvent,
       })
       : null;
     const cloudProvider = cloudEvidence && !geminiProvider ? createCloudEvidenceProvider({
