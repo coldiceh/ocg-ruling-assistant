@@ -23,7 +23,7 @@
 
 ## 本地检查
 
-当前项目无构建步骤。修改后至少检查：
+本项目使用 `pnpm run build:vercel` 构建；修改后按涉及范围运行 `pnpm run check` 和 `pnpm test`，并至少检查：
 
 - `index.html` 能打开。
 - 浏览器控制台无明显错误。

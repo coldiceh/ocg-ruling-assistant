@@ -17,3 +17,11 @@ artifacts/*-local.json
 preview.png
 data/public-release.json
 .private-evaluation-keys/
+
+# Private evaluation inputs and historical experiment output stay outside Git.
+data/test/
+private-archive/
+.private-evaluation/
+tests/fixtures/*-cases.json
+tests/fixtures/*-goldens.json
+tests/fixtures/real-ruling-cases/

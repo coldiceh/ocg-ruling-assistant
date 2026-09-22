@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { pathToFileURL } from "node:url";
 
 import {
   buildFinalRulingInput,
@@ -27,10 +27,6 @@ import {
   runAdminEvidenceSnapshotDryRun,
 } from "./lib/admin-evidence-snapshot-dry-run.mjs";
 
-const DEFAULT_CASES_URL = new URL(
-  "../tests/fixtures/admin-evidence-dry-run-cases.json",
-  import.meta.url,
-);
 const SENSITIVE_KEY = /^(?:api[_-]?key|authorization|cookie|csrf[_-]?token|password|secret)$/iu;
 
 export function parseAdminEvidenceDryRunArguments(argv = []) {
@@ -59,11 +55,6 @@ export function parseAdminEvidenceDryRunArguments(argv = []) {
     else if (argument === "--help" || argument === "-h") result.help = true;
     else throw new TypeError(`unsupported argument: ${argument}`);
   }
-  if (result.casesPaths.length === 0) {
-    result.casesPaths.push(fileURLToPath(DEFAULT_CASES_URL));
-  }
-  // Retain the original field for callers that only inspect the default or
-  // single-fixture CLI parse result.
   result.casesPath = result.casesPaths[0];
   return result;
 }
@@ -87,7 +78,7 @@ export async function runAdminEvidenceDryRunCli(
       "Usage: node scripts/admin-evidence-snapshot-dry-run.mjs [options]",
       "",
       "Options:",
-      "  --cases <path>    Cases fixture (contains no golden answers); may be repeated",
+      "  --cases <path>    Required input cases file; may be repeated",
       "  --data-dir <path> Override local RAG data directory",
       "  --case <id>       Run one case; may be repeated",
       "  --compact         Print compact JSON",
@@ -108,6 +99,7 @@ export async function runAdminEvidenceDryRunCli(
     ].join("\n"));
     return null;
   }
+  if (options.casesPaths.length === 0) throw new TypeError("--cases is required");
   const loadedFixtures = [];
   for (const casesPath of options.casesPaths) {
     loadedFixtures.push(await readCases(resolve(casesPath)));

@@ -1,21 +1,19 @@
 import { readFile } from "node:fs/promises";
 
-const DEFAULT_CORPUS_URL = new URL(
-  "../data/test/admin-model-lab-evaluations.json",
-  import.meta.url,
-);
-
 const VERDICT_VALUES = new Set(["TRUE", "FALSE", "CONDITIONAL", "UNKNOWN"]);
 
 export const ADMIN_LAB_AUTOMATED_ASSESSMENT_DISCLAIMER =
   "这是可解释的自动回归检查，不是人工裁定真值，也不能替代人工复核。";
 
 export async function loadAdminLabEvaluationCorpus({
-  corpusUrl = DEFAULT_CORPUS_URL,
+  corpusUrl = null,
   readFileImpl = readFile,
 } = {}) {
   if (typeof readFileImpl !== "function") {
     throw new TypeError("readFileImpl must be a function");
+  }
+  if (corpusUrl === null) {
+    return deepFreeze({ schemaVersion: 1, fixtureName: "", purpose: "No built-in evaluation corpus; supply a private corpus explicitly.", cases: [] });
   }
   const text = await readFileImpl(corpusUrl, "utf8");
   let parsed;

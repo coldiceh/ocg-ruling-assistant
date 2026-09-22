@@ -7,19 +7,15 @@ import {
   scoreOfflineExperimentReport,
 } from "./lib/offline-experiment-scorer.mjs";
 
-const DEFAULT_ASSERTIONS_FILE = new URL(
-  "../tests/fixtures/admin-evidence-dry-run-goldens.json",
-  import.meta.url,
-);
-
 export async function scoreAdminModelExperimentFiles({
   reportFile,
-  assertionsFile = DEFAULT_ASSERTIONS_FILE,
+  assertionsFile,
   outputFile = "",
   readFileImpl = readFile,
   writeFileImpl = writeFile,
 } = {}) {
   if (!reportFile) throw new Error("--report is required");
+  if (!assertionsFile) throw new Error("--assertions is required");
 
   // Deliberate sequencing boundary: first prove a paid experiment report was
   // generated and is terminal. Only then may the independent golden fixture be
@@ -41,7 +37,7 @@ export async function scoreAdminModelExperimentFiles({
 }
 
 export function parseArguments(argv) {
-  const options = { reportFile: "", assertionsFile: DEFAULT_ASSERTIONS_FILE, outputFile: "", compact: false };
+  const options = { reportFile: "", assertionsFile: "", outputFile: "", compact: false };
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
     const take = () => {
@@ -63,7 +59,7 @@ export async function main(argv = process.argv.slice(2), dependencies = {}) {
   const options = parseArguments(argv);
   const stdout = dependencies.stdout || process.stdout;
   if (options.help) {
-    stdout.write("用法：node scripts/score-admin-model-experiment.mjs --report REPORT.json [--assertions GOLDENS.json] [--output SCORED.json] [--compact]\n");
+    stdout.write("用法：node scripts/score-admin-model-experiment.mjs --report REPORT.json --assertions ASSERTIONS.json [--output SCORED.json] [--compact]\n");
     return 0;
   }
   const scored = await scoreAdminModelExperimentFiles({

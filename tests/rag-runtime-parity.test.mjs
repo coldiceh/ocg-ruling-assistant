@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { copyFile, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join, resolve, sep } from "node:path";
 import test from "node:test";
 
 import { clearBaigeSearchCache } from "../backend/baigeCardProvider.mjs";
@@ -19,16 +19,9 @@ import {
   RAG_RUNTIME_CORPORA,
   sha256,
 } from "../backend/ragRuntimeBundle.mjs";
+import { buildRagRuntimeBundle } from "../backend/ragRuntimeBundleCompiler.mjs";
+import { RAG_DATA_REVISION_MANIFEST_FILE, RAG_DATA_REVISION_SOURCE_FILES } from "../backend/ragDataRevisionManifest.mjs";
 import { registerCanonicalNormalizedRagData } from "../backend/ragNormalizedDataRegistry.mjs";
-
-const repositoryRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
-const dataDir = join(repositoryRoot, "data");
-const casesPath = join(
-  repositoryRoot,
-  "tests",
-  "fixtures",
-  "admin-evidence-dry-run-cases.json",
-);
 
 const EVIDENCE_BUCKET_KEYS = Object.freeze([
   "cardTexts",
@@ -89,13 +82,28 @@ test("explicit canonical registration prevents non-idempotent records from being
   assert.equal(reinjected.records[0].text, "处理说明。");
 });
 
-test("precompiled RAG runtime is byte-exact with the raw loader and four real retrieval prompts", async () => {
-  // Keep the parity gate deliberately single-path-at-a-time. Both corpora must
-  // coexist for comparison, but parsing/decompression and the two full index
-  // scans need not create an avoidable concurrent memory/CPU peak.
-  const fixture = await readFixture();
-  const rawData = await loadRawRagData(dataDir);
-  const runtimeBundle = await loadRagRuntimeBundle({ dataDir });
+test("precompiled RAG runtime is byte-exact with the raw loader and synthetic retrieval prompts", async (t) => {
+  const fixture = await createSyntheticFixture();
+  const { dataDir } = fixture;
+  t.after(async () => {
+    const root = resolve(fixture.root);
+    assert.ok(root.startsWith(resolve(tmpdir()) + sep));
+    await rm(root, { recursive: true, force: true });
+  });
+  const built = await buildRagRuntimeBundle({ dataDir, loadNormalizedData: loadRawRagData });
+  // Load the raw path from a separately persisted source snapshot so its
+  // revision manifest is present before the production loader caches it.
+  const rawDataDir = join(fixture.root, "raw");
+  await mkdir(rawDataDir);
+  await Promise.all(RAG_DATA_REVISION_SOURCE_FILES.map((name) => (
+    copyFile(join(dataDir, name), join(rawDataDir, name))
+  )));
+  await writeFile(join(rawDataDir, RAG_DATA_REVISION_MANIFEST_FILE), JSON.stringify(built.revisionManifest), "utf8");
+  const rawData = await loadRawRagData(rawDataDir);
+  const runtimeBundle = await loadRagRuntimeBundle({
+    dataDir,
+    sourceRevisionManifest: built.revisionManifest,
+  });
 
   assert.equal(runtimeBundle.ok, true, runtimeFailureDiagnostic(runtimeBundle));
   // The production loadRagData path binds this weak discovery sidecar after
@@ -106,7 +114,7 @@ test("precompiled RAG runtime is byte-exact with the raw loader and four real re
     data: runtimeBundle.data,
     requireTrustedData: true,
   });
-  assert.equal(fixture.cases.length, 4, "the parity gate must retain all four real dry-run cases");
+  assert.equal(fixture.cases.length, 4, "the parity gate retains four synthetic input shapes");
 
   for (const corpus of RAG_RUNTIME_CORPORA) {
     const raw = corpusDigest(rawData[corpus.key]);
@@ -137,6 +145,8 @@ test("precompiled RAG runtime is byte-exact with the raw loader and four real re
       modelCardNameCandidates,
     });
 
+    assert.ok(rawRun.extracted.resolvedCards.length > 0, `${definition.id}: synthetic cards must resolve`);
+    assert.ok(rawRun.evidence.cardTexts.length > 0, `${definition.id}: synthetic card text must be emitted`);
     assertCardResolutionParity(definition.id, "extract", rawRun.extracted, bundledRun.extracted);
     assertCardResolutionParity(
       definition.id,
@@ -259,19 +269,49 @@ function withoutDebugTimings(debug) {
   return rest;
 }
 
-async function readFixture() {
-  const parsed = JSON.parse(await readFile(casesPath, "utf8"));
-  assert.equal(parsed?.schemaVersion, 1, "unsupported parity fixture schemaVersion");
-  assert.ok(Array.isArray(parsed?.cases), "parity fixture cases must be an array");
-  for (const definition of parsed.cases) {
-    assert.equal(typeof definition?.id, "string", "parity case id is required");
-    assert.equal(typeof definition?.question, "string", `${definition?.id}: question is required`);
-    assert.ok(
-      Array.isArray(definition?.candidateCards) && definition.candidateCards.length > 0,
-      `${definition?.id}: fixed model card candidates are required`,
-    );
-  }
-  return parsed;
+async function createSyntheticFixture() {
+  const root = await mkdtemp(join(tmpdir(), "rag-parity-synthetic-"));
+  const dataDir = join(root, "data");
+  await mkdir(dataDir);
+  // These inputs exercise serialization, aliases, ordering and source fields.
+  // They contain no game scenario, reference ruling or historical test answer.
+  const sources = {
+    "cards.json": { records: [
+      { id: 31001, name: "协议甲", aliases: ["协议甲别名"], effectText: "合成卡文甲。\n字段字符：\"甲\"。" },
+      { id: 31002, name: "协议乙", aliases: [], effectText: "合成卡文乙。" },
+    ] },
+    "rulings.json": { records: [
+      { id: "synthetic-rule-a", title: "协议甲资料", text: "合成资料正文甲。", cards: ["协议甲"] },
+    ] },
+    "qa-index.json": { records: [
+      { id: "synthetic-qa-a", recordType: "qa", question: "协议甲的合成字段是什么？", answer: "字段内容甲。", cardIds: ["31001"],
+        questionLocales: { ja: { question: "合成フィールド甲？" }, cn: { question: "合成字段甲？" } } },
+      { id: "synthetic-qa-b", recordType: "qa", question: "协议乙的合成字段是什么？", answer: "字段内容乙。", cardIds: ["31002"] },
+    ] },
+    "evidence-index.json": { records: [
+      { id: "synthetic-faq-b", recordType: "faq", title: "协议乙资料", text: "合成补充正文乙。", cards: ["协议乙"] },
+      { id: "synthetic-rule-duplicate", sourceId: "ocg-rule", stableId: "ocg-rule:synthetic-parity", text: "合成旧重复条目。" },
+    ] },
+    "ocg-rule-corpus.json": { records: [
+      { id: "synthetic-rulebook", sourceId: "ocg-rule", stableId: "ocg-rule:synthetic-parity", title: "合成规则条目", text: "合成规则字段正文。" },
+    ] },
+    "official-responses.json": { records: [
+      { id: "synthetic-response", sourceType: "official_response_screenshot", title: "合成来源字段", scenario: "合成输入字段。", officialText: "合成来源正文字段。", cards: ["协议乙"] },
+    ] },
+  };
+  await Promise.all(Object.entries(sources).map(([name, value]) => (
+    writeFile(join(dataDir, name), JSON.stringify(value) + "\n", "utf8")
+  )));
+  return {
+    root,
+    dataDir,
+    cases: [
+      { id: "synthetic-name", question: "请展示「协议甲」的资料。", candidateCards: ["协议甲"] },
+      { id: "synthetic-second", question: "请展示「协议乙」的资料。", candidateCards: ["协议乙"] },
+      { id: "synthetic-alias", question: "请展示「协议甲别名」和「协议乙」的资料。", candidateCards: ["协议甲别名", "协议乙"] },
+      { id: "synthetic-pair", question: "请展示「协议甲」和「协议乙」及合成规则条目。", candidateCards: ["协议甲", "协议乙"] },
+    ],
+  };
 }
 
 async function unavailableFetch() {

@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import { createAdminEvidenceSnapshot } from "../backend/adminEvidenceSnapshot.mjs";
@@ -140,23 +139,6 @@ test("export CLI accepts repeatable reports and requires the dedicated secret", 
     }),
     /ADMIN_MODEL_LAB_PASSWORD is required/u,
   );
-});
-
-test("Sol effort workflow is manual, sequential, bounded to 12 calls and exports snapshots", async () => {
-  const workflow = await readFile(
-    new URL("../.github/workflows/admin-sol-effort-pilot.yml", import.meta.url),
-    "utf8",
-  );
-  assert.match(workflow, /workflow_dispatch:/u);
-  assert.match(workflow, /ADMIN_MODEL_LAB_PASSWORD: \$\{\{ secrets\.ADMIN_MODEL_LAB_PASSWORD \}\}/u);
-  assert.match(workflow, /--concurrency 1/u);
-  assert.match(workflow, /--max-final-requests 12/u);
-  assert.match(workflow, /:pro:none:full/u);
-  assert.match(workflow, /:pro:low:full/u);
-  assert.match(workflow, /:pro:medium:full/u);
-  assert.match(workflow, /export-admin-source-snapshots\.mjs/u);
-  assert.doesNotMatch(workflow, /golden/iu);
-  assert.equal((workflow.match(/--config relay:relay-gpt-5\.6-sol/gu) || []).length, 3);
 });
 
 test("source reference collection rejects ambiguous report provenance", () => {

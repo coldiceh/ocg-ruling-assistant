@@ -3,7 +3,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const DEFAULT_OUTPUT = resolve(root, "data", "test", "twitter-ruling-questions.json");
+const DEFAULT_OUTPUT = resolve(root, "artifacts", "official-x-rulings.json");
 const OFFICIAL_HANDLE = "YuGiOh_OCG_INFO";
 const OFFICIAL_ACCOUNT_ID = "618646265";
 const OFFICIAL_FAQ_HOST = "www.db.yugioh-card.com";
@@ -179,7 +179,8 @@ export async function fetchOfficialXRulings(options = {}) {
   });
 }
 
-export async function loadDiscoveredSample(path = DEFAULT_OUTPUT) {
+export async function loadDiscoveredSample(path) {
+  if (!path) throw new Error("sample path is required");
   const payload = JSON.parse(await readFile(resolve(path), "utf8"));
   validateCorpus(payload);
   if (payload.coverageLevel !== "discovered_public_sample" || payload.isCompleteCorpus !== false) {
@@ -308,7 +309,7 @@ function parseCli(argv) {
     else if (argument === "--start-time") options.startTime = requireValue(argument, value), index += 1;
     else if (argument === "--end-time") options.endTime = requireValue(argument, value), index += 1;
     else if (argument === "--max-pages") options.maxPages = requireValue(argument, value), index += 1;
-    else if (argument === "--use-discovered-sample") options.useDiscoveredSample = true;
+    else if (argument === "--use-discovered-sample") options.useDiscoveredSample = requireValue(argument, value), index += 1;
     else if (argument === "--help") options.help = true;
     else throw new Error(`unknown argument: ${argument}`);
   }
@@ -327,12 +328,12 @@ function printUsage() {
     "Without --use-discovered-sample this command requires X_BEARER_TOKEN and",
     "uses X API v2 full-archive search with complete pagination.",
     "",
-    "  --out <path>                   Output JSON (default: data/test/twitter-ruling-questions.json)",
+    "  --out <path>                   Output JSON (default: artifacts/official-x-rulings.json)",
     "  --query <x-query>              Override the documented series query",
     "  --start-time <ISO timestamp>   Restrict the archive query start",
     "  --end-time <ISO timestamp>     Restrict the archive query end",
     "  --max-pages <n>                Stop early and mark the result partial",
-    "  --use-discovered-sample        Validate/use the incomplete public-index sample",
+    "  --use-discovered-sample <path> Validate/use an explicitly supplied sample",
     "  --help                         Show this message",
   ].join("\n"));
 }
@@ -344,9 +345,9 @@ if (isMain) {
     if (options.help) {
       printUsage();
     } else if (options.useDiscoveredSample) {
-      const sample = await loadDiscoveredSample(DEFAULT_OUTPUT);
+      const sample = await loadDiscoveredSample(resolve(options.useDiscoveredSample));
       const outputPath = resolve(options.outputPath || DEFAULT_OUTPUT);
-      if (outputPath !== DEFAULT_OUTPUT) await writeJsonAtomic(outputPath, sample);
+      if (outputPath !== resolve(options.useDiscoveredSample)) await writeJsonAtomic(outputPath, sample);
       console.log(JSON.stringify({
         coverageLevel: sample.coverageLevel,
         isCompleteCorpus: sample.isCompleteCorpus,
