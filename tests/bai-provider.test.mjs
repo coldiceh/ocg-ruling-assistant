@@ -59,13 +59,14 @@ test("b.ai Astra low is the third-party public default and keeps credentials iso
   assert.equal(env.OCG_FINAL_OPENAI_API_KEY, undefined);
   assert.equal(env.RAG_RULE_MODEL_RELAY_API_KEY, "relay-key-must-not-be-final");
 
-  const relayEnv = createPublicAnswerModelEnv({
+  const deepseekEnv = createPublicAnswerModelEnv({
     ...BAI_ENV,
+    DEEPSEEK_API_KEY: "synthetic-deepseek-key",
     RELAY_API_KEY: "relay-key",
     RELAY_BASE_URL: "https://relay.example.invalid/v1",
-  }, "relay-gpt-5.6-sol-low");
-  assert.equal(relayEnv.BAI_API_KEY, undefined);
-  assert.equal(relayEnv.BAI_BASE_URL, undefined);
+  }, "deepseek-v4.1-flash-low");
+  assert.equal(deepseekEnv.BAI_API_KEY, undefined);
+  assert.equal(deepseekEnv.BAI_BASE_URL, undefined);
 });
 
 test("cloud evidence keeps both auxiliary DeepSeek calls on the verified 4.1 model", () => {

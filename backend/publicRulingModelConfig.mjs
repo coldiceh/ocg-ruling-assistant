@@ -19,10 +19,6 @@ function profile({ id, label, provider, model, thinkingMode, reasoningEffort, tr
 const profiles = [
   profile({ id: "bai-astra-low", label: "GPT-6 Astra · 思考 low", provider: "bai", model: DEFAULT_PUBLIC_BAI_MODEL, thinkingMode: "enabled", reasoningEffort: "low", transport: "chat_completions_sse", thirdParty: true, modelIdentityVerified: false }),
   profile({ id: "official-astra-low", label: "官方 GPT-6 Astra · 思考 low", provider: "openai", model: "gpt-6-astra", thinkingMode: "enabled", reasoningEffort: "low", transport: "chat_completions_sse", thirdParty: false, modelIdentityVerified: true }),
-  ...["low", "medium", "high", "xhigh", "max"].flatMap((reasoningEffort) => [
-    profile({ id: `relay-gpt-5.6-sol-${reasoningEffort}`, label: `中转 GPT-5.6 Sol · 思考 ${reasoningEffort}`, provider: "relay", model: "gpt-5.6-sol", thinkingMode: "enabled", reasoningEffort, transport: "chat_completions_sse", thirdParty: true, modelIdentityVerified: false }),
-    profile({ id: `relay-gpt-6-astra-${reasoningEffort}`, label: `中转 GPT-6 Astra · 思考 ${reasoningEffort}`, provider: "relay", model: "gpt-6-astra", thinkingMode: "enabled", reasoningEffort, transport: "chat_completions_sse", thirdParty: true, modelIdentityVerified: false }),
-  ]),
   ...[["none", "disabled", null], ["low", "enabled", "low"], ["high", "enabled", "high"], ["max", "enabled", "max"]]
     .map(([suffix, thinkingMode, reasoningEffort]) => profile({ id: `deepseek-v4.1-flash-${suffix}`, label: `DeepSeek V4.1 Flash · 思考 ${suffix}`, provider: "deepseek", model: DEFAULT_PUBLIC_DEEPSEEK_MODEL, thinkingMode, reasoningEffort, transport: "chat_completions", thirdParty: false, modelIdentityVerified: true })),
   ...[["low", "enabled", "low"], ["high", "enabled", "high"], ["max", "enabled", "max"]]

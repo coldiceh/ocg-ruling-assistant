@@ -12,7 +12,8 @@ test("public capability reports the card extraction model selected by the runtim
     expectedProvider: "deepseek",
     expectedModel: "configured-deepseek-card",
     sourceEnv: {
-      PUBLIC_RULING_MODEL_PROFILE: "relay-gpt-5.6-sol-low",
+      PUBLIC_RULING_MODEL_PROFILE: "bai-astra-low",
+      BAI_API_KEY: "synthetic-bai-key",
       RAG_EVIDENCE_PIPELINE: "cloud_evidence_v1",
       DEEPSEEK_API_KEY: "synthetic-deepseek-key",
       DEEPSEEK_CARD_MODEL: "configured-deepseek-card",
@@ -23,7 +24,8 @@ test("public capability reports the card extraction model selected by the runtim
     expectedProvider: "relay",
     expectedModel: "gpt-5.6-sol",
     sourceEnv: {
-      PUBLIC_RULING_MODEL_PROFILE: "relay-gpt-5.6-sol-low",
+      PUBLIC_RULING_MODEL_PROFILE: "bai-astra-low",
+      BAI_API_KEY: "synthetic-bai-key",
       RELAY_API_KEY: "synthetic-relay-key",
       RELAY_BASE_URL: "https://relay.example.test/v1",
     },

@@ -2263,6 +2263,8 @@ export function createPublicAnswerModelEnv(env = {}, profileValue) {
   const baiCardApiKey = String(source.BAI_CARD_API_KEY || source.BAI_API_KEY || "").trim();
   const baiCardBaseUrl = String(source.BAI_CARD_BASE_URL || DEFAULT_PUBLIC_BAI_BASE_URL).trim();
   const baiCardModel = DEFAULT_BAI_CARD_MODEL;
+  const evidenceBaiApiKey = String(source.RAG_EVIDENCE_BAI_API_KEY || source.BAI_API_KEY || "").trim();
+  const evidenceBaiBaseUrl = String(source.RAG_EVIDENCE_BAI_BASE_URL || source.BAI_BASE_URL || "").trim();
   const profile = configuredPublicRulingModelProfile(
     resolvePublicRulingModelProfile(profileValue || source.PUBLIC_RULING_MODEL_PROFILE),
     source,
@@ -2360,6 +2362,10 @@ export function createPublicAnswerModelEnv(env = {}, profileValue) {
   if (formalDraftRelayBaseUrl) {
     result.RAG_FORMAL_SCENARIO_DRAFT_RELAY_BASE_URL = formalDraftRelayBaseUrl;
   }
+  // Evidence selection uses its own B.AI route for every final provider.
+  // Preserve that route without restoring final-provider BAI_* credentials.
+  if (evidenceBaiApiKey) result.RAG_EVIDENCE_BAI_API_KEY = evidenceBaiApiKey;
+  if (evidenceBaiBaseUrl) result.RAG_EVIDENCE_BAI_BASE_URL = evidenceBaiBaseUrl;
   // The card-only b.ai experiment is deliberately copied after the provider
   // isolation pass. It must remain available to card-name and identity calls
   // while never becoming credentials for the final ruling provider.
