@@ -15,7 +15,7 @@
       property="og:description"
       content="结合卡片文本、公开规则资料与官方 Q&amp;A，分析游戏王 OCG 裁定问题。"
     />
-    <link rel="stylesheet" href="src/styles.css?v=20260913-history100-1" />
+    <link rel="stylesheet" href="src/styles.css?v=20260923-locale-glass-1" />
   </head>
   <body class="theme-night">
     <div class="page-background" aria-hidden="true"></div>
@@ -28,11 +28,18 @@
         <div class="status-cluster" aria-label="页面状态与主题设置">
           <label class="locale-picker" for="localeSelect">
             <span class="sr-only">显示语言</span>
+            <svg class="locale-picker-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <circle cx="12" cy="12" r="8.5" />
+              <path d="M3.5 12h17M12 3.5c2.3 2.2 3.5 5 3.5 8.5S14.3 18.3 12 20.5M12 3.5C9.7 5.7 8.5 8.5 8.5 12s1.2 6.3 3.5 8.5" />
+            </svg>
             <select id="localeSelect" aria-label="显示语言">
               <option value="zh-CN">中文</option>
               <option value="en">English</option>
               <option value="ja">日本語</option>
             </select>
+            <svg class="locale-picker-chevron" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path d="m4 6 4 4 4-4" />
+            </svg>
           </label>
           <span class="status-badge deployment-label" id="deploymentLabel" hidden></span>
           <button class="theme-toggle" id="themeToggle" type="button" aria-label="切换白天或黑夜主题">白天模式</button>

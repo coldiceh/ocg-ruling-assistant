@@ -286,6 +286,7 @@ export function extractRagCards(userQuery, {
   }
 
   const aliasHits = [];
+  const normalizedScanText = cardNameScanQuery.normalize("NFKC");
   for (const [aliasKey, primaryCandidates] of queryAliasEntries) {
     // Two-character aliases are too ambiguous for passive substring scanning
     // (for example, the card "融合" inside the gameplay term "融合怪").
@@ -293,9 +294,14 @@ export function extractRagCards(userQuery, {
     if (aliasKey.length < 3) continue;
     if (exactSpanSelection.hasOccurrences(aliasKey) && !exactSpanSelection.hasSelectedOccurrence(aliasKey)) continue;
     const bestAlias = primaryCandidates[0]?.matchedAlias || "";
-    if (!bestAlias || !buildMentionContexts(cardNameScanQuery, bestAlias, resolved).length) continue;
-    const candidates = resolveMentionCandidates(cards, aliasIndex, bestAlias);
-    aliasHits.push({ aliasKey, candidates, score: aliasKey.length + bestAlias.length / 100 });
+    const observedAlias = [
+      ...exactSpanSelection.selectedOccurrences(aliasKey)
+        .map(({ start, end }) => normalizedScanText.slice(start, end)),
+      bestAlias,
+    ].find((surface) => surface && buildMentionContexts(cardNameScanQuery, surface, resolved).length);
+    if (!observedAlias) continue;
+    const candidates = resolveMentionCandidates(cards, aliasIndex, observedAlias);
+    aliasHits.push({ aliasKey, candidates, observedAlias, score: aliasKey.length + bestAlias.length / 100 });
   }
   aliasHits.sort((left, right) => right.score - left.score);
 
@@ -304,7 +310,7 @@ export function extractRagCards(userQuery, {
       numberedAliasCompatibleWithExplicitMentions(query, candidate, exactMentionSeeds)
     ));
     if (eligibleCandidates.length === 1) {
-      const matchedAlias = eligibleCandidates[0].matchedAlias;
+      const matchedAlias = hit.observedAlias;
       // `aliasHits` is collected before any of those hits are resolved.  A
       // shorter exact card name can therefore be present only as a substring
       // of a longer card name in the same source span (for example, X inside
@@ -316,7 +322,7 @@ export function extractRagCards(userQuery, {
       continue;
     }
     const unresolved = eligibleCandidates.filter((candidate) => !seenCards.has(cardIdentity(candidate.card)));
-    if (unresolved.length > 1) ambiguousMentions.push(buildAmbiguousMention(hit.candidates[0].matchedAlias, unresolved));
+    if (unresolved.length > 1) ambiguousMentions.push(buildAmbiguousMention(hit.observedAlias, unresolved));
   }
 
   if (!typedModelOwnsMentionSet) {

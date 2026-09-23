@@ -8,6 +8,25 @@ import { analyzeEffectStateTransition, attachUserQueryToCardTexts } from "../bac
 const shortQuestion = "对方场上有一个b2b，导致我方场上的4+4变成了6+6。这个情况下假如我方额外只有8星同调而没有12星同调的话，可以发动异界共鸣吗";
 const fullQuestion = "对方场上有一个《杀手级调整曲 B2B》，导致我方场上的2只四星怪兽变成了2只六星怪兽，这个情况下假如我方额外只有一只可以同调召唤的8星同调怪兽而没有12星同调怪兽的话，可以发动【异界共鸣-同调融合】吗";
 
+test("localized names that share a normalized alias still resolve from the player's spelling", () => {
+  const card = {
+    id: "locale-fixture",
+    name: "匿名月龙",
+    cnName: "匿名月龙",
+    jaName: "匿名月の龍",
+    enName: "Anonymous Moon Dragon",
+  };
+  for (const question of [
+    "匿名月龙的攻击力是多少？",
+    "匿名月の龍の攻撃力はいくつですか？",
+    "What is the ATK of Anonymous Moon Dragon?",
+  ]) {
+    const resolution = extractRagCards(question, { cards: [card] });
+    assert.deepEqual(resolution.resolvedCards.map((item) => item.id), [card.id], question);
+    assert.deepEqual(resolution.unresolvedMentions, [], question);
+  }
+});
+
 test("unique short aliases and translated partial names resolve to the same cards as full names", async () => {
   const data = await loadRagData();
   const shortResolution = extractRagCards(shortQuestion, { cards: data.cards, maxCards: 8 });
