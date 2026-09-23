@@ -25,6 +25,8 @@ import {
   runCloudDeepSeekRequest,
   manageCloudFinalBudget,
   runCloudBaiRequest,
+  runCloudBaiCardRequest,
+  createCloudRequestBudget,
   runCloudRelayRequest,
   runOfficialOpenAIRequest,
   getCloudEvidenceBudgetStatus,
@@ -35,7 +37,7 @@ import {
 const DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com";
 const DEFAULT_DEEPSEEK_MODEL = DEFAULT_PUBLIC_DEEPSEEK_MODEL;
 const DEFAULT_DEEPSEEK_CARD_MODEL = DEFAULT_PUBLIC_DEEPSEEK_MODEL;
-const DEFAULT_BAI_CARD_MODEL = "deepseek-v4-pro";
+const DEFAULT_BAI_CARD_MODEL = "gpt-6-luna";
 const DEFAULT_RELAY_AUXILIARY_MODEL = "gpt-5.6-sol";
 const DEFAULT_RELAY_RULE_MODEL = "gpt-5.6-sol";
 const DEFAULT_GLM_BASE_URL = "https://open.bigmodel.cn/api/paas/v4";
@@ -938,14 +940,14 @@ export async function callCardNameExtractionModel({
       ? createBaiCardEnv(env)
       : env;
   const relayGeneration = resolveCardExtractionRelayGenerationConfig(provider, env);
-  const reasoningEffort = relayGeneration.reasoningEffort;
+  const reasoningEffort = provider === "bai" ? "none" : relayGeneration.reasoningEffort;
   const providerWarnings = [
     ...providerResolution.warnings,
     ...relayGeneration.warnings,
   ];
   const maxTokens = readNumber(env.RAG_CARD_MODEL_MAX_OUTPUT_TOKENS, 800);
   const prompt = buildCardNameExtractionPrompt(userQuery, { typed: provider === "deepseek" || provider === "bai" });
-  const budgetProvider = provider === "bai" ? "deepseek" : provider;
+  const budgetProvider = provider;
 
   if (dryRun === true || isEnabled(env.RAG_DRY_RUN)) {
     return emptyCardNameExtractionResult(provider, modelName, true, [
@@ -1154,14 +1156,14 @@ export async function callCardIdentitySelectionModel({
       ? createBaiCardEnv(env)
       : env;
   const relayGeneration = resolveCardExtractionRelayGenerationConfig(provider, env);
-  const reasoningEffort = relayGeneration.reasoningEffort;
+  const reasoningEffort = provider === "bai" ? "none" : relayGeneration.reasoningEffort;
   const providerWarnings = [
     ...providerResolution.warnings,
     ...relayGeneration.warnings,
   ];
   const maxTokens = readNumber(env.RAG_CARD_MODEL_MAX_OUTPUT_TOKENS, 800);
   const prompt = buildCardIdentitySelectionPrompt(userQuery, normalizedCandidateSets);
-  const budgetProvider = provider === "bai" ? "deepseek" : provider;
+  const budgetProvider = provider;
 
   if (!normalizedCandidateSets.length) {
     return emptyCardIdentitySelectionResult(provider, modelName, true, [
@@ -2057,7 +2059,7 @@ function createBaiCardEnv(env = {}) {
     BAI_CARD_API_KEY: apiKey,
     BAI_CARD_BASE_URL: baseUrl,
     BAI_CARD_MODEL: modelNameForCardExtractionProvider("bai", env),
-    BAI_CARD_THINKING_MODE: "disabled",
+    BAI_CARD_REASONING_EFFORT: "none",
   };
 }
 
@@ -2374,7 +2376,7 @@ export function createPublicAnswerModelEnv(env = {}, profileValue) {
     if (baiCardApiKey) result.BAI_CARD_API_KEY = baiCardApiKey;
     result.BAI_CARD_BASE_URL = baiCardBaseUrl;
     result.BAI_CARD_MODEL = baiCardModel;
-    result.BAI_CARD_THINKING_MODE = "disabled";
+    result.BAI_CARD_REASONING_EFFORT = "none";
   }
   const mockRequested = [
     source.RAG_MODEL_PROVIDER,
@@ -2467,7 +2469,7 @@ export function resolveCardExtractionProvider(env = {}) {
     const configured = Boolean(String(env.BAI_CARD_API_KEY || env.BAI_API_KEY || "").trim());
     if (!configured) warnings.push("bai_card_api_key_missing_card_name_model_disabled");
     if (String(env.BAI_CARD_MODEL || DEFAULT_BAI_CARD_MODEL).trim() !== DEFAULT_BAI_CARD_MODEL) {
-      warnings.push("bai_card_model_defaulted_deepseek_v4_1_flash");
+      warnings.push("bai_card_model_defaulted_gpt_6_luna");
     }
     try {
       baiChatCompletionsUrl(env.BAI_CARD_BASE_URL || DEFAULT_PUBLIC_BAI_BASE_URL);
@@ -2913,6 +2915,54 @@ async function callDeepSeek({
     responseFormat: jsonResponseModeEnabled ? "json_object" : "text",
     usage: payload?.usage || {},
     warnings,
+  };
+}
+
+async function callBaiCard({ prompt, env, modelName, maxTokens, fetchImpl, signal }) {
+  const endpoint = baiChatCompletionsUrl(env.BAI_CARD_BASE_URL || env.BAI_BASE_URL)
+    .replace(/\/chat\/completions$/u, "/responses");
+  const body = {
+    model: modelName,
+    input: prompt,
+    reasoning: { effort: "none" },
+    text: { format: { type: "json_object" } },
+    max_output_tokens: maxTokens,
+    stream: false,
+  };
+  const invoke = async () => {
+    const response = await postJson(fetchImpl, endpoint, {
+      authorization: `Bearer ${env.BAI_CARD_API_KEY || env.BAI_API_KEY}`,
+      "content-type": "application/json",
+    }, body, { signal });
+    assertProviderHttpResponse(response, "bai");
+    return readProviderJson(response, { signal });
+  };
+  const request = { body, invoke, signal };
+  const payload = cloudRequestBudgetActive()
+    ? await runCloudBaiCardRequest(request)
+    : await createCloudRequestBudget({ env, fetchImpl }).baiCard(request);
+  // A Responses completion status is an explicit protocol fact. Do not cache
+  // partial JSON from a failed or interrupted request; its usage is already recorded.
+  if (payload?.status !== "completed") {
+    throw new Error(`bai_card_response_${payload?.status || "missing_status"}:${payload?.incomplete_details?.reason || "unknown"}`);
+  }
+  const rawText = (Array.isArray(payload?.output) ? payload.output : [])
+    .filter((item) => item?.type === "message")
+    .flatMap((item) => Array.isArray(item.content) ? item.content : [])
+    .filter((part) => part?.type === "output_text")
+    .map((part) => String(part.text || "")).join("");
+  const finishReason = "stop";
+  const warnings = ["bai_transport_channel:bai", `bai_endpoint_host:${new URL(endpoint).hostname}`];
+  if (!rawText) warnings.push(`bai_empty_content:${finishReason}`);
+  const reasoningItems = (payload?.output || []).filter((item) => item?.type === "reasoning");
+  return {
+    rawText, finishReason, contentChars: rawText.length,
+    requestModel: body.model, responseModel: String(payload?.model || ""),
+    requestId: String(payload?.id || ""),
+    reasoningContentPresent: reasoningItems.length > 0,
+    reasoningEffort: "none", thinkingMode: "not_applicable",
+    maxOutputTokens: maxTokens, responseFormat: "json_object",
+    usage: payload?.usage || {}, warnings,
   };
 }
 
@@ -4199,6 +4249,13 @@ function buildExternallyManagedBudgetPreflight({
 }
 
 async function buildBudgetPreflight({ provider, stage, modelName, prompt, maxTokens, env, fetchImpl, now, trackSpend = true }) {
+  // The dedicated card transport owns its preparation USD reservation, using
+  // the current cloud controller or a standalone controller with the same config.
+  if (provider === "bai" && stage === "evidence_preparation") {
+    return buildExternallyManagedBudgetPreflight({
+      provider, stage, label: "B.AI Luna card preparation", currency: "USD",
+    });
+  }
   const privateEvaluationBudget = resolvePrivateEvaluationBudget({ provider, stage, env });
   if (privateEvaluationBudget) {
     return buildPrivateEvaluationBudgetPreflight({
@@ -6501,19 +6558,12 @@ function runLightweightCardProviderOperation({
         signal: requestSignal,
       })
       : provider === "bai"
-      ? callDeepSeek({
+      ? callBaiCard({
         prompt,
         env: providerEnv,
         modelName,
         maxTokens,
         fetchImpl,
-        temperature: readNumber(env.RAG_CARD_MODEL_TEMPERATURE, 0),
-        thinkingMode: "disabled",
-        reasoningEffort: null,
-        requireJson: true,
-        allowResponseFormatFallback: false,
-        cloudBudgeted: env.RAG_EVIDENCE_PIPELINE === "cloud_evidence_v1",
-        channel: "bai",
         signal: requestSignal,
       })
       : provider === "gemini"

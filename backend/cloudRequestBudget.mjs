@@ -581,6 +581,43 @@ export function createCloudRequestBudget({env, fetchImpl = globalThis.fetch, com
     }
     return result;
   }
+  async function baiCard({body, invoke, signal}) {
+    if (body?.model !== 'gpt-6-luna') throw new Error('cloud_budget_model_price_missing');
+    if (!Number.isSafeInteger(body.max_output_tokens) || body.max_output_tokens < 1) {
+      throw new Error('cloud_budget_explicit_output_limit_required');
+    }
+    // Whole-wire bytes are a theoretical input allocation. Above 272,000
+    // input tokens B.AI doubles all input tiers and multiplies output by 1.5.
+    const inputBytes = Buffer.byteLength(JSON.stringify(body), 'utf8');
+    const longInputReservation = inputBytes > 272000;
+    const theoreticalUsd = (inputBytes * 0.125 * (longInputReservation ? 2 : 1)
+      + body.max_output_tokens * 0.50 * (longInputReservation ? 1.5 : 1)) / 1_000_000;
+    const ticket = await reserve({provider:'bai',model:body.model,operation:'responses',stage:'evidence_preparation',
+      actualCny:0,theoreticalUsd,pricingBasis:'bai_gpt6_luna_context_tiered_theoretical_20260923',signal,
+      reservationMetadata:{requestBodyBytes:inputBytes,maxBillableOutputTokens:body.max_output_tokens}});
+    let result;
+    try { result = await invoke(); }
+    catch (error) { ticket.uncertainty='request_or_settlement_failed_reservation_retained'; throw error; }
+    if (result?.model !== body.model) {
+      ticket.uncertainty='provider_model_binding_mismatch_reservation_retained';
+      throw new Error('cloud_budget_bai_card_returned_model_mismatch');
+    }
+    const input = result?.usage?.input_tokens;
+    const output = result?.usage?.output_tokens;
+    if (Number.isSafeInteger(input) && input >= 0 && Number.isSafeInteger(output) && output >= 0) {
+      const cached = Math.min(input, Math.max(0, Number(result?.usage?.input_tokens_details?.cached_tokens) || 0));
+      const rawWritten = result.usage.input_tokens_details?.cache_write_tokens
+        ?? result.usage.input_tokens_details?.cache_write_input_tokens
+        ?? result.usage.cache_write_tokens ?? result.usage.cache_write_input_tokens;
+      const written = Math.min(input - cached, Math.max(0, Number(rawWritten) || 0));
+      const longContext = input > 272000;
+      const usd = (((input - cached - written) * 0.10 + cached * 0.01 + written * 0.125) * (longContext ? 2 : 1)
+        + output * 0.50 * (longContext ? 1.5 : 1)) / 1_000_000;
+      try { await settle(ticket,{usage:result.usage,returnedModel:result.model,actualCny:0,actualUpperCny:0,theoreticalUsd:usd}); }
+      catch { ticket.uncertainty='provider_response_received_settlement_uncertain_reservation_retained'; }
+    } else ticket.uncertainty='provider_usage_missing_reservation_retained';
+    return result;
+  }
   async function sourceTranslation({body, invoke, signal}) {
     if (body?.model !== 'gpt-6-luna' || body?.reasoning?.effort !== 'low'
         || !Number.isSafeInteger(body.max_output_tokens) || body.max_output_tokens < 1
@@ -840,7 +877,7 @@ export function createCloudRequestBudget({env, fetchImpl = globalThis.fetch, com
         accountedActualUpperCny:['bai','gemini'].includes(r.provider)?null:r.actualNano/UNIT,
         theoreticalUsd:r.theoreticalNano/UNIT}))};
   }
-  return {relay,deepseek,openai,sourceTranslation,bai:request=>request?.generationContract?.providerId === 'bai'
+  return {relay,deepseek,openai,baiCard,sourceTranslation,bai:request=>request?.generationContract?.providerId === 'bai'
     ? baiGeneration(request) : openai({...request,provider:'bai'}),gemini,
     beforeSend,onResponse,remainingPreparationUsd,snapshot};
 }
@@ -894,6 +931,10 @@ export async function runOfficialOpenAIRequest({env,body,invoke,fetchImpl=global
 export function runCloudBaiRequest(request) {
   const controller=scope.getStore();
   return controller?controller.bai(request):request.invoke();
+}
+export function runCloudBaiCardRequest(request) {
+  const controller=scope.getStore();
+  return controller?controller.baiCard(request):request.invoke();
 }
 export function runCloudDeepSeekRequest({body,invoke,channel='official'}) {
   const controller=scope.getStore();
