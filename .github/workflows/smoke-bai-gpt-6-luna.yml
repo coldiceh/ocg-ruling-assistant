@@ -1,0 +1,21 @@
+name: One-off bounded b.ai GPT-6 Luna smoke
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+      - name: Send one small request per effort and report sanitized usage
+        env:
+          BAI_API_KEY: ${{ secrets.BAI_API_KEY }}
+        run: node scripts/smoke-bai-gpt-6-luna.mjs
