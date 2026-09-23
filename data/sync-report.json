@@ -1,10 +1,10 @@
 {
-  "generatedAt": "2026-09-22T21:51:04.244Z",
+  "generatedAt": "2026-09-23T22:07:27.137Z",
   "cardCount": 14383,
   "rulingCount": 40187,
   "cardAliasCount": 49549,
   "qaIndexCount": 37147,
-  "qaIndexBytes": 62959730,
+  "qaIndexBytes": 63078805,
   "maxQaIndexBytes": 94371840,
   "syncAllReleasedCards": true,
   "syncOnlyReleasedCards": true,
@@ -14,13 +14,13 @@
     "selectedCount": 250,
     "discoveredCount": 11537,
     "truncatedCount": 11287,
-    "changedSelectedCount": 1,
+    "changedSelectedCount": 0,
     "recentSelectedCount": 120,
     "prioritySelectedCount": 2,
     "hotSelectedCount": 64,
     "coverageSelectedCount": 64,
-    "detailCursor": 169,
-    "nextDetailCursor": 234
+    "detailCursor": 234,
+    "nextDetailCursor": 300
   },
   "pendingQaCount": 0,
   "qaDiscoveryCardCount": 14299,
@@ -46,16 +46,5 @@
     "Q&A 13922 was removed upstream (404)"
   ],
   "dataQualityWarnings": [],
-  "changedPaths": [
-    "/data/card/7349",
-    "/data/card/23349",
-    "/data/card/23543",
-    "/data/card/23549",
-    "/data/card/23553",
-    "/data/idx/card",
-    "/data/idx/qa",
-    "/data/meta/index",
-    "/data/meta/recent",
-    "/data/qa/23560"
-  ]
+  "changedPaths": []
 }
