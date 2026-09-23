@@ -135,7 +135,9 @@ export function boundedSelectionBody(input, queryPlan, groups, revisions, packin
     ...(packingBudget ? ['packingBudget给出真实序列化计算的保守字数：basePromptChars已经包含题面和卡文，availableEvidenceChars是可用于证据的余额。所选ruleUnitChars和qaHandleChars的数值总和应不超过此余额，不要用阅读正文的长度猜装包大小。保留不同必要关系及相关限定；当多条资料重复说明同一关系时，选择能保留所需条件的完整原文组合。'] : []),
     'unread只列未交付的候选标题、类型和长度；未读不能当作不存在，不能选择未读编号。结构上下文只代表来源关系，不强制全组选择。表格的tableLayout保存原文单元内UTF-16区间与行列关系。',
     'selectedIds只能逐字复制本次已读条目的选择编号：规则复制units每行第一个值；QA/FAQ复制items条目外层的handle。record.id、sourceId、unitKey、网址中的数字都是来源标识，不是选择编号；不得给这些数字加前缀生成编号。同一编号只返回一次。',
-    '只输出JSON：{"selectedIds":["已实际提供的选择编号"],"unableToSelect":false,"note":"可为空"}。若无法完成选择，返回unableToSelect:true和简短原因，不声称已经找全。',
+    '在同一个JSON中，先写简短的checks，再给出最终selectedIds。checks按题面子问记录：issue用短语标识子问；evidenceIds列出支持该子问所需判断及其适用条件的已读编号；boundary用一句话记录适用范围或尚缺的依据。只记录证据对应关系与缺口，不复述原文，不输出详细推导。',
+    '核对每个子问所需的通则、限制和例外是否由最终selectedIds共同交付；若checks使用某条依据，确认其编号进入selectedIds。多个子问可共用同一条完整原文，最终编号去重。不要为凑齐检查项加入无关背景，也不要用检查文字代替原始依据。checks仅是内部选证记录，不会送入最终证据包。',
+    '只输出JSON：{"checks":[{"issue":"子问短语","evidenceIds":["已实际提供的选择编号"],"boundary":"适用范围或缺口"}],"selectedIds":["已实际提供的选择编号"],"unableToSelect":false,"note":"可为空"}。若无法完成选择，返回unableToSelect:true和简短原因，不声称已经找全。',
   ].join('\n');
   const originalBody = requestBody(instructions, selectionInput);
   const qaReadingText = compactRepeatedQaReadingText(compactGroups, faqReading.qaSources);
@@ -481,7 +483,7 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
       ? runCloudBaiRequest(request)
       : runCloudGeminiRequest(request)
   ));
-  return { async retrieve({ userQuery, cardResolution, retrievedEvidence = {}, dataRevision,
+  return { async retrieve({ userQuery, answerLocale = 'zh-CN', cardResolution, retrievedEvidence = {}, dataRevision,
     env = {}, signal: outerSignal, assetsPromise, elapsedBeforeRetrievalMs = 0 }) {
     const started = performance.now();
     const deadlineMs = offlineLimits?.deadlineMs
@@ -791,7 +793,7 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
           .map(ref => rules.explicitReferenceMap.get(ref)).filter(Boolean));
       }
       for (const key of allKeys) for (const ref of getReferences(key)) for (const target of ref.targetReadingUnitKeys || []) materialize(target);
-      const packCosts = computeGeminiSelectionPackingBudget({ userQuery, cardResolution, retrievedEvidence,
+      const packCosts = computeGeminiSelectionPackingBudget({ userQuery, answerLocale, cardResolution, retrievedEvidence,
         maxPromptChars,
         rules: [...entries.values()].filter(entry => entry.kind === 'rule').map(entry => entry.body),
         qaItems: [...entries.values()].filter(entry => entry.kind === 'qa').map(entry => entry.body) });
@@ -893,7 +895,7 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
         qaHandles: [...selectedQa.keys()] }, rules: canonicalRules, qaTools: { qaRevision: assets.qaRevision,
         readSelected: ids => ids.map(id => selectedQa.get(id)) } });
       at = performance.now();
-      const result = packGeminiSelection({ selection: resolved, userQuery, cardResolution, retrievedEvidence, maxPromptChars });
+      const result = packGeminiSelection({ selection: resolved, userQuery, answerLocale, cardResolution, retrievedEvidence, maxPromptChars });
       if (result.packing.capacityExceeded) throw Object.assign(new Error('gemini_bounded_pack_capacity_exceeded'), { packing: result.packing });
       timingsMs.packing = performance.now() - at; signal.throwIfAborted();
       timingsMs.total = performance.now() - started;

@@ -117,6 +117,30 @@ function fixture({ assets = schema3Assets(), plan, select, countTokens = 500,
   return { provider, requests };
 }
 
+test('bounded production packing honors answer locale without rewriting source text', async () => {
+  const baseline = await fixture().provider.retrieve(input);
+  for (const [answerLocale, instruction] of [['ja', /用日文先直接回答/u], ['en', /用英文先直接回答/u]]) {
+    const { provider, requests } = fixture();
+    const localized = await provider.retrieve({ ...input, answerLocale });
+    assert.match(localized.packing.prompt, instruction);
+    assert.deepEqual(localized.packing.modelEvidence, baseline.packing.modelEvidence);
+    assert.deepEqual(localized.packing.promptPayload, baseline.packing.promptPayload);
+    const delivered = JSON.parse(requests[1].contents[0].parts[1].text);
+    const empty = computeGeminiSelectionPackingBudget({ ...input, answerLocale });
+    assert.equal(delivered.packingBudget.basePromptChars, empty.basePromptChars);
+  }
+});
+
+test('private selection checks cannot enter the production evidence package', async () => {
+  const select = delivered => ({ selectedIds: delivered.groups.flatMap(group => (group.units || []).map(row => row[0])).slice(0, 2), unableToSelect: false, note: '' });
+  const baseline = await fixture({ select }).provider.retrieve(input);
+  const withChecks = await fixture({ select: delivered => ({ ...select(delivered),
+    checks: [{ issue: 'private diagnostic', evidenceIds: [], boundary: 'PRIVATE_CHECK'.repeat(2000) }],
+  }) }).provider.retrieve(input);
+  assert.deepEqual(withChecks.packing, baseline.packing);
+  assert.deepEqual(withChecks.evidence, baseline.evidence);
+});
+
 test("plan-v2 carries the complete question/card projection without a corpus directory", () => {
   const body = boundedPlanBody({ question: "q", confirmedCards: [{ id: "c", text: "full" }],
     cardTexts: [{ text: "card" }], userProvidedCardTexts: [], unresolvedMentions: [], ambiguousMentions: [] });

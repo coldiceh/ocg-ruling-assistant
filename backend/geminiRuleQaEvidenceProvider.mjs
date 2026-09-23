@@ -25,7 +25,7 @@ function normalizeCalls(content) {
 export function createGeminiRuleQaEvidenceProvider({ fetchImpl = globalThis.fetch,
   loadAssets = loadGeminiRuleQaAssets, clientFactory = createGeminiRuleCacheClient,
   onEvent = async () => {} } = {}) {
-  return { async retrieve({ userQuery, cardResolution, retrievedEvidence, dataRevision, env = {}, signal, assetsPromise }) {
+  return { async retrieve({ userQuery, answerLocale = 'zh-CN', cardResolution, retrievedEvidence, dataRevision, env = {}, signal, assetsPromise }) {
     const start = performance.now(), timingsMs = {}, usage = [];
     const assets = await (assetsPromise || loadAssets({ dataDir: env.GEMINI_RULE_QA_DATA_DIR || fileURLToPath(new URL('../data', import.meta.url)) }));
     timingsMs.assetLoadWait = performance.now() - start;
@@ -95,7 +95,7 @@ export function createGeminiRuleQaEvidenceProvider({ fetchImpl = globalThis.fetc
         } else if (call.name === 'submit_evidence') {
           step = performance.now();
           const selection = resolveGeminiSelection({ args, rules, qaTools });
-          const result = packGeminiSelection({ selection, userQuery, cardResolution, retrievedEvidence });
+          const result = packGeminiSelection({ selection, userQuery, answerLocale, cardResolution, retrievedEvidence });
           await onEvent({ type: 'selection', round, selection, ...result });
           if (result.packing.capacityExceeded) {
             responses.push({ functionResponse: { name: call.name, ...(call.id ? { id: call.id } : {}), response: {

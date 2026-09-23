@@ -134,11 +134,11 @@ function selectedBodiesForSelection(selection) {
   }))];
 }
 
-export function packGeminiSelection({ selection, userQuery, cardResolution, retrievedEvidence = {}, maxPromptChars = GEMINI_EVIDENCE_MAX_PROMPT_CHARS }) {
+export function packGeminiSelection({ selection, userQuery, answerLocale = 'zh-CN', cardResolution, retrievedEvidence = {}, maxPromptChars = GEMINI_EVIDENCE_MAX_PROMPT_CHARS }) {
   const selectedBodies = selectedBodiesForSelection(selection);
   const baseEvidence = { userProvidedCardTexts: retrievedEvidence.userProvidedCardTexts || [],
     cardTexts: retrievedEvidence.cardTexts || [] };
-  const base = buildRagRulingPromptBundle({ userQuery, cardResolution, evidence: baseEvidence,
+  const base = buildRagRulingPromptBundle({ userQuery, answerLocale, cardResolution, evidence: baseEvidence,
     env: { RAG_MAX_PROMPT_CHARS: '100000000', RAG_MAX_CARDS: Math.max(1, cardResolution.resolvedCards.length) } });
   const marker = '本次用户问题、卡片原文与检索资料如下：\n';
   const at = base.prompt.indexOf(marker);
@@ -168,7 +168,7 @@ export function packGeminiSelection({ selection, userQuery, cardResolution, retr
  * any multi-entry serialization, including shared source metadata.
  */
 export function computeGeminiSelectionPackingBudget({
-  rules = [], qaItems = [], userQuery, cardResolution, retrievedEvidence = {},
+  rules = [], qaItems = [], userQuery, answerLocale = 'zh-CN', cardResolution, retrievedEvidence = {},
   maxPromptChars = GEMINI_EVIDENCE_MAX_PROMPT_CHARS,
 } = {}) {
   if (!Array.isArray(rules)) throw new TypeError('gemini_selection_budget_rules_invalid');
@@ -177,7 +177,7 @@ export function computeGeminiSelectionPackingBudget({
     throw new TypeError('gemini_selection_budget_limit_invalid');
   }
 
-  const common = { userQuery, cardResolution, retrievedEvidence, maxPromptChars };
+  const common = { userQuery, answerLocale, cardResolution, retrievedEvidence, maxPromptChars };
   const emptySelection = { selectedRules: [], selectedQa: [] };
   const base = packGeminiSelection({ ...common, selection: emptySelection });
   const basePromptChars = base.packing.promptChars;

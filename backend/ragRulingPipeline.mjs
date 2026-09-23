@@ -787,6 +787,7 @@ async function answerRagRulingQuestionInternal({
             + elapsedMs(pipelineStartedAt) - timingsMs.cardPreparation);
           const result = assertPreparedEvidenceResult(await geminiProvider.retrieve({
             userQuery: query,
+            answerLocale,
             dataRevision,
             cardResolution: preparedEvidence.cardResolution,
             retrievedEvidence: preparedEvidence,

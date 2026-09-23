@@ -41,6 +41,7 @@ test('Gemini rule and QA provider preserves its exact packing in the prepared co
   };
   const prepared = await answerRagRulingQuestion({
     question: 'Synthetic integration question',
+    answerLocale: 'ja',
     cards: [],
     records: [],
     qaRecords: [],
@@ -68,6 +69,7 @@ test('Gemini rule and QA provider preserves its exact packing in the prepared co
   assert.equal(calls.length, 1);
   assert.ok(calls[0].elapsedBeforeRetrievalMs >= 100);
   assert.equal(calls[0].userQuery, 'Synthetic integration question');
+  assert.equal(calls[0].answerLocale, 'ja');
   assert.equal(typeof calls[0].packEvidence, 'function');
   assert.equal(
     calls[0].cardResolution.unresolvedMentions.some(
