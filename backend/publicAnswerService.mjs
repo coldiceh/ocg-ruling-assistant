@@ -41,6 +41,7 @@ import {
 
 export const PUBLIC_ANSWER_REQUEST_BODY_LIMIT_BYTES = 64 * 1024;
 export const PUBLIC_ANSWER_QUESTION_LIMIT_CHARACTERS = 12_000;
+export const PUBLIC_ANSWER_LOCALES = Object.freeze(["zh-CN", "en", "ja"]);
 // The public exact-question shortcut is temporarily disabled. Keep the
 // underlying matcher and pipeline available for internal evaluation and a
 // future, explicitly reviewed re-enable.
@@ -104,6 +105,15 @@ export function parsePublicAnswerPayload(body, {
     }
     return { action: payload.action, preparationId: payload.preparationId };
   }
+  if (payload.action === "translate_source") {
+    if (!isPublicPreparationId(payload.sourceSnapshotId)
+        || typeof payload.sourceId !== "string" || !payload.sourceId || payload.sourceId.length > 200
+        || !PUBLIC_ANSWER_LOCALES.includes(payload.targetLocale)
+        || Object.keys(payload).some((key) => !["action", "sourceSnapshotId", "sourceId", "targetLocale"].includes(key))) {
+      throw publicAnswerRequestError("Invalid source translation request", "invalid_source_translation_request", 400);
+    }
+    return payload;
+  }
   if (payload.action !== undefined && payload.action !== "prepare") {
     throw publicAnswerRequestError("Unsupported answer action", "invalid_answer_action");
   }
@@ -122,10 +132,15 @@ export function parsePublicAnswerPayload(body, {
       413,
     );
   }
+  const answerLocale = payload.answerLocale === undefined ? "zh-CN" : payload.answerLocale;
+  if (!PUBLIC_ANSWER_LOCALES.includes(answerLocale)) {
+    throw publicAnswerRequestError("Unsupported answerLocale", "invalid_answer_locale", 400);
+  }
 
   return {
     ...payload,
     question,
+    answerLocale,
   };
 }
 
@@ -321,6 +336,7 @@ export async function answerPublicRulingQuestion({
     let answer = await answerRuling({
       rulingVersion: normalizedPayload.rulingVersion,
       question: normalizedPayload.question,
+      answerLocale: normalizedPayload.answerLocale,
       env: publicEnv,
       signal,
       officialQaExactAlreadyChecked: true,
@@ -333,7 +349,8 @@ export async function answerPublicRulingQuestion({
     });
     requestDiagnostics.completedAt = new Date().toISOString();
     requestDiagnostics.durationMs = Math.max(0, Date.now() - publicRequestStartedAt);
-    answer = { ...answer, debug: { ...answer.debug, requestDiagnostics } };
+    answer = { ...answer, answerLocale: normalizedPayload.answerLocale,
+      debug: { ...answer.debug, requestDiagnostics } };
     if (!prepareForContinuation) answer = await withPublicGenerationInfo(answer, profile, env, {fallbackFrom:selection.fallbackFrom});
     const audit = await auditPromise;
     if (answer.status !== "evidence_prepared") {

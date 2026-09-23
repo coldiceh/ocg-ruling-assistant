@@ -46,7 +46,7 @@ const DEFAULT_GENERATION_PROFILE = join(
   rootDir,
   "config",
   "evidence-generation",
-  "bai-gpt-5.6-luna-medium-theoretical.json",
+  "bai-gpt-6-luna-medium-theoretical.json",
 );
 const sha256 = (value) => createHash("sha256").update(value).digest("hex");
 

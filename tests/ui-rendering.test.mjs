@@ -340,7 +340,7 @@ test("public ruling model selector renders measured latency and explicit fallbac
   const latencyNode = { textContent: "" };
   const render = new Function(
     "ui",
-    `${source}; return renderSelectedRulingModelLatency;`,
+    `const lt = (zh) => zh; const tr = (value) => value; ${source}; return renderSelectedRulingModelLatency;`,
   )({ rulingModelLatency: latencyNode });
 
   render({
@@ -364,87 +364,11 @@ test("public ruling model selector renders measured latency and explicit fallbac
   assert.doesNotMatch(latencyNode.textContent, /\d+ 秒|\d+ 分/u);
 });
 
-test("answer footer actual generation metadata and shared remaining budget come only from the answer", async () => {
+test("player interface omits the generation-information panel and renderer", async () => {
   const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
-  const source = sourceBetween(app, "function renderGenerationDetails", "function renderPending");
-  const document = createTestDocument();
-  const generationDetails = document.createElement("dl");
-  const render = new Function(
-    "ui",
-    "clearElement",
-    "appendText",
-    "modelProviderLabel",
-    "formatUsd",
-    "formatCny",
-    `${source}; return renderGenerationDetails;`,
-  )(
-    { generationPanel: {}, generationDetails },
-    clearTestElement,
-    appendTestText,
-    (provider) => provider === "relay" ? "ChatGPT" : "模型",
-    (value) => Number(value).toFixed(2),
-    (value) => Number(value).toFixed(2),
-  );
-
-  render({
-    generation: {
-      provider: "relay",
-      model: "gpt-5.6-sol",
-      label: "GPT-5.6 Sol",
-      reasoningEffort: "high",
-      thinkingMode: "enabled",
-      budget: {
-        currency: "USD",
-        remainingAmount: 3.25,
-        dailyBudgetAmount: 8,
-        sharedPoolLabel: "中转模型共享额度",
-      },
-    },
-  });
-  const actualText = testNodeText(generationDetails);
-  assert.match(actualText, /GPT-5\.6 Sol/u);
-  assert.match(actualText, /推理强度\nhigh/u);
-  assert.ok(actualText.includes("中转模型共享额度 · 剩余 $3.25 / 每日 $8.00"));
-
-  render({
-    generation: {
-      provider: "relay",
-      model: "gpt-5.6-sol",
-      label: "GPT-5.6 Sol",
-      reasoningEffort: "high",
-      thinkingMode: "enabled",
-      embeddedInAnswerText: true,
-      budget: {
-        currency: "USD",
-        remainingAmount: 3.25,
-        dailyBudgetAmount: 8,
-        sharedPoolLabel: "中转模型共享额度",
-      },
-    },
-  });
-  const embeddedText = testNodeText(generationDetails);
-  assert.doesNotMatch(embeddedText, /实际生成模型|推理强度|思考模式/u);
-  assert.match(embeddedText, /实际服务\nChatGPT/u);
-  assert.match(embeddedText, /共享今日额度/u);
-
-  render({
-    generation: {
-      provider: "deepseek",
-      model: "deepseek-v4.1-flash",
-      reasoningEffort: null,
-      thinkingMode: "disabled",
-      budget: { currency: "CNY", remainingAmount: null, dailyBudgetAmount: null },
-    },
-  });
-  const noThinkingText = testNodeText(generationDetails);
-  assert.match(noThinkingText, /无（已关闭思考）/u);
-  assert.match(noThinkingText, /共享今日额度\n未取得/u);
-  assert.doesNotMatch(noThinkingText, /0\.00 元/u);
-
-  render({ generation: null });
-  assert.match(testNodeText(generationDetails), /最终裁定模型\n未调用/u);
-  render({});
-  assert.match(testNodeText(generationDetails), /最终裁定模型\n未取得/u);
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  assert.doesNotMatch(html, /generationPanel|generationDetails|本次生成信息/u);
+  assert.doesNotMatch(app, /renderGenerationDetails|generationPanel|generationDetails/u);
 });
 
 test("public pipeline timing is driven by backend SSE events without fixed stage delays", async () => {
@@ -615,6 +539,7 @@ test("versioned backend answers require a matching server confirmation", async (
     mode: "rag",
     rulingModelProfile: "deepseek-v4-flash-high",
     rulingVersion: "latest",
+    answerLocale: "zh-CN",
     action: "prepare",
   });
   assert.equal(confirmed.effectiveRulingVersion, "latest");
@@ -2020,12 +1945,12 @@ test("renderBackendAnswer formats markdown safely and presents titled source lin
   ].map((name) => [name, { ...document.createElement("div"), classList: { remove() {} } }]));
   const render = new Function("ui", "document", "clearElement", "appendText", `
     let lastRenderedBackendAnswer;
+    const tr = value => value, lt = (zh) => zh, localeNames = {}, supportedLocales = ["zh-CN", "en", "ja"];
     const debugUiEnabled = false;
     const noop = () => {};
     const completePendingStages = noop, renderAnswerVersion = noop, renderEngineSimulation = noop;
     const renderCards = noop, pendingModelCardNames = noop, renderSubAnswers = noop, renderParserDebug = noop, renderFeedbackPanel = noop;
     const updateModelStatus = noop, renderBudgetStatus = noop, loadBudgetStatus = noop;
-    const renderGenerationDetails = (answer) => { renderBackendAnswer.lastGenerationAnswer = answer; };
     const modelProviderLabel = noop, modelStatusFromAnswer = noop, basisFromBackendMode = noop;
     ${source}
     return renderBackendAnswer;
@@ -2077,7 +2002,6 @@ test("renderBackendAnswer formats markdown safely and presents titled source lin
   assert.equal(ui.verdictTitle.textContent, "公开问答暂时受限");
   assert.equal(ui.confidenceText.textContent, "风控提醒");
   assert.match(testNodeText(ui.verdictBody), /预计还需 31 分钟/u);
-  assert.equal(render.lastGenerationAnswer?.generation, null);
 });
 
 test("budget labels distinguish final ruling providers", async () => {

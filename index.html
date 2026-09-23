@@ -26,6 +26,14 @@
           <h1>游戏王 OCG AI裁定</h1>
         </div>
         <div class="status-cluster" aria-label="页面状态与主题设置">
+          <label class="locale-picker" for="localeSelect">
+            <span class="sr-only">显示语言</span>
+            <select id="localeSelect" aria-label="显示语言">
+              <option value="zh-CN">中文</option>
+              <option value="en">English</option>
+              <option value="ja">日本語</option>
+            </select>
+          </label>
           <span class="status-badge deployment-label" id="deploymentLabel" hidden></span>
           <button class="theme-toggle" id="themeToggle" type="button" aria-label="切换白天或黑夜主题">白天模式</button>
         </div>
@@ -91,6 +99,7 @@
                 <strong id="confidenceText">未分析</strong>
               </div>
               <h3 id="verdictTitle"></h3>
+              <small id="answerLocaleStatus" class="answer-locale-status" hidden></small>
               <p class="basis-text" id="rulingBasisText"></p>
               <p id="verdictBody"></p>
               <div class="sub-answers" id="subAnswersPanel" hidden></div>
@@ -146,11 +155,6 @@
                 <span id="questionsTitle">风险提示</span>
               </div>
               <ul id="questionsList"></ul>
-            </section>
-
-            <section class="result-block generation-panel" id="generationPanel" aria-labelledby="generationTitle">
-              <div class="block-title"><span id="generationTitle">本次生成信息</span></div>
-              <dl id="generationDetails"></dl>
             </section>
 
             <details class="result-block parser-debug" id="parserDebugPanel" hidden>

@@ -4,7 +4,12 @@ import { createHash, randomBytes } from "node:crypto";
 // capability, never the prompt/evidence or provider credentials.
 export const PUBLIC_PREPARATION_TTL_SECONDS = 15 * 60;
 export const PUBLIC_PREPARATION_RUNNING_TTL_SECONDS = 15 * 60;
+export const PUBLIC_SOURCE_SNAPSHOT_TTL_SECONDS = 30 * 24 * 60 * 60;
+export const PUBLIC_SOURCE_TRANSLATION_TTL_SECONDS = 90 * 24 * 60 * 60;
 const PREFIX = "public-answer-preparation:v1:";
+const SOURCE_PREFIX = "public-answer-source:v1:";
+const TRANSLATION_PREFIX = "public-answer-source-translation:v1:";
+const TRANSLATION_LOCK_PREFIX = "public-answer-source-translation-lock:v1:";
 const CLAIM = `
 local raw = redis.call("GET", KEYS[1])
 if not raw then return {"missing"} end
@@ -53,6 +58,8 @@ export function createPublicAnswerPreparationStore({ env = process.env, fetchImp
     if (!isPublicPreparationId(id)) throw preparationError("无效的资料准备凭证", "invalid_preparation_id", 400);
     return PREFIX + createHash("sha256").update(id).digest("hex");
   };
+  const sourceKey = (id) => SOURCE_PREFIX + createHash("sha256").update(id).digest("hex");
+  const translationKey = (identity) => createHash("sha256").update(JSON.stringify(identity)).digest("hex");
   async function command(args) {
     // No automatic transport retry: an acknowledged claim is required before
     // a model is called. A lost acknowledgement never makes the record ready.
@@ -76,6 +83,33 @@ export function createPublicAnswerPreparationStore({ env = process.env, fetchImp
     return result;
   }
   return {
+    async saveSourceSnapshot(id, sources) {
+      if (!isPublicPreparationId(id)) throw preparationError("无效的来源凭证", "invalid_source_snapshot_id", 400);
+      const selected = (Array.isArray(sources) ? sources : []).filter((item) =>
+        typeof item?.id === "string" && item.id && /^[0-9a-f]{64}$/u.test(String(item.sourceHash || "")));
+      if (!selected.length) return false;
+      const record = JSON.stringify({ system: "OCG", sources: selected });
+      const result = await command(["SET", sourceKey(id), record, "EX", PUBLIC_SOURCE_SNAPSHOT_TTL_SECONDS, "NX"]);
+      return result === "OK";
+    },
+    async readSourceSnapshot(id) {
+      if (!isPublicPreparationId(id)) throw preparationError("无效的来源凭证", "invalid_source_snapshot_id", 400);
+      const raw = await command(["GET", sourceKey(id)]);
+      if (typeof raw !== "string") throw preparationError("来源快照已过期", "source_snapshot_expired", 410);
+      return JSON.parse(raw);
+    },
+    async readSourceTranslation(identity) {
+      const raw = await command(["GET", TRANSLATION_PREFIX + translationKey(identity)]);
+      return typeof raw === "string" ? JSON.parse(raw) : null;
+    },
+    async saveSourceTranslation(identity, value) {
+      await command(["SET", TRANSLATION_PREFIX + translationKey(identity), JSON.stringify(value),
+        "EX", PUBLIC_SOURCE_TRANSLATION_TTL_SECONDS, "NX"]);
+    },
+    async claimSourceTranslation(identity) {
+      const result = await command(["SET", TRANSLATION_LOCK_PREFIX + translationKey(identity), "1", "EX", 120, "NX"]);
+      return result === "OK";
+    },
     async create(preparation) {
       const id = randomBytes(32).toString("hex");
       // Nested JSON is stored as an opaque string. Redis Lua must not roundtrip

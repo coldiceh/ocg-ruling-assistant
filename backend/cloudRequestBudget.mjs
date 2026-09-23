@@ -581,6 +581,37 @@ export function createCloudRequestBudget({env, fetchImpl = globalThis.fetch, com
     }
     return result;
   }
+  async function sourceTranslation({body, invoke, signal}) {
+    if (body?.model !== 'gpt-6-luna' || body?.reasoning?.effort !== 'low'
+        || !Number.isSafeInteger(body.max_output_tokens) || body.max_output_tokens < 1
+        || body.max_output_tokens > 16384) {
+      throw new Error('source_translation_request_contract_invalid');
+    }
+    // Reserve a fixed $0.05 per bounded call, exceeding the byte-based
+    // estimate for the accepted payload. This remains theoretical accounting.
+    const inputBytes = Buffer.byteLength(JSON.stringify(body), 'utf8');
+    const upperUsd = Math.max(0.05, (inputBytes * 0.10 + body.max_output_tokens * 0.50) / 1_000_000);
+    const ticket = await reserve({provider:'bai',model:body.model,operation:'responses',stage:'source_translation',
+      actualCny:0,theoreticalUsd:upperUsd,pricingBasis:'bai_gpt6_luna_standard_byte_upper_20260922',signal,
+      reservationMetadata:{requestBodyBytes:inputBytes,maxBillableOutputTokens:body.max_output_tokens}});
+    let result;
+    try { result = await invoke(); }
+    catch (error) { ticket.uncertainty='request_or_settlement_failed_reservation_retained'; throw error; }
+    if (result?.model !== body.model) {
+      ticket.uncertainty='provider_model_binding_mismatch_reservation_retained';
+      throw new Error('source_translation_model_mismatch');
+    }
+    const input = result?.usage?.input_tokens;
+    const output = result?.usage?.output_tokens;
+    if (Number.isSafeInteger(input) && input >= 0 && Number.isSafeInteger(output) && output >= 0) {
+      const cached = Math.min(input, Math.max(0, Number(result?.usage?.input_tokens_details?.cached_tokens) || 0));
+      const written = Math.min(input - cached, Math.max(0, Number(result?.usage?.input_tokens_details?.cache_write_tokens) || 0));
+      const usd = ((input - cached - written) * 0.10 + cached * 0.01 + written * 0.125 + output * 0.50) / 1_000_000;
+      try { await settle(ticket,{usage:result.usage,returnedModel:result.model,actualCny:0,actualUpperCny:0,theoreticalUsd:usd}); }
+      catch { ticket.uncertainty='provider_response_received_settlement_uncertain_reservation_retained'; }
+    } else ticket.uncertainty='provider_usage_missing_reservation_retained';
+    return result;
+  }
   async function gemini({
     body,
     invoke,
@@ -809,7 +840,7 @@ export function createCloudRequestBudget({env, fetchImpl = globalThis.fetch, com
         accountedActualUpperCny:['bai','gemini'].includes(r.provider)?null:r.actualNano/UNIT,
         theoreticalUsd:r.theoreticalNano/UNIT}))};
   }
-  return {relay,deepseek,openai,bai:request=>request?.generationContract?.providerId === 'bai'
+  return {relay,deepseek,openai,sourceTranslation,bai:request=>request?.generationContract?.providerId === 'bai'
     ? baiGeneration(request) : openai({...request,provider:'bai'}),gemini,
     beforeSend,onResponse,remainingPreparationUsd,snapshot};
 }

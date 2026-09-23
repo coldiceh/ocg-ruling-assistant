@@ -83,15 +83,17 @@ const GENERAL_INSTRUCTIONS = Object.freeze([
 
 export function buildRagRulingPrompt({
   userQuery,
+  answerLocale = "zh-CN",
   cardResolution = {},
   evidence = {},
   env = {},
 } = {}) {
-  return buildRagRulingPromptBundle({ userQuery, cardResolution, evidence, env }).prompt;
+  return buildRagRulingPromptBundle({ userQuery, answerLocale, cardResolution, evidence, env }).prompt;
 }
 
 export function buildRagRulingPromptBundle({
   userQuery,
+  answerLocale = "zh-CN",
   cardResolution = {},
   evidence = {},
   env = {},
@@ -191,6 +193,7 @@ export function buildRagRulingPromptBundle({
     warnings.push("official_direct_focused_prompt");
     const promptResult = buildOfficialDirectPrompt({
       userQuery: payload.userQuery,
+      answerLocale,
       resolvedCards: payload.resolvedCards,
       decisionChecklist: payload.decisionChecklist,
       decisionPlan: payload.decisionPlan,
@@ -237,17 +240,17 @@ export function buildRagRulingPromptBundle({
     };
   }
 
-  let rendered = renderGeneralPrompt(restorePromptEvidenceBodies(payload));
+  let rendered = renderGeneralPrompt(restorePromptEvidenceBodies(payload), answerLocale);
   const ordinaryPromptChars = rendered.prompt.length;
   const promptCompacted = rendered.prompt.length > limits.maxPromptChars;
   if (promptCompacted) {
     warnings.push("rag_prompt_compacted_to_max_chars");
-    rendered = buildCompactRagPrompt({ payload, maxPromptChars: limits.maxPromptChars });
+    rendered = buildCompactRagPrompt({ payload, maxPromptChars: limits.maxPromptChars, answerLocale });
   }
   // Selection has finished under the unchanged 36k allocation envelope. Only
   // the repeated instructions are condensed; the complete payload is retained.
   const promptPayload = rendered.promptPayload;
-  const prompt = compactRagPromptInstructions(rendered.prompt, promptPayload);
+  const prompt = compactRagPromptInstructions(rendered.prompt, promptPayload, answerLocale);
   const allowedEvidenceIds = promptPayload.allowedEvidenceIds;
   appendSerializedEvidenceTruncationWarnings({
     promptPayload,
@@ -316,10 +319,10 @@ export function buildRagRulingPromptBundle({
   };
 }
 
-export function compactRagPromptInstructions(prompt, selectedPayload = parseSerializedPromptPayload(prompt)) {
+export function compactRagPromptInstructions(prompt, selectedPayload = parseSerializedPromptPayload(prompt), answerLocale = "zh-CN") {
   if (!selectedPayload || !Object.hasOwn(selectedPayload, "evidence")) return prompt;
   const leanPrompt = [
-    ...GENERAL_INSTRUCTIONS,
+    ...localizedAnswerInstructions(GENERAL_INSTRUCTIONS, answerLocale),
     "本次用户问题、卡片原文与检索资料如下：",
     renderReadableData(selectedPayload),
   ].join("\n");
@@ -610,10 +613,10 @@ export function selectAuthoritativeOfficialDirectCandidate({
     : null;
 }
 
-function renderGeneralPrompt(payload) {
+function renderGeneralPrompt(payload, answerLocale = "zh-CN") {
   const promptPayload = modelVisiblePromptPayload(payload);
   return { promptPayload, prompt: [
-    ...ALLOCATION_INSTRUCTIONS,
+    ...localizedAnswerInstructions(ALLOCATION_INSTRUCTIONS, answerLocale),
     "本次用户问题、卡片原文与检索资料如下：",
     renderReadableData(promptPayload),
   ].join("\n") };
@@ -651,6 +654,7 @@ function modelVisiblePromptEvidenceItem(item = {}) {
 
 function buildOfficialDirectPrompt({
   userQuery,
+  answerLocale = "zh-CN",
   resolvedCards = [],
   decisionChecklist = GENERIC_DECISION_CHECKLIST,
   decisionPlan = [],
@@ -683,7 +687,7 @@ function buildOfficialDirectPrompt({
         sourceUrl: directQa.sourceUrl || "",
       },
   };
-  const prompt = [...instructions, renderReadableData(promptPayload)].join("\n");
+  const prompt = [...localizedAnswerInstructions(instructions, answerLocale), renderReadableData(promptPayload)].join("\n");
   if (prompt.length > maxChars) {
     throw evidencePromptBudgetExceeded({
       reason: "complete_reference_does_not_fit",
@@ -1193,7 +1197,7 @@ function buildStructuredOfficialQa(item = {}, {
   return Object.keys(fields).length ? fields : null;
 }
 
-function buildCompactRagPrompt({ payload, maxPromptChars }) {
+function buildCompactRagPrompt({ payload, maxPromptChars, answerLocale = "zh-CN" }) {
   const maxChars = Math.max(1, Number(maxPromptChars) || 12000);
   const focusCardIds = (payload.resolvedCards || [])
     .map((card) => String(card?.id || "").trim())
@@ -1202,7 +1206,7 @@ function buildCompactRagPrompt({ payload, maxPromptChars }) {
     resolvedCards: payload.resolvedCards || [],
     limit: Number.POSITIVE_INFINITY,
   });
-  const variants = buildCompactPromptVariants(payload);
+  const variants = buildCompactPromptVariants(payload, answerLocale);
   let bestWholeAttempt = null;
   let smallestBaseAttempt = null;
   for (const variant of variants) {
@@ -1235,7 +1239,7 @@ function evidencePromptBudgetExceeded(details = {}) {
   return error;
 }
 
-function buildCompactPromptVariants(payload = {}) {
+function buildCompactPromptVariants(payload = {}, answerLocale = "zh-CN") {
   const emptyEvidence = Object.fromEntries(EVIDENCE_BUCKET_ORDER.map((bucket) => [bucket, []]));
   return [{
     mode: "buckets",
@@ -1244,7 +1248,7 @@ function buildCompactPromptVariants(payload = {}) {
       evidence: emptyEvidence,
       allowedEvidenceIds: [],
     },
-    render: renderGeneralPrompt,
+    render: (compactPayload) => renderGeneralPrompt(compactPayload, answerLocale),
   }, {
     mode: "array",
     basePayload: {
@@ -1265,11 +1269,20 @@ function buildCompactPromptVariants(payload = {}) {
       return { promptPayload, prompt: [
       "仅依据用户问题、卡片原文和所给资料，逐个子问题推理；不得编造。先在内部逐项核对 decisionChecklist 和 decisionPlan，但不得把它们当证据或输出检查过程。只有完整对应本题的 official direct Q&A 才能称为官方直接裁定，相关资料与卡文只能支持分析。",
       "typeLine 为来源的完整卡片类型；resolutionSource 为 card_text_reference 的卡片只是卡文引用，不能据此添加题面状态。",
-      "面向玩家输出中文裁定：先回答，再用短段落或列表解释处理与依据。可用 Markdown，不输出 JSON、代码围栏或内部字段。引用写【资料标题】，标题须对应 allowedEvidenceIds 中真实资料；不要输出资料 ID。用自然中文说明证据范围，不解释 relatedOnly、officialQaDirectCandidates、sourceAuthority 等内部字段或程序状态。",
+       ...localizedAnswerInstructions(["面向玩家输出中文裁定：先回答，再用短段落或列表解释处理与依据。可用 Markdown，不输出 JSON、代码围栏或内部字段。引用写【资料标题】，标题须对应 allowedEvidenceIds 中真实资料；不要输出资料 ID。用自然中文说明证据范围，不解释 relatedOnly、officialQaDirectCandidates、sourceAuthority 等内部字段或程序状态。"], answerLocale),
       renderReadableData(promptPayload),
     ].join("\n") };
     },
   }];
+}
+
+function localizedAnswerInstructions(instructions, locale) {
+  if (locale === "zh-CN") return instructions;
+  const language = locale === "en" ? "英文" : locale === "ja" ? "日文" : null;
+  if (!language) throw new TypeError("Unsupported answerLocale");
+  // Only the fixed instruction strings change. Evidence bodies are never
+  // rewritten or translated before the final model reads them.
+  return instructions.map((line) => line.replaceAll("中文", language));
 }
 
 function packWholeEvidenceEntries({ entries, variant, focusCardIds, maxChars }) {

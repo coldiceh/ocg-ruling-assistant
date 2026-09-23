@@ -119,3 +119,26 @@ test('production environment selects planning and selection profiles independent
   assert.equal(selection.modelId, 'gpt-5.6-luna');
   assert.deepEqual(selection.reasoningConfig.responses, { effort: 'low' });
 });
+
+test('new Luna profiles preserve Responses stages and reserve at the documented long-context rates', () => {
+  for (const [file, effort] of [
+    ['bai-gpt-6-luna-medium-theoretical.json', 'medium'],
+    ['bai-gpt-6-luna-high-theoretical.json', 'high'],
+  ]) {
+    const profileUrl = new URL(`../config/evidence-generation/${file}`, import.meta.url);
+    const selection = loadEvidenceGenerationContract('selection', { profileUrl });
+    const navigation = loadEvidenceGenerationContract('navigation', { profileUrl });
+    assert.equal(selection.modelId, 'gpt-6-luna');
+    assert.equal(selection.transportContract.protocol, 'responses');
+    assert.equal(selection.reasoningConfig.responses.effort, effort);
+    assert.equal(selection.maxBillableOutputTokens, 4096);
+    assert.equal(navigation.maxBillableOutputTokens, 2048);
+    const wire = convertEvidenceGenerationRequest(semanticBody(selection), selection);
+    assert.equal(wire.model, 'gpt-6-luna');
+    assert.equal(wire.reasoning.effort, effort);
+    const cost = normalizeEvidenceGenerationUsage({ input_tokens: 100,
+      input_tokens_details: { cached_tokens: 10, cache_write_tokens: 5 },
+      output_tokens: 20, total_tokens: 120 }, selection).billableCost;
+    assert.equal(cost.amountUsd, (85 * 0.20 + 10 * 0.02 + 5 * 0.25 + 20 * 0.75) / 1_000_000);
+  }
+});

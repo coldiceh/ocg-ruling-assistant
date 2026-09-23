@@ -20,6 +20,11 @@ export function classifyPublicRequestChannel(rawBody) {
     && typeof body.preparationId === "string" && /^[0-9a-f]{64}$/u.test(body.preparationId)) {
     return PUBLIC_REQUEST_CHANNELS.WEB;
   }
+  if (isPlainObject(body) && body.action === "translate_source"
+      && sameStringList(Object.keys(body).sort(), ["action", "sourceId", "sourceSnapshotId", "targetLocale"])
+      && typeof body.sourceSnapshotId === "string" && /^[0-9a-f]{64}$/u.test(body.sourceSnapshotId)) {
+    return PUBLIC_REQUEST_CHANNELS.WEB;
+  }
   if (!isPlainObject(body) || !nonEmptyString(body.question)) {
     return PUBLIC_REQUEST_CHANNELS.UNKNOWN;
   }
@@ -30,10 +35,15 @@ export function classifyPublicRequestChannel(rawBody) {
   }
   if (
     (sameStringList(keys, WEB_REQUEST_KEYS)
-      || (body.action === "prepare" && sameStringList(keys, ["action", ...WEB_REQUEST_KEYS])))
+      || sameStringList(keys, [...WEB_REQUEST_KEYS, "answerLocale"].sort())
+      || (body.action === "prepare" && (
+        sameStringList(keys, ["action", ...WEB_REQUEST_KEYS])
+        || sameStringList(keys, ["action", ...WEB_REQUEST_KEYS, "answerLocale"].sort())
+      )))
     && body.mode === "rag"
     && nonEmptyString(body.rulingModelProfile)
     && nonEmptyString(body.rulingVersion)
+    && (body.answerLocale === undefined || ["zh-CN", "en", "ja"].includes(body.answerLocale))
   ) {
     return PUBLIC_REQUEST_CHANNELS.WEB;
   }
@@ -44,6 +54,14 @@ export function presentPublicAnswer(answer, {
   channel = PUBLIC_REQUEST_CHANNELS.UNKNOWN,
   env = globalThis.process?.env || {},
 } = {}) {
+  if (channel === PUBLIC_REQUEST_CHANNELS.WEB && isPlainObject(answer)) {
+    const footer = answer.generation?.embeddedInAnswerText === true
+      ? String(answer.generation.answerTextFooter || "") : "";
+    const shortAnswer = typeof answer.shortAnswer === "string" ? answer.shortAnswer : "";
+    return footer && shortAnswer.endsWith(footer)
+      ? { ...answer, shortAnswer: shortAnswer.slice(0, -footer.length) }
+      : answer;
+  }
   if (channel !== PUBLIC_REQUEST_CHANNELS.EXTERNAL_API || !isPlainObject(answer)) {
     return answer;
   }

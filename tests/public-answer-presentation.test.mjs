@@ -24,6 +24,19 @@ const testNotice = "外部表示テスト通知";
 test("the current browser request contract is classified as web", () => {
   assert.equal(classifyPublicRequestChannel(webBody), PUBLIC_REQUEST_CHANNELS.WEB);
   assert.equal(classifyPublicRequestChannel(JSON.stringify(webBody)), PUBLIC_REQUEST_CHANNELS.WEB);
+  assert.equal(classifyPublicRequestChannel({ ...webBody, answerLocale: "ja", action: "prepare" }), PUBLIC_REQUEST_CHANNELS.WEB);
+});
+
+test("web presentation removes only the recorded generation footer", () => {
+  const footer = "\n\n实际最终模型：test；请求推理强度：low";
+  const answer = { shortAnswer: `正文${footer}`, generation: { embeddedInAnswerText: true, answerTextFooter: footer },
+    usedEvidence: [{ id: "source-1", text: "原文" }] };
+  const shown = presentPublicAnswer(answer, { channel: PUBLIC_REQUEST_CHANNELS.WEB });
+  assert.equal(shown.shortAnswer, "正文");
+  assert.equal(answer.shortAnswer, `正文${footer}`);
+  assert.equal(shown.usedEvidence, answer.usedEvidence);
+  assert.equal(presentPublicAnswer({ ...answer, shortAnswer: `正文${footer}仍在正文中` },
+    { channel: PUBLIC_REQUEST_CHANNELS.WEB }).shortAnswer, `正文${footer}仍在正文中`);
 });
 
 test("a question-only body is external_api and mixed or incomplete bodies are unknown", () => {

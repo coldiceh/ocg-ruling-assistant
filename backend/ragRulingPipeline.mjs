@@ -293,16 +293,17 @@ async function finalizePreparedRagRulingQuestionCore({
   const dataRevision = continuation.dataRevision;
   const evidenceFingerprint = continuation.evidenceFingerprint;
   const finalPromptSha256 = continuation.finalPromptSha256;
-  const identityClarifications = pendingCardIdentityLines(effectiveCardResolution);
+  const identityClarifications = pendingCardIdentityLines(effectiveCardResolution, continuation.answerLocale);
 
   return {
     mode: continuation.mode || (cloudEvidence ? "cloud_evidence_v1" : "rag_baseline"),
+    answerLocale: continuation.answerLocale || "zh-CN",
     // Authority is server-owned. A model cannot promote ordinary evidence to
     // an official ruling, while a completed answer from the already-certified
     // unique direct-Q&A route must not be downgraded by the plain-text adapter.
     answerLevel,
     shortAnswer: identityClarifications.length
-      ? `${normalized.shortAnswer}\n\n卡片身份待确认：\n${identityClarifications.map(line => `- ${line}`).join("\n")}`
+      ? `${normalized.shortAnswer}\n\n${continuation.answerLocale === "en" ? "Card identity needs confirmation" : continuation.answerLocale === "ja" ? "カードの特定が必要" : "卡片身份待确认"}：\n${identityClarifications.map(line => `- ${line}`).join("\n")}`
       : normalized.shortAnswer,
     reasoning: normalized.reasoning,
     usedEvidence: displayedEvidence,
@@ -442,7 +443,7 @@ async function finalizePreparedRagRulingQuestionCore({
   };
 }
 
-function pendingCardIdentityLines(cardResolution) {
+function pendingCardIdentityLines(cardResolution, answerLocale = "zh-CN") {
   // Render the final identity owner's pending records. Exact duplicates are
   // combined for display only; candidates never become confirmed identities.
   const pending = new Map();
@@ -460,6 +461,10 @@ function pendingCardIdentityLines(cardResolution) {
     pending.set(input, candidates);
   }
   return [...pending].map(([input, candidates]) => {
+    if (answerLocale === "en") return `“${input}” is not confirmed. ${candidates.size
+      ? `Possible cards (unconfirmed): ${[...candidates].join(", ")}. ` : ""}Please provide the full card name, card number, or original card text.`;
+    if (answerLocale === "ja") return `「${input}」は未確定です。${candidates.size
+      ? `候補（未確認）：${[...candidates].join("、")}。` : ""}カードの正式名、カード番号、または原文を入力してください。`;
     const choices = candidates.size
       ? `现有候选（未确认）：${[...candidates].join("、")}。`
       : "";
@@ -469,6 +474,7 @@ function pendingCardIdentityLines(cardResolution) {
 
 function buildPreparedContinuation({
   mode,
+  answerLocale = "zh-CN",
   dataRevision,
   evidenceFingerprint,
   finalPromptSha256,
@@ -485,6 +491,7 @@ function buildPreparedContinuation({
   const continuation = {
     schemaVersion: 1,
     mode,
+    answerLocale,
     dataRevision,
     evidenceFingerprint,
     finalPromptSha256,
@@ -585,6 +592,7 @@ async function answerRagRulingQuestionInternal({
   frozenCardResolution,
   captureEvidenceOnly = false,
   prepareForContinuation = false,
+  answerLocale = "zh-CN",
   preloadedAssets,
   nonCardElapsedBeforePipelineMs = 0,
   progress,
@@ -788,6 +796,7 @@ async function answerRagRulingQuestionInternal({
             elapsedBeforeRetrievalMs,
             packEvidence: (selectedEvidence) => buildRagRulingPromptBundle({
               userQuery: query,
+              answerLocale,
               cardResolution: preparedEvidence.cardResolution,
               evidence: selectedEvidence,
               env: promptEnv,
@@ -805,7 +814,7 @@ async function answerRagRulingQuestionInternal({
           userQuery:query, dataRevision, cardResolution:preparedEvidence.cardResolution,
           retrievedEvidence:preparedEvidence, env, signal,
           packEvidence:(selectedEvidence)=>buildRagRulingPromptBundle({
-            userQuery:query,cardResolution:preparedEvidence.cardResolution,
+            userQuery:query,answerLocale,cardResolution:preparedEvidence.cardResolution,
             evidence:selectedEvidence,env:promptEnv,
           }),
         }) : undefined,
@@ -871,6 +880,7 @@ async function answerRagRulingQuestionInternal({
       signal,
       packEvidence: (selectedEvidence) => buildRagRulingPromptBundle({
         userQuery: query,
+        answerLocale,
         cardResolution: effectiveCardResolution,
         evidence: selectedEvidence,
         env: promptEnv,
@@ -891,6 +901,7 @@ async function answerRagRulingQuestionInternal({
   try {
     promptBundle = preparedPromptBundle || buildRagRulingPromptBundle({
       userQuery: query,
+      answerLocale,
       cardResolution: effectiveCardResolution,
       evidence,
       env: promptEnv,
@@ -929,6 +940,7 @@ async function answerRagRulingQuestionInternal({
   }
   const continuation = buildPreparedContinuation({
     mode: cloudEvidence ? "cloud_evidence_v1" : "rag_baseline",
+    answerLocale,
     dataRevision,
     evidenceFingerprint,
     finalPromptSha256,
@@ -1548,14 +1560,24 @@ function selectedPromptEvidenceRefs(evidence = {}, allowedEvidenceIds = []) {
         type: String(item?.type || item?.recordType || "related"),
         title: String(item?.title || id),
         sourceUrl: String(item?.sourceUrl || item?.url || ""),
+        sourceName: String(item?.sourceName || item?.source || ""),
+        sourceType: String(item?.sourceType || item?.recordType || ""),
+        ruleSystem: ["OCG", "TCG"].includes(item?.ruleSystem) ? item.ruleSystem : "",
+        sourceLanguage: ["zh-CN", "en", "ja"].includes(item?.sourceLanguage || item?.language || item?.locale)
+          ? (item.sourceLanguage || item.language || item.locale) : "",
+        sourceVersion: String(item?.sourceVersion || item?.version || ""),
+        sourceDate: String(item?.sourceDate || item?.publishedAt || ""),
         // Project the source fields from the actual saved prompt, without
         // rereading a newer corpus or regenerating evidence for display.
-        ...Object.fromEntries(['question', 'detailedScene', 'answer', 'text', 'fullText', 'officialText']
+        ...Object.fromEntries(['question', 'rawQuestion', 'rawDetailedQuestion', 'detailedScene', 'answer', 'officialAnswer', 'conclusion', 'text', 'fullText', 'officialText', 'cardText', 'ruleText', 'body', 'content', 'paragraph', 'description', 'explanation']
           .filter(key => typeof item?.[key] === 'string').map(key => [key, item[key]])),
       });
     }
   }
-  return [...allowed].map((id) => byId.get(id)).filter(Boolean);
+  return [...allowed].map((id) => byId.get(id)).filter(Boolean).map((source) => ({
+    ...source,
+    sourceHash: createHash("sha256").update(JSON.stringify(source)).digest("hex"),
+  }));
 }
 
 function assertRelayRuleQueryPlanAvailable(result = {}, { dryRun = false, env = {} } = {}) {

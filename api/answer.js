@@ -19,6 +19,7 @@ import {
   wantsPublicAnswerProgress,
 } from "../backend/publicAnswerProgress.mjs";
 import { createPublicAnswerPreparationStore } from "../backend/publicAnswerPreparationStore.mjs";
+import { translatePublicSource } from "../backend/publicSourceTranslation.mjs";
 import { readQueryAuditRequestContext } from "../backend/publicQueryAudit.mjs";
 import { preparePublicAnswer, finalizePublicAnswer, preparedAnswerProgress } from "../backend/publicPreparedAnswerService.mjs";
 import {
@@ -61,6 +62,12 @@ return async function handler(request, response) {
     const payload = parsePublicAnswerPayload(request.body, {
       declaredBytes: declaredRequestBodyBytes(request),
     });
+    if (payload.action === "translate_source") {
+      const result = await translatePublicSource({ payload, store: createStore({ env }), env,
+        signal: requestAbort.signal });
+      response.status(result.status === "pending" ? 202 : 200).json(result);
+      return;
+    }
     if (["prepare", "finalize", "status"].includes(payload.action)) {
       await answerInSeparateRequest({ request, response, requestAbort, requestChannel,
         payload, env, store: createStore({ env }), prepare, finalize, readRiskControl, now });
@@ -195,6 +202,13 @@ async function answerInSeparateRequest({ request, response, requestAbort, reques
             completionPersistenceStartedAtMs,
           },
         };
+        if (Array.isArray(result.answer?.usedEvidence) && result.answer.usedEvidence.length) {
+          try {
+            if (await store.saveSourceSnapshot(payload.preparationId, result.answer.usedEvidence)) {
+              result.answer.sourceSnapshotId = payload.preparationId;
+            }
+          } catch { /* The answer remains readable if translation storage is unavailable. */ }
+        }
         // A storage acknowledgement failure must not discard a real answer.
         // The record stays running/completed, preventing duplicate generation.
         try {

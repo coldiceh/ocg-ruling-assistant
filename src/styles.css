@@ -250,6 +250,8 @@ h3 {
   color: var(--warn);
   border-color: var(--warn);
   background: var(--glass-strong);
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .theme-toggle:hover,
@@ -496,23 +498,8 @@ button:focus-visible {
   font-size: 13px;
 }
 
-.generation-panel dl {
-  display: grid;
-  grid-template-columns: max-content minmax(0, 1fr);
-  gap: 7px 14px;
-  margin: 0;
-}
-
-.generation-panel dt {
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 800;
-}
-
-.generation-panel dd {
-  margin: 0;
-  overflow-wrap: anywhere;
-}
+.locale-picker select { color: inherit; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 8px; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 
 .budget-panel {
   margin-top: 14px;
@@ -1711,6 +1698,12 @@ li + li {
   margin: 12px 0 0;
 }
 .source-evidence pre + pre { border-top: 1px solid var(--border); padding-top: 12px; }
+.source-field { margin-top: 12px; }
+.source-field strong { display: block; font-size: 12px; color: var(--muted); }
+.source-field p { margin: 4px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.7; }
+.source-meta, .answer-locale-status { display: block; color: var(--muted); font-size: 12px; margin-top: 5px; }
+.source-language-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.source-language-actions button { cursor: pointer; }
 
 .empty {
   color: var(--muted);
@@ -1837,6 +1830,8 @@ dialog::backdrop {
   }
 
   .status-cluster {
+    width: 100%;
+    min-width: 0;
     justify-content: flex-start;
   }
 
@@ -1902,6 +1897,16 @@ dialog::backdrop {
 
   .model-tier-label {
     width: 100%;
+    min-width: 0;
+    grid-template-columns: max-content minmax(0, 1fr);
+  }
+
+  .model-tier-label select {
+    width: 100%;
+  }
+
+  .model-tier-label {
+    width: 100%;
     justify-content: space-between;
   }
 
@@ -1923,10 +1928,6 @@ dialog::backdrop {
   .evidence-package-panel {
     align-items: stretch;
     flex-direction: column;
-  }
-
-  .generation-panel dl {
-    grid-template-columns: 1fr;
   }
 
   .budget-panel {

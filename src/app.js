@@ -5,6 +5,172 @@
 // treating a handful of historical examples as authoritative card knowledge.
 const baseCardIndex = [];
 const PAGE_TITLE = document.title;
+const localeStorageKey = "ocg-ui-locale:v1";
+const supportedLocales = ["zh-CN", "en", "ja"];
+const localeNames = { "zh-CN": "中文", en: "English", ja: "日本語" };
+const visibleSourceTranslations = new Map();
+const pendingSourceTranslations = new Map();
+const uiTranslations = {
+  en: {
+    "输入问题": "Ask a question", "输入卡片、场面、连锁和需要判断的处理节点。": "Describe the cards, game state, Chain, and decision point.",
+    "裁定模型": "Ruling model", "裁定流程": "Ruling process", "准备就绪": "Ready", "仅准备证据包": "Prepare evidence only",
+    "查询": "Ask", "查询中…": "Working…", "证据包已准备": "Evidence prepared", "下载证据包": "Download evidence",
+    "裁定结论": "Ruling", "未分析": "Not analyzed", "理由": "Reasoning", "相关卡片": "Related cards",
+    "资料来源": "Sources", "风险提示": "Cautions", "最终裁定今日额度": "Today's ruling allowance",
+    "每日北京时间 0 点更新。": "Resets daily at midnight Beijing time.", "免责声明": "Disclaimer",
+    "白天模式": "Light mode", "黑夜模式": "Dark mode", "分析中": "Analyzing", "正在分析": "Analyzing",
+    "分析完成": "Analysis complete", "资料来源": "Sources", "查看本次引用原文": "Read cited source",
+    "问题": "Question", "回答": "Answer", "详细情境": "Detailed situation", "正文": "Text", "卡片文本": "Card text",
+    "来源语言": "Source language", "机器译文": "Machine translation", "查看原文": "Show original", "查看译文": "Show translation",
+    "翻译中…": "Translating…", "翻译暂不可用，显示原文。": "Translation unavailable. Showing the original.",
+    "打开出处": "Open source", "回答语言": "Answer language", "规则分析": "Rule analysis", "裁定分析": "Ruling analysis",
+    "官方依据": "Official source", "官方直接裁定": "Official ruling", "需要核对": "Needs review", "条件性规则分析": "Conditional analysis",
+    "需要补充": "More information needed", "需要补充信息": "More information needed", "预算限制": "Budget limit",
+    "今日预算已用完": "Today's budget is exhausted", "风控提醒": "Access notice", "公开问答暂时受限": "Public answers temporarily limited",
+    "模型服务暂不可用": "Model service unavailable", "裁定生成异常": "Answer generation failed",
+    "试用版 · 复杂裁定请核对依据": "Trial version · Check sources for complex rulings",
+    "未配置模型能力接口；默认 GPT-6 Astra low 尚未确认可用。": "Model availability is not configured; the default GPT-6 Astra low has not been verified.",
+    "模型能力接口不可用；默认 GPT-6 Astra low 尚未确认可用。": "Model availability could not be checked; the default GPT-6 Astra low has not been verified.",
+  },
+  ja: {
+    "输入问题": "質問を入力", "输入卡片、场面、连锁和需要判断的处理节点。": "カード、盤面、チェーン、判断したい処理を入力してください。",
+    "裁定模型": "裁定モデル", "裁定流程": "裁定の進行", "准备就绪": "準備完了", "仅准备证据包": "根拠資料のみ準備",
+    "查询": "質問する", "查询中…": "処理中…", "证据包已准备": "根拠資料の準備完了", "下载证据包": "根拠資料をダウンロード",
+    "裁定结论": "裁定結果", "未分析": "未分析", "理由": "理由", "相关卡片": "関連カード",
+    "资料来源": "参照資料", "风险提示": "注意事項", "最终裁定今日额度": "本日の裁定枠",
+    "每日北京时间 0 点更新。": "北京時間の毎日0時に更新されます。", "免责声明": "免責事項",
+    "白天模式": "ライトモード", "黑夜模式": "ダークモード", "分析中": "分析中", "正在分析": "分析中",
+    "分析完成": "分析完了", "查看本次引用原文": "引用した原文を読む",
+    "问题": "質問", "回答": "回答", "详细情境": "詳しい状況", "正文": "本文", "卡片文本": "カードテキスト",
+    "来源语言": "原文の言語", "机器译文": "機械翻訳", "查看原文": "原文を表示", "查看译文": "翻訳を表示",
+    "翻译中…": "翻訳中…", "翻译暂不可用，显示原文。": "翻訳できません。原文を表示しています。",
+    "打开出处": "出典を開く", "回答语言": "回答の言語", "规则分析": "ルール分析", "裁定分析": "裁定分析",
+    "官方依据": "公式資料", "官方直接裁定": "公式裁定", "需要核对": "確認が必要", "条件性规则分析": "条件付き分析",
+    "需要补充": "情報が必要", "需要补充信息": "情報が必要", "预算限制": "利用枠の制限",
+    "今日预算已用完": "本日の利用枠を使い切りました", "风控提醒": "利用上の注意", "公开问答暂时受限": "公開質問を一時制限中",
+    "模型服务暂不可用": "モデルサービスを利用できません", "裁定生成异常": "回答の生成に失敗しました",
+  },
+};
+Object.assign(uiTranslations.en, {
+  "游戏王 OCG AI裁定": "Yu-Gi-Oh! OCG Ruling Assistant", "清空": "Clear", "调试": "Debug",
+  "证据包已生成": "Evidence package ready", "准备完成": "Preparation complete", "尚未请求最终裁定": "Final ruling has not been requested",
+  "可下载本题提交给最终裁定模型的实际材料。": "Download the exact materials sent to the final ruling model.",
+  "本题未取得可下载的证据包。": "No downloadable evidence package is available for this question.",
+  "本次只准备材料，未调用最终裁定模型。": "Only evidence was prepared; the final model was not called.",
+  "理解问题": "Understand question", "提取卡名": "Identify cards", "检索卡片文本": "Retrieve card text",
+  "检索规则资料": "Retrieve rules", "生成裁定": "Generate ruling",
+  "正在判断是否为裁定相关问题，并检查当前服务状态。": "Checking the question and service status.",
+  "正在识别卡名候选，并准备查询卡片资料。": "Identifying card names and preparing card lookup.",
+  "正在匹配本地资料、百鸽卡片资料和用户提供文本。": "Matching local data, card data, and supplied text.",
+  "正在补充检索线索、查找相关 Q&A、FAQ 和规则资料，并整理证据。": "Finding relevant Q&A, FAQ, and rule sources.",
+  "正在根据已准备的资料生成裁定分析。": "Generating an analysis from the prepared evidence.",
+  "本次回答：最新版": "Answer version: latest", "处理结果": "Result", "资料服务": "Source service",
+  "资料库准备中": "Preparing source data", "平均出答案时间暂不可用。": "Average answer time unavailable.",
+  "暂无该模型的成功回答耗时样本。": "No successful timing samples for this model yet.",
+  "平均出答案时间统计已关闭。": "Answer-time statistics are disabled.",
+  "平均出答案时间暂不可用（未配置统计存储）。": "Answer-time statistics are not configured.",
+  "平均出答案时间暂时读取失败。": "Answer-time statistics could not be loaded.",
+  "GPT最终裁定": "GPT final ruling", "未读取": "Unavailable", "暂不可用": "Unavailable",
+  "在 GitHub 反馈这个回答": "Report this answer on GitHub", "暂无卡图": "No card image",
+  "用户提供文本": "User-provided text", "本地数据库": "Local database",
+  "暂未读取到效果文本。": "Card text is unavailable.", "卡片文本 / FAQ / 相关资料": "Card text / FAQ / related sources",
+  "已有资料可供分析，但部分条件仍需核对": "Available sources support analysis, but some conditions need review",
+  "缺少作出判断所需的场景或卡片资料": "The scenario or card information is incomplete",
+  "API 预算守卫": "API budget limit", "非规则问题风控": "Question access control",
+  "卡片 FAQ": "Card FAQ", "规则资料": "Rule source", "官方 Q&A": "Official Q&A", "百鸽卡片文本": "Baige card text",
+  "规则书资料": "Rulebook", "逐步证据判读": "Evidence analysis", "形式规则验证": "Formal rule check", "相关资料": "Related source",
+});
+Object.assign(uiTranslations.ja, {
+  "游戏王 OCG AI裁定": "遊戯王 OCG 裁定アシスタント", "清空": "消去", "调试": "デバッグ",
+  "证据包已生成": "根拠資料を準備しました", "准备完成": "準備完了", "尚未请求最终裁定": "最終裁定はまだ依頼していません",
+  "可下载本题提交给最终裁定模型的实际材料。": "最終裁定モデルに送る資料をダウンロードできます。",
+  "本题未取得可下载的证据包。": "ダウンロード可能な根拠資料がありません。",
+  "本次只准备材料，未调用最终裁定模型。": "資料のみ準備し、最終モデルは呼び出していません。",
+  "理解问题": "質問を確認", "提取卡名": "カード名を特定", "检索卡片文本": "カードテキストを検索",
+  "检索规则资料": "ルール資料を検索", "生成裁定": "裁定を生成",
+  "正在判断是否为裁定相关问题，并检查当前服务状态。": "質問とサービスの状態を確認しています。",
+  "正在识别卡名候选，并准备查询卡片资料。": "カード名の候補を確認しています。",
+  "正在匹配本地资料、百鸽卡片资料和用户提供文本。": "カード資料と入力されたテキストを照合しています。",
+  "正在补充检索线索、查找相关 Q&A、FAQ 和规则资料，并整理证据。": "関連する Q&A、FAQ、ルール資料を探しています。",
+  "正在根据已准备的资料生成裁定分析。": "準備した資料をもとに裁定を生成しています。",
+  "本次回答：最新版": "回答バージョン：最新版", "处理结果": "結果", "资料服务": "資料サービス",
+  "资料库准备中": "資料を準備中", "平均出答案时间暂不可用。": "平均回答時間を取得できません。",
+  "暂无该模型的成功回答耗时样本。": "このモデルの回答時間データはまだありません。",
+  "平均出答案时间统计已关闭。": "回答時間の集計は無効です。",
+  "平均出答案时间暂不可用（未配置统计存储）。": "回答時間の集計は設定されていません。",
+  "平均出答案时间暂时读取失败。": "回答時間を読み込めませんでした。",
+  "GPT最终裁定": "GPT 最終裁定", "未读取": "取得不可", "暂不可用": "利用できません",
+  "在 GitHub 反馈这个回答": "この回答を GitHub で報告", "暂无卡图": "カード画像なし",
+  "用户提供文本": "ユーザー提供のテキスト", "本地数据库": "ローカルデータベース",
+  "暂未读取到效果文本。": "カードテキストを取得できません。", "卡片文本 / FAQ / 相关资料": "カードテキスト / FAQ / 関連資料",
+  "已有资料可供分析，但部分条件仍需核对": "資料に基づいて分析できますが、一部の条件は確認が必要です",
+  "缺少作出判断所需的场景或卡片资料": "判断に必要な状況またはカード資料が不足しています",
+  "API 预算守卫": "API 利用枠", "非规则问题风控": "質問の利用制限",
+  "卡片 FAQ": "カード FAQ", "规则资料": "ルール資料", "官方 Q&A": "公式 Q&A", "百鸽卡片文本": "百鴿カードテキスト",
+  "试用版 · 复杂裁定请核对依据": "試用版 · 複雑な裁定は根拠を確認してください",
+  "未配置模型能力接口；默认 GPT-6 Astra low 尚未确认可用。": "モデルの利用状況を取得する設定がありません。既定の GPT-6 Astra low は利用可能か確認できていません。",
+  "模型能力接口不可用；默认 GPT-6 Astra low 尚未确认可用。": "モデルの利用状況を確認できません。既定の GPT-6 Astra low は利用可能か確認できていません。",
+  "规则书资料": "ルールブック", "逐步证据判读": "根拠の分析", "形式规则验证": "形式ルールの確認", "相关资料": "関連資料",
+});
+let selectedUiLocale = "zh-CN";
+let lastModelStatusText = "准备就绪";
+let lastPublicBudgetStatus = null;
+function tr(value) { return uiTranslations[selectedUiLocale]?.[value] || value; }
+function lt(zh, en, ja) { return selectedUiLocale === "en" ? en : selectedUiLocale === "ja" ? ja : zh; }
+function readInitialLocale() {
+  try { const value = localStorage.getItem(localeStorageKey); if (supportedLocales.includes(value)) return value; } catch { /* Optional preference. */ }
+  return "zh-CN";
+}
+function applyUiLocale(locale) {
+  selectedUiLocale = supportedLocales.includes(locale) ? locale : "zh-CN";
+  document.documentElement.lang = selectedUiLocale;
+  if (ui.localeSelect) ui.localeSelect.value = selectedUiLocale;
+  const staticLabels = {
+    ".brand-block h1": "游戏王 OCG AI裁定",
+    "#askTitle": "输入问题", ".panel-head p": "输入卡片、场面、连锁和需要判断的处理节点。",
+    ".model-tier-label span": "裁定模型", ".model-strip span": "裁定流程",
+    "#prepareEvidenceButton": "仅准备证据包", "#evidencePackageTitle": "证据包已准备",
+    "#evidencePackageDownload": "下载证据包", ".verdict-block .block-title span": "裁定结论",
+    "#sourcesTitle": "资料来源", "#questionsTitle": "风险提示", "#cardsTitle": "相关卡片",
+    "#budgetTitle": "最终裁定今日额度", "#disclaimerTitle": "免责声明",
+    "#simulationTitle": "模拟器验证", "#cardImagePlaceholder": "暂无卡图",
+  };
+  for (const [selector, original] of Object.entries(staticLabels)) {
+    const node = document.querySelector(selector); if (node) node.textContent = tr(original);
+  }
+  if (ui.questionInput) ui.questionInput.placeholder = selectedUiLocale === "en"
+    ? "Enter an OCG ruling question…" : selectedUiLocale === "ja"
+      ? "OCGの裁定に関する質問を入力…" : "输入需要分析的 OCG 裁定问题...";
+  if (ui.themeToggle) applyTheme(document.body.classList.contains("theme-night") ? "night" : "day");
+  if (ui.clearButton) {
+    ui.clearButton.title = tr("清空");
+    ui.clearButton.setAttribute("aria-label", tr("清空"));
+  }
+  if (ui.localeSelect) ui.localeSelect.setAttribute("aria-label", lt("显示语言", "Display language", "表示言語"));
+  if (ui.themeToggle) ui.themeToggle.setAttribute("aria-label", lt("切换白天或黑夜主题", "Toggle light or dark theme", "明暗テーマを切り替え"));
+  const disclaimer = document.querySelector(".disclaimer-panel p");
+  if (disclaimer) disclaimer.textContent = lt(
+    "本项目不是 KONAMI 官方项目，分析结果不代表官方裁定。AI 生成内容和规则检索可能存在错误；正式比赛请以官方规则、官方数据库和现场裁判判断为准。",
+    "This is not an official KONAMI project. Its analysis is not an official ruling. AI answers and retrieved rules may contain errors. For tournaments, follow official rules, the official database, and the judge on site.",
+    "本プロジェクトは KONAMI の公式サービスではなく、分析結果は公式裁定ではありません。AI の回答やルール検索には誤りがあり得ます。大会では公式ルール、公式データベース、現地のジャッジの判断を優先してください。",
+  );
+  if (ui.analyzeButtonText) ui.analyzeButtonText.textContent = tr(ui.analyzeButton?.getAttribute("aria-busy") === "true" ? "查询中…" : "查询");
+  if (ui.stepsTitle) ui.stepsTitle.textContent = tr("理由");
+  if (ui.budgetHint) ui.budgetHint.textContent = tr("每日北京时间 0 点更新。");
+  if (ui.deploymentLabel) ui.deploymentLabel.textContent = tr(appConfig.deploymentLabel);
+  document.title = appConfig.deploymentLabel ? `${tr(PAGE_TITLE)} · ${tr(appConfig.deploymentLabel)}` : tr(PAGE_TITLE);
+  updateModelStatus(lastModelStatusText);
+  renderRulingModelOptions();
+  if (lastPublicBudgetStatus) renderBudgetStatus(lastPublicBudgetStatus);
+  if (activeAnalysisPhase) {
+    if (ui.confidenceText) ui.confidenceText.textContent = tr("分析中");
+    if (ui.verdictTitle) ui.verdictTitle.textContent = tr("正在分析");
+    if (ui.verdictBody) ui.verdictBody.textContent = tr(getPendingStages()[Math.max(0, pendingStageIndex)]?.body || pendingStages[0].body);
+    if (ui.stepsTitle) ui.stepsTitle.textContent = tr("裁定流程");
+    renderPendingStages(getPendingStages());
+  }
+  if (lastRenderedBackendAnswer && !activeAnalysisPhase) renderBackendAnswer(lastRenderedBackendAnswer);
+}
 const DEFAULT_RULING_MODEL_PROFILE = "bai-astra-low";
 const publicAnswerPreparationStorageKey = "ocg-public-answer-preparation-id";
 const FALLBACK_RULING_MODEL_PROFILE = Object.freeze({
@@ -33,6 +199,7 @@ const ui = {
   confidenceText: document.querySelector("#confidenceText"),
   verdictBlock: document.querySelector(".verdict-block"),
   verdictTitle: document.querySelector("#verdictTitle"),
+  answerLocaleStatus: document.querySelector("#answerLocaleStatus"),
   rulingBasisText: document.querySelector("#rulingBasisText"),
   verdictBody: document.querySelector("#verdictBody"),
   subAnswersPanel: document.querySelector("#subAnswersPanel"),
@@ -48,8 +215,6 @@ const ui = {
   reasonBlock: document.querySelector(".reason-block"),
   questionsList: document.querySelector("#questionsList"),
   riskBlock: document.querySelector(".risk-block"),
-  generationPanel: document.querySelector("#generationPanel"),
-  generationDetails: document.querySelector("#generationDetails"),
   sourcesList: document.querySelector("#sourcesList"),
   sourceTrace: document.querySelector(".source-trace"),
   simulationPanel: document.querySelector("#simulationPanel"),
@@ -70,6 +235,7 @@ const ui = {
   cardEffect: document.querySelector("#cardEffect"),
   cardSourceLink: document.querySelector("#cardSourceLink"),
   themeToggle: document.querySelector("#themeToggle"),
+  localeSelect: document.querySelector("#localeSelect"),
   budgetPanel: document.querySelector("#budgetPanel"),
   budgetHint: document.querySelector("#budgetHint"),
   budgetBucketList: document.querySelector("#budgetBucketList"),
@@ -243,11 +409,11 @@ async function loadAppConfig() {
   }
   if (!appConfig.budgetApiUrl) appConfig.budgetApiUrl = getBudgetApiUrl();
   if (ui.deploymentLabel) {
-    ui.deploymentLabel.textContent = appConfig.deploymentLabel;
+    ui.deploymentLabel.textContent = tr(appConfig.deploymentLabel);
     ui.deploymentLabel.hidden = !appConfig.deploymentLabel;
   }
   document.body.classList.toggle("has-deployment-label", Boolean(appConfig.deploymentLabel));
-  document.title = appConfig.deploymentLabel ? `${PAGE_TITLE} · ${appConfig.deploymentLabel}` : PAGE_TITLE;
+  document.title = appConfig.deploymentLabel ? `${tr(PAGE_TITLE)} · ${tr(appConfig.deploymentLabel)}` : tr(PAGE_TITLE);
 }
 
 async function loadBackendModelInfo() {
@@ -372,7 +538,8 @@ function renderRulingModelOptions(message = "") {
   for (const profile of appConfig.rulingModelProfiles || []) {
     const option = document.createElement("option");
     option.value = profile.id;
-    option.textContent = profile.available === false ? `${profile.label}（不可用）` : profile.label;
+    const label = localizedRulingModelLabel(profile);
+    option.textContent = profile.available === false ? `${label}${lt("（不可用）", " (unavailable)", "（利用不可）")}` : label;
     option.disabled = profile.available === false;
     ui.rulingModelSelect.appendChild(option);
   }
@@ -381,13 +548,25 @@ function renderRulingModelOptions(message = "") {
   syncRulingModelSelect();
 }
 
+function localizedRulingModelLabel(profile) {
+  const label = String(profile?.label || "");
+  if (selectedUiLocale === "zh-CN") return label;
+  return label
+    .replace(/^官方 /u, lt("官方 ", "Official ", "公式 "))
+    .replace(/ · 思考 /gu, lt(" · 思考 ", " · reasoning ", " · 推論 "))
+    .replace(/（可用性未确认）/gu, lt("（可用性未确认）", " (availability unverified)", "（利用可否未確認）"))
+    .replace(/ 测试版/gu, lt(" 测试版", " preview", " プレビュー版"));
+}
+
 function updateRulingModelSelectionStatus(message = "") {
   if (!ui.rulingModelStatus) return;
   const selected = (appConfig.rulingModelProfiles || [])
     .find((profile) => profile.id === selectedRulingModelProfile);
   const isUnavailable = selected?.available === false;
-  const status = message || (isUnavailable
-    ? `${selected.label} 当前不可用；请选择可用模型，系统不会自动改用其他模型。`
+  const status = message ? tr(message) : (isUnavailable
+    ? lt(`${selected.label} 当前不可用；请选择可用模型，系统不会自动改用其他模型。`,
+      `${localizedRulingModelLabel(selected)} is unavailable. Choose an available model; it will not switch automatically.`,
+      `${localizedRulingModelLabel(selected)} は利用できません。利用可能なモデルを選択してください。自動では切り替わりません。`)
     : selected?.benchmarkSummary || "");
   ui.rulingModelStatus.textContent = status;
   ui.rulingModelStatus.hidden = !status;
@@ -400,7 +579,11 @@ function renderSelectedRulingModelLatency(selected) {
   const latency = selected?.answerLatency;
   let message = "平均出答案时间暂不可用。";
   if (latency?.status === "available") {
-    message = `最近 ${latency.sampleCount} 次成功回答：平均 ${formatPublicAnswerLatency(latency.averageMs)}（最多统计 ${latency.windowSize} 次）。`;
+    message = lt(
+      `最近 ${latency.sampleCount} 次成功回答：平均 ${formatPublicAnswerLatency(latency.averageMs)}（最多统计 ${latency.windowSize} 次）。`,
+      `Average ${formatPublicAnswerLatency(latency.averageMs)} over the last ${latency.sampleCount} successful answers (up to ${latency.windowSize}).`,
+      `直近 ${latency.sampleCount} 件の成功回答の平均：${formatPublicAnswerLatency(latency.averageMs)}（最大 ${latency.windowSize} 件）。`,
+    );
   } else if (latency?.status === "no_samples") {
     message = "暂无该模型的成功回答耗时样本。";
   } else if (latency?.reason === "disabled" || latency?.storage === "disabled") {
@@ -410,18 +593,19 @@ function renderSelectedRulingModelLatency(selected) {
   } else if (latency?.reason === "storage_error") {
     message = "平均出答案时间暂时读取失败。";
   }
-  ui.rulingModelLatency.textContent = message;
+  ui.rulingModelLatency.textContent = tr(message);
 }
 
 function formatPublicAnswerLatency(durationMs) {
   const milliseconds = Number(durationMs);
-  if (!Number.isFinite(milliseconds) || milliseconds < 0) return "未知";
-  if (milliseconds < 1000) return `${Math.round(milliseconds)} 毫秒`;
+  if (!Number.isFinite(milliseconds) || milliseconds < 0) return lt("未知", "Unknown", "不明");
+  if (milliseconds < 1000) return `${Math.round(milliseconds)} ${lt("毫秒", "ms", "ミリ秒")}`;
   const totalSeconds = Math.round(milliseconds / 1000);
-  if (totalSeconds < 60) return `${totalSeconds} 秒`;
+  if (totalSeconds < 60) return `${totalSeconds} ${lt("秒", "s", "秒")}`;
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
-  return seconds ? `${minutes} 分 ${seconds} 秒` : `${minutes} 分钟`;
+  return seconds ? `${minutes} ${lt("分", "min", "分")} ${seconds} ${lt("秒", "s", "秒")}`
+    : `${minutes} ${lt("分钟", "min", "分")}`;
 }
 
 function syncRulingModelSelect(isPending = false) {
@@ -648,6 +832,7 @@ function getDetectedCards(text) {
 async function analyzeQuestion({ prepareOnly = false } = {}) {
   lastSubmittedQuestion = ui.questionInput.value;
   const text = ui.questionInput.value.trim();
+  const answerLocale = selectedUiLocale;
   cancelActiveAnalysisRequest();
   clearStoredPublicAnswerPreparationId();
   const requestId = ++analysisRequestId;
@@ -666,6 +851,7 @@ async function analyzeQuestion({ prepareOnly = false } = {}) {
     renderPending();
     try {
       const answer = await requestBackendAnswer(text, requestedRulingVersion, {
+        answerLocale,
         signal: abortController.signal,
         requestId,
         prepareOnly,
@@ -696,6 +882,7 @@ async function analyzeQuestion({ prepareOnly = false } = {}) {
 }
 
 async function requestBackendAnswer(text, requestedRulingVersion, {
+  answerLocale = "zh-CN",
   signal,
   requestId = null,
   prepareOnly = false,
@@ -710,6 +897,7 @@ async function requestBackendAnswer(text, requestedRulingVersion, {
       mode: backendMode,
       rulingModelProfile: firstRequestModelProfile,
       rulingVersion: requestedRulingVersion,
+      answerLocale,
       action: "prepare",
     },
     signal,
@@ -1301,96 +1489,24 @@ function renderPreparedOnly(prepared) {
   renderList(ui.stepsList, ["本次只准备材料，未调用最终裁定模型。"]);
   renderList(ui.questionsList, []);
   renderSources([]);
-  renderGenerationDetails({ generation: null });
-}
-
-function renderGenerationDetails(answer) {
-  if (!ui.generationPanel || !ui.generationDetails) return;
-  clearElement(ui.generationDetails);
-  const hasGenerationField = Boolean(answer) && Object.hasOwn(answer, "generation");
-  const generation = answer?.generation;
-  if (hasGenerationField && generation === null) {
-    appendGenerationDetail("最终裁定模型", "未调用");
-    return;
-  }
-  if (!generation || typeof generation !== "object" || Array.isArray(generation)) {
-    appendGenerationDetail("最终裁定模型", "未取得");
-    appendGenerationDetail("推理强度", "未取得");
-    appendGenerationDetail("共享今日额度", "未取得");
-    return;
-  }
-  const provider = String(generation.provider || "").trim();
-  appendGenerationDetail("实际服务", provider ? modelProviderLabel(provider) : "未取得");
-  if (generation.embeddedInAnswerText !== true) {
-    appendGenerationDetail("实际生成模型", formatGenerationText(generation.label, generation.model));
-    appendGenerationDetail("推理强度", formatGenerationReasoning(generation));
-    if (generation.thinkingMode) {
-      appendGenerationDetail("思考模式", formatGenerationText(generation.thinkingMode));
-    }
-  }
-  appendGenerationDetail("共享今日额度", formatGenerationBudget(generation.budget));
-  if (generation.fallbackFrom) {
-    appendGenerationDetail("自动切换自", formatGenerationText(generation.fallbackFrom));
-  }
-}
-
-function appendGenerationDetail(label, value) {
-  appendText(ui.generationDetails, "dt", label);
-  appendText(ui.generationDetails, "dd", value);
-}
-
-function formatGenerationText(...values) {
-  const value = values.map((item) => String(item || "").trim()).find(Boolean);
-  return value || "未取得";
-}
-
-function formatGenerationReasoning(generation) {
-  const thinkingMode = String(generation?.thinkingMode || "").trim().toLowerCase();
-  if (
-    (generation?.reasoningEffort === null || generation?.reasoningEffort === "")
-    && ["disabled", "none", "off"].includes(thinkingMode)
-  ) return "无（已关闭思考）";
-  return formatGenerationText(generation?.reasoningEffort);
-}
-
-function formatGenerationBudget(budget) {
-  if (!budget || typeof budget !== "object" || Array.isArray(budget)) return "未取得";
-  const currency = String(budget.currency || "").trim().toUpperCase();
-  const remaining = formatGenerationAmount(budget.remainingAmount, currency);
-  const daily = formatGenerationAmount(budget.dailyBudgetAmount, currency);
-  const amount = remaining === "未取得" && daily === "未取得"
-    ? "未取得"
-    : `剩余 ${remaining} / 每日 ${daily}`;
-  const pool = String(budget.sharedPoolLabel || "").trim();
-  const currencySuffix = currency ? "" : "（币种未取得）";
-  return `${pool ? `${pool} · ` : ""}${amount}${currencySuffix}`;
-}
-
-function formatGenerationAmount(value, currency) {
-  if (value === null || value === undefined || value === "") return "未取得";
-  const amount = Number(value);
-  if (!Number.isFinite(amount)) return "未取得";
-  if (currency === "USD") return `$${formatUsd(amount)}`;
-  if (currency === "CNY") return `${formatCny(amount)} 元`;
-  return currency ? `${amount} ${currency}` : String(amount);
 }
 
 function renderPending() {
+  lastRenderedBackendAnswer = null;
   ui.resultGrid.hidden = false;
   renderAnswerVersion(null);
   renderCards([]);
   renderEngineSimulation(null, null);
   updateModelStatus("分析中");
   ui.verdictBlock.className = "result-block verdict-block";
-  ui.confidenceText.textContent = "分析中";
-  ui.verdictTitle.textContent = "正在分析";
+  ui.confidenceText.textContent = tr("分析中");
+  ui.verdictTitle.textContent = tr("正在分析");
   ui.rulingBasisText.textContent = "";
-  ui.verdictBody.textContent = getPendingStages()[0].body;
-  ui.stepsTitle.textContent = "裁定流程";
+  ui.verdictBody.textContent = tr(getPendingStages()[0].body);
+  ui.stepsTitle.textContent = tr("裁定流程");
   ui.stepsList.hidden = true;
   renderSubAnswers([]);
   renderParserDebug(null);
-  renderGenerationDetails(null);
   startPendingStages();
   renderList(ui.questionsList, []);
   renderSources([]);
@@ -1401,9 +1517,11 @@ function renderBackendAnswer(answer) {
   ui.stepsTitle.textContent = "理由";
   ui.stepsList.hidden = false;
   lastRenderedBackendAnswer = answer || null;
-  renderGenerationDetails(answer?.answerLevel === "risk_control"
-    ? { generation: null }
-    : answer);
+  if (ui.answerLocaleStatus) {
+    const locale = supportedLocales.includes(answer?.answerLocale) ? answer.answerLocale : "zh-CN";
+    ui.answerLocaleStatus.textContent = `${tr("回答语言")}: ${localeNames[locale]}`;
+    ui.answerLocaleStatus.hidden = !answer;
+  }
   renderAnswerVersion(answer);
   renderEngineSimulation(null, null);
   if (answer?.mode === "rag_baseline"
@@ -1478,11 +1596,9 @@ function renderBackendVersionError(error, requestedRulingVersion) {
   renderEngineSimulation(null, null);
   renderParserDebug(null);
   renderFeedbackPanel(null);
-  renderGenerationDetails(null);
   const relayPreparationFailure = relayPreparationFailurePresentation(error);
   if (relayPreparationFailure) {
-    renderGenerationDetails({ generation: null });
-    updateModelStatus("证据准备失败");
+      updateModelStatus("证据准备失败");
     ui.verdictBlock.className = "result-block verdict-block is-risky";
     ui.confidenceText.textContent = "暂不可用";
     ui.verdictTitle.textContent = relayPreparationFailure.title;
@@ -1656,12 +1772,12 @@ function renderRagAnswer(answer) {
       ? "模型服务暂不可用"
       : (systemFailureState ? "裁定生成异常" : "分析完成")));
   ui.verdictBlock.className = `result-block verdict-block ${state.className}`;
-  ui.confidenceText.textContent = state.confidence;
-  ui.verdictTitle.textContent = state.title;
-  ui.rulingBasisText.textContent = state.basis;
+  ui.confidenceText.textContent = tr(state.confidence);
+  ui.verdictTitle.textContent = tr(state.title);
+  ui.rulingBasisText.textContent = tr(state.basis);
   renderMarkdown(ui.verdictBody, answer.shortAnswer || "当前无法给出可靠分析。", buildSourceLinkMap(answer?.usedEvidence));
   renderSubAnswers([]);
-  ui.stepsTitle.textContent = "理由";
+  ui.stepsTitle.textContent = tr("理由");
   ui.stepsList.hidden = false;
   renderList(ui.stepsList, answer.reasoning || []);
   renderList(ui.questionsList, [
@@ -1672,7 +1788,7 @@ function renderRagAnswer(answer) {
   ]);
   renderSources((answer.usedEvidence || []).map((item) => ({
     ...item,
-    label: ragEvidenceLabel(item.type),
+    label: tr(ragEvidenceLabel(item.type)),
     detail: item.title || item.id || "",
     id: item.id || "",
     url: item.sourceUrl || item.url || "",
@@ -1865,9 +1981,10 @@ async function capPublicChatGptBudgetStatus() {
 
 function renderBudgetStatus(status, message = "") {
   if (!ui.budgetPanel) return;
-  ui.budgetHint.textContent = message
-    || status?.storageWarning
-    || "每日北京时间 0 点更新。";
+  lastPublicBudgetStatus = status || null;
+  ui.budgetHint.textContent = message ? tr(message) : status?.storageWarning
+    ? lt(status.storageWarning, "Allowance status is temporarily unavailable.", "利用枠の状態を取得できません。")
+    : tr("每日北京时间 0 点更新。");
   const buckets = status?.buckets || (status?.bucket ? [status.bucket] : []);
   renderBudgetBuckets(buckets);
   renderAdminPublicBudgetStatus(buckets);
@@ -1911,9 +2028,9 @@ function renderBudgetBuckets(buckets = []) {
     const row = document.createElement("div");
     row.className = "budget-bucket";
     const label = document.createElement("span");
-    label.textContent = bucket?.provider === "bai" ? "GPT最终裁定"
-      : bucket?.provider === "relay" ? "中转 GPT 最终裁定"
-      : String(bucket?.label || [bucket?.provider, bucket?.stage].filter(Boolean).join(" · ") || "模型用量");
+    label.textContent = bucket?.provider === "bai" ? tr("GPT最终裁定")
+      : bucket?.provider === "relay" ? lt("中转 GPT 最终裁定", "Relay GPT final ruling", "中継 GPT 最終裁定")
+      : String(bucket?.label || [bucket?.provider, bucket?.stage].filter(Boolean).join(" · ") || lt("模型用量", "Model usage", "モデル使用量"));
     const value = document.createElement("strong");
     const currency = bucket?.currency === "USD" ? "USD" : "CNY";
     const rawSpent = currency === "USD"
@@ -1925,14 +2042,14 @@ function renderBudgetBuckets(buckets = []) {
     const spent = rawSpent === null ? Number.NaN : Number(rawSpent);
     const limit = rawLimit === null ? Number.NaN : Number(rawLimit);
     const spentText = Number.isFinite(spent)
-      ? currency === "USD" ? `$${formatUsd(spent)}` : `${formatCny(spent)} 元`
-      : "未读取";
+      ? currency === "USD" ? `$${formatUsd(spent)}` : `${formatCny(spent)} ${lt("元", "CNY", "元")}`
+      : tr("未读取");
     const valueText = Number.isFinite(limit) && limit > 0
       ? currency === "USD"
         ? `${spentText} / $${formatUsd(limit)}`
-        : `${Number.isFinite(spent) ? formatCny(spent) : "未读取"} / ${formatCny(limit)} 元`
+        : `${Number.isFinite(spent) ? formatCny(spent) : tr("未读取")} / ${formatCny(limit)} ${lt("元", "CNY", "元")}`
       : spentText;
-    value.textContent = `${valueText}${bucket?.manuallyClosed ? "（已封顶）" : ""}`;
+    value.textContent = `${valueText}${bucket?.manuallyClosed ? lt("（已封顶）", " (capped)", "（上限到達）") : ""}`;
     row.append(label, value);
     ui.budgetBucketList.appendChild(row);
   }
@@ -2059,9 +2176,7 @@ function setQueryPending(isPending) {
   }
   syncRulingModelSelect(Boolean(isPending));
   syncRulingVersionButtons(Boolean(isPending));
-  if (ui.analyzeButtonText) {
-    ui.analyzeButtonText.textContent = isPending ? "查询中…" : "查询";
-  }
+  if (ui.analyzeButtonText) ui.analyzeButtonText.textContent = tr(isPending ? "查询中…" : "查询");
 }
 
 function syncRulingVersionButtons(isPending = false) {
@@ -2120,7 +2235,6 @@ function renderBackendUnavailable(detectedCards = []) {
   renderEngineSimulation(null, null);
   renderParserDebug(null);
   renderFeedbackPanel(null);
-  renderGenerationDetails({ generation: null });
   updateModelStatus("服务不可用");
   ui.verdictBlock.className = "result-block verdict-block is-risky";
   ui.confidenceText.textContent = "无法裁定";
@@ -5118,7 +5232,7 @@ function getBudgetApiUrl() {
 function renderCardDetail(card, detail, status) {
   const name = detail?.name || cardDisplayName(card);
   const aliases = detail?.names?.filter((item) => item && item !== name).slice(0, 3) || [card.jaName, card.enName].filter(Boolean);
-  const effect = cleanDisplayText(detail?.effectText || card.effectText || "暂未读取到效果文本。");
+  const effect = cleanDisplayText(detail?.effectText || card.effectText || tr("暂未读取到效果文本。"));
   const sourceUrl = detail?.sourceUrl || card.sourceUrl || "";
   const sourceLabel = card.source === "user_provided_text"
     ? "用户提供文本"
@@ -5127,7 +5241,7 @@ function renderCardDetail(card, detail, status) {
   ui.cardName.textContent = name;
   ui.cardMeta.textContent = [detail?.meta || card.cardType, aliases.length ? aliases.join(" / ") : ""].filter(Boolean).join(" · ");
   ui.cardEffect.textContent = effect;
-  ui.cardSourceLink.textContent = sourceLabel;
+  ui.cardSourceLink.textContent = tr(sourceLabel);
   if (sourceUrl) {
     ui.cardSourceLink.href = sourceUrl;
     ui.cardSourceLink.hidden = false;
@@ -5283,7 +5397,8 @@ function basisFromBackendMode(mode) {
 
 function updateModelStatus(text) {
   if (!ui.modelStatusText) return;
-  ui.modelStatusText.textContent = text;
+  lastModelStatusText = text;
+  ui.modelStatusText.textContent = tr(text);
 }
 
 function renderSubAnswers(subAnswers) {
@@ -6016,7 +6131,7 @@ function renderPendingStages(stages = getPendingStages()) {
           ? "—"
         : state.status === "running" ? "•" : "·";
     const label = document.createElement("span");
-    label.textContent = stage.label;
+    label.textContent = tr(stage.label);
     const time = document.createElement("span");
     time.className = "progress-step-time";
     const durationMs = ["done", "failed"].includes(state.status)
@@ -6270,53 +6385,179 @@ function renderSources(sources) {
   for (const { url, title, source: normalizedSource, entries } of groups.values()) {
     const node = document.createElement("div");
     node.className = "source-item";
-    appendText(node, "strong", normalizedSource.label || normalizedSource.name || "资料来源");
+    appendText(node, "strong", normalizedSource.label || normalizedSource.name || tr("资料来源"));
     if (url) {
       const link = document.createElement("a");
       link.href = url;
       link.target = "_blank";
       link.rel = "noreferrer noopener";
-      link.textContent = title;
+      link.textContent = sourceDisplayText(title);
       node.appendChild(link);
     } else {
-      appendText(node, "p", title);
+      appendText(node, "p", sourceDisplayText(title));
     }
-    const bodies = entries.flatMap(sourceEvidenceBlocks);
-    if (bodies.length) {
+    for (const entry of entries) {
+      const fields = sourceEvidenceFields(entry);
+      if (!fields.length) continue;
       const details = document.createElement("details");
       details.className = "source-evidence";
-      appendText(details, "summary", "查看本次引用原文");
-      for (const body of bodies) appendText(details, "pre", body);
+      appendText(details, "summary", tr("查看本次引用原文"));
+      const body = document.createElement("div");
+      body.className = "source-body";
+      renderSourceFields(body, fields);
+      details.appendChild(body);
+      const meta = [
+        ["OCG", "TCG"].includes(entry.ruleSystem) ? entry.ruleSystem : "",
+        entry.sourceName,
+        entry.sourceLanguage ? `${tr("来源语言")}: ${localeNames[entry.sourceLanguage] || entry.sourceLanguage}` : "",
+        entry.sourceDate,
+      ].filter(Boolean).join(" · ");
+      if (meta) appendText(details, "small", meta).className = "source-meta";
+      const snapshotId = lastRenderedBackendAnswer?.sourceSnapshotId;
+      if (snapshotId && entry.id && entry.sourceHash) {
+        details.addEventListener("toggle", () => {
+          if (details.open) void translateExpandedSource({ details, body, fields, source: entry, snapshotId });
+        });
+      }
       node.appendChild(details);
     }
     ui.sourcesList.appendChild(node);
   }
 }
 
-function sourceEvidenceBlocks(source) {
-  const keys = ['question', 'rawQuestion', 'rawDetailedQuestion', 'detailedScene', 'answer', 'conclusion', 'text', 'fullText', 'officialText'];
-  let body = source.sourceRecord || source;
-  // Gemini packs the complete QA source record as JSON. Display its available
-  // body fields as plain text; never render source HTML or cut an excerpt.
-  try {
-    const record = JSON.parse(source.text);
-    if (record && ['qa', 'card-faq'].includes(record.recordType)) body = record;
-  } catch { /* Ordinary rule paragraphs are already plain text. */ }
-  if (body !== source) return [renderSourceFields(body)];
-  return [...new Set(keys.map(key => body[key]).filter(value => typeof value === 'string' && value.length))];
+function sourceEvidenceFields(source) {
+  let record = source.sourceRecord && typeof source.sourceRecord === "object" ? source.sourceRecord : source;
+  if (typeof source.text === "string" && /^[\s]*[{[]/u.test(source.text)) {
+    try {
+      const parsed = JSON.parse(source.text);
+      if (parsed && !Array.isArray(parsed) && typeof parsed === "object"
+          && ["qa", "card-faq"].includes(parsed.recordType)) record = parsed;
+    } catch { /* A plain source paragraph can begin with a brace. */ }
+  }
+  const labels = {
+    question: "问题", rawQuestion: "问题", rawDetailedQuestion: "详细情境", detailedScene: "详细情境",
+    answer: "回答", officialAnswer: "回答", conclusion: "回答", officialText: "正文", fullText: "正文",
+    cardText: "卡片文本", ruleText: "正文", body: "正文", content: "正文", paragraph: "正文", description: "正文",
+    text: source.type === "card_text" ? "卡片文本" : "正文", explanation: "正文",
+  };
+  const fields = [];
+  for (const key of Object.keys(labels)) {
+    const value = record[key];
+    if (typeof value === "string" && value) fields.push({ key, label: labels[key], text: value });
+  }
+  if (!fields.length && typeof source.detail === "string" && source.detail) {
+    fields.push({ key: "text", label: "正文", text: source.detail });
+  }
+  return fields;
 }
 
-// Same field-and-text display as the server. This classic browser script does
-// not import server modules. Source values always go into textContent.
-function renderSourceFields(value) {
-  if (typeof value === 'string') return value === '' ? '""' : value;
-  if (value === null || typeof value !== 'object') return JSON.stringify(value) ?? 'null';
-  if (Array.isArray(value)) return value.length
-    ? '[\n' + Array.from(value, renderSourceFields).join('\n,\n') + '\n]' : '[]';
-  const entries = Object.entries(value).filter(([, item]) =>
-    item !== undefined && typeof item !== 'function' && typeof item !== 'symbol');
-  if (!entries.length) return '{}';
-  return '{\n' + entries.map(([key, item]) => key + ': ' + renderSourceFields(item)).join('\n') + '\n}';
+function renderSourceFields(container, fields) {
+  clearElement(container);
+  for (const field of fields) {
+    const wrapper = document.createElement("div");
+    wrapper.className = "source-field";
+    appendText(wrapper, "strong", tr(field.label));
+    const paragraph = appendText(wrapper, "p", "");
+    appendSourceTextWithCardLinks(paragraph, field.text);
+    container.appendChild(wrapper);
+  }
+}
+
+function sourceCardNameForCid(cid) {
+  const card = syncedCards.find((item) => String(item.id) === cid);
+  if (!card) return `CID ${cid}`;
+  return (selectedUiLocale === "en" ? card.enName : selectedUiLocale === "ja" ? card.jaName : card.cnName)
+    || card.jaName || card.name || `CID ${cid}`;
+}
+
+function sourceDisplayText(value) {
+  return String(value || "").replace(/<<(\d{1,10})>>/gu, (_, cid) => sourceCardNameForCid(cid));
+}
+
+function appendSourceTextWithCardLinks(paragraph, value) {
+  const text = String(value || "");
+  const markers = [...text.matchAll(/<<(\d{1,10})>>/gu)];
+  if (!markers.length) { paragraph.textContent = text; return; }
+  let cursor = 0;
+  for (const marker of markers) {
+    if (marker.index > cursor) appendText(paragraph, "span", text.slice(cursor, marker.index));
+    const cid = marker[1];
+    const link = document.createElement("a");
+    link.href = `https://www.db.yugioh-card.com/yugiohdb/card_search.action?ope=2&cid=${cid}&request_locale=ja`;
+    link.target = "_blank";
+    link.rel = "noreferrer noopener";
+    link.textContent = sourceCardNameForCid(cid);
+    paragraph.appendChild(link);
+    cursor = marker.index + marker[0].length;
+  }
+  if (cursor < text.length) appendText(paragraph, "span", text.slice(cursor));
+}
+
+async function translateExpandedSource({ details, body, fields, source, snapshotId }) {
+  const targetLocale = selectedUiLocale;
+  if (source.sourceLanguage === targetLocale) return;
+  const cacheKey = JSON.stringify([snapshotId, source.id, source.sourceHash, targetLocale]);
+  let actions = details.querySelector(".source-language-actions");
+  if (!actions) {
+    actions = document.createElement("div");
+    actions.className = "source-language-actions";
+    details.appendChild(actions);
+  }
+  if (visibleSourceTranslations.has(cacheKey)) {
+    showSourceTranslation({ body, fields, actions, translated: visibleSourceTranslations.get(cacheKey), targetLocale });
+    return;
+  }
+  actions.textContent = tr("翻译中…");
+  if (!pendingSourceTranslations.has(cacheKey)) {
+    pendingSourceTranslations.set(cacheKey, fetchSourceTranslation({ snapshotId, source, targetLocale }));
+  }
+  try {
+    const translated = await pendingSourceTranslations.get(cacheKey);
+    if (!details.isConnected || selectedUiLocale !== targetLocale || !details.open) return;
+    if (!translated) { actions.textContent = tr("翻译暂不可用，显示原文。"); return; }
+    visibleSourceTranslations.set(cacheKey, translated);
+    showSourceTranslation({ body, fields, actions, translated, targetLocale });
+  } catch {
+    if (details.isConnected && selectedUiLocale === targetLocale) actions.textContent = tr("翻译暂不可用，显示原文。");
+  } finally {
+    pendingSourceTranslations.delete(cacheKey);
+  }
+}
+
+async function fetchSourceTranslation({ snapshotId, source, targetLocale }) {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const response = await fetch(appConfig.answerApiUrl, {
+      method: "POST", cache: "no-store", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "translate_source", sourceSnapshotId: snapshotId,
+        sourceId: source.id, targetLocale }),
+    });
+    if (!response.ok && response.status !== 202) return null;
+    const payload = await response.json();
+    if (payload.sourceHash !== source.sourceHash) return null;
+    if (payload.status === "original") return null;
+    if (payload.status === "translated" && payload.targetLocale === targetLocale
+        && payload.fields && typeof payload.fields === "object") return payload.fields;
+    if (payload.status !== "pending") return null;
+    await new Promise((resolve) => window.setTimeout(resolve, 3000));
+  }
+  return null;
+}
+
+function showSourceTranslation({ body, fields, actions, translated, targetLocale }) {
+  const translatedFields = fields.map((field) => ({ ...field,
+    text: typeof translated[field.key] === "string" ? translated[field.key] : field.text }));
+  actions.replaceChildren();
+  const label = appendText(actions, "small", `${tr("机器译文")} · ${localeNames[targetLocale]}`);
+  label.className = "source-meta";
+  const button = appendText(actions, "button", tr("查看原文"));
+  button.type = "button";
+  let showingOriginal = false;
+  renderSourceFields(body, translatedFields);
+  button.addEventListener("click", () => {
+    showingOriginal = !showingOriginal;
+    renderSourceFields(body, showingOriginal ? fields : translatedFields);
+    button.textContent = tr(showingOriginal ? "查看译文" : "查看原文");
+  });
 }
 
 function renderFeedbackPanel(answer) {
@@ -6332,7 +6573,7 @@ function renderFeedbackPanel(answer) {
   link.href = buildFeedbackIssueUrl(answer);
   link.target = "_blank";
   link.rel = "noreferrer";
-  link.textContent = "在 GitHub 反馈这个回答";
+  link.textContent = tr("在 GitHub 反馈这个回答");
   panel.appendChild(link);
   ui.verdictBlock.appendChild(panel);
 }
@@ -6391,6 +6632,7 @@ function clearElement(element) {
 }
 
 async function init() {
+  applyUiLocale(readInitialLocale());
   debugUiEnabled = isDebugUiEnabled();
   adminUiEnabled = isAdminUiEnabled();
   if (ui.adminLabPanel) ui.adminLabPanel.hidden = !adminUiEnabled;
@@ -6403,6 +6645,7 @@ async function init() {
   await loadBudgetStatus();
   updateSourceStatus();
   resetAnalysis();
+  applyUiLocale(selectedUiLocale);
   const recoveryRequestId = analysisRequestId;
   recoverStoredPublicAnswer().then((recoveredAnswer) => {
     if (recoveredAnswer && recoveryRequestId === analysisRequestId) renderBackendAnswer(recoveredAnswer);
@@ -6427,6 +6670,10 @@ async function init() {
     } catch {
       // Theme persistence is optional.
     }
+  });
+  ui.localeSelect?.addEventListener("change", () => {
+    applyUiLocale(ui.localeSelect.value);
+    try { localStorage.setItem(localeStorageKey, selectedUiLocale); } catch { /* Optional preference. */ }
   });
   ui.rulingModelSelect?.addEventListener("change", () => {
     selectRulingModelProfile(ui.rulingModelSelect.value);
@@ -6520,5 +6767,5 @@ function applyTheme(theme) {
   const normalized = theme === "night" ? "night" : "day";
   document.body.classList.toggle("theme-night", normalized === "night");
   document.body.classList.toggle("theme-day", normalized !== "night");
-  if (ui.themeToggle) ui.themeToggle.textContent = normalized === "night" ? "白天模式" : "黑夜模式";
+  if (ui.themeToggle) ui.themeToggle.textContent = tr(normalized === "night" ? "白天模式" : "黑夜模式");
 }

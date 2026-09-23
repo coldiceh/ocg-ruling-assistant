@@ -237,6 +237,15 @@ test("status payload accepts only a valid preparationId", () => {
   );
 });
 
+test("answer locale is fixed on prepare and source translation accepts only a saved-source reference", () => {
+  assert.equal(parsePublicAnswerPayload({ question: "Q" }).answerLocale, "zh-CN");
+  assert.equal(parsePublicAnswerPayload({ question: "Q", answerLocale: "en", action: "prepare" }).answerLocale, "en");
+  assert.throws(() => parsePublicAnswerPayload({ question: "Q", answerLocale: "fr" }), { code: "invalid_answer_locale" });
+  const payload = { action: "translate_source", sourceSnapshotId: "a".repeat(64), sourceId: "R1", targetLocale: "ja" };
+  assert.deepEqual(parsePublicAnswerPayload(payload), payload);
+  assert.throws(() => parsePublicAnswerPayload({ ...payload, text: "injected" }), { code: "invalid_source_translation_request" });
+});
+
 test("status is rejected by the direct answer service and remains confined to saved-preparation recovery", async () => {
   await assert.rejects(
     answerPublicRulingQuestion({

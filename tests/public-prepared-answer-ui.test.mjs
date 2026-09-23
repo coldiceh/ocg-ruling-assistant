@@ -112,7 +112,7 @@ test("prepare/finalize sends the exact two body shapes in serial order", async (
     );
   }, { sessionStorageImpl });
 
-  const result = await clientInstance.request("Synthetic question", "latest", { requestId: 0 });
+  const result = await clientInstance.request("Synthetic question", "latest", { requestId: 0, answerLocale: "ja" });
   assert.equal(result.verdict, "synthetic");
   assert.deepEqual(requests.map((item) => item.url), [
     "https://example.invalid/api/answer?progress=1",
@@ -123,6 +123,7 @@ test("prepare/finalize sends the exact two body shapes in serial order", async (
     mode: "rag",
     rulingModelProfile: "official-astra-low",
     rulingVersion: "latest",
+    answerLocale: "ja",
     action: "prepare",
   });
   assert.deepEqual(requests[1].body, {
@@ -142,7 +143,7 @@ test("a completed stored preparation is recovered through a read-only status req
     removeItem(key) { stored.delete(key); },
   };
   const requests = [];
-  const recoveredAnswer = { effectiveRulingVersion: "latest", verdict: "recovered" };
+  const recoveredAnswer = { effectiveRulingVersion: "latest", verdict: "recovered", answerLocale: "en" };
   const clientInstance = createClient(async (url, options) => {
     requests.push({ url, options, body: JSON.parse(options.body) });
     return new Response(JSON.stringify({
@@ -155,6 +156,7 @@ test("a completed stored preparation is recovered through a read-only status req
   assert.equal(recovered.verdict, recoveredAnswer.verdict);
   assert.equal(recovered.effectiveRulingVersion, "latest");
   assert.equal(recovered.requestedRulingVersion, "latest");
+  assert.equal(recovered.answerLocale, "en");
   assert.deepEqual(requests[0].body, { action: "status", preparationId });
   assert.equal(requests[0].options.signal, undefined);
   assert.equal(clientInstance.readStoredPreparationId(), "");

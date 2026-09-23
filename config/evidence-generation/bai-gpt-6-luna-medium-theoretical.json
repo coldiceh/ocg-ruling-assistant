@@ -1,0 +1,78 @@
+{
+  "profileId": "evidence-bai-gpt-6-luna-medium-theoretical-20260923",
+  "status": "ready",
+  "providerId": "bai",
+  "modelId": "gpt-6-luna",
+  "apiContractVersion": "bai-v1-responses-20260914",
+  "transportContract": {
+    "protocol": "responses",
+    "endpoint": "/v1/responses"
+  },
+  "reasoningConfig": {
+    "responses": {
+      "effort": "medium"
+    }
+  },
+  "outputLimitConfig": {
+    "field": "max_output_tokens",
+    "covers": [
+      "visible_output",
+      "reasoning_output"
+    ]
+  },
+  "responseFormatConfig": {
+    "responses": {
+      "type": "json_object"
+    }
+  },
+  "priceVersion": "bai-gpt-6-luna-long-context-conservative-20260923",
+  "countingContractVersion": "bai-responses-wire-theoretical-v1",
+  "capacityContract": {
+    "version": "bai-gpt-6-luna-declared-context-user-authorized-theoretical-20260923",
+    "contextCountingContractVersion": "bai-responses-wire-theoretical-v1",
+    "maxInputTokens": 1050000,
+    "maxOutputTokens": 128000,
+    "maxSharedContextTokens": 1050000,
+    "maxRequestBodyBytes": null,
+    "sharedContextRuleId": "input_plus_max_billable_output_lte_shared_context",
+    "basis": "declared_context_with_user_authorized_theoretical_input_estimate"
+  },
+  "pricingContract": {
+    "currency": "USD",
+    "billingMode": "busy_conservative_theoretical",
+    "inputUsdPerMillion": 0.2,
+    "cacheWriteUsdPerMillion": 0.25,
+    "cachedInputUsdPerMillion": 0.02,
+    "outputUsdPerMillion": 0.75,
+    "outputIncludesThinking": true,
+    "cachedInputMode": "usage_reported",
+    "requestCachingMode": "provider_automatic"
+  },
+  "measurementContract": {
+    "status": "user_authorized_theoretical",
+    "basis": "user_authorized_theoretical",
+    "exact": false,
+    "legacyFieldAnnotation": "inputTokensUpperBound is an estimated budget allocation, not an exact count or guaranteed token upper bound",
+    "estimator": {
+      "version": "bai-responses-wire-theoretical-v1",
+      "formula": "ceil(request_utf8_bytes / bytes_per_token) + fixed_allowance_tokens",
+      "bytesPerToken": 3,
+      "fixedAllowanceTokens": 256
+    }
+  },
+  "sources": {
+    "api": "https://docs.b.ai/llmservice/api/",
+    "model": "https://docs.b.ai/llmservice/models/gpt-6-luna/"
+  },
+  "stages": {
+    "planning": {
+      "maxBillableOutputTokens": 4096
+    },
+    "selection": {
+      "maxBillableOutputTokens": 4096
+    },
+    "navigation": {
+      "maxBillableOutputTokens": 2048
+    }
+  }
+}
