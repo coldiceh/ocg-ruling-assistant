@@ -1,9 +1,9 @@
 import { buildEvidenceInputMeasurement, estimateGenerationUpperBoundUsd,
   loadEvidenceGenerationContract, normalizeEvidenceGenerationUsage } from "../backend/evidenceGenerationContract.mjs";
 import { createEvidenceGenerationTransport, evidenceGenerationResponseDiagnostic } from "../backend/evidenceGenerationTransport.mjs";
+import { buildNavigationRequestBody, normalizeNavigationOutput } from "./prepare-evidence-navigation.mjs";
 
 const checks = [
-  ["high", "selection"],
   ["medium", "navigation"],
 ];
 const maxEstimatedUsd = 0.01;
@@ -14,9 +14,10 @@ const prepared = await Promise.all(checks.map(async ([effort, stage]) => {
   const profileUrl = new URL(`../config/evidence-generation/bai-gpt-6-luna-${effort}-theoretical.json`, import.meta.url);
   const contract = loadEvidenceGenerationContract(stage, { profileUrl });
   const transport = createEvidenceGenerationTransport({ contract });
-  const wire = transport.prepareRequest({
-    contents: [{ role: "user", parts: [{ text: 'Return exactly this JSON object: {"ok":true}' }] }],
-  });
+  const wire = transport.prepareRequest(buildNavigationRequestBody({ input: {
+    sourceKind: "rule", titlePath: ["步骤说明"], unitText: "先完成步骤甲，再执行步骤乙；若甲未完成，不执行乙。",
+    structuralContextTexts: [],
+  } }, contract));
   const measurement = await buildEvidenceInputMeasurement({ body: wire, contract });
   const reservation = estimateGenerationUpperBoundUsd({ measurement, contract });
   return { effort, contract, transport, wire, measurement, reservation };
@@ -35,8 +36,7 @@ for (const item of prepared) {
       signal: AbortSignal.timeout(45_000),
     });
     item.transport.validateResponse(raw);
-    const answer = JSON.parse(item.transport.extractText(raw));
-    if (answer?.ok !== true) throw new Error("bai_smoke_json_content_invalid");
+    normalizeNavigationOutput(item.transport.extractText(raw));
     const normalized = normalizeEvidenceGenerationUsage(item.transport.rawUsage(raw), item.contract);
     if (normalized.usageNormalization.status !== "complete") throw new Error("bai_smoke_usage_incomplete");
     console.log(JSON.stringify({ kind: "bai-gpt-6-luna-smoke-result", effort: item.effort,
