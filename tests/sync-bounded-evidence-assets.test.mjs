@@ -486,9 +486,9 @@ test("report-only full sync needs no ledger or max-usd, reports both providers a
   const first = await runBoundedEvidenceAssetSync(costOptions(source, "cost-first"), costDependencies());
   assert.equal(first.report.publishable, true);
   assert.equal(first.report.cost.requestsAttempted, 2);
-  assert.equal(first.report.cost.byProvider.bai.knownCostUsd, 0.000044);
+  assert.equal(first.report.cost.byProvider.bai.knownCostUsd, 0.000035);
   assert.equal(first.report.cost.byProvider.gemini.knownCostUsd, 0.00002);
-  assert.equal(first.report.cost.totalCostUsd, 0.000064);
+  assert.equal(first.report.cost.totalCostUsd, 0.000055);
   const replay = await runBoundedEvidenceAssetSync(costOptions(source, "cost-replay"), {
     navigationTransportFactory: () => { throw new Error("must_not_repeat_paid_navigation"); },
     embedBatch: async () => { throw new Error("must_not_repeat_paid_embeddings"); },
@@ -514,7 +514,7 @@ test("report-only cloud wiring receives reporter instead of requiring cumulative
     },
   });
   assert.equal(calls, 1);
-  assert.equal(result.report.cost.totalCostUsd, 0.000064);
+  assert.equal(result.report.cost.totalCostUsd, 0.000055);
 });
 
 test("report-only captures navigation usage even when saving the response fails", async (t) => {
@@ -528,7 +528,7 @@ test("report-only captures navigation usage even when saving the response fails"
   const report = JSON.parse(await readFile(join(options.outDir, "run-cost.json"), "utf8"));
   assert.equal(report.outcome, "failed");
   assert.equal(report.requestsAttempted, 1);
-  assert.equal(report.totalCostUsd, 0.000044);
+  assert.equal(report.totalCostUsd, 0.000035);
 });
 
 test("provider exception gives unknown request cost, not a zero bill", async (t) => {
@@ -553,7 +553,7 @@ test("invalid embedding response still contributes its reported usage to failed-
   }), /embedding_response_count_invalid/);
   const report = JSON.parse(await readFile(join(options.outDir, "run-cost.json"), "utf8"));
   assert.equal(report.outcome, "failed");
-  assert.equal(report.totalCostUsd, 0.000064);
+  assert.equal(report.totalCostUsd, 0.000055);
 });
 
 test("report-only preserves one output recovery and counts each fresh response exactly once", async (t) => {
@@ -577,7 +577,7 @@ test("report-only preserves one output recovery and counts each fresh response e
   });
   assert.deepEqual(caps, [2048, 8192]);
   assert.equal(result.report.cost.requestsAttempted, 3);
-  assert.equal(result.report.cost.totalCostUsd, 0.000108);
+  assert.equal(result.report.cost.totalCostUsd, 0.00009);
 });
 
 test("report-only rejects incomplete response, preserves known failed-call cost and does not embed", async (t) => {
@@ -596,7 +596,7 @@ test("report-only rejects incomplete response, preserves known failed-call cost 
   }), /evidence_generation_response_incomplete/);
   const report = JSON.parse(await readFile(join(options.outDir, "bounded-evidence-sync-report.json"), "utf8"));
   assert.equal(report.publishable, false);
-  assert.equal(report.cost.totalCostUsd, 0.000044);
+  assert.equal(report.cost.totalCostUsd, 0.000035);
   assert.equal(report.cost.requestsAttempted, 1);
 });
 
