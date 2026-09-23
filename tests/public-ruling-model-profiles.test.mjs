@@ -90,7 +90,7 @@ test("DeepSeek none disables thinking and omits reasoning effort", async () => {
   assert.equal(calls[0].body.model, "deepseek-v4.1-flash-expires-on-0910");
 });
 
-test("GLM profile keeps glm-5.3, enabled thinking and selected effort", async () => {
+test("GLM profile selects glm-5.3-flash, enabled thinking and selected effort", async () => {
   const calls = [];
   const env = createPublicAnswerModelEnv({
     GLM_API_KEY: "glm-secret",
@@ -104,20 +104,20 @@ test("GLM profile keeps glm-5.3, enabled thinking and selected effort", async ()
     now: new Date("2041-01-03T00:00:00.000Z"),
     fetchImpl: async (url, options) => {
       calls.push({ url, options, body: JSON.parse(options.body) });
-      return responsePayload("glm-5.3");
+      return responsePayload("glm-5.3-flash");
     },
   });
 
   assert.equal(calls.length, 1);
-  assert.equal(calls[0].body.model, "glm-5.3");
+  assert.equal(calls[0].body.model, "glm-5.3-flash");
   assert.deepEqual(calls[0].body.thinking, { type: "enabled" });
   assert.equal(calls[0].body.reasoning_effort, "max");
   assert.equal(calls[0].options.headers.authorization, "Bearer glm-secret");
   assert.equal(result.providerUsed, "glm");
-  assert.equal(result.modelUsed, "glm-5.3");
-  assert.equal(result.requestedModel, "glm-5.3");
-  assert.equal(result.returnedModel, "glm-5.3");
-  assert.equal(result.generationAttempts[0].responseModel, "glm-5.3");
+  assert.equal(result.modelUsed, "glm-5.3-flash");
+  assert.equal(result.requestedModel, "glm-5.3-flash");
+  assert.equal(result.returnedModel, "glm-5.3-flash");
+  assert.equal(result.generationAttempts[0].responseModel, "glm-5.3-flash");
   assert.equal(result.budgetStatus.bucket.id, "final_ruling:glm");
   assert.equal(result.budgetStatus.bucket.spentTodayCny > 0, true);
 });

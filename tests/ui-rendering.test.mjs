@@ -2004,10 +2004,11 @@ test("renderBackendAnswer formats markdown safely and presents titled source lin
   assert.match(testNodeText(ui.verdictBody), /预计还需 31 分钟/u);
 });
 
-test("budget labels distinguish final ruling providers", async () => {
+test("budget labels show current final ruling providers and omit the retired relay", async () => {
   const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
   assert.match(app, /bucket\?\.provider === "bai" \? "GPT最终裁定"/u);
-  assert.match(app, /bucket\?\.provider === "relay" \? "中转 GPT 最终裁定"/u);
+  assert.match(app, /bucket\?\.provider !== "relay"/u);
+  assert.doesNotMatch(app, /中转 GPT 最终裁定/u);
   assert.doesNotMatch(app, /bucket\?\.provider === "bai" \? "GPT"/u);
   assert.match(app, /bucket\?\.manuallyClosed \? "（已封顶）"/u);
   assert.doesNotMatch(app, /label\.textContent \+= "（共享额度）"/u);

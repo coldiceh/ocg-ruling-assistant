@@ -1994,7 +1994,7 @@ function renderAdminPublicBudgetStatus(buckets = []) {
   if (!ui.adminBudgetPools) return;
   clearElement(ui.adminBudgetPools);
   const publicBuckets = Array.isArray(buckets)
-    ? buckets.filter((bucket) => bucket?.stage === "final_ruling" && bucket?.provider !== "openai")
+    ? buckets.filter((bucket) => bucket?.stage === "final_ruling" && bucket?.provider !== "openai" && bucket?.provider !== "relay")
     : [];
   if (!publicBuckets.length) {
     appendText(ui.adminBudgetPools, "p", "今日额度暂未读取或未配置。");
@@ -2004,7 +2004,6 @@ function renderAdminPublicBudgetStatus(buckets = []) {
     const card = document.createElement("article");
     card.className = "admin-budget-pool";
     const title = bucket?.provider === "bai" ? "GPT最终裁定"
-      : bucket?.provider === "relay" ? "中转 GPT 最终裁定"
       : String(bucket?.label || [bucket?.provider, bucket?.stage].filter(Boolean).join(" · ") || "公开问答");
     appendText(card, "strong", title);
     const currency = bucket?.currency === "USD" ? "USD" : "CNY";
@@ -2023,13 +2022,12 @@ function renderAdminPublicBudgetStatus(buckets = []) {
 function renderBudgetBuckets(buckets = []) {
   if (!ui.budgetBucketList) return;
   ui.budgetBucketList.replaceChildren();
-  const publicBuckets = Array.isArray(buckets) ? buckets.filter(bucket => bucket?.stage === "final_ruling" && bucket?.provider !== "openai") : [];
+  const publicBuckets = Array.isArray(buckets) ? buckets.filter(bucket => bucket?.stage === "final_ruling" && bucket?.provider !== "openai" && bucket?.provider !== "relay") : [];
   for (const bucket of publicBuckets) {
     const row = document.createElement("div");
     row.className = "budget-bucket";
     const label = document.createElement("span");
     label.textContent = bucket?.provider === "bai" ? tr("GPT最终裁定")
-      : bucket?.provider === "relay" ? lt("中转 GPT 最终裁定", "Relay GPT final ruling", "中継 GPT 最終裁定")
       : String(bucket?.label || [bucket?.provider, bucket?.stage].filter(Boolean).join(" · ") || lt("模型用量", "Model usage", "モデル使用量"));
     const value = document.createElement("strong");
     const currency = bucket?.currency === "USD" ? "USD" : "CNY";

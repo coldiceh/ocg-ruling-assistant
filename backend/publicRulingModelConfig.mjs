@@ -10,7 +10,7 @@ export function resolveOfficialDeepSeekModel(value) {
   return ['deepseek-v4-flash', 'deepseek-v4.1-flash-expires-on-0910'].includes(model)
     ? DEFAULT_PUBLIC_DEEPSEEK_MODEL : model;
 }
-export const DEFAULT_PUBLIC_GLM_MODEL = "glm-5.3";
+export const DEFAULT_PUBLIC_GLM_MODEL = "glm-5.3-flash";
 
 function profile({ id, label, provider, model, thinkingMode, reasoningEffort, transport, thirdParty, modelIdentityVerified }) {
   return Object.freeze({ id, label, provider, model, thinkingMode, reasoningEffort, transport, thirdParty, modelIdentityVerified });
@@ -22,7 +22,7 @@ const profiles = [
   ...[["none", "disabled", null], ["low", "enabled", "low"], ["high", "enabled", "high"], ["max", "enabled", "max"]]
     .map(([suffix, thinkingMode, reasoningEffort]) => profile({ id: `deepseek-v4.1-flash-${suffix}`, label: `DeepSeek V4.1 Flash · 思考 ${suffix}`, provider: "deepseek", model: DEFAULT_PUBLIC_DEEPSEEK_MODEL, thinkingMode, reasoningEffort, transport: "chat_completions", thirdParty: false, modelIdentityVerified: true })),
   ...[["low", "enabled", "low"], ["high", "enabled", "high"], ["max", "enabled", "max"]]
-    .map(([suffix, thinkingMode, reasoningEffort]) => profile({ id: `glm-5.3-${suffix}`, label: `GLM-5.3 · 思考 ${suffix}`, provider: "glm", model: DEFAULT_PUBLIC_GLM_MODEL, thinkingMode, reasoningEffort, transport: "chat_completions", thirdParty: true, modelIdentityVerified: true })),
+    .map(([suffix, thinkingMode, reasoningEffort]) => profile({ id: `glm-5.3-${suffix}`, label: `GLM-5.3-Flash · 思考 ${suffix}`, provider: "glm", model: DEFAULT_PUBLIC_GLM_MODEL, thinkingMode, reasoningEffort, transport: "chat_completions", thirdParty: true, modelIdentityVerified: true })),
 ];
 
 export const PUBLIC_RULING_MODEL_PROFILES = Object.freeze(Object.fromEntries(profiles.map((item) => [item.id, item])));
