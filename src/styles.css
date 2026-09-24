@@ -1360,6 +1360,7 @@ svg {
 }
 
 .result-block {
+  min-width: 0;
   padding: 16px;
   box-shadow: none;
   position: relative;
@@ -1454,6 +1455,39 @@ svg {
 #verdictBody > ul,
 #verdictBody > ol {
   margin: 0 0 12px;
+}
+
+.markdown-table-scroll {
+  max-width: 100%;
+  margin: 0 0 12px;
+  overflow-x: auto;
+}
+
+.markdown-table-scroll table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.markdown-table-scroll th,
+.markdown-table-scroll td {
+  min-width: 8rem;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+
+.markdown-table-scroll th {
+  background: var(--accent-soft);
+}
+
+.markdown-table-scroll .markdown-align-center {
+  text-align: center;
+}
+
+.markdown-table-scroll .markdown-align-right {
+  text-align: right;
 }
 
 ol,

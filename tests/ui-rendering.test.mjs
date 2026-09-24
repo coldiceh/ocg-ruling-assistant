@@ -1992,6 +1992,55 @@ test("renderBackendAnswer formats markdown safely and presents titled source lin
     const renderedLongText = testNodeText(ui.verdictBody);
     assert.equal(renderedLongText.split(paragraph).length - 1, 300);
     assert.ok(renderedLongText.endsWith("最后部分：完整结论。"));
+
+    render({
+      ...answer,
+      mode,
+      shortAnswer: [
+        "先看**处理条件**。",
+        "",
+        "| 时点 | 处理 | 依据 |",
+        "| :--- | :---: | ---: |",
+        "| 发动时 | **可以发动** | 【官方参考资料】 |",
+        "| 处理时 | A\\|B 不进行处理 | <img src=x onerror=alert(1)> |",
+        "",
+        "因此按上述时点分别判断。",
+      ].join("\n"),
+    });
+    const findTags = (node, tag) => [
+      ...(node.tagName === tag ? [node] : []),
+      ...(node.childNodes || []).flatMap((child) => findTags(child, tag)),
+    ];
+    const inlineText = (node) => String(node.textContent || "")
+      + (node.childNodes || []).map(inlineText).join("");
+    const tables = findTags(ui.verdictBody, "table");
+    assert.equal(tables.length, 1, `${mode}: Markdown table must render as a table`);
+    assert.deepEqual(findTags(tables[0], "th").map(testNodeText), ["时点", "处理", "依据"]);
+    assert.deepEqual(findTags(tables[0], "tr").slice(1).map((row) =>
+      findTags(row, "td").map(testNodeText)), [
+      ["发动时", "可以发动", "官方参考资料"],
+      ["处理时", "A|B 不进行处理", "<img src=x onerror=alert(1)>"],
+    ]);
+    assert.equal(findTags(tables[0], "strong").length, 1);
+    assert.equal(findTags(tables[0], "a")[0]?.href, "https://example.test/reference/1");
+    assert.equal(findTags(tables[0], "img").length, 0);
+    assert.equal(inlineText(ui.verdictBody.childNodes[0]), "先看处理条件。");
+    assert.equal(inlineText(ui.verdictBody.childNodes.at(-1)), "因此按上述时点分别判断。");
+    assert.deepEqual(findTags(tables[0], "th").map((cell) => cell.className), [
+      "markdown-align-left", "markdown-align-center", "markdown-align-right",
+    ]);
+
+    render({ ...answer, mode, shortAnswer: "时点 | 处理 | 依据\n:--- | :---: | ---:\n发动时 | 可以发动 | 官方 Q&A" });
+    assert.equal(findTags(ui.verdictBody, "table").length, 1);
+    assert.deepEqual(findTags(ui.verdictBody, "td").map(testNodeText), ["发动时", "可以发动", "官方 Q&A"]);
+
+    render({ ...answer, mode, shortAnswer: "普通正文中的 A | B 应原样显示。" });
+    assert.equal(findTags(ui.verdictBody, "table").length, 0);
+    assert.match(testNodeText(ui.verdictBody), /A \| B/u);
+
+    render({ ...answer, mode, shortAnswer: "| 时点 | 处理 |\n| 不是分隔行 | 内容 |" });
+    assert.equal(findTags(ui.verdictBody, "table").length, 0);
+    assert.match(testNodeText(ui.verdictBody), /不是分隔行/u);
   }
 
   const riskAnswer = buildPublicOfftopicRiskControlAnswer({

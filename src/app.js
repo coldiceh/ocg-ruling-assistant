@@ -5866,7 +5866,47 @@ function renderMarkdown(container, value, sourceLinks = []) {
     listType = "";
   };
 
-  for (const line of lines) {
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
+    const line = lines[lineIndex];
+    const headers = splitMarkdownTableRow(line);
+    const separators = splitMarkdownTableRow(lines[lineIndex + 1]);
+    if (headers && separators && headers.length === separators.length
+      && separators.every((cell) => /^:?-+:?$/u.test(cell))) {
+      flushParagraph();
+      flushList();
+      const wrapper = document.createElement("div");
+      wrapper.className = "markdown-table-scroll";
+      wrapper.tabIndex = 0;
+      const table = document.createElement("table");
+      const head = document.createElement("thead");
+      const body = document.createElement("tbody");
+      const alignments = separators.map((cell) => cell.endsWith(":")
+        ? (cell.startsWith(":") ? "center" : "right") : "left");
+      const appendRow = (section, cells, tagName) => {
+        const row = document.createElement("tr");
+        cells.forEach((text, index) => {
+          const cell = document.createElement(tagName);
+          cell.className = `markdown-align-${alignments[index]}`;
+          if (tagName === "th") cell.scope = "col";
+          renderMarkdownInline(cell, text, sourceLinks);
+          row.appendChild(cell);
+        });
+        section.appendChild(row);
+      };
+      appendRow(head, headers, "th");
+      lineIndex += 1;
+      while (lineIndex + 1 < lines.length) {
+        const cells = splitMarkdownTableRow(lines[lineIndex + 1]);
+        if (!cells || cells.length !== headers.length) break;
+        appendRow(body, cells, "td");
+        lineIndex += 1;
+      }
+      table.appendChild(head);
+      table.appendChild(body);
+      wrapper.appendChild(table);
+      container.appendChild(wrapper);
+      continue;
+    }
     const heading = /^\s*(#{1,6})\s+(.+)$/u.exec(line);
     if (heading) {
       flushParagraph();
@@ -5901,6 +5941,31 @@ function renderMarkdown(container, value, sourceLinks = []) {
   }
   flushParagraph();
   flushList();
+}
+
+function splitMarkdownTableRow(value) {
+  const text = String(value ?? "").trim();
+  const cells = [];
+  let cell = "";
+  let lastPipe = -1;
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    if (char === "\\" && (text[index + 1] === "|" || text[index + 1] === "\\")) {
+      cell += text[index + 1];
+      index += 1;
+    } else if (char === "|") {
+      cells.push(cell.trim());
+      cell = "";
+      lastPipe = index;
+    } else {
+      cell += char;
+    }
+  }
+  if (lastPipe < 0) return null;
+  cells.push(cell.trim());
+  if (text.startsWith("|")) cells.shift();
+  if (lastPipe === text.length - 1) cells.pop();
+  return cells.length ? cells : null;
 }
 
 function renderMarkdownInline(parent, value, sourceLinks = []) {
