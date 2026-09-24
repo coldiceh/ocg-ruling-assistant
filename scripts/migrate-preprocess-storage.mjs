@@ -18,7 +18,7 @@ async function redis(commands, pipeline=false) {
  if(!Array.isArray(rows)||rows.some(row=>row.error))throw Error('Redis command failed');
  return pipeline?rows.map(row=>row.result):body.result;
 }
-const parseKey=key=>/^evidence-preprocess:(nav|dense):\{([a-f0-9]{64})\}:([A-Za-z0-9._-]{1,160}):([A-Za-z0-9._-]+)$/.exec(key);
+const parseKey=key=>/^evidence-preprocess:(nav|dense|dense-batch):\{([a-f0-9]{64})\}:([A-Za-z0-9._-]{1,160}):([A-Za-z0-9._-]+)$/.exec(key);
 await fs.mkdir(out,{recursive:true});
 if(mode==='backup'){
  const publicKey=Buffer.from(process.env.MIGRATION_PUBLIC_KEY_BASE64 || '', 'base64').toString('utf8');
@@ -31,8 +31,12 @@ if(mode==='backup'){
  }while(cursor!=='0');
  const rows=[], manifest={schemaVersion:1,createdAt:new Date().toISOString(),entries:[],retainedClaims:0,namespaces:{}};
  const ordered=[...keys].sort();
- for(let offset=0;offset<ordered.length;offset+=40){
-   const batch=ordered.slice(offset,offset+40);
+ for(let offset=0;offset<ordered.length;){
+   // Batch embedding responses are about 1 MB each; read them separately to
+   // stay within the provider's response size limit.
+   const size=ordered[offset].startsWith('evidence-preprocess:dense-batch:')?1:20;
+   const batch=ordered.slice(offset,offset+size);
+   offset+=batch.length;
    const values=await redis(batch.map(key=>['GET',key]),true);
    if(!Array.isArray(values)||values.length!==batch.length)throw Error('Invalid MGET response');
    for(let i=0;i<batch.length;i++){
@@ -43,7 +47,8 @@ if(mode==='backup'){
      if(suffix==='claim'){manifest.retainedClaims++;continue;}
      const parsed=JSON.parse(value);
      if(parsed.key!==inputKey||typeof parsed.kind!=='string')throw Error('Cache identity mismatch');
-     const dir=path.join(cacheRoot,namespace,kind);
+     // Match createLocalEvidencePreprocessCache's canonical resultPath.
+     const dir=path.join(cacheRoot,namespace,kind==='nav'?'nav':'dense');
      const file=path.join(dir,inputKey+'.'+suffix+'.json');
      await fs.mkdir(dir,{recursive:true});
      await fs.writeFile(file,value);
