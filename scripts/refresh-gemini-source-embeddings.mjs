@@ -587,7 +587,7 @@ async function main(argv = process.argv.slice(2)) {
   const denseInputs = await readDenseInputs(options.inputs);
   const execute = options.mode === "execute";
   const cloud = execute && options.cloud
-    ? await createCloudEvidencePreprocessResources({ env: { ...process.env, EVIDENCE_PREPROCESS_MAX_USD: String(options.maxUsd) } })
+    ? await createCloudEvidencePreprocessResources({ cacheDir: options.cacheDir, env: { ...process.env, EVIDENCE_PREPROCESS_MAX_USD: String(options.maxUsd) } })
     : null;
   const cache = cloud?.cache || createLocalEvidencePreprocessCache({ cacheDir: options.cacheDir });
   let transport;

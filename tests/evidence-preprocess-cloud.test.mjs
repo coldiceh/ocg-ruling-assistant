@@ -108,7 +108,9 @@ test("Redis ledger initialization is one-time and preserves cumulative history a
   assert.deepEqual(await readRedisEvidencePreprocessLedger(config), after);
 });
 
-test("cloud resources require a separately initialized authorized ledger", async () => {
+test("cloud resources keep the authorized ledger in Redis and paid results on disk", async (t) => {
+  const cacheDir = await mkdtemp(join(tmpdir(), "preprocess-disk-"));
+  t.after(() => rm(cacheDir, { recursive: true, force: true }));
   const redis = fakeRedis();
   const fetchImpl = async (_url, options) => {
     assert.equal(options.headers.authorization, "Bearer fixture-token");
@@ -124,14 +126,18 @@ test("cloud resources require a separately initialized authorized ledger", async
     EVIDENCE_PREPROCESS_MAX_USD: "0.25",
   };
   await assert.rejects(
-    createCloudEvidencePreprocessResources({ env: baseEnv, fetchImpl }),
+    createCloudEvidencePreprocessResources({ env: baseEnv, fetchImpl, cacheDir }),
     /redis_ledger_missing/u,
   );
   assert.equal((await initializeCloudEvidencePreprocessLedger({
     env: baseEnv, ledger: legacyLedger(), fetchImpl,
   })).status, "initialized");
-  const resources = await createCloudEvidencePreprocessResources({ env: baseEnv, fetchImpl });
-  assert.equal(resources.cache.kind, "redis-evidence-preprocess-cache");
+  const resources = await createCloudEvidencePreprocessResources({ env: baseEnv, fetchImpl, cacheDir });
+  assert.equal(resources.cache.kind, "local-evidence-preprocess-cache");
+  const key = "a".repeat(64), value = { key, kind: "dense", vector: [1, 2] };
+  await resources.cache.saveDense(key, value);
+  assert.deepEqual(await resources.cache.readResult("dense", key), value);
+  assert.equal([...redis.values.keys()].some(key => key.startsWith("evidence-preprocess:")), false);
   assert.equal(resources.budget.kind, "redis-evidence-preprocess-budget");
 });
 

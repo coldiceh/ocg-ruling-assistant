@@ -1,9 +1,10 @@
 import {
   createRedisEvidencePreprocessBudget,
-  createRedisEvidencePreprocessCache,
+  createLocalEvidencePreprocessCache,
   initializeRedisEvidencePreprocessLedger,
   readRedisEvidencePreprocessLedger,
 } from "./evidence-preprocess-cache.mjs";
+import { join } from "node:path";
 
 export function createUpstashRedisCommand({ url, token, fetchImpl = globalThis.fetch } = {}) {
   const endpoint = new URL(requiredText(url, "evidence_preprocess_redis_url_required"));
@@ -32,7 +33,9 @@ export async function createCloudEvidencePreprocessResources({
   fetchImpl = globalThis.fetch,
   reportOnlyCost = false,
   costReporter = null,
+  cacheDir,
 } = {}) {
+  if (!cacheDir) throw new Error("evidence_preprocess_cache_dir_required");
   if (reportOnlyCost) {
     if (costReporter?.reportOnly !== true) throw new Error("evidence_run_cost_reporter_required");
     // Keep the paid-result cache namespace. Do not read or modify the old ledger.
@@ -40,7 +43,7 @@ export async function createCloudEvidencePreprocessResources({
       /^[a-zA-Z0-9._-]{1,160}$/u, "evidence_preprocess_cache_namespace_required");
     const command = createUpstashRedisCommand({ ...redisConfig(env), fetchImpl });
     return Object.freeze({ command,
-      cache: createRedisEvidencePreprocessCache({ command, namespace: cacheNamespace }),
+      cache: createLocalEvidencePreprocessCache({ cacheDir: join(cacheDir, cacheNamespace) }),
       budget: costReporter,
     });
   }
@@ -51,7 +54,7 @@ export async function createCloudEvidencePreprocessResources({
   await readRedisEvidencePreprocessLedger({ command, ledgerKey, authorizationId });
   return Object.freeze({
     command,
-    cache: createRedisEvidencePreprocessCache({ command, namespace: cacheNamespace }),
+    cache: createLocalEvidencePreprocessCache({ cacheDir: join(cacheDir, cacheNamespace) }),
     budget: createRedisEvidencePreprocessBudget({ command, ledgerKey, authorizationId, maxUsd }),
   });
 }

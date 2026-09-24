@@ -111,7 +111,7 @@ export async function runBoundedEvidenceAssetSync(options = {}, dependencies = {
     if (normalized.batchBudgetUsd > 0 && normalized.execute) {
       if (!previous.bundleRevision) throw codedError("sync_batch_published_baseline_required", 2);
       const factory = dependencies.createCloudResources || createCloudEvidencePreprocessResources;
-      const cloud = await factory({ env: normalized.env, fetchImpl: dependencies.fetchImpl || globalThis.fetch,
+      const cloud = await factory({ env: normalized.env, cacheDir: normalized.cacheDir, fetchImpl: dependencies.fetchImpl || globalThis.fetch,
         reportOnlyCost: true, costReporter });
       preliminaryCache = cloud.cache;
       const initialSpentUsd = normalized.env.EVIDENCE_SYNC_CARRY_BASELINE === previous.bundleRevision
@@ -178,6 +178,7 @@ export async function runBoundedEvidenceAssetSync(options = {}, dependencies = {
       } else if (normalized.cloud) {
         const cloudFactory = dependencies.createCloudResources || createCloudEvidencePreprocessResources;
         const cloud = await cloudFactory({
+          cacheDir: normalized.cacheDir,
           env: normalized.reportOnlyCost ? normalized.env
             : { ...normalized.env, EVIDENCE_PREPROCESS_MAX_USD: String(normalized.maxUsd) },
           fetchImpl: dependencies.fetchImpl || globalThis.fetch,

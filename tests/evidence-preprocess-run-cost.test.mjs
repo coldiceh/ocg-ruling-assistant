@@ -69,9 +69,11 @@ test("report storage failure does not block provider processing", async (t) => {
   assert.deepEqual(r.summary().warnings, ["cost_report_write_failed"]);
 });
 
-test("cloud report-only uses existing cache without touching invalid or missing ledger", async () => {
+test("cloud report-only reads local paid results without accessing Redis", async (t) => {
+  const cacheDir = await directory(t);
   const calls = [];
   const resources = await createCloudEvidencePreprocessResources({
+    cacheDir,
     reportOnlyCost: true, costReporter: createEvidenceRunCostReporter(),
     env: {
       EVIDENCE_PREPROCESS_AUTHORIZATION_ID: "invalid auth!",
@@ -92,9 +94,10 @@ test("cloud report-only uses existing cache without touching invalid or missing 
   });
   assert.equal(calls.length, 0);
   assert.equal(resources.budget.reportOnly, true);
-  assert.deepEqual(await resources.cache.readResult("dense", "a".repeat(64)), { vector: [1] });
-  assert.equal(calls.length, 1);
-  assert.match(calls[0][1], /ocg-daily-sync-20260920:result$/);
+  const key = "a".repeat(64), row = { key, kind: "dense", vector: [1] };
+  await resources.cache.saveDense(key, row);
+  assert.deepEqual(await resources.cache.readResult("dense", key), row);
+  assert.equal(calls.length, 0);
 });
 
 test("summary is available on failure and unavailable reports never claim zero", async (t) => {

@@ -941,7 +941,7 @@ export async function runNavigationCli(argv = process.argv.slice(2), {
     : null;
   const execute = options.mode === "execute";
   const cloud = execute && options.cloud
-    ? await createCloudEvidencePreprocessResources({ env: { ...env, EVIDENCE_PREPROCESS_MAX_USD: String(options.maxUsd) }, fetchImpl })
+    ? await createCloudEvidencePreprocessResources({ cacheDir: options.cacheDir, env: { ...env, EVIDENCE_PREPROCESS_MAX_USD: String(options.maxUsd) }, fetchImpl })
     : null;
   const cache = cloud?.cache || createLocalEvidencePreprocessCache({ cacheDir: options.cacheDir });
   const transports = new Map();

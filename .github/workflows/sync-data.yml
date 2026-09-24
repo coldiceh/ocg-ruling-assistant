@@ -24,7 +24,7 @@ jobs:
   sync:
     runs-on: ubuntu-latest
     # Leave room for the existing CPU embedding path, bounded preprocessing,
-    # and post-rebase checks. Paid progress persists in the authorized Redis cache.
+    # and post-rebase checks. Paid progress persists in the runner file cache.
     timeout-minutes: 240
     permissions:
       contents: write
@@ -124,6 +124,14 @@ jobs:
       - name: Validate cloud source identities and provenance before paid calls
         run: node scripts/build-cloud-evidence-assets.mjs --data-dir data --validate-only
 
+      - name: Restore paid preprocessing results from file cache
+        if: steps.restore.outputs.resumed != 'true'
+        uses: actions/cache/restore@v5
+        with:
+          path: ${{ runner.temp }}/bounded-evidence-cache
+          key: evidence-preprocess-disk-v1-${{ vars.EVIDENCE_PREPROCESS_CACHE_NAMESPACE }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: evidence-preprocess-disk-v1-${{ vars.EVIDENCE_PREPROCESS_CACHE_NAMESPACE }}-
+
       - name: Incrementally refresh current navigation and Gemini vectors
         if: steps.restore.outputs.resumed != 'true'
         id: bounded_sync
@@ -150,6 +158,13 @@ jobs:
             --progress \
             --cloud \
             --execute
+
+      - name: Save paid preprocessing results even after a failed batch
+        if: ${{ always() && steps.bounded_sync.outcome != 'skipped' && steps.bounded_sync.outcome != '' }}
+        uses: actions/cache/save@v5
+        with:
+          path: ${{ runner.temp }}/bounded-evidence-cache
+          key: evidence-preprocess-disk-v1-${{ vars.EVIDENCE_PREPROCESS_CACHE_NAMESPACE }}-${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Report this run's model API cost
         if: ${{ always() && steps.bounded_sync.outcome != 'skipped' }}

@@ -1,0 +1,58 @@
+name: Move paid preprocessing cache out of Upstash
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        type: choice
+        options: [backup, delete]
+        default: backup
+      backup_run_id:
+        type: string
+        default: ''
+      confirmed_manifest_sha256:
+        type: string
+        default: ''
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: sync-ruling-data
+  cancel-in-progress: false
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          sparse-checkout: scripts
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - uses: actions/download-artifact@v4
+        if: inputs.mode == 'delete'
+        with:
+          name: preprocess-storage-backup
+          run-id: ${{ inputs.backup_run_id }}
+          github-token: ${{ github.token }}
+          path: preprocess-backup
+      - name: Back up or remove only verified cache values
+        env:
+          UPSTASH_BUDGET_KV_REST_API_URL: ${{ secrets.UPSTASH_BUDGET_KV_REST_API_URL }}
+          UPSTASH_BUDGET_KV_REST_API_TOKEN: ${{ secrets.UPSTASH_BUDGET_KV_REST_API_TOKEN }}
+          MIGRATION_PUBLIC_KEY_BASE64: ${{ vars.PREPROCESS_MIGRATION_PUBLIC_KEY_BASE64 }}
+          CONFIRMED_MANIFEST_SHA256: ${{ inputs.confirmed_manifest_sha256 }}
+          EVIDENCE_CACHE_DIR: ${{ runner.temp }}/bounded-evidence-cache
+          MIGRATION_MODE: ${{ inputs.mode }}
+        run: node scripts/migrate-preprocess-storage.mjs "$MIGRATION_MODE"
+      - name: Seed the main branch file cache with paid results
+        if: inputs.mode == 'backup'
+        uses: actions/cache/save@v5
+        with:
+          path: ${{ runner.temp }}/bounded-evidence-cache
+          key: evidence-preprocess-disk-v1-${{ vars.EVIDENCE_PREPROCESS_CACHE_NAMESPACE }}-${{ github.run_id }}-${{ github.run_attempt }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: preprocess-storage-backup
+          path: preprocess-backup
+          retention-days: 7
