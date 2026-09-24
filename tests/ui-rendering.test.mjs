@@ -722,7 +722,7 @@ test("backend answers bypass persistent browser cache and bust static assets", a
     readFile(new URL("../config.json", import.meta.url), "utf8"),
   ]);
   const config = JSON.parse(configText.replace(/^\uFEFF/u, ""));
-  assert.match(html, /src\/app\.js\?v=20260924-local-experiments-1/u);
+  assert.match(html, /src\/app\.js\?v=20260924-history-1000-1/u);
   assert.match(html, /src\/styles\.css\?v=20260923-locale-glass-1/u);
   assert.equal(config.answerApiUrl, "https://ocg-ruling-assistant.vercel.app/api/answer");
   assert.match(app, /cache: "no-store"/u);
@@ -873,10 +873,10 @@ test("admin_model_lab_is_hidden_and_requires_a_real_session", async () => {
   assert.match(html, /id="adminQuestionHistoryTitle">后台历史提问/u);
   assert.match(css, /\.admin-history-list li\s*\{[^}]*min-width:\s*0/u);
   assert.match(css, /\.admin-history-list button\s*\{[^}]*max-width:\s*100%[^}]*overflow:\s*hidden/u);
-  assert.match(html, /显示最近保存的公开问答记录，最多保留 1000 条，默认显示最近 100 条/u);
+  assert.match(html, /显示最近保存的公开问答记录，最多保留并显示最近 1000 条/u);
   assert.doesNotMatch(html, /id="adminComparisonSection"|id="adminEvaluationSelect"|id="adminHistoryList"/u);
   assert.match(app, /getAdminEndpointUrl\("\/api\/admin-queries"\)/u);
-  assert.match(app, /url\.searchParams\.set\("limit", "100"\)/u);
+  assert.match(app, /url\.searchParams\.set\("limit", "1000"\)/u);
   assert.match(app, /sessionStorage\.setItem\(adminCurrentRunStorageKey, id\)/u);
   assert.match(app, /sessionStorage\.getItem\(adminCurrentRunStorageKey\)/u);
   assert.doesNotMatch(sourceBetween(app, "async function loadAdminLabBootstrap", "async function loadAdminCapabilities"), /restoreStoredAdminRun/u);

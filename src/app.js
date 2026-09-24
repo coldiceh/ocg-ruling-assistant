@@ -4790,7 +4790,7 @@ async function loadAdminQuestionHistory() {
       payload?.items,
       Array.isArray(payload) ? payload : null,
     );
-    renderAdminQuestionHistory(entries.slice(0, 100));
+    renderAdminQuestionHistory(entries.slice(0, 1000));
   } catch (error) {
     if (!adminSession.authenticated || adminSession.csrfToken !== historySessionToken) return;
     ui.adminQuestionHistoryStatus.textContent = adminErrorMessage(
@@ -4806,7 +4806,7 @@ async function loadAdminQuestionHistory() {
 
 async function requestAdminQuestionHistory() {
   const url = new URL(getAdminEndpointUrl("/api/admin-queries"));
-  url.searchParams.set("limit", "100");
+  url.searchParams.set("limit", "1000");
   const response = await fetch(url, {
     method: "GET",
     cache: "no-store",
@@ -4826,7 +4826,7 @@ async function requestAdminQuestionHistory() {
 function renderAdminQuestionHistory(entries) {
   clearElement(ui.adminQuestionHistoryList);
   ui.adminQuestionHistoryStatus.textContent = entries.length
-    ? `后台最近保存的 ${entries.length} 条提问（最多保留 1000 条，默认显示最近 100 条）。旧记录未保存的字段显示“未记录”。`
+    ? `后台最近保存的 ${entries.length} 条提问（最多保留并显示最近 1000 条）。旧记录未保存的字段显示“未记录”。`
     : "后台暂时没有已保存的提问。";
   for (const entry of entries) {
     const item = document.createElement("li");
