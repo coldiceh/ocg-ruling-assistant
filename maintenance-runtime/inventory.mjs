@@ -1,0 +1,7 @@
+const url=process.env.UPSTASH_REDIS_REST_URL, token=process.env.UPSTASH_REDIS_REST_TOKEN;
+const groups=new Map();
+async function command(c){const r=await fetch(url,{method:'POST',headers:{authorization:`Bearer ${token}`,'content-type':'application/json'},body:JSON.stringify(c)});if(!r.ok)throw Error(`Redis HTTP ${r.status}`);const j=await r.json();if(j.error)throw Error('Redis command failed');return j.result;}
+const prefixes=['admin-runs:v1','admin-lab-records:v1','admin-lab-records','rag-query-audit:v1','public-answer-latency','rag-budget','admin-session','admin-final'];
+const keys=new Set();let cursor='0';do{const r=await command(['SCAN',cursor,'COUNT','500']);cursor=String(r[0]);for(const k of r[1])keys.add(k);if(keys.size>20000)throw Error('Key limit exceeded');}while(cursor!=='0');
+for(const key of keys){const bucket=prefixes.find(p=>key.startsWith(p))||'other';const g=groups.get(bucket)||{keys:0,bytes:0,persistent:0,expiring:0,types:{}};const [type,bytes,ttl]=await Promise.all([command(['TYPE',key]),command(['MEMORY','USAGE',key]),command(['PTTL',key])]);g.keys++;g.bytes+=Number(bytes)||0;g.types[type]=(g.types[type]||0)+1;if(ttl===-1)g.persistent++;else if(ttl>=0)g.expiring++;groups.set(bucket,g);}
+console.log(JSON.stringify({at:new Date().toISOString(),dbsize:await command(['DBSIZE']),scanned:keys.size,totalBytes:[...groups.values()].reduce((s,g)=>s+g.bytes,0),groups:Object.fromEntries(groups),valuesRead:false},null,2));
