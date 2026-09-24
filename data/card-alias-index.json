@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-23T22:07:27.137Z",
+  "generatedAt": "2026-09-24T13:43:30.828Z",
   "records": [
     {
       "alias": "“K9刑侦案件”",
@@ -72493,6 +72493,13 @@
       "cardId": "22692",
       "cardName": "黑之魔导的帘布",
       "language": "en"
+    },
+    {
+      "alias": "黑魔导的幕帘",
+      "normalizedAlias": "黑魔导的幕帘",
+      "cardId": "22692",
+      "cardName": "黑之魔导的帘布",
+      "language": "zh"
     },
     {
       "alias": "黑魔导",

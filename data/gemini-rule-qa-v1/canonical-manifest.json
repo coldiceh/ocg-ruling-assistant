@@ -1,7 +1,7 @@
 {
   "schemaVersion": 3,
   "kind": "gemini-rule-qa-canonical-stage",
-  "dataRevision": "75a6e38c54d564a4507047c116e6b015af57eeb6bbad64d0874bdf6eceb27b47",
+  "dataRevision": "baa4478d813ba1e39edaef092b9ffe59875d6c3da33940ecc0ec4a855fe3896e",
   "qaRevision": "7d435ae58626a9db9a7b181358adc5d8c55d09c5c2e006b7c727cc9923db7776",
   "qaContentRevision": "7d435ae58626a9db9a7b181358adc5d8c55d09c5c2e006b7c727cc9923db7776",
   "ruleContentRevision": "cde29fdf2fb556afcaedbb17443d9f2726f42a8268f1b979b1a1de9fe3684d39",
@@ -25,13 +25,13 @@
     "ragDataRevision": {
       "file": "rag-data-revision-manifest.json",
       "bytes": 1479,
-      "sha256": "7f9913fe5119002e12cac13504d052636633b4b79b4d5186066ce2ea38550fd7",
-      "revision": "75a6e38c54d564a4507047c116e6b015af57eeb6bbad64d0874bdf6eceb27b47"
+      "sha256": "c7217a1063be656ca111b1ef6b00d0ca371765d8c93ab47cb545f11aaa6ebfbb",
+      "revision": "baa4478d813ba1e39edaef092b9ffe59875d6c3da33940ecc0ec4a855fe3896e"
     },
     "cards": {
       "file": "cards.json",
-      "bytes": 24013042,
-      "sha256": "4b9f9e37abce509e4fa08c2991fbb90675c5ea319c62ef5624a8e7eaa827f18e"
+      "bytes": 24014009,
+      "sha256": "269cd9e12370ce99d43125e1cfb6fea7d1add7f65c94bf68c882db53f5a5df99"
     }
   },
   "counts": {
@@ -93,5 +93,5 @@
       "canonicalSha256": "3b58e059ee8480dd2d26995368136e8edc1f69ae9e7e3654d3be843108acd281"
     }
   },
-  "canonicalRevision": "27d20a7971d540b6b31ed6cc91c8631a6bfaf7ed6b442e79860e2f96159e7aa7"
+  "canonicalRevision": "96905c7fec15f32a538cdc735318afeda623f488239a9656f48c4c1e70d6e8f8"
 }

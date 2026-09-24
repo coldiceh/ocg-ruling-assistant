@@ -3,9 +3,9 @@
   "kind": "rag-data-revision-manifest",
   "compilerAbi": "rag-data-revision-compiler/v1",
   "canonicalizationAbi": "rag-data-revision-canonical-json-lf/v2",
-  "revision": "75a6e38c54d564a4507047c116e6b015af57eeb6bbad64d0874bdf6eceb27b47",
-  "canonicalCorpusDigest": "75a6e38c54d564a4507047c116e6b015af57eeb6bbad64d0874bdf6eceb27b47",
-  "sourceSetDigest": "590c94fcf5b20242cfeb2f631ddd84f75caa8649562adc2bf36270ed590562b2",
+  "revision": "baa4478d813ba1e39edaef092b9ffe59875d6c3da33940ecc0ec4a855fe3896e",
+  "canonicalCorpusDigest": "baa4478d813ba1e39edaef092b9ffe59875d6c3da33940ecc0ec4a855fe3896e",
+  "sourceSetDigest": "b7d767f2d7b0d9ef207abea974d2fdeb99369068b61d013b82089f1013eac1e0",
   "counts": {
     "cards": 14383,
     "records": 115170,
@@ -14,8 +14,8 @@
   "sources": [
     {
       "path": "cards.json",
-      "bytes": 24013042,
-      "sha256": "4b9f9e37abce509e4fa08c2991fbb90675c5ea319c62ef5624a8e7eaa827f18e"
+      "bytes": 24014009,
+      "sha256": "269cd9e12370ce99d43125e1cfb6fea7d1add7f65c94bf68c882db53f5a5df99"
     },
     {
       "path": "rulings.json",

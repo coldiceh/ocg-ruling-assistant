@@ -11,6 +11,36 @@ import {
   preserveBackfilledChineseNames,
 } from "../scripts/lib/baige-chinese-name-backfill.mjs";
 import { projectCardLite } from "../scripts/sync-ygoresources.mjs";
+import { extractRagCards } from "../backend/ragCardExtractor.mjs";
+
+test("existing official Chinese names retain CID-bound community aliases for exact identity lookup", () => {
+  const cards = [
+    { id: "22692", name: "黑之魔导的帘布", cnName: "黑之魔导的帘布", aliases: ["黑之魔导的帘布", "黒魔導のカーテン"] },
+    { id: "4830", name: "黒魔術のカーテン", cnName: "黑魔术的幕帘", aliases: ["黒魔術のカーテン", "黑魔术的幕帘"] },
+  ];
+  const source = [{ cid: 22692, sc_name: "黑之魔导的帘布", cn_name: "黑魔导的幕帘" }];
+  const merged = mergeMissingChineseNamesFromBaige(cards, source).records;
+  const result = extractRagCards("「黑魔导的幕帘」能否发动？", {
+    cards: merged, mentionSetSource: "typed_model",
+    modelCardNameCandidates: [{ name: "黑魔导的幕帘", originalText: "黑魔导的幕帘" }],
+  });
+  assert.deepEqual(result.resolvedCards.map(card => card.id), ["22692"]);
+  assert.equal(result.resolvedCards[0].requiresExternalIdentityVerification, undefined);
+  assert.equal(merged[0].cnName, cards[0].cnName);
+  assert.equal(merged[0].name, cards[0].name);
+  assert.equal(merged[0].chineseNameSources.find(entry => entry.name === "黑魔导的幕帘").sourceRecordId, "22692");
+  assert.deepEqual(cards[0].aliases, ["黑之魔导的帘布", "黒魔導のカーテン"]);
+});
+
+test("a later sync preserves sourced aliases when upstream supplies its own Chinese name", () => {
+  const sources = [{ name: "社区译名", source: "baige", sourceRecordId: "13000" }];
+  const fresh = [{ id: "13000", name: "官方主名", cnName: "官方中文名", aliases: ["官方中文名"], effectText: "新卡文" }];
+  const previous = [{ id: "13000", cnName: "旧中文名", chineseNameSources: sources }];
+  const result = preserveBackfilledChineseNames(fresh, previous);
+  assert.equal(result[0].cnName, "官方中文名");
+  assert.deepEqual(result[0].aliases, ["官方中文名", "旧中文名", "社区译名"]);
+  assert.equal(result[0].effectText, "新卡文");
+});
 
 test("projects only explicit Baige Chinese name fields with their provenance", () => {
   const projected = projectBaigeChineseNames({
@@ -42,7 +72,7 @@ test("projects only explicit Baige Chinese name fields with their provenance", (
   assert.equal(projected.names.includes("must not be imported"), false);
 });
 
-test("backfills only an empty cnName with the exact same stable cid", () => {
+test("backfills only an empty cnName and merges aliases with the exact same stable cid", () => {
   const original = {
     id: "12002",
     name: "既有主名称",
@@ -81,15 +111,17 @@ test("backfills only an empty cnName with the exact same stable cid", () => {
   delete expected.cnName;
   delete expected.aliases;
   assert.deepEqual(preserved, expected);
-  assert.strictEqual(result.records[1], existingChinese);
+  assert.equal(result.records[1].cnName, existingChinese.cnName);
+  assert.equal(result.records[1].name, existingChinese.name);
+  assert.deepEqual(result.records[1].aliases, [...existingChinese.aliases, "不得覆盖"]);
   assert.strictEqual(result.records[2], wrongId);
   assert.deepEqual(result.stats, {
     sourceRecordCount: 3,
     usableSourceRecordCount: 3,
-    eligibleCardCount: 2,
-    matchedCardCount: 1,
+    eligibleCardCount: 3,
+    matchedCardCount: 2,
     backfilledCardCount: 1,
-    addedAliasCount: 2,
+    addedAliasCount: 3,
   });
 });
 
@@ -152,5 +184,7 @@ test("a later upstream sync preserves bound name enrichment without a new source
   assert.deepEqual(output[0].chineseNameSources,sources);
   assert.deepEqual(output[0].aliases,["当前主名称","已补中文名"]);
   assert.strictEqual(output[1],fresh[1]);
-  assert.strictEqual(output[2],fresh[2]);
+  assert.equal(output[2].cnName, fresh[2].cnName);
+  assert.deepEqual(output[2].aliases, ["已补中文名"]);
+  assert.deepEqual(output[2].chineseNameSources, sources);
 });

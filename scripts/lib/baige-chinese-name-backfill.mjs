@@ -78,7 +78,7 @@ export function mergeMissingChineseNamesFromBaige(cards = [], sourceRecords = []
   let addedAliasCount = 0;
 
   const records = (cards || []).map((card) => {
-    if (!isObject(card) || nonEmptyString(card.cnName)) return card;
+    if (!isObject(card)) return card;
     eligibleCardCount += 1;
     const id = stableId(card.id);
     const source = id ? sourceByCid.get(id) : null;
@@ -94,10 +94,11 @@ export function mergeMissingChineseNamesFromBaige(cards = [], sourceRecords = []
     );
 
     addedAliasCount += aliases.length - unique(previousAliases).length;
-    backfilledCardCount += 1;
+    const existingChineseName = nonEmptyString(card.cnName);
+    if (!existingChineseName) backfilledCardCount += 1;
     return {
       ...card,
-      cnName: source.names[0],
+      cnName: existingChineseName || source.names[0],
       aliases,
       chineseNameSources,
     };
@@ -119,11 +120,11 @@ export function mergeMissingChineseNamesFromBaige(cards = [], sourceRecords = []
 export function preserveBackfilledChineseNames(cards = [], previousCards = []) {
   const previousById = new Map(previousCards.map(card => [stableId(card?.id), card]));
   return cards.map(card => {
-    if (!isObject(card) || nonEmptyString(card.cnName)) return card;
+    if (!isObject(card)) return card;
     const previous = previousById.get(stableId(card.id));
     if (!nonEmptyString(previous?.cnName) || !Array.isArray(previous.chineseNameSources)
         || !previous.chineseNameSources.length) return card;
-    return { ...card, cnName: previous.cnName,
+    return { ...card, cnName: nonEmptyString(card.cnName) || previous.cnName,
       aliases: unique([...(Array.isArray(card.aliases) ? card.aliases : []), previous.cnName,
         ...previous.chineseNameSources.map(entry => nonEmptyString(entry?.name)).filter(Boolean)]),
       chineseNameSources: previous.chineseNameSources,
