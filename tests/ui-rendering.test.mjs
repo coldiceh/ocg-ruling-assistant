@@ -722,7 +722,7 @@ test("backend answers bypass persistent browser cache and bust static assets", a
     readFile(new URL("../config.json", import.meta.url), "utf8"),
   ]);
   const config = JSON.parse(configText.replace(/^\uFEFF/u, ""));
-  assert.match(html, /src\/app\.js\?v=20260913-history100-1/u);
+  assert.match(html, /src\/app\.js\?v=20260924-local-experiments-1/u);
   assert.match(html, /src\/styles\.css\?v=20260923-locale-glass-1/u);
   assert.equal(config.answerApiUrl, "https://ocg-ruling-assistant.vercel.app/api/answer");
   assert.match(app, /cache: "no-store"/u);
@@ -873,7 +873,7 @@ test("admin_model_lab_is_hidden_and_requires_a_real_session", async () => {
   assert.match(html, /id="adminQuestionHistoryTitle">后台历史提问/u);
   assert.match(css, /\.admin-history-list li\s*\{[^}]*min-width:\s*0/u);
   assert.match(css, /\.admin-history-list button\s*\{[^}]*max-width:\s*100%[^}]*overflow:\s*hidden/u);
-  assert.match(html, /显示最近保存的公开问答记录，最多 100 条/u);
+  assert.match(html, /显示最近保存的公开问答记录，最多保留 1000 条，默认显示最近 100 条/u);
   assert.doesNotMatch(html, /id="adminComparisonSection"|id="adminEvaluationSelect"|id="adminHistoryList"/u);
   assert.match(app, /getAdminEndpointUrl\("\/api\/admin-queries"\)/u);
   assert.match(app, /url\.searchParams\.set\("limit", "100"\)/u);
@@ -2151,6 +2151,37 @@ function sourceBetween(source, startMarker, endMarker) {
   assert.notEqual(end, -1, `missing source marker: ${endMarker}`);
   return source.slice(start, end);
 }
+
+test("hosted archived questions render saved ratings and saving cannot execute a model", async () => {
+  const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+  const source = sourceBetween(app, "function renderSavedAdminRating", "async function loadAdminCapabilities");
+  const document = createTestDocument();
+  const create = document.createElement;
+  document.createElement = tag => Object.assign(create(tag), {
+    setAttribute() {},
+    addEventListener(name, handler) { this[name] = handler; },
+  });
+  const list = document.createElement("ol");
+  const requests = [];
+  const render = new Function("document", "appendText", "formatAdminDate", "requestAdminLab", "adminErrorMessage",
+    source + "; return renderSavedAdminRating;")(document, appendTestText, String,
+    async payload => { requests.push(payload); }, error => error.message);
+  render(list, { runId: "saved-1", questionSummary: "历史问题", createdAt: "2026-09-24",
+    humanRating: { rating: "incorrect", note: "已存备注" } });
+  assert.equal(requests.length, 0);
+  const details = list.childNodes[0].childNodes[0];
+  const select = details.childNodes.find(node => node.tagName === "select");
+  const notes = details.childNodes.find(node => node.tagName === "textarea");
+  const button = details.childNodes.find(node => node.tagName === "button");
+  assert.equal(select.value, "incorrect");
+  assert.equal(notes.value, "已存备注");
+  select.value = "correct";
+  await button.click();
+  assert.deepEqual(requests, [{ method: "POST", action: "rating",
+    body: { runId: "saved-1", rating: "correct", notes: "已存备注" } }]);
+  assert.match(testNodeText(details), /评分已保存/u);
+  assert.equal(button.disabled, false);
+});
 
 function createTestDocument() {
   return {

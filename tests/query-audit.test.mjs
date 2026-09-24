@@ -58,7 +58,7 @@ test("query_audit_persists_preparing_request_context_with_retention", async () =
   assert.equal(stored.profileId, "official-astra-low");
   assert.ok(!("headers" in stored));
   assert.ok(!("cookies" in stored));
-  assert.equal(commands[1][3], "99");
+  assert.equal(commands[1][3], "999");
   assert.equal(commands[2][2], String(30 * 86400));
 });
 
@@ -223,20 +223,20 @@ test("query audit update leaves an evicted id absent and validates mechanical pa
   );
 });
 
-test("query audit retention and listing are capped at 100 questions", async () => {
+test("query audit retention supports 1000 questions while default listing remains 100", async () => {
   const appendCommands = [];
   await appendQueryAudit({
     question: "合成查询输入5",
     env: {
       ...redisEnv,
-      QUERY_AUDIT_MAX_ENTRIES: "500",
+      QUERY_AUDIT_MAX_ENTRIES: "5000",
     },
     fetchImpl: async (_url, options) => {
       appendCommands.push(JSON.parse(options.body));
       return jsonResponse(1);
     },
   });
-  assert.deepEqual(appendCommands[1], ["LTRIM", "rag-query-audit:v1", "0", "99"]);
+  assert.deepEqual(appendCommands[1], ["LTRIM", "rag-query-audit:v1", "0", "999"]);
 
   const lowerConfiguredCommands = [];
   await appendQueryAudit({
@@ -261,7 +261,7 @@ test("query audit retention and listing are capped at 100 questions", async () =
       return jsonResponse([]);
     },
   });
-  assert.deepEqual(listCommands[0], ["LRANGE", "rag-query-audit:v1", "0", "99"]);
+  assert.deepEqual(listCommands[0], ["LRANGE", "rag-query-audit:v1", "0", "499"]);
 
   const defaultListCommands = [];
   await listQueryAudits({

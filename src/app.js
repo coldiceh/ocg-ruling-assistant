@@ -2611,6 +2611,8 @@ function setAdminAuthenticated(authenticated, payload = {}) {
     clearAdminRiskControlStatus();
     if (ui.adminBudgetActionStatus) ui.adminBudgetActionStatus.textContent = "";
     if (ui.adminQuestionHistoryList) clearElement(ui.adminQuestionHistoryList);
+    const savedRatings = document.querySelector('#adminSavedRatingsList');
+    if (savedRatings) clearElement(savedRatings);
     if (ui.adminQuestionHistoryStatus) ui.adminQuestionHistoryStatus.textContent = "登录后读取后台历史提问。";
   }
 }
@@ -2816,7 +2818,73 @@ async function loadAdminLabBootstrap() {
   await Promise.allSettled([
     loadAdminRiskControlStatus(),
     loadAdminQuestionHistory(),
+    loadSavedAdminRatings(),
   ]);
+}
+
+async function loadSavedAdminRatings(cursor) {
+  const list = document.querySelector('#adminSavedRatingsList');
+  const status = document.querySelector('#adminSavedRatingsStatus');
+  const more = document.querySelector('#adminSavedRatingsMore');
+  if (!adminSession.authenticated || !list) return;
+  if (!cursor) clearElement(list);
+  if (more) more.disabled = true;
+  status.textContent = '正在读取问题摘要与评分…';
+  try {
+    const page = await requestAdminLab({ action: 'list', query: { limit: 25, cursor } });
+    for (const record of page.records || []) renderSavedAdminRating(list, record);
+    status.textContent = list.children.length ? '评分可直接修改并保存。' : '暂无已存问题摘要与评分。';
+    if (more) {
+      more.hidden = !page.nextCursor;
+      more.onclick = () => loadSavedAdminRatings(page.nextCursor);
+    }
+  } catch (error) {
+    status.textContent = adminErrorMessage(error, '无法读取已存评分。');
+  } finally {
+    if (more) more.disabled = false;
+  }
+}
+
+function renderSavedAdminRating(list, record) {
+  const item = document.createElement('li');
+  const details = document.createElement('details');
+  const summary = document.createElement('summary');
+  appendText(summary, 'strong', record.questionSummary || record.question || '未记录问题');
+  details.appendChild(summary);
+  appendText(details, 'p', formatAdminDate(record.createdAt));
+  const select = document.createElement('select');
+  select.setAttribute('aria-label', '人工评分');
+  for (const [value, label] of [['needs_review', '待审核'], ['correct', '正确'], ['partially_correct', '部分正确'], ['incorrect', '错误']]) {
+    const option = document.createElement('option');
+    option.value = value;
+    option.textContent = label;
+    select.appendChild(option);
+  }
+  select.value = record.humanRating?.rating || 'needs_review';
+  const notes = document.createElement('textarea');
+  notes.setAttribute('aria-label', '评分备注');
+  notes.maxLength = 4000;
+  notes.value = record.humanRating?.note || '';
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'text-button';
+  button.textContent = '保存评分';
+  const status = document.createElement('p');
+  status.setAttribute('role', 'status');
+  button.addEventListener('click', async () => {
+    button.disabled = true;
+    status.textContent = '正在保存评分…';
+    try {
+      await requestAdminLab({ method: 'POST', action: 'rating',
+        body: { runId: record.runId, rating: select.value, notes: notes.value.trim() } });
+      status.textContent = '评分已保存。';
+    } catch (error) {
+      status.textContent = adminErrorMessage(error, '评分保存失败。');
+    } finally { button.disabled = false; }
+  });
+  for (const element of [select, notes, button, status]) details.appendChild(element);
+  item.appendChild(details);
+  list.appendChild(item);
 }
 
 async function loadAdminCapabilities() {
@@ -2829,6 +2897,11 @@ async function loadAdminCapabilities() {
     });
     adminCapabilityState = normalizeAdminCapabilities(data);
     renderAdminCapabilities(adminCapabilityState);
+    if (adminCapabilityState.historyOnly) {
+      setAdminControlsEnabled(false);
+      setAdminRunStatus("实验仅在本地运行。这里保留历史问题与人工评分。", "good");
+      return;
+    }
     const hasModels = adminCapabilityState.models.length > 0
       && adminCapabilityState.preparationModels.length > 0;
     setAdminControlsEnabled(hasModels);
@@ -2923,6 +2996,7 @@ function normalizeAdminCapabilities(data) {
     models,
     preparationProviders,
     preparationModels,
+    historyOnly: source.historyOnly === true,
     efforts: uniqueAdminOptions(normalizeAdminOptionList(
       source.reasoningEfforts || source.efforts || source.reasoning_efforts,
     ).map(normalizeAdminBasicOption)),
@@ -3007,6 +3081,22 @@ function uniqueAdminOptions(options) {
 }
 
 function renderAdminCapabilities(capabilities) {
+  for (const selector of ['#adminQuestionInput', '#adminProgressTitle', '#adminComparisonTitle', '#adminEvaluationTitle']) {
+    const section = document.querySelector(selector)?.closest('.admin-lab-section');
+    if (section) section.hidden = capabilities.historyOnly;
+  }
+  if (capabilities.historyOnly) {
+    for (const selector of ['#adminMetrics', '#adminEvidenceDetails', '#adminResultJson']) {
+      const element = document.querySelector(selector);
+      if (element) (element.closest('details') || element).hidden = true;
+    }
+    const title = document.querySelector('#adminResultTitle');
+    if (title) title.textContent = '历史问题与评分';
+    const subtitle = title?.parentElement?.querySelector('p');
+    if (subtitle) subtitle.textContent = '选择历史问题查看摘要和保存评分，完整实验记录保存在本地。';
+    applyAdminFeatureAvailability();
+    return;
+  }
   renderAdminFinalCallBudget(capabilities.finalCallBudget);
   populateAdminSelect(
     ui.adminPreparationProviderSelect,
@@ -4064,6 +4154,18 @@ function adminDurationCategory(durationMs) {
 }
 
 function renderAdminRun(run) {
+  if (run?.historyOnly) {
+    clearElement(ui.adminResultSummary);
+    appendText(ui.adminResultSummary, 'p', run.question || run.questionSummary || '未记录问题');
+    if (ui.adminRatingSelect) ui.adminRatingSelect.value = run.humanRating?.rating || 'needs_review';
+    if (ui.adminRatingNotes) ui.adminRatingNotes.value = run.humanRating?.note || '';
+    setAdminRunningState(false);
+    if (ui.adminRatingButton) ui.adminRatingButton.disabled = !adminFeatureEnabled('rating');
+    if (ui.adminExportJsonButton) ui.adminExportJsonButton.disabled = !adminFeatureEnabled('export');
+    if (ui.adminExportCsvButton) ui.adminExportCsvButton.disabled = !adminFeatureEnabled('export');
+    setAdminRunStatus('已载入历史问题，可查看或修改评分。', 'good');
+    return;
+  }
   updateAdminStagesFromRun(run);
   renderAdminStageStates();
   const runId = extractAdminRunId(run) || adminCurrentRunId;
@@ -4621,7 +4723,7 @@ async function loadAdminRunFromHistory(runId) {
   setAdminRunStatus("正在读取实验记录…");
   try {
     await refreshAdminRun(adminCurrentRunId);
-    if (!isAdminRunTerminal(adminCurrentRun)) {
+    if (!adminCapabilityState?.historyOnly && !isAdminRunTerminal(adminCurrentRun)) {
       adminClientStartedAt = Date.now();
       startAdminElapsedTimer();
       void followAdminRun(adminCurrentRunId);
@@ -4636,6 +4738,7 @@ async function loadAdminRunFromHistory(runId) {
 }
 
 async function restoreStoredAdminRun() {
+  if (adminCapabilityState?.historyOnly) return;
   const runId = readStoredAdminRunId();
   if (!runId || !adminSession.authenticated) return;
   setAdminRunStatus("正在恢复刷新前的实验…");
@@ -4723,7 +4826,7 @@ async function requestAdminQuestionHistory() {
 function renderAdminQuestionHistory(entries) {
   clearElement(ui.adminQuestionHistoryList);
   ui.adminQuestionHistoryStatus.textContent = entries.length
-    ? `后台最近保存的 ${entries.length} 条提问（最多 100 条）。旧记录未保存的字段显示“未记录”。`
+    ? `后台最近保存的 ${entries.length} 条提问（最多保留 1000 条，默认显示最近 100 条）。旧记录未保存的字段显示“未记录”。`
     : "后台暂时没有已保存的提问。";
   for (const entry of entries) {
     const item = document.createElement("li");
@@ -4880,7 +4983,7 @@ function loadSelectedAdminEvaluation() {
 
 async function submitAdminRating(event) {
   event.preventDefault();
-  if (!adminFeatureEnabled("rating") || !adminCurrentRunId || !isAdminRunTerminal(adminCurrentRun)) return;
+  if (!adminFeatureEnabled("rating") || !adminCurrentRunId || (!adminCurrentRun?.historyOnly && !isAdminRunTerminal(adminCurrentRun))) return;
   ui.adminRatingButton.disabled = true;
   ui.adminRatingStatus.textContent = "正在保存评分…";
   try {

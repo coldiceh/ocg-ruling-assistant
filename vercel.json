@@ -5,7 +5,7 @@
   "env": {
     "NODE_OPTIONS": "--max-old-space-size=1152",
     "ADMIN_PAGE_ORIGIN": "https://ocg-ruling-assistant.vercel.app",
-    "QUERY_AUDIT_MAX_ENTRIES": "100",
+    "QUERY_AUDIT_MAX_ENTRIES": "1000",
     "PUBLIC_OPENAI_DAILY_LIMIT_USD": "5",
     "RELAY_STREAM_TIMEOUT_MS": "270000",
     "ADMIN_MODEL_LAB_SYNC_FINAL_TIMEOUT_MS": "290000",
@@ -48,9 +48,14 @@
       "excludeFiles": "{data/{cards,rulings,qa-index,evidence-index,ocg-rule-corpus,official-responses}.json,data/evidence-index.json.gz,data/gemini-rule-qa-v1/{canonical-manifest.json,navigation-inputs.json.gz,dense-inputs.json.gz,structure-mapping.json.gz}}"
     },
     "api/admin-model-lab.js": {
-      "maxDuration": 300,
-      "includeFiles": "{config/evidence-generation/*.json,data/{legacy-lua-semantic-cache-v2/**,qa-discovery-index.json,rag-data-revision-manifest.json,rag-runtime-v1/**,gemini-rule-qa-v1/**,{rule,qa}-embedding-v1/**}}",
-      "excludeFiles": "{data/{cards,rulings,qa-index,evidence-index,ocg-rule-corpus,official-responses}.json,data/evidence-index.json.gz,data/gemini-rule-qa-v1/{canonical-manifest.json,navigation-inputs.json.gz,dense-inputs.json.gz,structure-mapping.json.gz}}"
+      "maxDuration": 30,
+      "excludeFiles": "data/**"
+    }
+  },
+  "git": {
+    "deploymentEnabled": {
+      "main": true,
+      "*": false
     }
   }
 }

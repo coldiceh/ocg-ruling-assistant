@@ -1,7 +1,7 @@
 import { createAdminSessionManager } from "../backend/adminSession.mjs";
 import {
-  createAdminModelLabProductionService,
-} from "../backend/adminModelLabProduction.mjs";
+  createAdminHistoryService,
+} from "../backend/adminHistoryService.mjs";
 
 const GET_ACTIONS = new Set([
   "capabilities",
@@ -51,7 +51,7 @@ export function createAdminModelLabHandler(options = {}) {
     setCors(response, origin.ok ? origin.origin : "");
     response.setHeader(
       "x-admin-model-lab-write-state",
-      writesDisabledByMaintenance ? "maintenance-disabled" : "enabled",
+      writesDisabledByMaintenance ? "maintenance-disabled" : service.historyOnly ? "history-only" : "enabled",
     );
 
     if (method === "OPTIONS") {
@@ -142,7 +142,7 @@ export function createProductionAdminModelLabHandler(options = {}) {
   if (!service) {
     try {
       const productionFactory = options.productionFactory
-        || createAdminModelLabProductionService;
+        || createAdminHistoryService;
       service = productionFactory({
         env,
         fetchImpl,

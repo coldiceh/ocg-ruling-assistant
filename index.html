@@ -237,11 +237,18 @@
                 <div class="admin-section-head">
                   <div>
                     <h3 id="adminQuestionHistoryTitle">后台历史提问</h3>
-                    <p id="adminQuestionHistoryStatus">显示最近保存的公开问答记录，最多 100 条。</p>
+                    <p id="adminQuestionHistoryStatus">显示最近保存的公开问答记录，最多保留 1000 条，默认显示最近 100 条。</p>
                   </div>
                   <button class="text-button" id="adminQuestionHistoryRefreshButton" type="button">刷新</button>
                 </div>
                 <ol class="admin-history-list admin-question-history-list" id="adminQuestionHistoryList"></ol>
+              </section>
+              <section class="admin-lab-section" aria-labelledby="adminSavedRatingsTitle">
+                <h3 id="adminSavedRatingsTitle">已存问题摘要与评分</h3>
+                <p>实验仅在本地运行；这里保留已有问题摘要和人工评分。</p>
+                <p id="adminSavedRatingsStatus" role="status"></p>
+                <ol class="admin-history-list" id="adminSavedRatingsList"></ol>
+                <button class="text-button" id="adminSavedRatingsMore" type="button" hidden>加载更多</button>
               </section>
             </div>
           </section>
@@ -256,6 +263,6 @@
       </main>
     </div>
 
-    <script src="src/app.js?v=20260913-history100-1"></script>
+    <script src="src/app.js?v=20260924-local-experiments-1"></script>
   </body>
 </html>

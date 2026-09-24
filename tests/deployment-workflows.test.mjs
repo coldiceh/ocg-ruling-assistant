@@ -278,7 +278,10 @@ test("Vercel verifies the source, runtime, and enabled Gemini asset bindings bef
     "data/rule-embedding-v1/evidence-vector-index.json",
     "data/rule-embedding-v1/evidence-vectors-000.f32",
   ].sort();
-  for (const route of ["api/answer.js", "api/admin-model-lab.js"]) {
+  assert.equal(config.functions["api/admin-model-lab.js"].excludeFiles, "data/**");
+  assert.equal(config.functions["api/admin-model-lab.js"].includeFiles, undefined);
+  assert.deepEqual(config.git.deploymentEnabled, { main: true, "*": false });
+  for (const route of ["api/answer.js"]) {
     const included = String(config.functions?.[route]?.includeFiles || "");
     const excluded = String(config.functions?.[route]?.excludeFiles || "");
     assert.match(included, /config\/evidence-generation\/(?:gemini-3\.8-flash-low\.json|\*\.json)/u);
