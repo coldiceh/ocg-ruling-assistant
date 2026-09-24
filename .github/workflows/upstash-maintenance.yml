@@ -16,12 +16,11 @@ jobs:
           node-version: "24"
       - name: Run bounded verification
         env:
-          UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_BUDGET_KV_REST_API_URL }}
-          UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_BUDGET_KV_REST_API_TOKEN }}
-        run: node maintenance-runtime/inventory-fast.mjs
+          ADMIN_MODEL_LAB_PASSWORD: ${{ secrets.ADMIN_MODEL_LAB_PASSWORD }}
+        run: node maintenance-runtime/verify-hosted.mjs > hosted-verification.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: inventory-fast
-          path: inventory.json
+          name: verify-hosted
+          path: hosted-verification.json
           retention-days: 3
