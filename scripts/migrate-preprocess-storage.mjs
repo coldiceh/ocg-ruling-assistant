@@ -33,7 +33,7 @@ if(mode==='backup'){
  const ordered=[...keys].sort();
  for(let offset=0;offset<ordered.length;offset+=40){
    const batch=ordered.slice(offset,offset+40);
-   const values=await redis(['MGET',...batch]);
+   const values=await redis(batch.map(key=>['GET',key]),true);
    if(!Array.isArray(values)||values.length!==batch.length)throw Error('Invalid MGET response');
    for(let i=0;i<batch.length;i++){
      const key=batch[i],value=values[i],match=parseKey(key);
