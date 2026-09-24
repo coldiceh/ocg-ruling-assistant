@@ -1,26 +1,27 @@
-name: Read-only Upstash complete inventory
+name: Read-only storage and hosted verification
 on:
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
-  audit:
+  verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v6
         with:
           sparse-checkout: maintenance-runtime
       - uses: actions/setup-node@v6
         with:
-          node-version: '24'
-      - name: Read aggregate storage metadata
+          node-version: "24"
+      - name: Run bounded verification
         env:
           UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_BUDGET_KV_REST_API_URL }}
           UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_BUDGET_KV_REST_API_TOKEN }}
-        run: node maintenance-runtime/inventory.mjs > inventory.json
+        run: node maintenance-runtime/inventory-fast.mjs
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
-          name: storage-inventory
+          name: inventory-fast
           path: inventory.json
           retention-days: 3
