@@ -27,6 +27,17 @@ It is not an official KONAMI project and does not replace an event judge.
 
 AI can misread rules, miss conditions, or reach an incorrect conclusion, so answers are not guaranteed to be correct. Check the displayed evidence, and rely on official materials and the judge on site for tournament decisions.
 
+| Model | Answer mode | Accuracy | Mean time (s) | Median answer time (s) | P95 answer time (s) | Average per question (USD) |
+|---|---|---:|---:|---:|---:|---:|
+| Astra low | Evidence-assisted | 50/50 (100%) | (76.11 + 10.78) | 10.30 | 16.98 | $0.094601 |
+| Astra low | Direct answer | 33/50 (66%) | 22.69 | 17.57 | 48.71 | $0.036693 |
+| DeepSeek V4.1 Flash max | Evidence-assisted | 41/50 (82%) | (76.11 + 111.58) | 93.93 | 231.25 | $0.009158 |
+| DeepSeek V4.1 Flash max | Direct answer | 10/50 (20%) | 198.54 | 168.71 | 446.76 | $0.015915 |
+| GLM 5.3 Flash max | Evidence-assisted | 37/50 (74%) | (76.11 + 468.29) | 353.75 | 998.49 | $0.013171 |
+| GLM 5.3 Flash max | Direct answer | 3/50 (6%) | 1003.99 | 946.43 | 2166.98 | $0.024208 |
+
+[Full questions and answers](https://coldiceh.github.io/ocg-ruling-assistant/assets/benchmarks/ocg-50-20260924.html)
+
 ## Data and reference sources
 
 - [Official Yu-Gi-Oh! OCG Card Database and Q&A](https://www.db.yugioh-card.com/yugiohdb/)
