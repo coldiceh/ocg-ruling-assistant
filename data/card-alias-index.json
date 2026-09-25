@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-24T13:43:30.828Z",
+  "generatedAt": "2026-09-25T03:13:12.481Z",
   "records": [
     {
       "alias": "“K9刑侦案件”",
@@ -346846,11 +346846,186 @@
       "language": "en"
     },
     {
+      "alias": "暗黒魔族ギルファー・デーモン－暗黒魔炎葬",
+      "normalizedAlias": "暗黒魔族ギルファ-・デ-モン-暗黒魔炎葬",
+      "cardId": "23586",
+      "cardName": "暗黒魔族ギルファー・デーモン－暗黒魔炎葬",
+      "language": "ja"
+    },
+    {
+      "alias": "稲妻の戦士－ギルフォード・ザ・ライトニング",
+      "normalizedAlias": "稲妻の戦士-ギルフォ-ド・ザ・ライトニング",
+      "cardId": "23572",
+      "cardName": "稲妻の戦士－ギルフォード・ザ・ライトニング",
+      "language": "ja"
+    },
+    {
+      "alias": "神を超えたしもべ－青眼の究極竜",
+      "normalizedAlias": "神を超えたしもべ-青眼の究極竜",
+      "cardId": "23568",
+      "cardName": "神を超えたしもべ－青眼の究極竜",
+      "language": "ja"
+    },
+    {
+      "alias": "完全なる羽化－究極完全態・グレート・モス",
+      "normalizedAlias": "完全なる羽化-究極完全態・グレ-ト・モス",
+      "cardId": "23566",
+      "cardName": "完全なる羽化－究極完全態・グレート・モス",
+      "language": "ja"
+    },
+    {
+      "alias": "機械龍－リボルバー・ドラゴン",
+      "normalizedAlias": "機械龍-リボルバ-・ドラゴン",
+      "cardId": "23569",
+      "cardName": "機械龍－リボルバー・ドラゴン",
+      "language": "ja"
+    },
+    {
+      "alias": "幻想の邪眼－サクリファイス",
+      "normalizedAlias": "幻想の邪眼-サクリファイス",
+      "cardId": "23570",
+      "cardName": "幻想の邪眼－サクリファイス",
+      "language": "ja"
+    },
+    {
+      "alias": "鋼鉄の騎士 ギア・フリード",
+      "normalizedAlias": "鋼鉄の騎士 ギア・フリ-ド",
+      "cardId": "23587",
+      "cardName": "鋼鉄の騎士 ギア・フリード",
+      "language": "ja"
+    },
+    {
+      "alias": "業火の魔神エクゾディア",
+      "normalizedAlias": "業火の魔神エクゾディア",
+      "cardId": "23565",
+      "cardName": "業火の魔神エクゾディア",
+      "language": "ja"
+    },
+    {
+      "alias": "死の世界の支配者－ダーク・ネクロフィア",
+      "normalizedAlias": "死の世界の支配者-ダ-ク・ネクロフィア",
+      "cardId": "23571",
+      "cardName": "死の世界の支配者－ダーク・ネクロフィア",
+      "language": "ja"
+    },
+    {
+      "alias": "閃光の封殺剣",
+      "normalizedAlias": "閃光の封殺剣",
+      "cardId": "23585",
+      "cardName": "閃光の封殺剣",
+      "language": "ja"
+    },
+    {
+      "alias": "属性反発作用",
+      "normalizedAlias": "属性反発作用",
+      "cardId": "23583",
+      "cardName": "属性反発作用",
+      "language": "zh"
+    },
+    {
+      "alias": "魂への引導",
+      "normalizedAlias": "魂への引導",
+      "cardId": "23589",
+      "cardName": "魂への引導",
+      "language": "ja"
+    },
+    {
+      "alias": "沈黙の闘者－サイレント・マジシャン",
+      "normalizedAlias": "沈黙の闘者-サイレント・マジシャン",
+      "cardId": "23574",
+      "cardName": "沈黙の闘者－サイレント・マジシャン",
+      "language": "ja"
+    },
+    {
+      "alias": "波動の超魔導剣士－ブラック・パラディン",
+      "normalizedAlias": "波動の超魔導剣士-ブラック・パラディン",
+      "cardId": "23573",
+      "cardName": "波動の超魔導剣士－ブラック・パラディン",
+      "language": "ja"
+    },
+    {
+      "alias": "罰ゲーム「GREED－欲望の幻像－」",
+      "normalizedAlias": "罰ゲ-ム「greed-欲望の幻像-」",
+      "cardId": "23575",
+      "cardName": "罰ゲーム「GREED－欲望の幻像－」",
+      "language": "ja"
+    },
+    {
+      "alias": "魔の龍札－金龍",
+      "normalizedAlias": "魔の龍札-金龍",
+      "cardId": "23578",
+      "cardName": "魔の龍札－金龍",
+      "language": "ja"
+    },
+    {
+      "alias": "魔の龍札－土龍",
+      "normalizedAlias": "魔の龍札-土龍",
+      "cardId": "23577",
+      "cardName": "魔の龍札－土龍",
+      "language": "ja"
+    },
+    {
+      "alias": "闇魔導の覇王",
+      "normalizedAlias": "闇魔導の覇王",
+      "cardId": "23582",
+      "cardName": "闇魔導の覇王",
+      "language": "ja"
+    },
+    {
+      "alias": "香水戦術",
+      "normalizedAlias": "香水戦術",
+      "cardId": "23581",
+      "cardName": "香水戦術",
+      "language": "zh"
+    },
+    {
+      "alias": "スーパークリティカル",
+      "normalizedAlias": "ス-パ-クリティカル",
+      "cardId": "23579",
+      "cardName": "スーパークリティカル",
+      "language": "ja"
+    },
+    {
       "alias": "７",
       "normalizedAlias": "7",
       "cardId": "6053",
       "cardName": "7",
       "language": "unknown"
+    },
+    {
+      "alias": "ゾンバイア",
+      "normalizedAlias": "ゾンバイア",
+      "cardId": "23576",
+      "cardName": "ゾンバイア",
+      "language": "ja"
+    },
+    {
+      "alias": "デューカー・ツイン・ソード",
+      "normalizedAlias": "デュ-カ-・ツイン・ソ-ド",
+      "cardId": "23584",
+      "cardName": "デューカー・ツイン・ソード",
+      "language": "ja"
+    },
+    {
+      "alias": "ハーピィ・レディ－華麗なる分身－",
+      "normalizedAlias": "ハ-ピィ・レディ-華麗なる分身-",
+      "cardId": "23567",
+      "cardName": "ハーピィ・レディ－華麗なる分身－",
+      "language": "ja"
+    },
+    {
+      "alias": "環境適応力",
+      "normalizedAlias": "環境適応力",
+      "cardId": "23580",
+      "cardName": "環境適応力",
+      "language": "zh"
+    },
+    {
+      "alias": "マジックカード「エネミーコントローラー」",
+      "normalizedAlias": "マジックカ-ド「エネミ-コントロ-ラ-」",
+      "cardId": "23588",
+      "cardName": "マジックカード「エネミーコントローラー」",
+      "language": "ja"
     }
   ]
 }
