@@ -65,9 +65,12 @@ export function presentPublicAnswer(answer, {
   if (channel !== PUBLIC_REQUEST_CHANNELS.EXTERNAL_API || !isPlainObject(answer)) {
     return answer;
   }
-  const notice = String(env.EXTERNAL_API_TEST_NOTICE || "").trim();
   const shortAnswer = typeof answer.shortAnswer === "string" ? answer.shortAnswer : "";
-  if (!notice || !shortAnswer.trim() || shortAnswer.includes(notice)) {
+  const notice = [
+    String(env.EXTERNAL_API_TEST_NOTICE || "").trim(),
+    "网页端体验完整内容：https://coldiceh.github.io/ocg-ruling-assistant/",
+  ].filter((text) => text && !shortAnswer.includes(text)).join("\n");
+  if (!notice || !shortAnswer.trim()) {
     return { ...answer };
   }
   const answerTextFooter = answer.generation?.embeddedInAnswerText === true

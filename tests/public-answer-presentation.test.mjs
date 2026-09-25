@@ -20,6 +20,7 @@ const webBody = {
   rulingVersion: "latest",
 };
 const testNotice = "外部表示テスト通知";
+const webNotice = "网页端体验完整内容：https://coldiceh.github.io/ocg-ruling-assistant/";
 
 test("the current browser request contract is classified as web", () => {
   assert.equal(classifyPublicRequestChannel(webBody), PUBLIC_REQUEST_CHANNELS.WEB);
@@ -88,7 +89,7 @@ test("external_api receives one notice without mutating the core answer", () => 
 
   assert.notEqual(first, core);
   assert.equal(core.shortAnswer, "裁定回答");
-  assert.equal(first.shortAnswer, `裁定回答\n\n${testNotice}`);
+  assert.equal(first.shortAnswer, `裁定回答\n\n${testNotice}\n${webNotice}`);
   assert.equal(second.shortAnswer, first.shortAnswer);
   assert.equal(second.shortAnswer.split(testNotice).length - 1, 1);
   assert.equal(first.reasoning, core.reasoning);
@@ -114,7 +115,7 @@ test("exact official fields and evidence remain byte-for-byte unchanged", () => 
     env: { EXTERNAL_API_TEST_NOTICE: testNotice },
   });
 
-  assert.match(shown.shortAnswer, new RegExp(`${testNotice}$`, "u"));
+  assert.ok(shown.shortAnswer.endsWith(`${testNotice}\n${webNotice}`));
   assert.equal(shown.officialQuestionJapanese, snapshot.officialQuestionJapanese);
   assert.equal(shown.officialAnswerJapanese, snapshot.officialAnswerJapanese);
   assert.equal(shown.officialQaId, snapshot.officialQaId);
@@ -131,14 +132,14 @@ test("web and unknown responses never receive the external notice", () => {
   assert.equal(answer.shortAnswer, "原始回答");
 });
 
-test("an empty external notice preserves a successful response", () => {
+test("an empty external notice still includes the webpage link", () => {
   const answer = { shortAnswer: "原始回答", answerLevel: "rule_analysis" };
   const shown = presentPublicAnswer(answer, {
     channel: PUBLIC_REQUEST_CHANNELS.EXTERNAL_API,
     env: {},
   });
   assert.notEqual(shown, answer);
-  assert.deepEqual(shown, answer);
+  assert.deepEqual(shown, { ...answer, shortAnswer: `原始回答\n\n${webNotice}` });
 });
 
 test("presentation state never leaks between external_api and web calls", () => {
