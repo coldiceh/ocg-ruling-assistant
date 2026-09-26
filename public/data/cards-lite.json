@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-25T22:07:06.394Z",
+  "generatedAt": "2026-09-26T21:54:47.153Z",
   "records": [
     {
       "id": "21385",
@@ -31833,6 +31833,42 @@
       ]
     },
     {
+      "id": "23586",
+      "name": "暗黒魔族ギルファー・デーモン－暗黒魔炎葬",
+      "jaName": "暗黒魔族ギルファー・デーモン－暗黒魔炎葬",
+      "enName": "Archfiend of Gilfer - Flame Attack",
+      "aliases": [
+        "暗黒魔族ギルファー・デーモン－暗黒魔炎葬",
+        "Archfiend of Gilfer - Flame Attack"
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Fiend",
+      "attribute": "dark",
+      "attack": 2200,
+      "defense": 2500,
+      "atk": 2200,
+      "def": 2500,
+      "level": 6,
+      "propertyIds": [
+        "14",
+        "4"
+      ],
+      "properties": [
+        "Fiend",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "14",
+        "4"
+      ],
+      "monsterProperties": [
+        "Fiend",
+        "Effect"
+      ]
+    },
+    {
       "id": "20036",
       "name": "恶魔的光来",
       "cnName": "恶魔的光来",
@@ -36133,15 +36169,20 @@
       ]
     },
     {
-      "id": "-2",
-      "name": "Aroma Strategy",
+      "id": "23581",
+      "name": "香水戦術",
+      "jaName": "香水戦術",
       "enName": "Aroma Strategy",
       "aliases": [
+        "香水戦術",
         "Aroma Strategy"
       ],
       "released": true,
-      "type": "skill",
-      "cardType": "skill"
+      "type": "trap",
+      "cardType": "trap",
+      "properties": [
+        "continuous"
+      ]
     },
     {
       "id": "11821",
@@ -42107,6 +42148,22 @@
       ]
     },
     {
+      "id": "23583",
+      "name": "属性反発作用",
+      "jaName": "属性反発作用",
+      "enName": "Attribute Rejection",
+      "aliases": [
+        "属性反発作用",
+        "Attribute Rejection"
+      ],
+      "released": true,
+      "type": "spell",
+      "cardType": "spell",
+      "properties": [
+        "quickplay"
+      ]
+    },
+    {
       "id": "10976",
       "name": "升华的徽章",
       "cnName": "升华的徽章",
@@ -47798,6 +47855,42 @@
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "4749"
         }
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Machine",
+      "attribute": "dark",
+      "attack": 2600,
+      "defense": 2200,
+      "atk": 2600,
+      "def": 2200,
+      "level": 7,
+      "propertyIds": [
+        "9",
+        "4"
+      ],
+      "properties": [
+        "Machine",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "9",
+        "4"
+      ],
+      "monsterProperties": [
+        "Machine",
+        "Effect"
+      ]
+    },
+    {
+      "id": "23569",
+      "name": "機械龍－リボルバー・ドラゴン",
+      "jaName": "機械龍－リボルバー・ドラゴン",
+      "enName": "Barrel Dragon the Machine Dragon",
+      "aliases": [
+        "機械龍－リボルバー・ドラゴン",
+        "Barrel Dragon the Machine Dragon"
       ],
       "released": true,
       "type": "monster",
@@ -69325,6 +69418,46 @@
       "monsterProperties": [
         "Dragon",
         "Fusion"
+      ]
+    },
+    {
+      "id": "23568",
+      "name": "神を超えたしもべ－青眼の究極竜",
+      "jaName": "神を超えたしもべ－青眼の究極竜",
+      "enName": "Blue-Eyes Ultimate Dragon, the God-Surpassing Servant",
+      "aliases": [
+        "神を超えたしもべ－青眼の究極竜",
+        "Blue-Eyes Ultimate Dragon, the God-Surpassing Servant"
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Dragon",
+      "attribute": "light",
+      "attack": 4500,
+      "defense": 3800,
+      "atk": 4500,
+      "def": 3800,
+      "level": 12,
+      "propertyIds": [
+        "21",
+        "11",
+        "4"
+      ],
+      "properties": [
+        "Dragon",
+        "Fusion",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "21",
+        "11",
+        "4"
+      ],
+      "monsterProperties": [
+        "Dragon",
+        "Fusion",
+        "Effect"
       ]
     },
     {
@@ -139784,6 +139917,46 @@
       ]
     },
     {
+      "id": "23571",
+      "name": "死の世界の支配者－ダーク・ネクロフィア",
+      "jaName": "死の世界の支配者－ダーク・ネクロフィア",
+      "enName": "Dark Necrofear, the Ruler of Demise",
+      "aliases": [
+        "死の世界の支配者－ダーク・ネクロフィア",
+        "Dark Necrofear, the Ruler of Demise"
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Fiend",
+      "attribute": "dark",
+      "attack": 2200,
+      "defense": 2800,
+      "atk": 2200,
+      "def": 2800,
+      "level": 8,
+      "propertyIds": [
+        "14",
+        "2",
+        "4"
+      ],
+      "properties": [
+        "Fiend",
+        "Special Summon Monster",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "14",
+        "2",
+        "4"
+      ],
+      "monsterProperties": [
+        "Fiend",
+        "Special Summon Monster",
+        "Effect"
+      ]
+    },
+    {
       "id": "21045",
       "name": "大尸教",
       "cnName": "大尸教",
@@ -139934,6 +140107,46 @@
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "5628"
         }
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Spellcaster",
+      "attribute": "dark",
+      "attack": 2900,
+      "defense": 2400,
+      "atk": 2900,
+      "def": 2400,
+      "level": 8,
+      "propertyIds": [
+        "8",
+        "11",
+        "4"
+      ],
+      "properties": [
+        "Spellcaster",
+        "Fusion",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "8",
+        "11",
+        "4"
+      ],
+      "monsterProperties": [
+        "Spellcaster",
+        "Fusion",
+        "Effect"
+      ]
+    },
+    {
+      "id": "23573",
+      "name": "波動の超魔導剣士－ブラック・パラディン",
+      "jaName": "波動の超魔導剣士－ブラック・パラディン",
+      "enName": "Dark Paladin - Wave-Motion",
+      "aliases": [
+        "波動の超魔導剣士－ブラック・パラディン",
+        "Dark Paladin - Wave-Motion"
       ],
       "released": true,
       "type": "monster",
@@ -199950,6 +200163,86 @@
       ]
     },
     {
+      "id": "23577",
+      "name": "魔の龍札－土龍",
+      "jaName": "魔の龍札－土龍",
+      "enName": "Evil Dragon Cards - Earth Dragon",
+      "aliases": [
+        "魔の龍札－土龍",
+        "Evil Dragon Cards - Earth Dragon"
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Dragon",
+      "attribute": "earth",
+      "attack": 1200,
+      "defense": 2000,
+      "atk": 1200,
+      "def": 2000,
+      "level": 4,
+      "propertyIds": [
+        "21",
+        "2",
+        "4"
+      ],
+      "properties": [
+        "Dragon",
+        "Special Summon Monster",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "21",
+        "2",
+        "4"
+      ],
+      "monsterProperties": [
+        "Dragon",
+        "Special Summon Monster",
+        "Effect"
+      ]
+    },
+    {
+      "id": "23578",
+      "name": "魔の龍札－金龍",
+      "jaName": "魔の龍札－金龍",
+      "enName": "Evil Dragon Cards - Metal Dragon",
+      "aliases": [
+        "魔の龍札－金龍",
+        "Evil Dragon Cards - Metal Dragon"
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Dragon",
+      "attribute": "light",
+      "attack": 2100,
+      "defense": 1500,
+      "atk": 2100,
+      "def": 1500,
+      "level": 5,
+      "propertyIds": [
+        "21",
+        "2",
+        "4"
+      ],
+      "properties": [
+        "Dragon",
+        "Special Summon Monster",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "21",
+        "2",
+        "4"
+      ],
+      "monsterProperties": [
+        "Dragon",
+        "Special Summon Monster",
+        "Effect"
+      ]
+    },
+    {
       "id": "14424",
       "name": "喚忌の呪眼",
       "cnName": "唤忌之咒眼",
@@ -205524,6 +205817,42 @@
       "atk": 1000,
       "def": 1000,
       "level": 3,
+      "propertyIds": [
+        "8",
+        "4"
+      ],
+      "properties": [
+        "Spellcaster",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "8",
+        "4"
+      ],
+      "monsterProperties": [
+        "Spellcaster",
+        "Effect"
+      ]
+    },
+    {
+      "id": "23565",
+      "name": "業火の魔神エクゾディア",
+      "jaName": "業火の魔神エクゾディア",
+      "enName": "Exodia the Obliterator",
+      "aliases": [
+        "業火の魔神エクゾディア",
+        "Exodia the Obliterator"
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Spellcaster",
+      "attribute": "dark",
+      "attack": 1000,
+      "defense": 1000,
+      "atk": 1000,
+      "def": 1000,
+      "level": 10,
       "propertyIds": [
         "8",
         "4"
@@ -213771,6 +214100,22 @@
       ]
     },
     {
+      "id": "23580",
+      "name": "環境適応力",
+      "jaName": "環境適応力",
+      "enName": "Field Power Bonus",
+      "aliases": [
+        "環境適応力",
+        "Field Power Bonus"
+      ],
+      "released": true,
+      "type": "spell",
+      "cardType": "spell",
+      "properties": [
+        "field"
+      ]
+    },
+    {
       "id": "7431",
       "name": "戦士ラーズ",
       "cnName": "战士 拉兹",
@@ -216104,6 +216449,19 @@
       "released": true,
       "type": "spell",
       "cardType": "spell"
+    },
+    {
+      "id": "23589",
+      "name": "魂への引導",
+      "jaName": "魂への引導",
+      "enName": "Final Journey of the Soul",
+      "aliases": [
+        "魂への引導",
+        "Final Journey of the Soul"
+      ],
+      "released": true,
+      "type": "trap",
+      "cardType": "trap"
     },
     {
       "id": "14361",
@@ -222327,6 +222685,22 @@
       "released": true,
       "type": "trap",
       "cardType": "trap"
+    },
+    {
+      "id": "23585",
+      "name": "閃光の封殺剣",
+      "jaName": "閃光の封殺剣",
+      "enName": "Flashforce Sword",
+      "aliases": [
+        "閃光の封殺剣",
+        "Flashforce Sword"
+      ],
+      "released": true,
+      "type": "spell",
+      "cardType": "spell",
+      "properties": [
+        "quickplay"
+      ]
     },
     {
       "id": "20797",
@@ -243264,6 +243638,42 @@
       ]
     },
     {
+      "id": "23587",
+      "name": "鋼鉄の騎士 ギア・フリード",
+      "jaName": "鋼鉄の騎士 ギア・フリード",
+      "enName": "Gearfried the Steel Knight",
+      "aliases": [
+        "鋼鉄の騎士 ギア・フリード",
+        "Gearfried the Steel Knight"
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Warrior",
+      "attribute": "earth",
+      "attack": 1800,
+      "defense": 1600,
+      "atk": 1800,
+      "def": 1600,
+      "level": 4,
+      "propertyIds": [
+        "12",
+        "4"
+      ],
+      "properties": [
+        "Warrior",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "12",
+        "4"
+      ],
+      "monsterProperties": [
+        "Warrior",
+        "Effect"
+      ]
+    },
+    {
       "id": "6251",
       "name": "剣聖－ネイキッド・ギア・フリード",
       "cnName": "剑圣-赤膊的基亚·弗里德",
@@ -253815,6 +254225,42 @@
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "5451"
         }
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Warrior",
+      "attribute": "light",
+      "attack": 2800,
+      "defense": 1400,
+      "atk": 2800,
+      "def": 1400,
+      "level": 8,
+      "propertyIds": [
+        "12",
+        "4"
+      ],
+      "properties": [
+        "Warrior",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "12",
+        "4"
+      ],
+      "monsterProperties": [
+        "Warrior",
+        "Effect"
+      ]
+    },
+    {
+      "id": "23572",
+      "name": "稲妻の戦士－ギルフォード・ザ・ライトニング",
+      "jaName": "稲妻の戦士－ギルフォード・ザ・ライトニング",
+      "enName": "Gilford the Lightning, the Warrior of Thunderbolts",
+      "aliases": [
+        "稲妻の戦士－ギルフォード・ザ・ライトニング",
+        "Gilford the Lightning, the Warrior of Thunderbolts"
       ],
       "released": true,
       "type": "monster",
@@ -281285,6 +281731,42 @@
       "monsterProperties": [
         "Winged Beast",
         "Normal"
+      ]
+    },
+    {
+      "id": "23567",
+      "name": "ハーピィ・レディ－華麗なる分身－",
+      "jaName": "ハーピィ・レディ－華麗なる分身－",
+      "enName": "Harpie Lady - Elegant Egotist",
+      "aliases": [
+        "ハーピィ・レディ－華麗なる分身－",
+        "Harpie Lady - Elegant Egotist"
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Winged Beast",
+      "attribute": "wind",
+      "attack": 2100,
+      "defense": 1800,
+      "atk": 2100,
+      "def": 1800,
+      "level": 5,
+      "propertyIds": [
+        "35",
+        "4"
+      ],
+      "properties": [
+        "Winged Beast",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "35",
+        "4"
+      ],
+      "monsterProperties": [
+        "Winged Beast",
+        "Effect"
       ]
     },
     {
@@ -325374,6 +325856,42 @@
       ]
     },
     {
+      "id": "23582",
+      "name": "闇魔導の覇王",
+      "jaName": "闇魔導の覇王",
+      "enName": "King of Yamimado",
+      "aliases": [
+        "闇魔導の覇王",
+        "King of Yamimado"
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Fiend",
+      "attribute": "dark",
+      "attack": 2600,
+      "defense": 2300,
+      "atk": 2600,
+      "def": 2300,
+      "level": 7,
+      "propertyIds": [
+        "14",
+        "4"
+      ],
+      "properties": [
+        "Fiend",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "14",
+        "4"
+      ],
+      "monsterProperties": [
+        "Fiend",
+        "Effect"
+      ]
+    },
+    {
       "id": "4091",
       "name": "闇魔界の覇王",
       "cnName": "暗魔界的霸王",
@@ -326495,6 +327013,42 @@
       "released": true,
       "type": "skill",
       "cardType": "skill"
+    },
+    {
+      "id": "23584",
+      "name": "デューカー・ツイン・ソード",
+      "jaName": "デューカー・ツイン・ソード",
+      "enName": "Knight of Twin Swords",
+      "aliases": [
+        "デューカー・ツイン・ソード",
+        "Knight of Twin Swords"
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Warrior",
+      "attribute": "earth",
+      "attack": 350,
+      "defense": 200,
+      "atk": 350,
+      "def": 200,
+      "level": 3,
+      "propertyIds": [
+        "12",
+        "4"
+      ],
+      "properties": [
+        "Warrior",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "12",
+        "4"
+      ],
+      "monsterProperties": [
+        "Warrior",
+        "Effect"
+      ]
     },
     {
       "id": "8467",
@@ -441846,6 +442400,19 @@
       "cardType": "spell"
     },
     {
+      "id": "23575",
+      "name": "罰ゲーム「GREED－欲望の幻像－」",
+      "jaName": "罰ゲーム「GREED－欲望の幻像－」",
+      "enName": "Penalty Game \"GREED, the Illusion of Avarice\"",
+      "aliases": [
+        "罰ゲーム「GREED－欲望の幻像－」",
+        "Penalty Game \"GREED, the Illusion of Avarice\""
+      ],
+      "released": true,
+      "type": "trap",
+      "cardType": "trap"
+    },
+    {
       "id": "6277",
       "name": "罰ゲーム！",
       "cnName": "惩罚游戏！",
@@ -443461,6 +444028,46 @@
       "cardType": "spell",
       "properties": [
         "field"
+      ]
+    },
+    {
+      "id": "23566",
+      "name": "完全なる羽化－究極完全態・グレート・モス",
+      "jaName": "完全なる羽化－究極完全態・グレート・モス",
+      "enName": "Perfect Eclosion - Perfectly Ultimate Great Moth",
+      "aliases": [
+        "完全なる羽化－究極完全態・グレート・モス",
+        "Perfect Eclosion - Perfectly Ultimate Great Moth"
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Insect",
+      "attribute": "earth",
+      "attack": 3500,
+      "defense": 3000,
+      "atk": 3500,
+      "def": 3000,
+      "level": 8,
+      "propertyIds": [
+        "34",
+        "2",
+        "4"
+      ],
+      "properties": [
+        "Insect",
+        "Special Summon Monster",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "34",
+        "2",
+        "4"
+      ],
+      "monsterProperties": [
+        "Insect",
+        "Special Summon Monster",
+        "Effect"
       ]
     },
     {
@@ -491188,6 +491795,46 @@
       ]
     },
     {
+      "id": "23570",
+      "name": "幻想の邪眼－サクリファイス",
+      "jaName": "幻想の邪眼－サクリファイス",
+      "enName": "Relinquished the Wicked Eye of Illusion",
+      "aliases": [
+        "幻想の邪眼－サクリファイス",
+        "Relinquished the Wicked Eye of Illusion"
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Illusion",
+      "attribute": "dark",
+      "attack": 0,
+      "defense": 0,
+      "atk": 0,
+      "def": 0,
+      "level": 1,
+      "propertyIds": [
+        "41",
+        "27",
+        "4"
+      ],
+      "properties": [
+        "Illusion",
+        "Ritual",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "41",
+        "27",
+        "4"
+      ],
+      "monsterProperties": [
+        "Illusion",
+        "Ritual",
+        "Effect"
+      ]
+    },
+    {
       "id": "5849",
       "name": "リロード",
       "cnName": "上膛",
@@ -526467,6 +527114,46 @@
       ]
     },
     {
+      "id": "23574",
+      "name": "沈黙の闘者－サイレント・マジシャン",
+      "jaName": "沈黙の闘者－サイレント・マジシャン",
+      "enName": "Silent Magician, the Silent Fighter",
+      "aliases": [
+        "沈黙の闘者－サイレント・マジシャン",
+        "Silent Magician, the Silent Fighter"
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Spellcaster",
+      "attribute": "light",
+      "attack": 3500,
+      "defense": 1000,
+      "atk": 3500,
+      "def": 1000,
+      "level": 8,
+      "propertyIds": [
+        "8",
+        "2",
+        "4"
+      ],
+      "properties": [
+        "Spellcaster",
+        "Special Summon Monster",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "8",
+        "2",
+        "4"
+      ],
+      "monsterProperties": [
+        "Spellcaster",
+        "Special Summon Monster",
+        "Effect"
+      ]
+    },
+    {
       "id": "12672",
       "name": "沈黙の魔導剣士－サイレント・パラディン",
       "cnName": "沉默魔导剑士",
@@ -541824,6 +542511,22 @@
       "monsterProperties": [
         "Machine",
         "Effect"
+      ]
+    },
+    {
+      "id": "23588",
+      "name": "マジックカード「エネミーコントローラー」",
+      "jaName": "マジックカード「エネミーコントローラー」",
+      "enName": "Spell Card \"Enemy Controller\"",
+      "aliases": [
+        "マジックカード「エネミーコントローラー」",
+        "Spell Card \"Enemy Controller\""
+      ],
+      "released": true,
+      "type": "spell",
+      "cardType": "spell",
+      "properties": [
+        "quickplay"
       ]
     },
     {
@@ -559924,6 +560627,22 @@
       "monsterProperties": [
         "Fiend",
         "Effect"
+      ]
+    },
+    {
+      "id": "23579",
+      "name": "スーパークリティカル",
+      "jaName": "スーパークリティカル",
+      "enName": "Super Critical",
+      "aliases": [
+        "スーパークリティカル",
+        "Super Critical"
+      ],
+      "released": true,
+      "type": "spell",
+      "cardType": "spell",
+      "properties": [
+        "continuous"
       ]
     },
     {
@@ -664643,6 +665362,42 @@
       ]
     },
     {
+      "id": "23576",
+      "name": "ゾンバイア",
+      "jaName": "ゾンバイア",
+      "enName": "Zombyra",
+      "aliases": [
+        "ゾンバイア",
+        "Zombyra"
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Warrior",
+      "attribute": "dark",
+      "attack": 2100,
+      "defense": 500,
+      "atk": 2100,
+      "def": 500,
+      "level": 4,
+      "propertyIds": [
+        "12",
+        "4"
+      ],
+      "properties": [
+        "Warrior",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "12",
+        "4"
+      ],
+      "monsterProperties": [
+        "Warrior",
+        "Effect"
+      ]
+    },
+    {
       "id": "5245",
       "name": "暗黑英雄 尸魔侠",
       "cnName": "暗黑英雄 尸魔侠",
@@ -665427,592 +666182,6 @@
       ]
     },
     {
-      "id": "23586",
-      "name": "暗黒魔族ギルファー・デーモン－暗黒魔炎葬",
-      "jaName": "暗黒魔族ギルファー・デーモン－暗黒魔炎葬",
-      "aliases": [
-        "暗黒魔族ギルファー・デーモン－暗黒魔炎葬"
-      ],
-      "released": true,
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Fiend",
-      "attribute": "dark",
-      "attack": 2200,
-      "defense": 2500,
-      "atk": 2200,
-      "def": 2500,
-      "level": 6,
-      "propertyIds": [
-        "14",
-        "4"
-      ],
-      "properties": [
-        "Fiend",
-        "Effect"
-      ],
-      "monsterPropertyIds": [
-        "14",
-        "4"
-      ],
-      "monsterProperties": [
-        "Fiend",
-        "Effect"
-      ]
-    },
-    {
-      "id": "23572",
-      "name": "稲妻の戦士－ギルフォード・ザ・ライトニング",
-      "jaName": "稲妻の戦士－ギルフォード・ザ・ライトニング",
-      "aliases": [
-        "稲妻の戦士－ギルフォード・ザ・ライトニング"
-      ],
-      "released": true,
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Warrior",
-      "attribute": "light",
-      "attack": 2800,
-      "defense": 1400,
-      "atk": 2800,
-      "def": 1400,
-      "level": 8,
-      "propertyIds": [
-        "12",
-        "4"
-      ],
-      "properties": [
-        "Warrior",
-        "Effect"
-      ],
-      "monsterPropertyIds": [
-        "12",
-        "4"
-      ],
-      "monsterProperties": [
-        "Warrior",
-        "Effect"
-      ]
-    },
-    {
-      "id": "23568",
-      "name": "神を超えたしもべ－青眼の究極竜",
-      "jaName": "神を超えたしもべ－青眼の究極竜",
-      "aliases": [
-        "神を超えたしもべ－青眼の究極竜"
-      ],
-      "released": true,
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Dragon",
-      "attribute": "light",
-      "attack": 4500,
-      "defense": 3800,
-      "atk": 4500,
-      "def": 3800,
-      "level": 12,
-      "propertyIds": [
-        "21",
-        "11",
-        "4"
-      ],
-      "properties": [
-        "Dragon",
-        "Fusion",
-        "Effect"
-      ],
-      "monsterPropertyIds": [
-        "21",
-        "11",
-        "4"
-      ],
-      "monsterProperties": [
-        "Dragon",
-        "Fusion",
-        "Effect"
-      ]
-    },
-    {
-      "id": "23566",
-      "name": "完全なる羽化－究極完全態・グレート・モス",
-      "jaName": "完全なる羽化－究極完全態・グレート・モス",
-      "aliases": [
-        "完全なる羽化－究極完全態・グレート・モス"
-      ],
-      "released": true,
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Insect",
-      "attribute": "earth",
-      "attack": 3500,
-      "defense": 3000,
-      "atk": 3500,
-      "def": 3000,
-      "level": 8,
-      "propertyIds": [
-        "34",
-        "2",
-        "4"
-      ],
-      "properties": [
-        "Insect",
-        "Special Summon Monster",
-        "Effect"
-      ],
-      "monsterPropertyIds": [
-        "34",
-        "2",
-        "4"
-      ],
-      "monsterProperties": [
-        "Insect",
-        "Special Summon Monster",
-        "Effect"
-      ]
-    },
-    {
-      "id": "23569",
-      "name": "機械龍－リボルバー・ドラゴン",
-      "jaName": "機械龍－リボルバー・ドラゴン",
-      "aliases": [
-        "機械龍－リボルバー・ドラゴン"
-      ],
-      "released": true,
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Machine",
-      "attribute": "dark",
-      "attack": 2600,
-      "defense": 2200,
-      "atk": 2600,
-      "def": 2200,
-      "level": 7,
-      "propertyIds": [
-        "9",
-        "4"
-      ],
-      "properties": [
-        "Machine",
-        "Effect"
-      ],
-      "monsterPropertyIds": [
-        "9",
-        "4"
-      ],
-      "monsterProperties": [
-        "Machine",
-        "Effect"
-      ]
-    },
-    {
-      "id": "23570",
-      "name": "幻想の邪眼－サクリファイス",
-      "jaName": "幻想の邪眼－サクリファイス",
-      "aliases": [
-        "幻想の邪眼－サクリファイス"
-      ],
-      "released": true,
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Illusion",
-      "attribute": "dark",
-      "attack": 0,
-      "defense": 0,
-      "atk": 0,
-      "def": 0,
-      "level": 1,
-      "propertyIds": [
-        "41",
-        "27",
-        "4"
-      ],
-      "properties": [
-        "Illusion",
-        "Ritual",
-        "Effect"
-      ],
-      "monsterPropertyIds": [
-        "41",
-        "27",
-        "4"
-      ],
-      "monsterProperties": [
-        "Illusion",
-        "Ritual",
-        "Effect"
-      ]
-    },
-    {
-      "id": "23587",
-      "name": "鋼鉄の騎士 ギア・フリード",
-      "jaName": "鋼鉄の騎士 ギア・フリード",
-      "aliases": [
-        "鋼鉄の騎士 ギア・フリード"
-      ],
-      "released": true,
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Warrior",
-      "attribute": "earth",
-      "attack": 1800,
-      "defense": 1600,
-      "atk": 1800,
-      "def": 1600,
-      "level": 4,
-      "propertyIds": [
-        "12",
-        "4"
-      ],
-      "properties": [
-        "Warrior",
-        "Effect"
-      ],
-      "monsterPropertyIds": [
-        "12",
-        "4"
-      ],
-      "monsterProperties": [
-        "Warrior",
-        "Effect"
-      ]
-    },
-    {
-      "id": "23565",
-      "name": "業火の魔神エクゾディア",
-      "jaName": "業火の魔神エクゾディア",
-      "aliases": [
-        "業火の魔神エクゾディア"
-      ],
-      "released": true,
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Spellcaster",
-      "attribute": "dark",
-      "attack": 1000,
-      "defense": 1000,
-      "atk": 1000,
-      "def": 1000,
-      "level": 10,
-      "propertyIds": [
-        "8",
-        "4"
-      ],
-      "properties": [
-        "Spellcaster",
-        "Effect"
-      ],
-      "monsterPropertyIds": [
-        "8",
-        "4"
-      ],
-      "monsterProperties": [
-        "Spellcaster",
-        "Effect"
-      ]
-    },
-    {
-      "id": "23571",
-      "name": "死の世界の支配者－ダーク・ネクロフィア",
-      "jaName": "死の世界の支配者－ダーク・ネクロフィア",
-      "aliases": [
-        "死の世界の支配者－ダーク・ネクロフィア"
-      ],
-      "released": true,
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Fiend",
-      "attribute": "dark",
-      "attack": 2200,
-      "defense": 2800,
-      "atk": 2200,
-      "def": 2800,
-      "level": 8,
-      "propertyIds": [
-        "14",
-        "2",
-        "4"
-      ],
-      "properties": [
-        "Fiend",
-        "Special Summon Monster",
-        "Effect"
-      ],
-      "monsterPropertyIds": [
-        "14",
-        "2",
-        "4"
-      ],
-      "monsterProperties": [
-        "Fiend",
-        "Special Summon Monster",
-        "Effect"
-      ]
-    },
-    {
-      "id": "23585",
-      "name": "閃光の封殺剣",
-      "jaName": "閃光の封殺剣",
-      "aliases": [
-        "閃光の封殺剣"
-      ],
-      "released": true,
-      "type": "spell",
-      "cardType": "spell",
-      "properties": [
-        "quickplay"
-      ]
-    },
-    {
-      "id": "23583",
-      "name": "属性反発作用",
-      "jaName": "属性反発作用",
-      "aliases": [
-        "属性反発作用"
-      ],
-      "released": true,
-      "type": "spell",
-      "cardType": "spell",
-      "properties": [
-        "quickplay"
-      ]
-    },
-    {
-      "id": "23589",
-      "name": "魂への引導",
-      "jaName": "魂への引導",
-      "aliases": [
-        "魂への引導"
-      ],
-      "released": true,
-      "type": "trap",
-      "cardType": "trap"
-    },
-    {
-      "id": "23574",
-      "name": "沈黙の闘者－サイレント・マジシャン",
-      "jaName": "沈黙の闘者－サイレント・マジシャン",
-      "aliases": [
-        "沈黙の闘者－サイレント・マジシャン"
-      ],
-      "released": true,
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Spellcaster",
-      "attribute": "light",
-      "attack": 3500,
-      "defense": 1000,
-      "atk": 3500,
-      "def": 1000,
-      "level": 8,
-      "propertyIds": [
-        "8",
-        "2",
-        "4"
-      ],
-      "properties": [
-        "Spellcaster",
-        "Special Summon Monster",
-        "Effect"
-      ],
-      "monsterPropertyIds": [
-        "8",
-        "2",
-        "4"
-      ],
-      "monsterProperties": [
-        "Spellcaster",
-        "Special Summon Monster",
-        "Effect"
-      ]
-    },
-    {
-      "id": "23573",
-      "name": "波動の超魔導剣士－ブラック・パラディン",
-      "jaName": "波動の超魔導剣士－ブラック・パラディン",
-      "aliases": [
-        "波動の超魔導剣士－ブラック・パラディン"
-      ],
-      "released": true,
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Spellcaster",
-      "attribute": "dark",
-      "attack": 2900,
-      "defense": 2400,
-      "atk": 2900,
-      "def": 2400,
-      "level": 8,
-      "propertyIds": [
-        "8",
-        "11",
-        "4"
-      ],
-      "properties": [
-        "Spellcaster",
-        "Fusion",
-        "Effect"
-      ],
-      "monsterPropertyIds": [
-        "8",
-        "11",
-        "4"
-      ],
-      "monsterProperties": [
-        "Spellcaster",
-        "Fusion",
-        "Effect"
-      ]
-    },
-    {
-      "id": "23575",
-      "name": "罰ゲーム「GREED－欲望の幻像－」",
-      "jaName": "罰ゲーム「GREED－欲望の幻像－」",
-      "aliases": [
-        "罰ゲーム「GREED－欲望の幻像－」"
-      ],
-      "released": true,
-      "type": "trap",
-      "cardType": "trap"
-    },
-    {
-      "id": "23578",
-      "name": "魔の龍札－金龍",
-      "jaName": "魔の龍札－金龍",
-      "aliases": [
-        "魔の龍札－金龍"
-      ],
-      "released": true,
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Dragon",
-      "attribute": "light",
-      "attack": 2100,
-      "defense": 1500,
-      "atk": 2100,
-      "def": 1500,
-      "level": 5,
-      "propertyIds": [
-        "21",
-        "2",
-        "4"
-      ],
-      "properties": [
-        "Dragon",
-        "Special Summon Monster",
-        "Effect"
-      ],
-      "monsterPropertyIds": [
-        "21",
-        "2",
-        "4"
-      ],
-      "monsterProperties": [
-        "Dragon",
-        "Special Summon Monster",
-        "Effect"
-      ]
-    },
-    {
-      "id": "23577",
-      "name": "魔の龍札－土龍",
-      "jaName": "魔の龍札－土龍",
-      "aliases": [
-        "魔の龍札－土龍"
-      ],
-      "released": true,
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Dragon",
-      "attribute": "earth",
-      "attack": 1200,
-      "defense": 2000,
-      "atk": 1200,
-      "def": 2000,
-      "level": 4,
-      "propertyIds": [
-        "21",
-        "2",
-        "4"
-      ],
-      "properties": [
-        "Dragon",
-        "Special Summon Monster",
-        "Effect"
-      ],
-      "monsterPropertyIds": [
-        "21",
-        "2",
-        "4"
-      ],
-      "monsterProperties": [
-        "Dragon",
-        "Special Summon Monster",
-        "Effect"
-      ]
-    },
-    {
-      "id": "23582",
-      "name": "闇魔導の覇王",
-      "jaName": "闇魔導の覇王",
-      "aliases": [
-        "闇魔導の覇王"
-      ],
-      "released": true,
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Fiend",
-      "attribute": "dark",
-      "attack": 2600,
-      "defense": 2300,
-      "atk": 2600,
-      "def": 2300,
-      "level": 7,
-      "propertyIds": [
-        "14",
-        "4"
-      ],
-      "properties": [
-        "Fiend",
-        "Effect"
-      ],
-      "monsterPropertyIds": [
-        "14",
-        "4"
-      ],
-      "monsterProperties": [
-        "Fiend",
-        "Effect"
-      ]
-    },
-    {
-      "id": "23581",
-      "name": "香水戦術",
-      "jaName": "香水戦術",
-      "aliases": [
-        "香水戦術"
-      ],
-      "released": true,
-      "type": "trap",
-      "cardType": "trap",
-      "properties": [
-        "continuous"
-      ]
-    },
-    {
-      "id": "23579",
-      "name": "スーパークリティカル",
-      "jaName": "スーパークリティカル",
-      "aliases": [
-        "スーパークリティカル"
-      ],
-      "released": true,
-      "type": "spell",
-      "cardType": "spell",
-      "properties": [
-        "continuous"
-      ]
-    },
-    {
       "id": "6053",
       "name": "7",
       "cnName": "7",
@@ -666057,136 +666226,6 @@
       "cardType": "spell",
       "properties": [
         "continuous"
-      ]
-    },
-    {
-      "id": "23576",
-      "name": "ゾンバイア",
-      "jaName": "ゾンバイア",
-      "aliases": [
-        "ゾンバイア"
-      ],
-      "released": true,
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Warrior",
-      "attribute": "dark",
-      "attack": 2100,
-      "defense": 500,
-      "atk": 2100,
-      "def": 500,
-      "level": 4,
-      "propertyIds": [
-        "12",
-        "4"
-      ],
-      "properties": [
-        "Warrior",
-        "Effect"
-      ],
-      "monsterPropertyIds": [
-        "12",
-        "4"
-      ],
-      "monsterProperties": [
-        "Warrior",
-        "Effect"
-      ]
-    },
-    {
-      "id": "23584",
-      "name": "デューカー・ツイン・ソード",
-      "jaName": "デューカー・ツイン・ソード",
-      "aliases": [
-        "デューカー・ツイン・ソード"
-      ],
-      "released": true,
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Warrior",
-      "attribute": "earth",
-      "attack": 350,
-      "defense": 200,
-      "atk": 350,
-      "def": 200,
-      "level": 3,
-      "propertyIds": [
-        "12",
-        "4"
-      ],
-      "properties": [
-        "Warrior",
-        "Effect"
-      ],
-      "monsterPropertyIds": [
-        "12",
-        "4"
-      ],
-      "monsterProperties": [
-        "Warrior",
-        "Effect"
-      ]
-    },
-    {
-      "id": "23567",
-      "name": "ハーピィ・レディ－華麗なる分身－",
-      "jaName": "ハーピィ・レディ－華麗なる分身－",
-      "aliases": [
-        "ハーピィ・レディ－華麗なる分身－"
-      ],
-      "released": true,
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Winged Beast",
-      "attribute": "wind",
-      "attack": 2100,
-      "defense": 1800,
-      "atk": 2100,
-      "def": 1800,
-      "level": 5,
-      "propertyIds": [
-        "35",
-        "4"
-      ],
-      "properties": [
-        "Winged Beast",
-        "Effect"
-      ],
-      "monsterPropertyIds": [
-        "35",
-        "4"
-      ],
-      "monsterProperties": [
-        "Winged Beast",
-        "Effect"
-      ]
-    },
-    {
-      "id": "23580",
-      "name": "環境適応力",
-      "jaName": "環境適応力",
-      "aliases": [
-        "環境適応力"
-      ],
-      "released": true,
-      "type": "spell",
-      "cardType": "spell",
-      "properties": [
-        "field"
-      ]
-    },
-    {
-      "id": "23588",
-      "name": "マジックカード「エネミーコントローラー」",
-      "jaName": "マジックカード「エネミーコントローラー」",
-      "aliases": [
-        "マジックカード「エネミーコントローラー」"
-      ],
-      "released": true,
-      "type": "spell",
-      "cardType": "spell",
-      "properties": [
-        "quickplay"
       ]
     }
   ]
