@@ -176,6 +176,41 @@ a {
   border-bottom: 1px solid var(--line);
 }
 
+.project-support {
+  width: min(1180px, calc(100% - 48px));
+  margin: 12px auto 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.project-support a {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--accent);
+  background: transparent;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.project-support a:hover {
+  border-color: var(--accent);
+  text-decoration: underline;
+}
+
+.project-support a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
 .brand-block {
   padding: 8px 0;
 }
@@ -1924,6 +1959,10 @@ dialog::backdrop {
 }
 
 @media (max-width: 900px) {
+  .project-support {
+    width: calc(100% - 28px);
+  }
+
   .topbar {
     width: min(100% - 28px, 960px);
     padding-top: 16px;

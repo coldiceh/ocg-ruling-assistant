@@ -12,6 +12,8 @@ const visibleSourceTranslations = new Map();
 const pendingSourceTranslations = new Map();
 const uiTranslations = {
   en: {
+    "觉得好用？欢迎分享给牌友，也欢迎在 GitHub 点个 Star。": "Finding it useful? Share it with fellow duelists or give the project a star on GitHub.",
+    "给项目 Star": "Star on GitHub",
     "输入问题": "Ask a question", "输入卡片、场面、连锁和需要判断的处理节点。": "Describe the cards, game state, Chain, and decision point.",
     "裁定模型": "Ruling model", "裁定流程": "Ruling process", "准备就绪": "Ready", "仅准备证据包": "Prepare evidence only",
     "查询": "Ask", "查询中…": "Working…", "证据包已准备": "Evidence prepared", "下载证据包": "Download evidence",
@@ -33,6 +35,8 @@ const uiTranslations = {
     "模型能力接口不可用；默认 GPT-6 Astra low 尚未确认可用。": "Model availability could not be checked; the default GPT-6 Astra low has not been verified.",
   },
   ja: {
+    "觉得好用？欢迎分享给牌友，也欢迎在 GitHub 点个 Star。": "役に立ったら、デュエリスト仲間へのシェアや GitHub での Star をお願いします。",
+    "给项目 Star": "GitHub で Star",
     "输入问题": "質問を入力", "输入卡片、场面、连锁和需要判断的处理节点。": "カード、盤面、チェーン、判断したい処理を入力してください。",
     "裁定模型": "裁定モデル", "裁定流程": "裁定の進行", "准备就绪": "準備完了", "仅准备证据包": "根拠資料のみ準備",
     "查询": "質問する", "查询中…": "処理中…", "证据包已准备": "根拠資料の準備完了", "下载证据包": "根拠資料をダウンロード",
@@ -126,6 +130,8 @@ function applyUiLocale(locale) {
   document.documentElement.lang = selectedUiLocale;
   if (ui.localeSelect) ui.localeSelect.value = selectedUiLocale;
   const staticLabels = {
+    "#projectSupportText": "觉得好用？欢迎分享给牌友，也欢迎在 GitHub 点个 Star。",
+    "#projectStarText": "给项目 Star",
     ".brand-block h1": "游戏王 OCG AI裁定",
     "#askTitle": "输入问题", ".panel-head p": "输入卡片、场面、连锁和需要判断的处理节点。",
     ".model-tier-label span": "裁定模型", ".model-strip span": "裁定流程",
