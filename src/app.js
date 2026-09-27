@@ -2617,8 +2617,6 @@ function setAdminAuthenticated(authenticated, payload = {}) {
     clearAdminRiskControlStatus();
     if (ui.adminBudgetActionStatus) ui.adminBudgetActionStatus.textContent = "";
     if (ui.adminQuestionHistoryList) clearElement(ui.adminQuestionHistoryList);
-    const savedRatings = document.querySelector('#adminSavedRatingsList');
-    if (savedRatings) clearElement(savedRatings);
     if (ui.adminQuestionHistoryStatus) ui.adminQuestionHistoryStatus.textContent = "登录后读取后台历史提问。";
   }
 }
@@ -2824,73 +2822,7 @@ async function loadAdminLabBootstrap() {
   await Promise.allSettled([
     loadAdminRiskControlStatus(),
     loadAdminQuestionHistory(),
-    loadSavedAdminRatings(),
   ]);
-}
-
-async function loadSavedAdminRatings(cursor) {
-  const list = document.querySelector('#adminSavedRatingsList');
-  const status = document.querySelector('#adminSavedRatingsStatus');
-  const more = document.querySelector('#adminSavedRatingsMore');
-  if (!adminSession.authenticated || !list) return;
-  if (!cursor) clearElement(list);
-  if (more) more.disabled = true;
-  status.textContent = '正在读取问题摘要与评分…';
-  try {
-    const page = await requestAdminLab({ action: 'list', query: { limit: 25, cursor } });
-    for (const record of page.records || []) renderSavedAdminRating(list, record);
-    status.textContent = list.children.length ? '评分可直接修改并保存。' : '暂无已存问题摘要与评分。';
-    if (more) {
-      more.hidden = !page.nextCursor;
-      more.onclick = () => loadSavedAdminRatings(page.nextCursor);
-    }
-  } catch (error) {
-    status.textContent = adminErrorMessage(error, '无法读取已存评分。');
-  } finally {
-    if (more) more.disabled = false;
-  }
-}
-
-function renderSavedAdminRating(list, record) {
-  const item = document.createElement('li');
-  const details = document.createElement('details');
-  const summary = document.createElement('summary');
-  appendText(summary, 'strong', record.questionSummary || record.question || '未记录问题');
-  details.appendChild(summary);
-  appendText(details, 'p', formatAdminDate(record.createdAt));
-  const select = document.createElement('select');
-  select.setAttribute('aria-label', '人工评分');
-  for (const [value, label] of [['needs_review', '待审核'], ['correct', '正确'], ['partially_correct', '部分正确'], ['incorrect', '错误']]) {
-    const option = document.createElement('option');
-    option.value = value;
-    option.textContent = label;
-    select.appendChild(option);
-  }
-  select.value = record.humanRating?.rating || 'needs_review';
-  const notes = document.createElement('textarea');
-  notes.setAttribute('aria-label', '评分备注');
-  notes.maxLength = 4000;
-  notes.value = record.humanRating?.note || '';
-  const button = document.createElement('button');
-  button.type = 'button';
-  button.className = 'text-button';
-  button.textContent = '保存评分';
-  const status = document.createElement('p');
-  status.setAttribute('role', 'status');
-  button.addEventListener('click', async () => {
-    button.disabled = true;
-    status.textContent = '正在保存评分…';
-    try {
-      await requestAdminLab({ method: 'POST', action: 'rating',
-        body: { runId: record.runId, rating: select.value, notes: notes.value.trim() } });
-      status.textContent = '评分已保存。';
-    } catch (error) {
-      status.textContent = adminErrorMessage(error, '评分保存失败。');
-    } finally { button.disabled = false; }
-  });
-  for (const element of [select, notes, button, status]) details.appendChild(element);
-  item.appendChild(details);
-  list.appendChild(item);
 }
 
 async function loadAdminCapabilities() {
