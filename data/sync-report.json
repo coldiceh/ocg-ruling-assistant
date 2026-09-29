@@ -1,10 +1,10 @@
 {
-  "generatedAt": "2026-09-27T21:57:44.638Z",
+  "generatedAt": "2026-09-28T23:47:15.743Z",
   "cardCount": 14407,
   "rulingCount": 40281,
   "cardAliasCount": 49599,
   "qaIndexCount": 37222,
-  "qaIndexBytes": 63619836,
+  "qaIndexBytes": 63729680,
   "maxQaIndexBytes": 94371840,
   "syncAllReleasedCards": true,
   "syncOnlyReleasedCards": true,
@@ -14,18 +14,18 @@
     "selectedCount": 250,
     "discoveredCount": 11542,
     "truncatedCount": 11292,
-    "changedSelectedCount": 3,
+    "changedSelectedCount": 1,
     "recentSelectedCount": 120,
     "prioritySelectedCount": 2,
-    "hotSelectedCount": 63,
-    "coverageSelectedCount": 62,
-    "detailCursor": 492,
-    "nextDetailCursor": 558
+    "hotSelectedCount": 64,
+    "coverageSelectedCount": 64,
+    "detailCursor": 558,
+    "nextDetailCursor": 623
   },
   "pendingQaCount": 0,
   "qaDiscoveryCardCount": 14324,
   "qaDiscoveryQaCount": 11542,
-  "qaDiscoveryRelationCount": 36147,
+  "qaDiscoveryRelationCount": 36148,
   "qaDiscoveryComplete": true,
   "qaDetailSnapshotAuthoritative": true,
   "chineseNameBackfill": {
@@ -47,11 +47,13 @@
   ],
   "dataQualityWarnings": [],
   "changedPaths": [
+    "/data/card/7714",
+    "/data/card/11207",
+    "/data/card/22715",
+    "/data/idx/card",
     "/data/idx/qa",
     "/data/meta/index",
     "/data/meta/recent",
-    "/data/qa/7280",
-    "/data/qa/7624",
-    "/data/qa/10615"
+    "/data/qa/24392"
   ]
 }

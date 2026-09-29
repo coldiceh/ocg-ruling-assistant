@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-27T21:57:44.638Z",
-  "sourceRevision": "32604",
+  "generatedAt": "2026-09-28T23:47:15.743Z",
+  "sourceRevision": "32613",
   "complete": true,
   "cardCount": 14324,
   "linkedCardCount": 8587,
   "qaCount": 11542,
-  "relationCount": 36147,
+  "relationCount": 36148,
   "records": [
     {
       "cardId": "4007",
@@ -100073,7 +100073,8 @@
       "qaIds": [
         "7984",
         "23949",
-        "24054"
+        "24054",
+        "24392"
       ]
     },
     {
