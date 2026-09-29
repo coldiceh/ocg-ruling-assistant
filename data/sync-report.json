@@ -1,10 +1,10 @@
 {
-  "generatedAt": "2026-09-28T23:47:15.743Z",
+  "generatedAt": "2026-09-29T22:56:00.883Z",
   "cardCount": 14407,
   "rulingCount": 40281,
   "cardAliasCount": 49599,
   "qaIndexCount": 37222,
-  "qaIndexBytes": 63729680,
+  "qaIndexBytes": 63841081,
   "maxQaIndexBytes": 94371840,
   "syncAllReleasedCards": true,
   "syncOnlyReleasedCards": true,
@@ -14,13 +14,13 @@
     "selectedCount": 250,
     "discoveredCount": 11542,
     "truncatedCount": 11292,
-    "changedSelectedCount": 1,
+    "changedSelectedCount": 3,
     "recentSelectedCount": 120,
     "prioritySelectedCount": 2,
-    "hotSelectedCount": 64,
-    "coverageSelectedCount": 64,
-    "detailCursor": 558,
-    "nextDetailCursor": 623
+    "hotSelectedCount": 63,
+    "coverageSelectedCount": 62,
+    "detailCursor": 623,
+    "nextDetailCursor": 686
   },
   "pendingQaCount": 0,
   "qaDiscoveryCardCount": 14324,
@@ -47,13 +47,11 @@
   ],
   "dataQualityWarnings": [],
   "changedPaths": [
-    "/data/card/7714",
-    "/data/card/11207",
-    "/data/card/22715",
-    "/data/idx/card",
     "/data/idx/qa",
     "/data/meta/index",
     "/data/meta/recent",
-    "/data/qa/24392"
+    "/data/qa/8129",
+    "/data/qa/10487",
+    "/data/qa/11251"
   ]
 }
