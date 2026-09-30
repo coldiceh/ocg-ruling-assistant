@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-29T22:56:00.883Z",
+  "generatedAt": "2026-09-30T22:54:26.567Z",
   "records": [
     {
       "alias": "“K9刑侦案件”",
@@ -13093,6 +13093,20 @@
       "language": "zh"
     },
     {
+      "alias": "Angelechy Brilliant Move",
+      "normalizedAlias": "angelechy brilliant move",
+      "cardId": "23525",
+      "cardName": "Angelechy Brilliant Move",
+      "language": "en"
+    },
+    {
+      "alias": "Angelechy Castellan",
+      "normalizedAlias": "angelechy castellan",
+      "cardId": "23522",
+      "cardName": "Angelechy Castellan",
+      "language": "en"
+    },
+    {
       "alias": "Angelechy Destrier",
       "normalizedAlias": "angelechy destrier",
       "cardId": "23307",
@@ -13133,6 +13147,13 @@
       "cardId": "23310",
       "cardName": "Angelechy Disturbance",
       "language": "zh"
+    },
+    {
+      "alias": "Angelechy Endgame Problem",
+      "normalizedAlias": "angelechy endgame problem",
+      "cardId": "23527",
+      "cardName": "Angelechy Endgame Problem",
+      "language": "en"
     },
     {
       "alias": "Angelechy Enlisted",
@@ -13177,6 +13198,13 @@
       "language": "zh"
     },
     {
+      "alias": "Angelechy Opposition",
+      "normalizedAlias": "angelechy opposition",
+      "cardId": "23526",
+      "cardName": "Angelechy Opposition",
+      "language": "en"
+    },
+    {
       "alias": "Angelechy Problem",
       "normalizedAlias": "angelechy problem",
       "cardId": "23309",
@@ -13198,6 +13226,13 @@
       "language": "zh"
     },
     {
+      "alias": "Angelechy Seneschal",
+      "normalizedAlias": "angelechy seneschal",
+      "cardId": "23523",
+      "cardName": "Angelechy Seneschal",
+      "language": "en"
+    },
+    {
       "alias": "Angelechy Shatranga",
       "normalizedAlias": "angelechy shatranga",
       "cardId": "23305",
@@ -13217,6 +13252,20 @@
       "cardId": "23305",
       "cardName": "Angelechy Shatranga",
       "language": "zh"
+    },
+    {
+      "alias": "Angelechy Strategy Score",
+      "normalizedAlias": "angelechy strategy score",
+      "cardId": "23524",
+      "cardName": "Angelechy Strategy Score",
+      "language": "en"
+    },
+    {
+      "alias": "Angelechy Verdict",
+      "normalizedAlias": "angelechy verdict",
+      "cardId": "23528",
+      "cardName": "Angelechy Verdict",
+      "language": "en"
     },
     {
       "alias": "天魔之声选器－『华耳琴璃』",
@@ -17069,6 +17118,13 @@
       "language": "zh"
     },
     {
+      "alias": "Archidux, the Squid Sorcerer",
+      "normalizedAlias": "archidux, the squid sorcerer",
+      "cardId": "23518",
+      "cardName": "Archidux, the Squid Sorcerer",
+      "language": "en"
+    },
+    {
       "alias": "大天使 克里斯蒂亚",
       "normalizedAlias": "大天使 克里斯蒂亚",
       "cardId": "8283",
@@ -19484,8 +19540,8 @@
       "language": "zh"
     },
     {
-      "alias": "Ars Magna - \"Citrinitas\"",
-      "normalizedAlias": "ars magna - \"citrinitas\"",
+      "alias": "Ars Magna \"Citrinitas\"",
+      "normalizedAlias": "ars magna \"citrinitas\"",
       "cardId": "23383",
       "cardName": "無垢なる芸術－「黄昏の変幻」",
       "language": "en"
@@ -19519,8 +19575,8 @@
       "language": "zh"
     },
     {
-      "alias": "Ars Magna - \"Philosophirum\"",
-      "normalizedAlias": "ars magna - \"philosophirum\"",
+      "alias": "Ars Magna \"Philosophorum\"",
+      "normalizedAlias": "ars magna \"philosophorum\"",
       "cardId": "23399",
       "cardName": "無垢なる芸術－「幻創の賢者」",
       "language": "en"
@@ -19554,8 +19610,8 @@
       "language": "zh"
     },
     {
-      "alias": "Ars Magna of Infinity and Finity",
-      "normalizedAlias": "ars magna of infinity and finity",
+      "alias": "Ars Magna the Finite and the Infinite",
+      "normalizedAlias": "ars magna the finite and the infinite",
       "cardId": "23340",
       "cardName": "無限と有限のアルス＝マグナ",
       "language": "en"
@@ -19589,8 +19645,8 @@
       "language": "zh"
     },
     {
-      "alias": "Ars Magna of Purification and Corruption",
-      "normalizedAlias": "ars magna of purification and corruption",
+      "alias": "Ars Magna the Corruption and the Purification",
+      "normalizedAlias": "ars magna the corruption and the purification",
       "cardId": "23341",
       "cardName": "浄化と腐敗のアルス＝マグナ",
       "language": "en"
@@ -19624,8 +19680,8 @@
       "language": "zh"
     },
     {
-      "alias": "Ars Magna of Unification and Separation",
-      "normalizedAlias": "ars magna of unification and separation",
+      "alias": "Ars Magna the Division and the Union",
+      "normalizedAlias": "ars magna the division and the union",
       "cardId": "23342",
       "cardName": "結合と乖離のアルス＝マグナ",
       "language": "en"
@@ -20716,8 +20772,8 @@
       "language": "zh"
     },
     {
-      "alias": "Ashtra Cursed Roar",
-      "normalizedAlias": "ashtra cursed roar",
+      "alias": "Ashtra's Howl",
+      "normalizedAlias": "ashtra's howl",
       "cardId": "23396",
       "cardName": "依鬼の呪咆",
       "language": "en"
@@ -20751,8 +20807,8 @@
       "language": "zh"
     },
     {
-      "alias": "Ashtra Divine Domain",
-      "normalizedAlias": "ashtra divine domain",
+      "alias": "Ashtra's Domain",
+      "normalizedAlias": "ashtra's domain",
       "cardId": "23397",
       "cardName": "剣鬼の神域",
       "language": "en"
@@ -20786,8 +20842,8 @@
       "language": "zh"
     },
     {
-      "alias": "Ashtra Insect Poison",
-      "normalizedAlias": "ashtra insect poison",
+      "alias": "Ashtra's Web",
+      "normalizedAlias": "ashtra's web",
       "cardId": "23395",
       "cardName": "色鬼の蟲毒",
       "language": "en"
@@ -20842,8 +20898,8 @@
       "language": "zh"
     },
     {
-      "alias": "Ashtrashen - Gateway to the Worlds Beyond",
-      "normalizedAlias": "ashtrashen - gateway to the worlds beyond",
+      "alias": "Ashtrashen - Gate to the Worlds Beyond",
+      "normalizedAlias": "ashtrashen - gate to the worlds beyond",
       "cardId": "23379",
       "cardName": "艮神鬼門 三千世界",
       "language": "en"
@@ -22116,8 +22172,8 @@
       "language": "zh"
     },
     {
-      "alias": "Atlantis Call",
-      "normalizedAlias": "atlantis call",
+      "alias": "Call of Atlantis",
+      "normalizedAlias": "call of atlantis",
       "cardId": "23381",
       "cardName": "呼応する伝説の都",
       "language": "en"
@@ -22491,6 +22547,13 @@
       "normalizedAlias": "attribute rejection",
       "cardId": "23583",
       "cardName": "属性反発作用",
+      "language": "en"
+    },
+    {
+      "alias": "Audhumla, Progenitor of the Frozen Expanse",
+      "normalizedAlias": "audhumla, progenitor of the frozen expanse",
+      "cardId": "23513",
+      "cardName": "Audhumla, Progenitor of the Frozen Expanse",
       "language": "en"
     },
     {
@@ -25340,6 +25403,41 @@
       "normalizedAlias": "巴里安之封印",
       "cardId": "23394",
       "cardName": "バリアンズ・シール",
+      "language": "zh"
+    },
+    {
+      "alias": "七皇の冀望郷",
+      "normalizedAlias": "七皇の冀望郷",
+      "cardId": "23377",
+      "cardName": "七皇の冀望郷",
+      "language": "ja"
+    },
+    {
+      "alias": "巴利安之七皇冀望乡",
+      "normalizedAlias": "巴利安之七皇冀望乡",
+      "cardId": "23377",
+      "cardName": "七皇の冀望郷",
+      "language": "zh"
+    },
+    {
+      "alias": "Barian's Seventh Untopia",
+      "normalizedAlias": "barian's seventh untopia",
+      "cardId": "23377",
+      "cardName": "七皇の冀望郷",
+      "language": "en"
+    },
+    {
+      "alias": "七皇的冀望乡",
+      "normalizedAlias": "七皇的冀望乡",
+      "cardId": "23377",
+      "cardName": "七皇の冀望郷",
+      "language": "zh"
+    },
+    {
+      "alias": "七皇·巴里安之冀望乡",
+      "normalizedAlias": "七皇·巴里安之冀望乡",
+      "cardId": "23377",
+      "cardName": "七皇の冀望郷",
       "language": "zh"
     },
     {
@@ -30523,8 +30621,8 @@
       "language": "zh"
     },
     {
-      "alias": "Bingo Card",
-      "normalizedAlias": "bingo card",
+      "alias": "Bingo!",
+      "normalizedAlias": "bingo!",
       "cardId": "23402",
       "cardName": "ビンゴカード",
       "language": "en"
@@ -31902,8 +32000,8 @@
       "language": "zh"
     },
     {
-      "alias": "Black Skull Dragon the Archfiend Dragon of Unity",
-      "normalizedAlias": "black skull dragon the archfiend dragon of unity",
+      "alias": "Black Skull Dragon, the Archfiend of Unity",
+      "normalizedAlias": "black skull dragon, the archfiend of unity",
       "cardId": "23348",
       "cardName": "結束の悪魔竜ブラック・デーモンズ・ドラゴン",
       "language": "en"
@@ -34947,8 +35045,8 @@
       "language": "zh"
     },
     {
-      "alias": "Blitzclique - Overvoltage",
-      "normalizedAlias": "blitzclique - overvoltage",
+      "alias": "Blitzclique Overvolt",
+      "normalizedAlias": "blitzclique overvolt",
       "cardId": "23388",
       "cardName": "雷盟－オーバーボルテージ",
       "language": "en"
@@ -43879,8 +43977,8 @@
       "language": "zh"
     },
     {
-      "alias": "CXyz Chaos Barian Hope Dragon",
-      "normalizedAlias": "cxyz chaos barian hope dragon",
+      "alias": "CXyz Hope Chaos Barian Dragon",
+      "normalizedAlias": "cxyz hope chaos barian dragon",
       "cardId": "23366",
       "cardName": "CX 冀望皇龍カオス・バリアン・ドラゴン",
       "language": "en"
@@ -49526,6 +49624,13 @@
       "cardId": "7837",
       "cardName": "カオスエンドマスター",
       "language": "zh"
+    },
+    {
+      "alias": "Chaospawn Bishop",
+      "normalizedAlias": "chaospawn bishop",
+      "cardId": "23521",
+      "cardName": "Chaospawn Bishop",
+      "language": "en"
     },
     {
       "alias": "カオスライダー グスタフ",
@@ -57382,8 +57487,8 @@
       "language": "zh"
     },
     {
-      "alias": "Coralianektes the Shimmering Shining Dragon",
-      "normalizedAlias": "coralianektes the shimmering shining dragon",
+      "alias": "Coralianectes, the Luminous Cradle Dragon",
+      "normalizedAlias": "coralianectes, the luminous cradle dragon",
       "cardId": "23351",
       "cardName": "耀爛竜コラリアネクテス",
       "language": "en"
@@ -57662,8 +57767,8 @@
       "language": "zh"
     },
     {
-      "alias": "Corpse-Seller Crow",
-      "normalizedAlias": "corpse-seller crow",
+      "alias": "Crow, the Carrion Cutpurse",
+      "normalizedAlias": "crow, the carrion cutpurse",
       "cardId": "23401",
       "cardName": "躯売りのカラス",
       "language": "en"
@@ -60047,6 +60152,41 @@
       "cardId": "15612",
       "cardName": "伟魔贤者 法典之克劳利",
       "language": "en"
+    },
+    {
+      "alias": "燦冠乗騎シックラヴィー",
+      "normalizedAlias": "燦冠乗騎シックラヴィ-",
+      "cardId": "23367",
+      "cardName": "燦冠乗騎シックラヴィー",
+      "language": "ja"
+    },
+    {
+      "alias": "灿冠乘骑 迅快拉维",
+      "normalizedAlias": "灿冠乘骑 迅快拉维",
+      "cardId": "23367",
+      "cardName": "燦冠乗騎シックラヴィー",
+      "language": "zh"
+    },
+    {
+      "alias": "Crowned Siclavee",
+      "normalizedAlias": "crowned siclavee",
+      "cardId": "23367",
+      "cardName": "燦冠乗騎シックラヴィー",
+      "language": "en"
+    },
+    {
+      "alias": "灿冠乘骑 经典三冠海人马",
+      "normalizedAlias": "灿冠乘骑 经典三冠海人马",
+      "cardId": "23367",
+      "cardName": "燦冠乗騎シックラヴィー",
+      "language": "zh"
+    },
+    {
+      "alias": "灿冠乘骑 希克拉维",
+      "normalizedAlias": "灿冠乘骑 希克拉维",
+      "cardId": "23367",
+      "cardName": "燦冠乗騎シックラヴィー",
+      "language": "zh"
     },
     {
       "alias": "获得星杯的巫女",
@@ -62807,8 +62947,8 @@
       "language": "zh"
     },
     {
-      "alias": "Cursed Paper Retribution",
-      "normalizedAlias": "cursed paper retribution",
+      "alias": "Revenge of the Paper Dolls",
+      "normalizedAlias": "revenge of the paper dolls",
       "cardId": "23400",
       "cardName": "祟リ紙ノ報イ",
       "language": "en"
@@ -80447,8 +80587,8 @@
       "language": "zh"
     },
     {
-      "alias": "Destratification Dino Stratiae",
-      "normalizedAlias": "destratification dino stratiae",
+      "alias": "Stratiae the Stratasmasher Dino",
+      "normalizedAlias": "stratiae the stratasmasher dino",
       "cardId": "23373",
       "cardName": "解層竜ストラティアエ",
       "language": "en"
@@ -113095,8 +113235,8 @@
       "language": "zh"
     },
     {
-      "alias": "Fiendish Vortex of Atlantis",
-      "normalizedAlias": "fiendish vortex of atlantis",
+      "alias": "Siren Vortex of Atlantis",
+      "normalizedAlias": "siren vortex of atlantis",
       "cardId": "23338",
       "cardName": "アトランティスの妖渦",
       "language": "en"
@@ -129923,8 +130063,8 @@
       "language": "zh"
     },
     {
-      "alias": "General of Atlantis",
-      "normalizedAlias": "general of atlantis",
+      "alias": "Warchief of Atlantis",
+      "normalizedAlias": "warchief of atlantis",
       "cardId": "23336",
       "cardName": "アトランティスの戦将",
       "language": "en"
@@ -146261,6 +146401,13 @@
       "language": "zh"
     },
     {
+      "alias": "Half Slice of Nickeline",
+      "normalizedAlias": "half slice of nickeline",
+      "cardId": "23520",
+      "cardName": "Half Slice of Nickeline",
+      "language": "en"
+    },
+    {
       "alias": "ハーフ・アンブレイク",
       "normalizedAlias": "ハ-フ・アンブレイク",
       "cardId": "10839",
@@ -151154,6 +151301,34 @@
       "language": "zh"
     },
     {
+      "alias": "宇宙的ハリケーン",
+      "normalizedAlias": "宇宙的ハリケ-ン",
+      "cardId": "23390",
+      "cardName": "宇宙的ハリケーン",
+      "language": "ja"
+    },
+    {
+      "alias": "宇宙性飓风",
+      "normalizedAlias": "宇宙性飓风",
+      "cardId": "23390",
+      "cardName": "宇宙的ハリケーン",
+      "language": "zh"
+    },
+    {
+      "alias": "Hey, Space Trunade!",
+      "normalizedAlias": "hey, space trunade!",
+      "cardId": "23390",
+      "cardName": "宇宙的ハリケーン",
+      "language": "en"
+    },
+    {
+      "alias": "宇宙型飓风",
+      "normalizedAlias": "宇宙型飓风",
+      "cardId": "23390",
+      "cardName": "宇宙的ハリケーン",
+      "language": "zh"
+    },
+    {
       "alias": "局部性飓风",
       "normalizedAlias": "局部性飓风",
       "cardId": "13433",
@@ -154038,8 +154213,8 @@
       "language": "zh"
     },
     {
-      "alias": "Hublot the Dark Directory of Death",
-      "normalizedAlias": "hublot the dark directory of death",
+      "alias": "Hubrow, Founder of the Ominous Observers",
+      "normalizedAlias": "hubrow, founder of the ominous observers",
       "cardId": "23352",
       "cardName": "死相の冥鑑ヒュブロ",
       "language": "en"
@@ -161339,8 +161514,8 @@
       "language": "zh"
     },
     {
-      "alias": "Invocation - \"Chalice\"",
-      "normalizedAlias": "invocation - \"chalice\"",
+      "alias": "Invocation - \"Grail\"",
+      "normalizedAlias": "invocation - \"grail\"",
       "cardId": "23389",
       "cardName": "召喚魔術－「杯」",
       "language": "en"
@@ -161416,8 +161591,8 @@
       "language": "ja"
     },
     {
-      "alias": "Invoked Dee Anima",
-      "normalizedAlias": "invoked dee anima",
+      "alias": "Invoked De Anima",
+      "normalizedAlias": "invoked de anima",
       "cardId": "23360",
       "cardName": "召喚獣ディー・アニマ",
       "language": "en"
@@ -166071,6 +166246,13 @@
       "language": "zh"
     },
     {
+      "alias": "Just Flip a Coin",
+      "normalizedAlias": "just flip a coin",
+      "cardId": "23515",
+      "cardName": "Just Flip a Coin",
+      "language": "en"
+    },
+    {
       "alias": "ジャスティブレイク",
       "normalizedAlias": "ジャスティブレイク",
       "cardId": "6912",
@@ -168805,6 +168987,13 @@
       "normalizedAlias": "revenge rally",
       "cardId": "15088",
       "cardName": "捲怒重来",
+      "language": "en"
+    },
+    {
+      "alias": "Kerolia the Frolicsome",
+      "normalizedAlias": "kerolia the frolicsome",
+      "cardId": "23517",
+      "cardName": "Kerolia the Frolicsome",
       "language": "en"
     },
     {
@@ -172371,6 +172560,13 @@
       "language": "en"
     },
     {
+      "alias": "Kumenyo, the Nine-Hued Deer",
+      "normalizedAlias": "kumenyo, the nine-hued deer",
+      "cardId": "23516",
+      "cardName": "Kumenyo, the Nine-Hued Deer",
+      "language": "en"
+    },
+    {
       "alias": "粘丝坏兽 蛛默鼓丝",
       "normalizedAlias": "粘丝坏兽 蛛默鼓丝",
       "cardId": "12039",
@@ -172952,8 +173148,8 @@
       "language": "zh"
     },
     {
-      "alias": "Kuzuha the Bewitching Deity Ashtra",
-      "normalizedAlias": "kuzuha the bewitching deity ashtra",
+      "alias": "Kuzuha the Hex Ashtra",
+      "normalizedAlias": "kuzuha the hex ashtra",
       "cardId": "23332",
       "cardName": "蠱神の色鬼 クズハ",
       "language": "en"
@@ -177495,6 +177691,34 @@
       "language": "zh"
     },
     {
+      "alias": "アトランティスの竜神－ダイダロス",
+      "normalizedAlias": "アトランティスの竜神-ダイダロス",
+      "cardId": "23335",
+      "cardName": "アトランティスの竜神－ダイダロス",
+      "language": "ja"
+    },
+    {
+      "alias": "亚特兰蒂斯的龙神-代达罗斯",
+      "normalizedAlias": "亚特兰蒂斯的龙神-代达罗斯",
+      "cardId": "23335",
+      "cardName": "アトランティスの竜神－ダイダロス",
+      "language": "zh"
+    },
+    {
+      "alias": "Levia-Dragon of Atlantis - Daedalus",
+      "normalizedAlias": "levia-dragon of atlantis - daedalus",
+      "cardId": "23335",
+      "cardName": "アトランティスの竜神－ダイダロス",
+      "language": "en"
+    },
+    {
+      "alias": "亚特兰蒂斯的龙神-泰达路斯",
+      "normalizedAlias": "亚特兰蒂斯的龙神-泰达路斯",
+      "cardId": "23335",
+      "cardName": "アトランティスの竜神－ダイダロス",
+      "language": "zh"
+    },
+    {
       "alias": "真海竜騎－ダイダロス",
       "normalizedAlias": "真海竜騎-ダイダロス",
       "cardId": "23369",
@@ -177542,34 +177766,6 @@
       "cardId": "9660",
       "cardName": "虚空海龙 利维埃尔",
       "language": "en"
-    },
-    {
-      "alias": "アトランティスの竜神－ダイダロス",
-      "normalizedAlias": "アトランティスの竜神-ダイダロス",
-      "cardId": "23335",
-      "cardName": "アトランティスの竜神－ダイダロス",
-      "language": "ja"
-    },
-    {
-      "alias": "亚特兰蒂斯的龙神-代达罗斯",
-      "normalizedAlias": "亚特兰蒂斯的龙神-代达罗斯",
-      "cardId": "23335",
-      "cardName": "アトランティスの竜神－ダイダロス",
-      "language": "zh"
-    },
-    {
-      "alias": "Leviathan of Atlantis - Daedalus",
-      "normalizedAlias": "leviathan of atlantis - daedalus",
-      "cardId": "23335",
-      "cardName": "アトランティスの竜神－ダイダロス",
-      "language": "en"
-    },
-    {
-      "alias": "亚特兰蒂斯的龙神-泰达路斯",
-      "normalizedAlias": "亚特兰蒂斯的龙神-泰达路斯",
-      "cardId": "23335",
-      "cardName": "アトランティスの竜神－ダイダロス",
-      "language": "zh"
     },
     {
       "alias": "星键士 利伊布",
@@ -195618,8 +195814,8 @@
       "language": "zh"
     },
     {
-      "alias": "Medicurius the Power Patron of Illusions",
-      "normalizedAlias": "medicurius the power patron of illusions",
+      "alias": "Mediclius the Extraordinary Power Patron",
+      "normalizedAlias": "mediclius the extraordinary power patron",
       "cardId": "23370",
       "cardName": "幻獄神メディクリウス",
       "language": "en"
@@ -201295,8 +201491,8 @@
       "language": "zh"
     },
     {
-      "alias": "Mikumari the Sealing Deity Ashtra",
-      "normalizedAlias": "mikumari the sealing deity ashtra",
+      "alias": "Mikumari the Banisher Ashtra",
+      "normalizedAlias": "mikumari the banisher ashtra",
       "cardId": "23334",
       "cardName": "封神の剣鬼 ミクマリ",
       "language": "en"
@@ -204277,8 +204473,8 @@
       "language": "zh"
     },
     {
-      "alias": "Misstic Call",
-      "normalizedAlias": "misstic call",
+      "alias": "Ms. Tick Call",
+      "normalizedAlias": "ms. tick call",
       "cardId": "23353",
       "cardName": "ミズティックコール",
       "language": "en"
@@ -205705,6 +205901,27 @@
       "language": "en"
     },
     {
+      "alias": "アトランティスの怪腕",
+      "normalizedAlias": "アトランティスの怪腕",
+      "cardId": "23337",
+      "cardName": "アトランティスの怪腕",
+      "language": "ja"
+    },
+    {
+      "alias": "亚特兰蒂斯的怪腕",
+      "normalizedAlias": "亚特兰蒂斯的怪腕",
+      "cardId": "23337",
+      "cardName": "アトランティスの怪腕",
+      "language": "zh"
+    },
+    {
+      "alias": "Monster Arms of Atlantis",
+      "normalizedAlias": "monster arms of atlantis",
+      "cardId": "23337",
+      "cardName": "アトランティスの怪腕",
+      "language": "en"
+    },
+    {
       "alias": "怪兽蛋",
       "normalizedAlias": "怪兽蛋",
       "cardId": "4153",
@@ -205982,27 +206199,6 @@
       "normalizedAlias": "monster tamer",
       "cardId": "4382",
       "cardName": "地獄の魔物使い",
-      "language": "en"
-    },
-    {
-      "alias": "アトランティスの怪腕",
-      "normalizedAlias": "アトランティスの怪腕",
-      "cardId": "23337",
-      "cardName": "アトランティスの怪腕",
-      "language": "ja"
-    },
-    {
-      "alias": "亚特兰蒂斯的怪腕",
-      "normalizedAlias": "亚特兰蒂斯的怪腕",
-      "cardId": "23337",
-      "cardName": "アトランティスの怪腕",
-      "language": "zh"
-    },
-    {
-      "alias": "Monstrous Arms of Atlantis",
-      "normalizedAlias": "monstrous arms of atlantis",
-      "cardId": "23337",
-      "cardName": "アトランティスの怪腕",
       "language": "en"
     },
     {
@@ -218018,8 +218214,8 @@
       "language": "zh"
     },
     {
-      "alias": "Number 104: Masquerade Vain",
-      "normalizedAlias": "number 104: masquerade vain",
+      "alias": "Number 104: Masquerade V",
+      "normalizedAlias": "number 104: masquerade v",
       "cardId": "23364",
       "cardName": "No.104 仮面魔踏士シャイニングV",
       "language": "en"
@@ -240236,6 +240432,41 @@
       "language": "en"
     },
     {
+      "alias": "捕食植物デェアデビル",
+      "normalizedAlias": "捕食植物デェアデビル",
+      "cardId": "22922",
+      "cardName": "捕食植物デェアデビル",
+      "language": "ja"
+    },
+    {
+      "alias": "捕食植物 无畏魔鬼树",
+      "normalizedAlias": "捕食植物 无畏魔鬼树",
+      "cardId": "22922",
+      "cardName": "捕食植物デェアデビル",
+      "language": "zh"
+    },
+    {
+      "alias": "Predaplant Daredevil",
+      "normalizedAlias": "predaplant daredevil",
+      "cardId": "22922",
+      "cardName": "捕食植物デェアデビル",
+      "language": "en"
+    },
+    {
+      "alias": "捕食植物 魔爪花蛮勇鬼",
+      "normalizedAlias": "捕食植物 魔爪花蛮勇鬼",
+      "cardId": "22922",
+      "cardName": "捕食植物デェアデビル",
+      "language": "zh"
+    },
+    {
+      "alias": "捕食植物 超胆魔爪花",
+      "normalizedAlias": "捕食植物 超胆魔爪花",
+      "cardId": "22922",
+      "cardName": "捕食植物デェアデビル",
+      "language": "zh"
+    },
+    {
       "alias": "捕食植物 百合眼镜蛇",
       "normalizedAlias": "捕食植物 百合眼镜蛇",
       "cardId": "12924",
@@ -240255,41 +240486,6 @@
       "cardId": "12924",
       "cardName": "捕食植物 百合眼镜蛇",
       "language": "en"
-    },
-    {
-      "alias": "捕食植物デェアデビル",
-      "normalizedAlias": "捕食植物デェアデビル",
-      "cardId": "22922",
-      "cardName": "捕食植物デェアデビル",
-      "language": "ja"
-    },
-    {
-      "alias": "捕食植物 无畏魔鬼树",
-      "normalizedAlias": "捕食植物 无畏魔鬼树",
-      "cardId": "22922",
-      "cardName": "捕食植物デェアデビル",
-      "language": "zh"
-    },
-    {
-      "alias": "Predaplant Dheadevil",
-      "normalizedAlias": "predaplant dheadevil",
-      "cardId": "22922",
-      "cardName": "捕食植物デェアデビル",
-      "language": "en"
-    },
-    {
-      "alias": "捕食植物 魔爪花蛮勇鬼",
-      "normalizedAlias": "捕食植物 魔爪花蛮勇鬼",
-      "cardId": "22922",
-      "cardName": "捕食植物デェアデビル",
-      "language": "zh"
-    },
-    {
-      "alias": "捕食植物 超胆魔爪花",
-      "normalizedAlias": "捕食植物 超胆魔爪花",
-      "cardId": "22922",
-      "cardName": "捕食植物デェアデビル",
-      "language": "zh"
     },
     {
       "alias": "捕食植物 魔星花龙",
@@ -263322,6 +263518,34 @@
       "language": "en"
     },
     {
+      "alias": "三幻魔の天壊",
+      "normalizedAlias": "三幻魔の天壊",
+      "cardId": "23387",
+      "cardName": "三幻魔の天壊",
+      "language": "ja"
+    },
+    {
+      "alias": "三幻魔之天坏",
+      "normalizedAlias": "三幻魔之天坏",
+      "cardId": "23387",
+      "cardName": "三幻魔の天壊",
+      "language": "zh"
+    },
+    {
+      "alias": "Sacred Beasts Skyfall",
+      "normalizedAlias": "sacred beasts skyfall",
+      "cardId": "23387",
+      "cardName": "三幻魔の天壊",
+      "language": "en"
+    },
+    {
+      "alias": "三幻魔的天坏",
+      "normalizedAlias": "三幻魔的天坏",
+      "cardId": "23387",
+      "cardName": "三幻魔の天壊",
+      "language": "zh"
+    },
+    {
       "alias": "三幻魔の霹靂",
       "normalizedAlias": "三幻魔の霹靂",
       "cardId": "22998",
@@ -270427,41 +270651,6 @@
       "language": "en"
     },
     {
-      "alias": "七皇の冀望郷",
-      "normalizedAlias": "七皇の冀望郷",
-      "cardId": "23377",
-      "cardName": "七皇の冀望郷",
-      "language": "ja"
-    },
-    {
-      "alias": "巴利安之七皇冀望乡",
-      "normalizedAlias": "巴利安之七皇冀望乡",
-      "cardId": "23377",
-      "cardName": "七皇の冀望郷",
-      "language": "zh"
-    },
-    {
-      "alias": "Seventh Barian's",
-      "normalizedAlias": "seventh barian's",
-      "cardId": "23377",
-      "cardName": "七皇の冀望郷",
-      "language": "en"
-    },
-    {
-      "alias": "七皇的冀望乡",
-      "normalizedAlias": "七皇的冀望乡",
-      "cardId": "23377",
-      "cardName": "七皇の冀望郷",
-      "language": "zh"
-    },
-    {
-      "alias": "七皇·巴里安之冀望乡",
-      "normalizedAlias": "七皇·巴里安之冀望乡",
-      "cardId": "23377",
-      "cardName": "七皇の冀望郷",
-      "language": "zh"
-    },
-    {
       "alias": "七皇觉醒",
       "normalizedAlias": "七皇觉醒",
       "cardId": "18927",
@@ -272321,34 +272510,6 @@
       "normalizedAlias": "蠕动之影",
       "cardId": "6354",
       "cardName": "うごめく影",
-      "language": "zh"
-    },
-    {
-      "alias": "三幻魔の天壊",
-      "normalizedAlias": "三幻魔の天壊",
-      "cardId": "23387",
-      "cardName": "三幻魔の天壊",
-      "language": "ja"
-    },
-    {
-      "alias": "三幻魔之天坏",
-      "normalizedAlias": "三幻魔之天坏",
-      "cardId": "23387",
-      "cardName": "三幻魔の天壊",
-      "language": "zh"
-    },
-    {
-      "alias": "Shimmering Shatterer of the Sacred Beasts",
-      "normalizedAlias": "shimmering shatterer of the sacred beasts",
-      "cardId": "23387",
-      "cardName": "三幻魔の天壊",
-      "language": "en"
-    },
-    {
-      "alias": "三幻魔的天坏",
-      "normalizedAlias": "三幻魔的天坏",
-      "cardId": "23387",
-      "cardName": "三幻魔の天壊",
       "language": "zh"
     },
     {
@@ -277371,6 +277532,13 @@
       "language": "zh"
     },
     {
+      "alias": "Skyborne Blue Cularsaw",
+      "normalizedAlias": "skyborne blue cularsaw",
+      "cardId": "23519",
+      "cardName": "Skyborne Blue Cularsaw",
+      "language": "en"
+    },
+    {
       "alias": "スカイスクレイパー・シュート",
       "normalizedAlias": "スカイスクレイパ-・シュ-ト",
       "cardId": "12902",
@@ -280987,34 +281155,6 @@
       "normalizedAlias": "宇宙的收缩",
       "cardId": "5855",
       "cardName": "宇宙の収縮",
-      "language": "zh"
-    },
-    {
-      "alias": "宇宙的ハリケーン",
-      "normalizedAlias": "宇宙的ハリケ-ン",
-      "cardId": "23390",
-      "cardName": "宇宙的ハリケーン",
-      "language": "ja"
-    },
-    {
-      "alias": "宇宙性飓风",
-      "normalizedAlias": "宇宙性飓风",
-      "cardId": "23390",
-      "cardName": "宇宙的ハリケーン",
-      "language": "zh"
-    },
-    {
-      "alias": "Spatial Trunade",
-      "normalizedAlias": "spatial trunade",
-      "cardId": "23390",
-      "cardName": "宇宙的ハリケーン",
-      "language": "en"
-    },
-    {
-      "alias": "宇宙型飓风",
-      "normalizedAlias": "宇宙型飓风",
-      "cardId": "23390",
-      "cardName": "宇宙的ハリケーン",
       "language": "zh"
     },
     {
@@ -295410,41 +295550,6 @@
       "language": "en"
     },
     {
-      "alias": "燦冠乗騎シックラヴィー",
-      "normalizedAlias": "燦冠乗騎シックラヴィ-",
-      "cardId": "23367",
-      "cardName": "燦冠乗騎シックラヴィー",
-      "language": "ja"
-    },
-    {
-      "alias": "灿冠乘骑 迅快拉维",
-      "normalizedAlias": "灿冠乘骑 迅快拉维",
-      "cardId": "23367",
-      "cardName": "燦冠乗騎シックラヴィー",
-      "language": "zh"
-    },
-    {
-      "alias": "Swickelavee the Brilliantly Crowned Heavy Cavalry",
-      "normalizedAlias": "swickelavee the brilliantly crowned heavy cavalry",
-      "cardId": "23367",
-      "cardName": "燦冠乗騎シックラヴィー",
-      "language": "en"
-    },
-    {
-      "alias": "灿冠乘骑 经典三冠海人马",
-      "normalizedAlias": "灿冠乘骑 经典三冠海人马",
-      "cardId": "23367",
-      "cardName": "燦冠乗騎シックラヴィー",
-      "language": "zh"
-    },
-    {
-      "alias": "灿冠乘骑 希克拉维",
-      "normalizedAlias": "灿冠乘骑 希克拉维",
-      "cardId": "23367",
-      "cardName": "燦冠乗騎シックラヴィー",
-      "language": "zh"
-    },
-    {
       "alias": "疾風鳥人ジョー",
       "normalizedAlias": "疾風鳥人ジョ-",
       "cardId": "6704",
@@ -304279,6 +304384,34 @@
       "language": "en"
     },
     {
+      "alias": "天下独歩の大義賊",
+      "normalizedAlias": "天下独歩の大義賊",
+      "cardId": "23349",
+      "cardName": "天下独歩の大義賊",
+      "language": "ja"
+    },
+    {
+      "alias": "天下独步之大义贼",
+      "normalizedAlias": "天下独步之大义贼",
+      "cardId": "23349",
+      "cardName": "天下独歩の大義賊",
+      "language": "zh"
+    },
+    {
+      "alias": "The Great Gallant Bandit",
+      "normalizedAlias": "the great gallant bandit",
+      "cardId": "23349",
+      "cardName": "天下独歩の大義賊",
+      "language": "en"
+    },
+    {
+      "alias": "天下独步的大义贼",
+      "normalizedAlias": "天下独步的大义贼",
+      "cardId": "23349",
+      "cardName": "天下独歩の大義賊",
+      "language": "zh"
+    },
+    {
       "alias": "传承之大御巫",
       "normalizedAlias": "传承之大御巫",
       "cardId": "18019",
@@ -308017,34 +308150,6 @@
       "language": "en"
     },
     {
-      "alias": "天下独歩の大義賊",
-      "normalizedAlias": "天下独歩の大義賊",
-      "cardId": "23349",
-      "cardName": "天下独歩の大義賊",
-      "language": "ja"
-    },
-    {
-      "alias": "天下独步之大义贼",
-      "normalizedAlias": "天下独步之大义贼",
-      "cardId": "23349",
-      "cardName": "天下独歩の大義賊",
-      "language": "zh"
-    },
-    {
-      "alias": "The World's Greatest Gallant Thief",
-      "normalizedAlias": "the world's greatest gallant thief",
-      "cardId": "23349",
-      "cardName": "天下独歩の大義賊",
-      "language": "en"
-    },
-    {
-      "alias": "天下独步的大义贼",
-      "normalizedAlias": "天下独步的大义贼",
-      "cardId": "23349",
-      "cardName": "天下独歩の大義賊",
-      "language": "zh"
-    },
-    {
       "alias": "ナイトメアテーベ",
       "normalizedAlias": "ナイトメアテ-ベ",
       "cardId": "6025",
@@ -308220,8 +308325,8 @@
       "language": "zh"
     },
     {
-      "alias": "Theorealize Medius",
-      "normalizedAlias": "theorealize medius",
+      "alias": "Theorealized Medius",
+      "normalizedAlias": "theorealized medius",
       "cardId": "23339",
       "cardName": "予幻使 メディウス",
       "language": "en"
@@ -310037,6 +310142,13 @@
       "normalizedAlias": "tiger dragon",
       "cardId": "7896",
       "cardName": "タイガードラゴン",
+      "language": "en"
+    },
+    {
+      "alias": "Tigress in Silent Repose",
+      "normalizedAlias": "tigress in silent repose",
+      "cardId": "23514",
+      "cardName": "Tigress in Silent Repose",
       "language": "en"
     },
     {
@@ -343388,8 +343500,8 @@
       "language": "zh"
     },
     {
-      "alias": "Yoa the Plague Deity Ashtra",
-      "normalizedAlias": "yoa the plague deity ashtra",
+      "alias": "Yoa the Plague Ashtra",
+      "normalizedAlias": "yoa the plague ashtra",
       "cardId": "23333",
       "cardName": "疫神の依鬼 ヨア",
       "language": "en"
@@ -347187,6 +347299,13 @@
       "cardId": "10588",
       "cardName": "青之眼少女",
       "language": "en"
+    },
+    {
+      "alias": "ウルトゥムの魔竜王",
+      "normalizedAlias": "ウルトゥムの魔竜王",
+      "cardId": "23902",
+      "cardName": "ウルトゥムの魔竜王",
+      "language": "ja"
     },
     {
       "alias": "７",

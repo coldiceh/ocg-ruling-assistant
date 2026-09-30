@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-29T22:56:00.883Z",
+  "generatedAt": "2026-09-30T22:54:26.567Z",
   "records": [
     {
       "id": "21385",
@@ -24816,6 +24816,55 @@
       ]
     },
     {
+      "id": "23525",
+      "name": "Angelechy Brilliant Move",
+      "enName": "Angelechy Brilliant Move",
+      "aliases": [
+        "Angelechy Brilliant Move"
+      ],
+      "released": true,
+      "type": "spell",
+      "cardType": "spell"
+    },
+    {
+      "id": "23522",
+      "name": "Angelechy Castellan",
+      "enName": "Angelechy Castellan",
+      "aliases": [
+        "Angelechy Castellan"
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Fairy",
+      "attribute": "light",
+      "attack": 2000,
+      "defense": 2500,
+      "atk": 2000,
+      "def": 2500,
+      "level": 7,
+      "propertyIds": [
+        "15",
+        "19",
+        "4"
+      ],
+      "properties": [
+        "Fairy",
+        "Synchro",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "15",
+        "19",
+        "4"
+      ],
+      "monsterProperties": [
+        "Fairy",
+        "Synchro",
+        "Effect"
+      ]
+    },
+    {
       "id": "23307",
       "name": "Angelechy Destrier",
       "cnName": "战马之具象天使",
@@ -24901,6 +24950,20 @@
       "released": true,
       "type": "trap",
       "cardType": "trap"
+    },
+    {
+      "id": "23527",
+      "name": "Angelechy Endgame Problem",
+      "enName": "Angelechy Endgame Problem",
+      "aliases": [
+        "Angelechy Endgame Problem"
+      ],
+      "released": true,
+      "type": "spell",
+      "cardType": "spell",
+      "properties": [
+        "field"
+      ]
     },
     {
       "id": "23308",
@@ -24994,6 +25057,17 @@
       "cardType": "trap"
     },
     {
+      "id": "23526",
+      "name": "Angelechy Opposition",
+      "enName": "Angelechy Opposition",
+      "aliases": [
+        "Angelechy Opposition"
+      ],
+      "released": true,
+      "type": "spell",
+      "cardType": "spell"
+    },
+    {
       "id": "23309",
       "name": "Angelechy Problem",
       "cnName": "具象天使之问",
@@ -25024,6 +25098,44 @@
       "cardType": "spell",
       "properties": [
         "field"
+      ]
+    },
+    {
+      "id": "23523",
+      "name": "Angelechy Seneschal",
+      "enName": "Angelechy Seneschal",
+      "aliases": [
+        "Angelechy Seneschal"
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Fairy",
+      "attribute": "dark",
+      "attack": 3000,
+      "defense": 0,
+      "atk": 3000,
+      "def": 0,
+      "level": 10,
+      "propertyIds": [
+        "15",
+        "19",
+        "4"
+      ],
+      "properties": [
+        "Fairy",
+        "Synchro",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "15",
+        "19",
+        "4"
+      ],
+      "monsterProperties": [
+        "Fairy",
+        "Synchro",
+        "Effect"
       ]
     },
     {
@@ -25082,6 +25194,28 @@
         "Synchro",
         "Effect"
       ]
+    },
+    {
+      "id": "23524",
+      "name": "Angelechy Strategy Score",
+      "enName": "Angelechy Strategy Score",
+      "aliases": [
+        "Angelechy Strategy Score"
+      ],
+      "released": true,
+      "type": "spell",
+      "cardType": "spell"
+    },
+    {
+      "id": "23528",
+      "name": "Angelechy Verdict",
+      "enName": "Angelechy Verdict",
+      "aliases": [
+        "Angelechy Verdict"
+      ],
+      "released": true,
+      "type": "trap",
+      "cardType": "trap"
     },
     {
       "id": "19385",
@@ -32375,6 +32509,44 @@
       "cardType": "trap"
     },
     {
+      "id": "23518",
+      "name": "Archidux, the Squid Sorcerer",
+      "enName": "Archidux, the Squid Sorcerer",
+      "aliases": [
+        "Archidux, the Squid Sorcerer"
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Aqua",
+      "attribute": "water",
+      "attack": 1500,
+      "atk": 1500,
+      "link": 2,
+      "linkRating": 2,
+      "linkArrows": "62",
+      "propertyIds": [
+        "31",
+        "23",
+        "4"
+      ],
+      "properties": [
+        "Aqua",
+        "Link",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "31",
+        "23",
+        "4"
+      ],
+      "monsterProperties": [
+        "Aqua",
+        "Link",
+        "Effect"
+      ]
+    },
+    {
       "id": "8283",
       "name": "大天使 克里斯蒂亚",
       "cnName": "大天使 克里斯蒂亚",
@@ -36851,10 +37023,10 @@
       "name": "無垢なる芸術－「黄昏の変幻」",
       "cnName": "无垢奥艺－“黄昏之变幻”",
       "jaName": "無垢なる芸術－「黄昏の変幻」",
-      "enName": "Ars Magna - \"Citrinitas\"",
+      "enName": "Ars Magna \"Citrinitas\"",
       "aliases": [
         "無垢なる芸術－「黄昏の変幻」",
-        "Ars Magna - \"Citrinitas\"",
+        "Ars Magna \"Citrinitas\"",
         "无垢奥艺－“黄昏之变幻”",
         "无垢大艺术-「黄昏之变幻」",
         "无垢艺术-「黄昏的变幻」"
@@ -36901,10 +37073,10 @@
       "name": "無垢なる芸術－「幻創の賢者」",
       "cnName": "无垢奥艺－“幻创之贤者”",
       "jaName": "無垢なる芸術－「幻創の賢者」",
-      "enName": "Ars Magna - \"Philosophirum\"",
+      "enName": "Ars Magna \"Philosophorum\"",
       "aliases": [
         "無垢なる芸術－「幻創の賢者」",
-        "Ars Magna - \"Philosophirum\"",
+        "Ars Magna \"Philosophorum\"",
         "无垢奥艺－“幻创之贤者”",
         "无垢大艺术-「幻创之贤者」",
         "无垢艺术-「创幻的贤者」"
@@ -36948,10 +37120,10 @@
       "name": "無限と有限のアルス＝マグナ",
       "cnName": "无限与有限之奥艺",
       "jaName": "無限と有限のアルス＝マグナ",
-      "enName": "Ars Magna of Infinity and Finity",
+      "enName": "Ars Magna the Finite and the Infinite",
       "aliases": [
         "無限と有限のアルス＝マグナ",
-        "Ars Magna of Infinity and Finity",
+        "Ars Magna the Finite and the Infinite",
         "无限与有限之奥艺",
         "无限与有限之无垢大艺术",
         "无限与有限的无垢艺术"
@@ -37018,10 +37190,10 @@
       "name": "浄化と腐敗のアルス＝マグナ",
       "cnName": "净化与腐败之奥艺",
       "jaName": "浄化と腐敗のアルス＝マグナ",
-      "enName": "Ars Magna of Purification and Corruption",
+      "enName": "Ars Magna the Corruption and the Purification",
       "aliases": [
         "浄化と腐敗のアルス＝マグナ",
-        "Ars Magna of Purification and Corruption",
+        "Ars Magna the Corruption and the Purification",
         "净化与腐败之奥艺",
         "净化与腐败之无垢大艺术",
         "净化与腐败的无垢艺术"
@@ -37088,10 +37260,10 @@
       "name": "結合と乖離のアルス＝マグナ",
       "cnName": "统合与乖离之奥艺",
       "jaName": "結合と乖離のアルス＝マグナ",
-      "enName": "Ars Magna of Unification and Separation",
+      "enName": "Ars Magna the Division and the Union",
       "aliases": [
         "結合と乖離のアルス＝マグナ",
-        "Ars Magna of Unification and Separation",
+        "Ars Magna the Division and the Union",
         "统合与乖离之奥艺",
         "结合与乖离之无垢大艺术",
         "结合与乖离的无垢艺术"
@@ -38813,10 +38985,10 @@
       "name": "依鬼の呪咆",
       "cnName": "依艮鬼之咒咆",
       "jaName": "依鬼の呪咆",
-      "enName": "Ashtra Cursed Roar",
+      "enName": "Ashtra's Howl",
       "aliases": [
         "依鬼の呪咆",
-        "Ashtra Cursed Roar",
+        "Ashtra's Howl",
         "依艮鬼之咒咆",
         "依鬼之咒咆",
         "依艮鬼的咒咆"
@@ -38860,10 +39032,10 @@
       "name": "剣鬼の神域",
       "cnName": "剑艮鬼之神域",
       "jaName": "剣鬼の神域",
-      "enName": "Ashtra Divine Domain",
+      "enName": "Ashtra's Domain",
       "aliases": [
         "剣鬼の神域",
-        "Ashtra Divine Domain",
+        "Ashtra's Domain",
         "剑艮鬼之神域",
         "剑鬼之神域",
         "剑艮鬼的神域"
@@ -38907,10 +39079,10 @@
       "name": "色鬼の蟲毒",
       "cnName": "色艮鬼之蛊毒",
       "jaName": "色鬼の蟲毒",
-      "enName": "Ashtra Insect Poison",
+      "enName": "Ashtra's Web",
       "aliases": [
         "色鬼の蟲毒",
-        "Ashtra Insect Poison",
+        "Ashtra's Web",
         "色艮鬼之蛊毒",
         "色鬼之虫毒",
         "色艮鬼的蛊毒"
@@ -39026,10 +39198,10 @@
       "name": "艮神鬼門 三千世界",
       "cnName": "艮鬼神门 三千世界",
       "jaName": "艮神鬼門 三千世界",
-      "enName": "Ashtrashen - Gateway to the Worlds Beyond",
+      "enName": "Ashtrashen - Gate to the Worlds Beyond",
       "aliases": [
         "艮神鬼門 三千世界",
-        "Ashtrashen - Gateway to the Worlds Beyond",
+        "Ashtrashen - Gate to the Worlds Beyond",
         "艮鬼神门 三千世界",
         "艮神鬼门 三千世界"
       ],
@@ -41420,10 +41592,10 @@
       "name": "呼応する伝説の都",
       "cnName": "响应的亚特兰蒂斯",
       "jaName": "呼応する伝説の都",
-      "enName": "Atlantis Call",
+      "enName": "Call of Atlantis",
       "aliases": [
         "呼応する伝説の都",
-        "Atlantis Call",
+        "Call of Atlantis",
         "响应的亚特兰蒂斯",
         "呼应的传说之都"
       ],
@@ -42161,6 +42333,40 @@
       "cardType": "spell",
       "properties": [
         "quickplay"
+      ]
+    },
+    {
+      "id": "23513",
+      "name": "Audhumla, Progenitor of the Frozen Expanse",
+      "enName": "Audhumla, Progenitor of the Frozen Expanse",
+      "aliases": [
+        "Audhumla, Progenitor of the Frozen Expanse"
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Aqua",
+      "attribute": "water",
+      "attack": 2500,
+      "defense": 3200,
+      "atk": 2500,
+      "def": 3200,
+      "level": 9,
+      "propertyIds": [
+        "31",
+        "4"
+      ],
+      "properties": [
+        "Aqua",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "31",
+        "4"
+      ],
+      "monsterProperties": [
+        "Aqua",
+        "Effect"
       ]
     },
     {
@@ -47432,6 +47638,56 @@
       "cardType": "trap",
       "properties": [
         "counter"
+      ]
+    },
+    {
+      "id": "23377",
+      "name": "七皇の冀望郷",
+      "cnName": "巴利安之七皇冀望乡",
+      "jaName": "七皇の冀望郷",
+      "enName": "Barian's Seventh Untopia",
+      "aliases": [
+        "七皇の冀望郷",
+        "Barian's Seventh Untopia",
+        "巴利安之七皇冀望乡",
+        "七皇的冀望乡",
+        "七皇·巴里安之冀望乡"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "巴利安之七皇冀望乡",
+          "source": "baige",
+          "sourceField": "sc_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23377"
+        },
+        {
+          "name": "七皇的冀望乡",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23377"
+        },
+        {
+          "name": "七皇的冀望乡",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23377"
+        },
+        {
+          "name": "七皇·巴里安之冀望乡",
+          "source": "baige",
+          "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23377"
+        }
+      ],
+      "released": true,
+      "type": "spell",
+      "cardType": "spell",
+      "properties": [
+        "field"
       ]
     },
     {
@@ -57783,10 +58039,10 @@
       "name": "ビンゴカード",
       "cnName": "宾果卡",
       "jaName": "ビンゴカード",
-      "enName": "Bingo Card",
+      "enName": "Bingo!",
       "aliases": [
         "ビンゴカード",
-        "Bingo Card",
+        "Bingo!",
         "宾果卡"
       ],
       "chineseNameSources": [
@@ -60678,10 +60934,10 @@
       "name": "結束の悪魔竜ブラック・デーモンズ・ドラゴン",
       "cnName": "团结之凶魔龙 黑恶魔龙",
       "jaName": "結束の悪魔竜ブラック・デーモンズ・ドラゴン",
-      "enName": "Black Skull Dragon the Archfiend Dragon of Unity",
+      "enName": "Black Skull Dragon, the Archfiend of Unity",
       "aliases": [
         "結束の悪魔竜ブラック・デーモンズ・ドラゴン",
-        "Black Skull Dragon the Archfiend Dragon of Unity",
+        "Black Skull Dragon, the Archfiend of Unity",
         "团结之凶魔龙 黑恶魔龙",
         "团结的恶魔龙 暗黑魔龙",
         "团结之恶魔龙 暗黑恶魔龙"
@@ -60728,22 +60984,18 @@
       "level": 9,
       "propertyIds": [
         "21",
-        "2",
         "4"
       ],
       "properties": [
         "Dragon",
-        "Special Summon Monster",
         "Effect"
       ],
       "monsterPropertyIds": [
         "21",
-        "2",
         "4"
       ],
       "monsterProperties": [
         "Dragon",
-        "Special Summon Monster",
         "Effect"
       ]
     },
@@ -66721,10 +66973,10 @@
       "name": "雷盟－オーバーボルテージ",
       "cnName": "雷盟－电压过载",
       "jaName": "雷盟－オーバーボルテージ",
-      "enName": "Blitzclique - Overvoltage",
+      "enName": "Blitzclique Overvolt",
       "aliases": [
         "雷盟－オーバーボルテージ",
-        "Blitzclique - Overvoltage",
+        "Blitzclique Overvolt",
         "雷盟－电压过载",
         "雷盟-过电压",
         "雷盟-超电压"
@@ -83299,10 +83551,10 @@
       "name": "CX 冀望皇龍カオス・バリアン・ドラゴン",
       "cnName": "混沌超量 冀望皇龙混沌巴利安龙",
       "jaName": "CX 冀望皇龍カオス・バリアン・ドラゴン",
-      "enName": "CXyz Chaos Barian Hope Dragon",
+      "enName": "CXyz Hope Chaos Barian Dragon",
       "aliases": [
         "CX 冀望皇龍カオス・バリアン・ドラゴン",
-        "CXyz Chaos Barian Hope Dragon",
+        "CXyz Hope Chaos Barian Dragon",
         "混沌超量 冀望皇龙混沌巴利安龙",
         "混沌超量 冀望皇龙 混沌异晶龙",
         "混沌XYZ 冀望皇龙 混沌异晶龙",
@@ -87961,22 +88213,18 @@
       "level": 1,
       "propertyIds": [
         "41",
-        "2",
         "4"
       ],
       "properties": [
         "Illusion",
-        "Special Summon Monster",
         "Effect"
       ],
       "monsterPropertyIds": [
         "41",
-        "2",
         "4"
       ],
       "monsterProperties": [
         "Illusion",
-        "Special Summon Monster",
         "Effect"
       ]
     },
@@ -94521,6 +94769,44 @@
       ],
       "monsterProperties": [
         "Warrior",
+        "Tuner",
+        "Effect"
+      ]
+    },
+    {
+      "id": "23521",
+      "name": "Chaospawn Bishop",
+      "enName": "Chaospawn Bishop",
+      "aliases": [
+        "Chaospawn Bishop"
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Fiend",
+      "attribute": "dark",
+      "attack": 100,
+      "defense": 1000,
+      "atk": 100,
+      "def": 1000,
+      "level": 4,
+      "propertyIds": [
+        "14",
+        "20",
+        "4"
+      ],
+      "properties": [
+        "Fiend",
+        "Tuner",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "14",
+        "20",
+        "4"
+      ],
+      "monsterProperties": [
+        "Fiend",
         "Tuner",
         "Effect"
       ]
@@ -110091,10 +110377,10 @@
       "name": "耀爛竜コラリアネクテス",
       "cnName": "耀烂龙 珊栖泳龙",
       "jaName": "耀爛竜コラリアネクテス",
-      "enName": "Coralianektes the Shimmering Shining Dragon",
+      "enName": "Coralianectes, the Luminous Cradle Dragon",
       "aliases": [
         "耀爛竜コラリアネクテス",
-        "Coralianektes the Shimmering Shining Dragon",
+        "Coralianectes, the Luminous Cradle Dragon",
         "耀烂龙 珊栖泳龙",
         "耀烂龙 珊瑚泳龙"
       ],
@@ -110576,10 +110862,10 @@
       "name": "躯売りのカラス",
       "cnName": "贩卖亡骸的乌鸦",
       "jaName": "躯売りのカラス",
-      "enName": "Corpse-Seller Crow",
+      "enName": "Crow, the Carrion Cutpurse",
       "aliases": [
         "躯売りのカラス",
-        "Corpse-Seller Crow",
+        "Crow, the Carrion Cutpurse",
         "贩卖亡骸的乌鸦",
         "卖骸乌鸦",
         "卖躯乌鸦"
@@ -115368,6 +115654,80 @@
       ],
       "monsterProperties": [
         "Spellcaster",
+        "Effect"
+      ]
+    },
+    {
+      "id": "23367",
+      "name": "燦冠乗騎シックラヴィー",
+      "cnName": "灿冠乘骑 迅快拉维",
+      "jaName": "燦冠乗騎シックラヴィー",
+      "enName": "Crowned Siclavee",
+      "aliases": [
+        "燦冠乗騎シックラヴィー",
+        "Crowned Siclavee",
+        "灿冠乘骑 迅快拉维",
+        "灿冠乘骑 经典三冠海人马",
+        "灿冠乘骑 希克拉维"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "灿冠乘骑 迅快拉维",
+          "source": "baige",
+          "sourceField": "sc_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23367"
+        },
+        {
+          "name": "灿冠乘骑 经典三冠海人马",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23367"
+        },
+        {
+          "name": "灿冠乘骑 经典三冠海人马",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23367"
+        },
+        {
+          "name": "灿冠乘骑 希克拉维",
+          "source": "baige",
+          "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23367"
+        }
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Beast-Warrior",
+      "attribute": "light",
+      "attack": 2000,
+      "defense": 2000,
+      "atk": 2000,
+      "def": 2000,
+      "rank": 3,
+      "propertyIds": [
+        "13",
+        "18",
+        "4"
+      ],
+      "properties": [
+        "Beast-Warrior",
+        "Xyz",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "13",
+        "18",
+        "4"
+      ],
+      "monsterProperties": [
+        "Beast-Warrior",
+        "Xyz",
         "Effect"
       ]
     },
@@ -120657,10 +121017,10 @@
       "name": "祟リ紙ノ報イ",
       "cnName": "祟纸之报应",
       "jaName": "祟リ紙ノ報イ",
-      "enName": "Cursed Paper Retribution",
+      "enName": "Revenge of the Paper Dolls",
       "aliases": [
         "祟リ紙ノ報イ",
-        "Cursed Paper Retribution",
+        "Revenge of the Paper Dolls",
         "祟纸之报应",
         "祟纸报应"
       ],
@@ -153198,22 +153558,18 @@
       "level": 8,
       "propertyIds": [
         "12",
-        "2",
         "4"
       ],
       "properties": [
         "Warrior",
-        "Special Summon Monster",
         "Effect"
       ],
       "monsterPropertyIds": [
         "12",
-        "2",
         "4"
       ],
       "monsterProperties": [
         "Warrior",
-        "Special Summon Monster",
         "Effect"
       ]
     },
@@ -154477,10 +154833,10 @@
       "name": "解層竜ストラティアエ",
       "cnName": "解层龙 斯特拉提亚",
       "jaName": "解層竜ストラティアエ",
-      "enName": "Destratification Dino Stratiae",
+      "enName": "Stratiae the Stratasmasher Dino",
       "aliases": [
         "解層竜ストラティアエ",
-        "Destratification Dino Stratiae",
+        "Stratiae the Stratasmasher Dino",
         "解层龙 斯特拉提亚",
         "解层龙 分层友谊丹波巨龙",
         "解层龙 地层古兽"
@@ -215156,10 +215512,10 @@
       "name": "アトランティスの妖渦",
       "cnName": "亚特兰蒂斯的妖涡",
       "jaName": "アトランティスの妖渦",
-      "enName": "Fiendish Vortex of Atlantis",
+      "enName": "Siren Vortex of Atlantis",
       "aliases": [
         "アトランティスの妖渦",
-        "Fiendish Vortex of Atlantis",
+        "Siren Vortex of Atlantis",
         "亚特兰蒂斯的妖涡"
       ],
       "chineseNameSources": [
@@ -247360,10 +247716,10 @@
       "name": "アトランティスの戦将",
       "cnName": "亚特兰蒂斯的战将",
       "jaName": "アトランティスの戦将",
-      "enName": "General of Atlantis",
+      "enName": "Warchief of Atlantis",
       "aliases": [
         "アトランティスの戦将",
-        "General of Atlantis",
+        "Warchief of Atlantis",
         "亚特兰蒂斯的战将"
       ],
       "chineseNameSources": [
@@ -279809,6 +280165,40 @@
       ]
     },
     {
+      "id": "23520",
+      "name": "Half Slice of Nickeline",
+      "enName": "Half Slice of Nickeline",
+      "aliases": [
+        "Half Slice of Nickeline"
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Rock",
+      "attribute": "water",
+      "attack": 0,
+      "defense": 0,
+      "atk": 0,
+      "def": 0,
+      "level": 4,
+      "propertyIds": [
+        "24",
+        "4"
+      ],
+      "properties": [
+        "Rock",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "24",
+        "4"
+      ],
+      "monsterProperties": [
+        "Rock",
+        "Effect"
+      ]
+    },
+    {
       "id": "10839",
       "name": "ハーフ・アンブレイク",
       "cnName": "半伤不破",
@@ -289163,6 +289553,52 @@
       ]
     },
     {
+      "id": "23390",
+      "name": "宇宙的ハリケーン",
+      "cnName": "宇宙性飓风",
+      "jaName": "宇宙的ハリケーン",
+      "enName": "Hey, Space Trunade!",
+      "aliases": [
+        "宇宙的ハリケーン",
+        "Hey, Space Trunade!",
+        "宇宙性飓风",
+        "宇宙型飓风"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "宇宙性飓风",
+          "source": "baige",
+          "sourceField": "sc_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23390"
+        },
+        {
+          "name": "宇宙性飓风",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23390"
+        },
+        {
+          "name": "宇宙性飓风",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23390"
+        },
+        {
+          "name": "宇宙型飓风",
+          "source": "baige",
+          "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23390"
+        }
+      ],
+      "released": true,
+      "type": "spell",
+      "cardType": "spell"
+    },
+    {
       "id": "13433",
       "name": "局部性飓风",
       "cnName": "局部性飓风",
@@ -294638,10 +295074,10 @@
       "name": "死相の冥鑑ヒュブロ",
       "cnName": "死相之冥鉴 修布罗",
       "jaName": "死相の冥鑑ヒュブロ",
-      "enName": "Hublot the Dark Directory of Death",
+      "enName": "Hubrow, Founder of the Ominous Observers",
       "aliases": [
         "死相の冥鑑ヒュブロ",
-        "Hublot the Dark Directory of Death",
+        "Hubrow, Founder of the Ominous Observers",
         "死相之冥鉴 修布罗",
         "死相之冥鉴 许布洛",
         "死相的冥鉴 休布罗"
@@ -308861,10 +309297,10 @@
       "name": "召喚魔術－「杯」",
       "cnName": "召唤魔术－“杯”",
       "jaName": "召喚魔術－「杯」",
-      "enName": "Invocation - \"Chalice\"",
+      "enName": "Invocation - \"Grail\"",
       "aliases": [
         "召喚魔術－「杯」",
-        "Invocation - \"Chalice\"",
+        "Invocation - \"Grail\"",
         "召唤魔术－“杯”",
         "召唤魔术-「杯」"
       ],
@@ -309029,10 +309465,10 @@
       "name": "召喚獣ディー・アニマ",
       "cnName": "召唤兽 迪・阿尼玛",
       "jaName": "召喚獣ディー・アニマ",
-      "enName": "Invoked Dee Anima",
+      "enName": "Invoked De Anima",
       "aliases": [
         "召喚獣ディー・アニマ",
-        "Invoked Dee Anima",
+        "Invoked De Anima",
         "召唤兽 迪・阿尼玛",
         "召唤兽 迪·阿尼玛"
       ],
@@ -318861,6 +319297,17 @@
       "cardType": "trap"
     },
     {
+      "id": "23515",
+      "name": "Just Flip a Coin",
+      "enName": "Just Flip a Coin",
+      "aliases": [
+        "Just Flip a Coin"
+      ],
+      "released": true,
+      "type": "trap",
+      "cardType": "trap"
+    },
+    {
       "id": "6912",
       "name": "ジャスティブレイク",
       "cnName": "正义雷破",
@@ -324396,6 +324843,44 @@
       "released": true,
       "type": "trap",
       "cardType": "trap"
+    },
+    {
+      "id": "23517",
+      "name": "Kerolia the Frolicsome",
+      "enName": "Kerolia the Frolicsome",
+      "aliases": [
+        "Kerolia the Frolicsome"
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Aqua",
+      "attribute": "water",
+      "attack": 200,
+      "defense": 200,
+      "atk": 200,
+      "def": 200,
+      "level": 1,
+      "propertyIds": [
+        "31",
+        "20",
+        "4"
+      ],
+      "properties": [
+        "Aqua",
+        "Tuner",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "31",
+        "20",
+        "4"
+      ],
+      "monsterProperties": [
+        "Aqua",
+        "Tuner",
+        "Effect"
+      ]
     },
     {
       "id": "21361",
@@ -332049,6 +332534,44 @@
       "cardType": "spell"
     },
     {
+      "id": "23516",
+      "name": "Kumenyo, the Nine-Hued Deer",
+      "enName": "Kumenyo, the Nine-Hued Deer",
+      "aliases": [
+        "Kumenyo, the Nine-Hued Deer"
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Spellcaster",
+      "attribute": "dark",
+      "attack": 2500,
+      "defense": 1800,
+      "atk": 2500,
+      "def": 1800,
+      "rank": 4,
+      "propertyIds": [
+        "8",
+        "18",
+        "4"
+      ],
+      "properties": [
+        "Spellcaster",
+        "Xyz",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "8",
+        "18",
+        "4"
+      ],
+      "monsterProperties": [
+        "Spellcaster",
+        "Xyz",
+        "Effect"
+      ]
+    },
+    {
       "id": "12039",
       "name": "粘丝坏兽 蛛默鼓丝",
       "cnName": "粘丝坏兽 蛛默鼓丝",
@@ -333254,10 +333777,10 @@
       "name": "蠱神の色鬼 クズハ",
       "cnName": "蛊神之色艮鬼 葛叶",
       "jaName": "蠱神の色鬼 クズハ",
-      "enName": "Kuzuha the Bewitching Deity Ashtra",
+      "enName": "Kuzuha the Hex Ashtra",
       "aliases": [
         "蠱神の色鬼 クズハ",
-        "Kuzuha the Bewitching Deity Ashtra",
+        "Kuzuha the Hex Ashtra",
         "蛊神之色艮鬼 葛叶",
         "蛊神之色鬼 国栖八"
       ],
@@ -342247,6 +342770,76 @@
       ]
     },
     {
+      "id": "23335",
+      "name": "アトランティスの竜神－ダイダロス",
+      "cnName": "亚特兰蒂斯的龙神－代达罗斯",
+      "jaName": "アトランティスの竜神－ダイダロス",
+      "enName": "Levia-Dragon of Atlantis - Daedalus",
+      "aliases": [
+        "アトランティスの竜神－ダイダロス",
+        "Levia-Dragon of Atlantis - Daedalus",
+        "亚特兰蒂斯的龙神－代达罗斯",
+        "亚特兰蒂斯的龙神-泰达路斯",
+        "亚特兰蒂斯的龙神-代达罗斯"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "亚特兰蒂斯的龙神－代达罗斯",
+          "source": "baige",
+          "sourceField": "sc_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23335"
+        },
+        {
+          "name": "亚特兰蒂斯的龙神-泰达路斯",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23335"
+        },
+        {
+          "name": "亚特兰蒂斯的龙神-泰达路斯",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23335"
+        },
+        {
+          "name": "亚特兰蒂斯的龙神-代达罗斯",
+          "source": "baige",
+          "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23335"
+        }
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Sea Serpent",
+      "attribute": "water",
+      "attack": 2600,
+      "defense": 1500,
+      "atk": 2600,
+      "def": 1500,
+      "level": 7,
+      "propertyIds": [
+        "17",
+        "4"
+      ],
+      "properties": [
+        "Sea Serpent",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "17",
+        "4"
+      ],
+      "monsterProperties": [
+        "Sea Serpent",
+        "Effect"
+      ]
+    },
+    {
       "id": "23369",
       "name": "真海竜騎－ダイダロス",
       "cnName": "真海龙骑－代达罗斯",
@@ -342359,76 +342952,6 @@
       "monsterProperties": [
         "Aqua",
         "Xyz",
-        "Effect"
-      ]
-    },
-    {
-      "id": "23335",
-      "name": "アトランティスの竜神－ダイダロス",
-      "cnName": "亚特兰蒂斯的龙神－代达罗斯",
-      "jaName": "アトランティスの竜神－ダイダロス",
-      "enName": "Leviathan of Atlantis - Daedalus",
-      "aliases": [
-        "アトランティスの竜神－ダイダロス",
-        "Leviathan of Atlantis - Daedalus",
-        "亚特兰蒂斯的龙神－代达罗斯",
-        "亚特兰蒂斯的龙神-泰达路斯",
-        "亚特兰蒂斯的龙神-代达罗斯"
-      ],
-      "chineseNameSources": [
-        {
-          "name": "亚特兰蒂斯的龙神－代达罗斯",
-          "source": "baige",
-          "sourceField": "sc_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23335"
-        },
-        {
-          "name": "亚特兰蒂斯的龙神-泰达路斯",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23335"
-        },
-        {
-          "name": "亚特兰蒂斯的龙神-泰达路斯",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23335"
-        },
-        {
-          "name": "亚特兰蒂斯的龙神-代达罗斯",
-          "source": "baige",
-          "sourceField": "cnocg_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23335"
-        }
-      ],
-      "released": true,
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Sea Serpent",
-      "attribute": "water",
-      "attack": 2600,
-      "defense": 1500,
-      "atk": 2600,
-      "def": 1500,
-      "level": 7,
-      "propertyIds": [
-        "17",
-        "4"
-      ],
-      "properties": [
-        "Sea Serpent",
-        "Effect"
-      ],
-      "monsterPropertyIds": [
-        "17",
-        "4"
-      ],
-      "monsterProperties": [
-        "Sea Serpent",
         "Effect"
       ]
     },
@@ -376088,10 +376611,10 @@
       "name": "幻獄神メディクリウス",
       "cnName": "幻狱神 墨迪克利乌斯",
       "jaName": "幻獄神メディクリウス",
-      "enName": "Medicurius the Power Patron of Illusions",
+      "enName": "Mediclius the Extraordinary Power Patron",
       "aliases": [
         "幻獄神メディクリウス",
-        "Medicurius the Power Patron of Illusions",
+        "Mediclius the Extraordinary Power Patron",
         "幻狱神 墨迪克利乌斯",
         "幻狱神 米底丘利乌斯",
         "幻狱神 墨迪克里乌斯"
@@ -387014,10 +387537,10 @@
       "name": "封神の剣鬼 ミクマリ",
       "cnName": "封神之剑艮鬼 水子守",
       "jaName": "封神の剣鬼 ミクマリ",
-      "enName": "Mikumari the Sealing Deity Ashtra",
+      "enName": "Mikumari the Banisher Ashtra",
       "aliases": [
         "封神の剣鬼 ミクマリ",
-        "Mikumari the Sealing Deity Ashtra",
+        "Mikumari the Banisher Ashtra",
         "封神之剑艮鬼 水子守",
         "封神之剑鬼 水子守"
       ],
@@ -392468,10 +392991,10 @@
       "name": "ミズティックコール",
       "cnName": "秘召刻漏淑女",
       "jaName": "ミズティックコール",
-      "enName": "Misstic Call",
+      "enName": "Ms. Tick Call",
       "aliases": [
         "ミズティックコール",
-        "Misstic Call",
+        "Ms. Tick Call",
         "秘召刻漏淑女",
         "秘召水巫女士"
       ],
@@ -395497,6 +396020,74 @@
       ]
     },
     {
+      "id": "23337",
+      "name": "アトランティスの怪腕",
+      "cnName": "亚特兰蒂斯的怪腕",
+      "jaName": "アトランティスの怪腕",
+      "enName": "Monster Arms of Atlantis",
+      "aliases": [
+        "アトランティスの怪腕",
+        "Monster Arms of Atlantis",
+        "亚特兰蒂斯的怪腕"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "亚特兰蒂斯的怪腕",
+          "source": "baige",
+          "sourceField": "sc_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23337"
+        },
+        {
+          "name": "亚特兰蒂斯的怪腕",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23337"
+        },
+        {
+          "name": "亚特兰蒂斯的怪腕",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23337"
+        },
+        {
+          "name": "亚特兰蒂斯的怪腕",
+          "source": "baige",
+          "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23337"
+        }
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Sea Serpent",
+      "attribute": "water",
+      "attack": 1500,
+      "defense": 1200,
+      "atk": 1500,
+      "def": 1200,
+      "level": 4,
+      "propertyIds": [
+        "17",
+        "4"
+      ],
+      "properties": [
+        "Sea Serpent",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "17",
+        "4"
+      ],
+      "monsterProperties": [
+        "Sea Serpent",
+        "Effect"
+      ]
+    },
+    {
       "id": "4153",
       "name": "怪兽蛋",
       "cnName": "怪兽蛋",
@@ -395986,74 +396577,6 @@
       "monsterProperties": [
         "Warrior",
         "Normal"
-      ]
-    },
-    {
-      "id": "23337",
-      "name": "アトランティスの怪腕",
-      "cnName": "亚特兰蒂斯的怪腕",
-      "jaName": "アトランティスの怪腕",
-      "enName": "Monstrous Arms of Atlantis",
-      "aliases": [
-        "アトランティスの怪腕",
-        "Monstrous Arms of Atlantis",
-        "亚特兰蒂斯的怪腕"
-      ],
-      "chineseNameSources": [
-        {
-          "name": "亚特兰蒂斯的怪腕",
-          "source": "baige",
-          "sourceField": "sc_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23337"
-        },
-        {
-          "name": "亚特兰蒂斯的怪腕",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23337"
-        },
-        {
-          "name": "亚特兰蒂斯的怪腕",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23337"
-        },
-        {
-          "name": "亚特兰蒂斯的怪腕",
-          "source": "baige",
-          "sourceField": "cnocg_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23337"
-        }
-      ],
-      "released": true,
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Sea Serpent",
-      "attribute": "water",
-      "attack": 1500,
-      "defense": 1200,
-      "atk": 1500,
-      "def": 1200,
-      "level": 4,
-      "propertyIds": [
-        "17",
-        "4"
-      ],
-      "properties": [
-        "Sea Serpent",
-        "Effect"
-      ],
-      "monsterPropertyIds": [
-        "17",
-        "4"
-      ],
-      "monsterProperties": [
-        "Sea Serpent",
-        "Effect"
       ]
     },
     {
@@ -419699,10 +420222,10 @@
       "name": "No.104 仮面魔踏士シャイニングV",
       "cnName": "编号104 假面魔蹈士 闪光V",
       "jaName": "No.104 仮面魔踏士シャイニングV",
-      "enName": "Number 104: Masquerade Vain",
+      "enName": "Number 104: Masquerade V",
       "aliases": [
         "No.104 仮面魔踏士シャイニングV",
-        "Number 104: Masquerade Vain",
+        "Number 104: Masquerade V",
         "编号104 假面魔蹈士 闪光V",
         "No.104 假面魔蹈士 闪光V枉然",
         "No.104 假面魔蹈士 闪光V"
@@ -463674,52 +464197,14 @@
       ]
     },
     {
-      "id": "12924",
-      "name": "捕食植物 百合眼镜蛇",
-      "cnName": "捕食植物 百合眼镜蛇",
-      "jaName": "捕食植物ダーリング・コブラ",
-      "enName": "Predaplant Darlingtonia Cobra",
-      "aliases": [
-        "捕食植物 百合眼镜蛇",
-        "捕食植物ダーリング・コブラ",
-        "Predaplant Darlingtonia Cobra"
-      ],
-      "released": true,
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Plant",
-      "attribute": "dark",
-      "attack": 1000,
-      "defense": 1500,
-      "atk": 1000,
-      "def": 1500,
-      "level": 3,
-      "propertyIds": [
-        "25",
-        "4"
-      ],
-      "properties": [
-        "Plant",
-        "Effect"
-      ],
-      "monsterPropertyIds": [
-        "25",
-        "4"
-      ],
-      "monsterProperties": [
-        "Plant",
-        "Effect"
-      ]
-    },
-    {
       "id": "22922",
       "name": "捕食植物デェアデビル",
       "cnName": "捕食植物 无畏魔鬼树",
       "jaName": "捕食植物デェアデビル",
-      "enName": "Predaplant Dheadevil",
+      "enName": "Predaplant Daredevil",
       "aliases": [
         "捕食植物デェアデビル",
-        "Predaplant Dheadevil",
+        "Predaplant Daredevil",
         "捕食植物 无畏魔鬼树",
         "捕食植物 魔爪花蛮勇鬼",
         "捕食植物 超胆魔爪花"
@@ -463789,6 +464274,44 @@
       "monsterProperties": [
         "Plant",
         "Fusion",
+        "Effect"
+      ]
+    },
+    {
+      "id": "12924",
+      "name": "捕食植物 百合眼镜蛇",
+      "cnName": "捕食植物 百合眼镜蛇",
+      "jaName": "捕食植物ダーリング・コブラ",
+      "enName": "Predaplant Darlingtonia Cobra",
+      "aliases": [
+        "捕食植物 百合眼镜蛇",
+        "捕食植物ダーリング・コブラ",
+        "Predaplant Darlingtonia Cobra"
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Plant",
+      "attribute": "dark",
+      "attack": 1000,
+      "defense": 1500,
+      "atk": 1000,
+      "def": 1500,
+      "level": 3,
+      "propertyIds": [
+        "25",
+        "4"
+      ],
+      "properties": [
+        "Plant",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "25",
+        "4"
+      ],
+      "monsterProperties": [
+        "Plant",
         "Effect"
       ]
     },
@@ -506686,6 +507209,55 @@
       "cardType": "spell"
     },
     {
+      "id": "23387",
+      "name": "三幻魔の天壊",
+      "cnName": "三幻魔之天坏",
+      "jaName": "三幻魔の天壊",
+      "enName": "Sacred Beasts Skyfall",
+      "aliases": [
+        "三幻魔の天壊",
+        "Sacred Beasts Skyfall",
+        "三幻魔之天坏",
+        "三幻魔的天坏"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "三幻魔之天坏",
+          "source": "baige",
+          "sourceField": "sc_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23387"
+        },
+        {
+          "name": "三幻魔的天坏",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23387"
+        },
+        {
+          "name": "三幻魔的天坏",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23387"
+        },
+        {
+          "name": "三幻魔的天坏",
+          "source": "baige",
+          "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23387"
+        }
+      ],
+      "released": true,
+      "type": "spell",
+      "cardType": "spell",
+      "properties": [
+        "quickplay"
+      ]
+    },
+    {
       "id": "22998",
       "name": "三幻魔の霹靂",
       "cnName": "三幻魔之霹雳",
@@ -519776,56 +520348,6 @@
       ]
     },
     {
-      "id": "23377",
-      "name": "七皇の冀望郷",
-      "cnName": "巴利安之七皇冀望乡",
-      "jaName": "七皇の冀望郷",
-      "enName": "Seventh Barian's",
-      "aliases": [
-        "七皇の冀望郷",
-        "Seventh Barian's",
-        "巴利安之七皇冀望乡",
-        "七皇的冀望乡",
-        "七皇·巴里安之冀望乡"
-      ],
-      "chineseNameSources": [
-        {
-          "name": "巴利安之七皇冀望乡",
-          "source": "baige",
-          "sourceField": "sc_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23377"
-        },
-        {
-          "name": "七皇的冀望乡",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23377"
-        },
-        {
-          "name": "七皇的冀望乡",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23377"
-        },
-        {
-          "name": "七皇·巴里安之冀望乡",
-          "source": "baige",
-          "sourceField": "cnocg_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23377"
-        }
-      ],
-      "released": true,
-      "type": "spell",
-      "cardType": "spell",
-      "properties": [
-        "field"
-      ]
-    },
-    {
       "id": "18927",
       "name": "七皇觉醒",
       "cnName": "七皇觉醒",
@@ -523427,55 +523949,6 @@
       "cardType": "spell",
       "properties": [
         "continuous"
-      ]
-    },
-    {
-      "id": "23387",
-      "name": "三幻魔の天壊",
-      "cnName": "三幻魔之天坏",
-      "jaName": "三幻魔の天壊",
-      "enName": "Shimmering Shatterer of the Sacred Beasts",
-      "aliases": [
-        "三幻魔の天壊",
-        "Shimmering Shatterer of the Sacred Beasts",
-        "三幻魔之天坏",
-        "三幻魔的天坏"
-      ],
-      "chineseNameSources": [
-        {
-          "name": "三幻魔之天坏",
-          "source": "baige",
-          "sourceField": "sc_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23387"
-        },
-        {
-          "name": "三幻魔的天坏",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23387"
-        },
-        {
-          "name": "三幻魔的天坏",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23387"
-        },
-        {
-          "name": "三幻魔的天坏",
-          "source": "baige",
-          "sourceField": "cnocg_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23387"
-        }
-      ],
-      "released": true,
-      "type": "spell",
-      "cardType": "spell",
-      "properties": [
-        "quickplay"
       ]
     },
     {
@@ -533246,6 +533719,44 @@
       ]
     },
     {
+      "id": "23519",
+      "name": "Skyborne Blue Cularsaw",
+      "enName": "Skyborne Blue Cularsaw",
+      "aliases": [
+        "Skyborne Blue Cularsaw"
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Warrior",
+      "attribute": "dark",
+      "attack": 2800,
+      "defense": 1800,
+      "atk": 2800,
+      "def": 1800,
+      "level": 8,
+      "propertyIds": [
+        "12",
+        "11",
+        "4"
+      ],
+      "properties": [
+        "Warrior",
+        "Fusion",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "12",
+        "11",
+        "4"
+      ],
+      "monsterProperties": [
+        "Warrior",
+        "Fusion",
+        "Effect"
+      ]
+    },
+    {
       "id": "12902",
       "name": "スカイスクレイパー・シュート",
       "cnName": "摩天一击",
@@ -540108,52 +540619,6 @@
       "properties": [
         "continuous"
       ]
-    },
-    {
-      "id": "23390",
-      "name": "宇宙的ハリケーン",
-      "cnName": "宇宙性飓风",
-      "jaName": "宇宙的ハリケーン",
-      "enName": "Spatial Trunade",
-      "aliases": [
-        "宇宙的ハリケーン",
-        "Spatial Trunade",
-        "宇宙性飓风",
-        "宇宙型飓风"
-      ],
-      "chineseNameSources": [
-        {
-          "name": "宇宙性飓风",
-          "source": "baige",
-          "sourceField": "sc_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23390"
-        },
-        {
-          "name": "宇宙性飓风",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23390"
-        },
-        {
-          "name": "宇宙性飓风",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23390"
-        },
-        {
-          "name": "宇宙型飓风",
-          "source": "baige",
-          "sourceField": "cnocg_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23390"
-        }
-      ],
-      "released": true,
-      "type": "spell",
-      "cardType": "spell"
     },
     {
       "id": "8702",
@@ -567404,80 +567869,6 @@
       ]
     },
     {
-      "id": "23367",
-      "name": "燦冠乗騎シックラヴィー",
-      "cnName": "灿冠乘骑 迅快拉维",
-      "jaName": "燦冠乗騎シックラヴィー",
-      "enName": "Swickelavee the Brilliantly Crowned Heavy Cavalry",
-      "aliases": [
-        "燦冠乗騎シックラヴィー",
-        "Swickelavee the Brilliantly Crowned Heavy Cavalry",
-        "灿冠乘骑 迅快拉维",
-        "灿冠乘骑 经典三冠海人马",
-        "灿冠乘骑 希克拉维"
-      ],
-      "chineseNameSources": [
-        {
-          "name": "灿冠乘骑 迅快拉维",
-          "source": "baige",
-          "sourceField": "sc_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23367"
-        },
-        {
-          "name": "灿冠乘骑 经典三冠海人马",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23367"
-        },
-        {
-          "name": "灿冠乘骑 经典三冠海人马",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23367"
-        },
-        {
-          "name": "灿冠乘骑 希克拉维",
-          "source": "baige",
-          "sourceField": "cnocg_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23367"
-        }
-      ],
-      "released": true,
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Beast-Warrior",
-      "attribute": "light",
-      "attack": 2000,
-      "defense": 2000,
-      "atk": 2000,
-      "def": 2000,
-      "rank": 3,
-      "propertyIds": [
-        "13",
-        "18",
-        "4"
-      ],
-      "properties": [
-        "Beast-Warrior",
-        "Xyz",
-        "Effect"
-      ],
-      "monsterPropertyIds": [
-        "13",
-        "18",
-        "4"
-      ],
-      "monsterProperties": [
-        "Beast-Warrior",
-        "Xyz",
-        "Effect"
-      ]
-    },
-    {
       "id": "6704",
       "name": "疾風鳥人ジョー",
       "cnName": "疾风鸟人 乔",
@@ -584550,6 +584941,82 @@
       ]
     },
     {
+      "id": "23349",
+      "name": "天下独歩の大義賊",
+      "cnName": "天下独步之大义贼",
+      "jaName": "天下独歩の大義賊",
+      "enName": "The Great Gallant Bandit",
+      "aliases": [
+        "天下独歩の大義賊",
+        "The Great Gallant Bandit",
+        "天下独步之大义贼",
+        "天下独步的大义贼"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "天下独步之大义贼",
+          "source": "baige",
+          "sourceField": "sc_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23349"
+        },
+        {
+          "name": "天下独步之大义贼",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23349"
+        },
+        {
+          "name": "天下独步之大义贼",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23349"
+        },
+        {
+          "name": "天下独步之大义贼",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23349"
+        },
+        {
+          "name": "天下独步的大义贼",
+          "source": "baige",
+          "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23349"
+        }
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Warrior",
+      "attribute": "wind",
+      "attack": 2500,
+      "defense": 2000,
+      "atk": 2500,
+      "def": 2000,
+      "level": 10,
+      "propertyIds": [
+        "12",
+        "4"
+      ],
+      "properties": [
+        "Warrior",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "12",
+        "4"
+      ],
+      "monsterProperties": [
+        "Warrior",
+        "Effect"
+      ]
+    },
+    {
       "id": "18019",
       "name": "传承之大御巫",
       "cnName": "传承之大御巫",
@@ -591901,82 +592368,6 @@
       "cardType": "skill"
     },
     {
-      "id": "23349",
-      "name": "天下独歩の大義賊",
-      "cnName": "天下独步之大义贼",
-      "jaName": "天下独歩の大義賊",
-      "enName": "The World's Greatest Gallant Thief",
-      "aliases": [
-        "天下独歩の大義賊",
-        "The World's Greatest Gallant Thief",
-        "天下独步之大义贼",
-        "天下独步的大义贼"
-      ],
-      "chineseNameSources": [
-        {
-          "name": "天下独步之大义贼",
-          "source": "baige",
-          "sourceField": "sc_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23349"
-        },
-        {
-          "name": "天下独步之大义贼",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23349"
-        },
-        {
-          "name": "天下独步之大义贼",
-          "source": "baige",
-          "sourceField": "md_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23349"
-        },
-        {
-          "name": "天下独步之大义贼",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23349"
-        },
-        {
-          "name": "天下独步的大义贼",
-          "source": "baige",
-          "sourceField": "cnocg_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23349"
-        }
-      ],
-      "released": true,
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Warrior",
-      "attribute": "wind",
-      "attack": 2500,
-      "defense": 2000,
-      "atk": 2500,
-      "def": 2000,
-      "level": 10,
-      "propertyIds": [
-        "12",
-        "4"
-      ],
-      "properties": [
-        "Warrior",
-        "Effect"
-      ],
-      "monsterPropertyIds": [
-        "12",
-        "4"
-      ],
-      "monsterProperties": [
-        "Warrior",
-        "Effect"
-      ]
-    },
-    {
       "id": "6025",
       "name": "ナイトメアテーベ",
       "cnName": "底比斯的梦魇",
@@ -592265,10 +592656,10 @@
       "name": "予幻使 メディウス",
       "cnName": "预幻使 墨迪乌斯",
       "jaName": "予幻使 メディウス",
-      "enName": "Theorealize Medius",
+      "enName": "Theorealized Medius",
       "aliases": [
         "予幻使 メディウス",
-        "Theorealize Medius",
+        "Theorealized Medius",
         "预幻使 墨迪乌斯",
         "预幻使 米底乌斯",
         "预幻视使 墨迪乌斯"
@@ -595710,6 +596101,40 @@
       ],
       "monsterProperties": [
         "Dragon",
+        "Effect"
+      ]
+    },
+    {
+      "id": "23514",
+      "name": "Tigress in Silent Repose",
+      "enName": "Tigress in Silent Repose",
+      "aliases": [
+        "Tigress in Silent Repose"
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Beast-Warrior",
+      "attribute": "earth",
+      "attack": 1700,
+      "defense": 200,
+      "atk": 1700,
+      "def": 200,
+      "level": 3,
+      "propertyIds": [
+        "13",
+        "4"
+      ],
+      "properties": [
+        "Beast-Warrior",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "13",
+        "4"
+      ],
+      "monsterProperties": [
+        "Beast-Warrior",
         "Effect"
       ]
     },
@@ -658669,10 +659094,10 @@
       "name": "疫神の依鬼 ヨア",
       "cnName": "疫神之依艮鬼 夜亚",
       "jaName": "疫神の依鬼 ヨア",
-      "enName": "Yoa the Plague Deity Ashtra",
+      "enName": "Yoa the Plague Ashtra",
       "aliases": [
         "疫神の依鬼 ヨア",
-        "Yoa the Plague Deity Ashtra",
+        "Yoa the Plague Ashtra",
         "疫神之依艮鬼 夜亚",
         "疫神之依鬼 夜亚"
       ],
@@ -666179,6 +666604,40 @@
         "Spellcaster",
         "Tuner",
         "Effect"
+      ]
+    },
+    {
+      "id": "23902",
+      "name": "ウルトゥムの魔竜王",
+      "jaName": "ウルトゥムの魔竜王",
+      "aliases": [
+        "ウルトゥムの魔竜王"
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Dragon",
+      "attribute": "earth",
+      "attack": 2000,
+      "defense": 2000,
+      "atk": 2000,
+      "def": 2000,
+      "level": 8,
+      "propertyIds": [
+        "21",
+        "6"
+      ],
+      "properties": [
+        "Dragon",
+        "Normal"
+      ],
+      "monsterPropertyIds": [
+        "21",
+        "6"
+      ],
+      "monsterProperties": [
+        "Dragon",
+        "Normal"
       ]
     },
     {
