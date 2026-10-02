@@ -676,6 +676,18 @@ async function answerRagRulingQuestionInternal({
     const auxiliaryExtractionStartedAt = Date.now();
     cardNameModel = await callCardNameExtractionModel({
       userQuery: query,
+      cardNameReferences: localCardResolution.resolvedCards.flatMap((match) => {
+        // This explicit provenance tag identifies a card-text expansion, not
+        // a query match. Omitting its name hint does not remove any evidence
+        // or override the model; the existing tag is the direct observation.
+        if (match.resolutionSource === "card_text_reference") return [];
+        const card = (data.cards || []).find((item) => String(item.id) === String(match.id));
+        if (!card) return [];
+        // Read names from the canonical record: resolved aliases can include
+        // a query fragment inferred by local matching.
+        return [{ input: match.input, name: card.name || "", cnName: card.cnName || "",
+          jaName: card.jaName || "", enName: card.enName || "", aliases: card.aliases || [] }];
+      }),
       dataRevision,
       env,
       modelInvoker: cardModelInvoker,

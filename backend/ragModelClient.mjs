@@ -923,6 +923,7 @@ export async function callBaiJsonTask({
 
 export async function callCardNameExtractionModel({
   userQuery,
+  cardNameReferences = [],
   dataRevision = "",
   env = globalThis.process?.env || {},
   modelInvoker,
@@ -946,7 +947,9 @@ export async function callCardNameExtractionModel({
     ...relayGeneration.warnings,
   ];
   const maxTokens = readNumber(env.RAG_CARD_MODEL_MAX_OUTPUT_TOKENS, 800);
-  const prompt = buildCardNameExtractionPrompt(userQuery, { typed: provider === "deepseek" || provider === "bai" });
+  const prompt = buildCardNameExtractionPrompt(userQuery, {
+    typed: provider === "deepseek" || provider === "bai", cardNameReferences,
+  });
   const budgetProvider = provider;
 
   if (dryRun === true || isEnabled(env.RAG_DRY_RUN)) {
@@ -5492,7 +5495,7 @@ function budgetBucketConfig(env, bucket) {
   };
 }
 
-export function buildCardNameExtractionPrompt(userQuery, { typed = false } = {}) {
+export function buildCardNameExtractionPrompt(userQuery, { typed = false, cardNameReferences = [] } = {}) {
   if (typed) {
     return [
       "你负责游戏王问题的提及抽取，不回答裁定，也不查找未给出的卡片。把问题中的名称分为两个独立数组：",
@@ -5500,6 +5503,10 @@ export function buildCardNameExtractionPrompt(userQuery, { typed = false } = {})
       "groupMentions：系列、种族、属性、卡片种类等集合名称，以及只由这些特征描述而未给出个体名称的卡。指向场上某一只实际怪兽，并不等于给出了该怪兽的卡名；“我方”“一只”“作为对象”等限定不能把集合名变成单卡简称。引号也不决定属于哪类。只有上下文给出某个具体卡名与简称的对应，或该称呼本身就是单卡名称，才归cardNames。",
       "每项只放入其实际类别。不能猜测未命名对象是该系列的哪张卡。动作、效果、区域、连锁编号不放入任一数组。重复提及合并。",
       "只输出JSON：{\"cardNames\":[{\"name\":\"单卡称呼\",\"originalText\":\"对应原文\",\"confidence\":\"high或medium或low\"}],\"groupMentions\":[\"系列或类别原文\"]}。没有内容的数组为空。",
+      ...(cardNameReferences.length ? [
+        "以下是本地匹配得到的卡库名称参考；input只是匹配到的题面片段，其余字段来自卡库。参考不代表题面一定提及该卡，不能据此添加未命名的卡。结合完整原题判断：完整单卡名称即使含有系列词也属于cardNames；只提到系列、类别或局部片段时，不得因为参考中有相似卡名就改判为单卡。",
+        JSON.stringify(cardNameReferences),
+      ] : []),
       "玩家问题：",
       String(userQuery || ""),
     ].join("\n");
