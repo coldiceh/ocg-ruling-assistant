@@ -1,0 +1,41 @@
+name: Verify selection fix on frozen material
+on:
+  push:
+    branches: [codex/evidence-selection-failure-20261002]
+    paths: [.github/workflows/selection-failure-replay.yml, scripts/replay-selection-fix-once.mjs]
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: selection-failure-frozen-replay-20261002
+  cancel-in-progress: false
+jobs:
+  replay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - uses: actions/download-artifact@v4
+        with:
+          name: selection-failure-private-20261002
+          run-id: '37001180193'
+          github-token: ${{ github.token }}
+          path: frozen-input
+      - name: Reuse paid upstream responses, select once and finalize once
+        env:
+          BAI_API_KEY: ${{ secrets.BAI_API_KEY }}
+          BAI_CARD_API_KEY: ${{ secrets.BAI_CARD_API_KEY }}
+          RAG_EVIDENCE_BAI_API_KEY: ${{ secrets.RAG_EVIDENCE_BAI_API_KEY }}
+          GEMINI_RULE_QA_API_KEY: ${{ secrets.GEMINI_RULE_QA_API_KEY }}
+          UPSTASH_BUDGET_KV_REST_API_URL: ${{ secrets.UPSTASH_BUDGET_KV_REST_API_URL }}
+          UPSTASH_BUDGET_KV_REST_API_TOKEN: ${{ secrets.UPSTASH_BUDGET_KV_REST_API_TOKEN }}
+        run: node scripts/replay-selection-fix-once.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: selection-fix-replay-private-20261002
+          path: selection-replay/
+          retention-days: 3
