@@ -1,0 +1,34 @@
+name: Diagnose one evidence selection failure
+on:
+  push:
+    branches: [codex/evidence-selection-failure-20261002]
+    paths: [.github/workflows/selection-failure-once.yml, scripts/probe-selection-failure-once.mjs]
+permissions:
+  contents: read
+concurrency:
+  group: selection-failure-once-20261002
+  cancel-in-progress: false
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - name: Prepare the screenshot question once, without final generation
+        env:
+          BAI_API_KEY: ${{ secrets.BAI_API_KEY }}
+          BAI_CARD_API_KEY: ${{ secrets.BAI_CARD_API_KEY }}
+          RAG_EVIDENCE_BAI_API_KEY: ${{ secrets.RAG_EVIDENCE_BAI_API_KEY }}
+          GEMINI_RULE_QA_API_KEY: ${{ secrets.GEMINI_RULE_QA_API_KEY }}
+          UPSTASH_BUDGET_KV_REST_API_URL: ${{ secrets.UPSTASH_BUDGET_KV_REST_API_URL }}
+          UPSTASH_BUDGET_KV_REST_API_TOKEN: ${{ secrets.UPSTASH_BUDGET_KV_REST_API_TOKEN }}
+        run: node scripts/probe-selection-failure-once.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: selection-failure-private-20261002
+          path: selection-diagnostic/
+          retention-days: 3
