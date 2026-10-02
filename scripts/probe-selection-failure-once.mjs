@@ -5,6 +5,8 @@ import { answerRagRulingQuestionForVersion } from '../backend/rulingVersionRegis
 import { estimateGenerationUpperBoundUsd } from '../backend/evidenceGenerationContract.mjs';
 
 Object.assign(process.env, JSON.parse(await readFile('vercel.json', 'utf8')).env);
+Object.assign(process.env, { CLOUD_BUDGET_RUN_ID: 'selection-failure-fix-20261002',
+  CLOUD_BUDGET_ACTUAL_LIMIT_CNY: '3.5', CLOUD_BUDGET_THEORETICAL_LIMIT_USD: '0.50' });
 const events = [], cachedResponses = [];
 const nativeFetch = globalThis.fetch;
 let generationReserveUsd = 0;
