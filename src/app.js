@@ -1659,6 +1659,15 @@ function renderBackendVersionError(error, requestedRulingVersion) {
 }
 
 function publicRequestFailurePresentation(error) {
+  if (error?.code === "evidence_model_unable_to_select") {
+    return {
+      title: "证据选材未完成",
+      status: "暂不可用",
+      basis: "证据准备失败",
+      message: "证据准备模型未能完成选材。本次请求已在证据准备阶段停止，未调用最终裁定模型。",
+      step: "本次未生成裁定；请稍后重试，若持续出现可反馈此问题。",
+    };
+  }
   if (error?.code === "ruling_progress_end_missing") {
     return {
       title: "回答传输未完成",

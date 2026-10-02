@@ -698,6 +698,10 @@ test("backend errors render without the removed answer-version element", async (
 
   assert.doesNotThrow(() => render({ code: "rule_query_model_timeout", status: 504 }, "latest"));
   assert.equal(ui.verdictTitle.textContent, "证据准备模型超时");
+  assert.doesNotThrow(() => render({ requestFailure: true, code: "evidence_model_unable_to_select", status: 503 }, "latest"));
+  assert.equal(ui.verdictTitle.textContent, "证据选材未完成");
+  assert.match(ui.verdictBody.textContent, /未调用最终裁定模型/u);
+  assert.doesNotMatch(ui.verdictBody.textContent, /状态尚未确认/u);
   assert.doesNotThrow(() => render({ requestFailure: true, status: 503, publicMessage: "暂时失败" }, "latest"));
   assert.equal(ui.verdictTitle.textContent, "裁定服务请求失败");
   assert.doesNotThrow(() => render({ code: "ruling_version_mismatch", effectiveVersion: "latest" }, "latest"));
@@ -722,7 +726,7 @@ test("backend answers bypass persistent browser cache and bust static assets", a
     readFile(new URL("../config.json", import.meta.url), "utf8"),
   ]);
   const config = JSON.parse(configText.replace(/^\uFEFF/u, ""));
-  assert.match(html, /src\/app\.js\?v=20260924-history-1000-1/u);
+  assert.match(html, /src\/app\.js\?v=20261002-evidence-selection-1/u);
   assert.match(html, /src\/styles\.css\?v=20260923-locale-glass-1/u);
   assert.equal(config.answerApiUrl, "https://ocg-ruling-assistant.vercel.app/api/answer");
   assert.match(app, /cache: "no-store"/u);
