@@ -319,6 +319,31 @@ test("a selection cannot name an alias that was not actually offered", async () 
   await assert.rejects(provider.retrieve(input), /gemini_bounded_selected_identity_not_offered/u);
 });
 
+test('selection IDs are usable without a separate model-reported ability verdict', async () => {
+  const { provider, requests } = fixture({ select: delivered => ({
+    selectedIds: [delivered.groups.flatMap(group => group.units || [])[0][0]],
+    note: 'A remaining premise is not specified in the question.',
+  }) });
+  const result = await provider.retrieve(input);
+  assert.equal(requests.length, 2, 'a complete ID selection is not retried for an absent optional verdict');
+  assert.equal(result.packing.selectedEntryChars.length, 1);
+});
+
+test('an explicit selection failure preserves its cause and reports a known preparation failure', async () => {
+  const note = 'The provided material does not resolve the remaining question.';
+  const { provider, requests } = fixture({ select: { selectedIds: [], unableToSelect: true, note } });
+  await assert.rejects(provider.retrieve(input), error => {
+    assert.equal(error.code, 'evidence_model_unable_to_select');
+    assert.equal(error.statusCode, 503);
+    assert.deepEqual(error.boundedRetrieval.selectionFailure, { selectedIds: [], unableToSelect: true, note });
+    assert.equal(publicAnswerHttpError(error).statusCode, 503);
+    assert.equal(publicAnswerHttpError(error).payload.code, error.code);
+    assert.equal(error.boundedRetrieval.finalModelCalls, 0);
+    return true;
+  });
+  assert.equal(requests.length, 2, 'a model-reported inability does not silently repeat upstream or selection calls');
+});
+
 test('unknown selection aliases get one measured reselection using the identical offered material', async () => {
   let attempts = 0;
   const events = [];
