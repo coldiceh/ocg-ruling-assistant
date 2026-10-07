@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "builtAtUtc": "2026-10-06T23:03:05.682Z",
-  "dataRevision": "02903b2e48bff38fefa3767acb9ac9dc65bd27883141198960b410c40b56f67d",
+  "builtAtUtc": "2026-10-07T23:39:09.978Z",
+  "dataRevision": "da88981c9b0c6a2693766682eba1620427b2eeab88456d75d213838883e16a85",
   "model": {
     "id": "Qwen/Qwen3-Embedding-0.6B",
     "revision": "97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3"
@@ -25,24 +25,24 @@
   "inputContractSha256": "bc6634e9180568b7144dd456be8f2bec81007468a10fe60b838ce83114e91392",
   "corpusFile": "corpus.json.gz",
   "corpusEncoding": "gzip",
-  "corpusSha256": "a63371c46fae0848b335de45c5d3c3361a962a802da9b75edc2093c986bd6c14",
-  "corpusBytes": 301176571,
-  "corpusCompressedSha256": "034de77d9143b103c9cf0a92be9e17481c8e8ea49568220e023f49b23786bddb",
-  "corpusCompressedBytes": 36048800,
+  "corpusSha256": "39f6a53cfb6d53508aa3e251192e47870c989fe9b3db8959e38df2e1ef2c85df",
+  "corpusBytes": 301245243,
+  "corpusCompressedSha256": "58171ff4a10bea2b533b45c766c35e9f4f10c074bf9843c81a5a8f0465b6ed83",
+  "corpusCompressedBytes": 36070378,
   "candidateCount": 37404,
   "uniqueDocumentViews": 74654,
   "lexicalIndex": {
     "file": "lexical-index.bin.gz",
     "encoding": "gzip",
-    "bytes": 105709184,
-    "sha256": "4a1bd413d9372ccd3beaa3ac3b84246bd2abc7d7218627e0439bf67a604b97ed",
-    "compressedBytes": 27581899,
-    "compressedSha256": "bf38352d86ae5baeaa04762dd983733288a3c426cbc28c37615d0560fb6b0443"
+    "bytes": 105710328,
+    "sha256": "a44483da4d3780f56cb5df958297236e8db6f937282c4a50ba65e7dfc81ff357",
+    "compressedBytes": 27592860,
+    "compressedSha256": "98def86171975281e4cb47e5ac228da33919d95efd359b3d613f7a02c2cfb7fd"
   },
-  "sourceRuleSha256": "6f82f0b40295c1f81282bee5b67728f215be66d96cb83c0e3df6f5ea8cbbcaed",
+  "sourceRuleSha256": "73f200294c9ce48d03d640e08dce5bcd77fb10bc1ea13352ff15b62398300c2b",
   "privateEvaluationInputs": false,
   "externalCalls": 0,
-  "embeddingComputations": 83,
-  "vectorIndexSha256": "3fde4e984a5d0d76879364e6253e95b421292e31ed26e0e60935ce17e6349d8c",
-  "reusedVectorCount": 74571
+  "embeddingComputations": 36,
+  "vectorIndexSha256": "fa3e62aa7d0a083997e24c7092f1190a736c209ce264afb378505b44f9693049",
+  "reusedVectorCount": 74618
 }

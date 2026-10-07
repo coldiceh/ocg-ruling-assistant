@@ -1,13 +1,13 @@
 {
   "schemaVersion": 1,
   "status": "synced-with-warnings",
-  "generatedAt": "2026-10-06T22:57:51.919Z",
+  "generatedAt": "2026-10-07T23:32:53.931Z",
   "freshnessDays": 7,
   "sourceFreshness": "fresh",
-  "previousSourceRevision": "32671",
+  "previousSourceRevision": "32674",
   "sourceRevision": "32674",
   "pendingQaIds": [],
-  "lastSuccessfulSyncAt": "2026-10-06T22:57:51.919Z",
+  "lastSuccessfulSyncAt": "2026-10-07T23:32:53.931Z",
   "lastFailedSyncAt": null,
   "syncFailureCount": 0,
   "aliasWarnings": [],
@@ -18,10 +18,10 @@
   "parseFailedCount": 0,
   "contentQualityWarningCount": 0,
   "dataQualityWarningCount": 0,
-  "newItems": 2,
-  "changedItems": 36,
-  "removedItems": 1,
-  "qaDetailCursor": 1128,
+  "newItems": 0,
+  "changedItems": 14,
+  "removedItems": 0,
+  "qaDetailCursor": 1193,
   "qaDiscoveryCardCount": 14341,
   "qaDiscoveryQaCount": 11519,
   "qaDiscoveryComplete": true,
@@ -58,15 +58,5 @@
     "Q&A 13922 was removed upstream (404)"
   ],
   "sourceRetirementWarningCount": 2,
-  "changedPaths": [
-    "/data/card/5615",
-    "/data/card/13813",
-    "/data/card/13920",
-    "/data/card/13939",
-    "/data/card/13954",
-    "/data/card/14081",
-    "/data/card/14245",
-    "/data/card/23552",
-    "/data/card/23561"
-  ]
+  "changedPaths": []
 }

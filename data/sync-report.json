@@ -1,10 +1,10 @@
 {
-  "generatedAt": "2026-10-06T22:57:51.919Z",
+  "generatedAt": "2026-10-07T23:32:53.931Z",
   "cardCount": 14424,
   "rulingCount": 40305,
   "cardAliasCount": 49616,
   "qaIndexCount": 37226,
-  "qaIndexBytes": 64528515,
+  "qaIndexBytes": 64607151,
   "maxQaIndexBytes": 94371840,
   "syncAllReleasedCards": true,
   "syncOnlyReleasedCards": true,
@@ -19,8 +19,8 @@
     "prioritySelectedCount": 2,
     "hotSelectedCount": 64,
     "coverageSelectedCount": 64,
-    "detailCursor": 1064,
-    "nextDetailCursor": 1128
+    "detailCursor": 1128,
+    "nextDetailCursor": 1193
   },
   "pendingQaCount": 0,
   "qaDiscoveryCardCount": 14341,
@@ -46,15 +46,5 @@
     "Q&A 13922 was removed upstream (404)"
   ],
   "dataQualityWarnings": [],
-  "changedPaths": [
-    "/data/card/5615",
-    "/data/card/13813",
-    "/data/card/13920",
-    "/data/card/13939",
-    "/data/card/13954",
-    "/data/card/14081",
-    "/data/card/14245",
-    "/data/card/23552",
-    "/data/card/23561"
-  ]
+  "changedPaths": []
 }
