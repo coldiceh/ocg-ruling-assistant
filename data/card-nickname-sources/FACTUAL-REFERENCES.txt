@@ -1,0 +1,10 @@
+LicenseRef-Factual-References is a scope notice, not a third-party license grant.
+
+The Baige and MyCard references record only the necessary short card-name,
+nickname, CID and Japanese-name identity facts with a source URL and revision.
+No card effect text, rulings, forum article body, images or complete Baige
+database are included in this nickname package. No general permission to
+redistribute those source works is asserted.
+
+MIT-licensed dictionary inputs are separately attributed in ocgbot-LICENSE.txt
+and yugioh-slang-LICENSE.txt. The fixed ocgbot input retains its original bytes.

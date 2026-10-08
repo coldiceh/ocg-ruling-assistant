@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "entries": [
+    {
+      "alias": "凤凰人",
+      "cardId": "16524",
+      "jaName": "D-HERO デストロイフェニックスガイ",
+      "sourceId": "yugioh-slang-29ee2df4"
+    },
+    {
+      "alias": "毁灭凤凰人",
+      "cardId": "16524",
+      "jaName": "D-HERO デストロイフェニックスガイ",
+      "sourceId": "mycard-phoenix-short-name"
+    },
+    {
+      "alias": "命运英雄 毁灭凤凰人",
+      "cardId": "16524",
+      "jaName": "D-HERO デストロイフェニックスガイ",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "alias": "龟G",
+      "cardId": "23548",
+      "jaName": "レイズ・ムーンの朔 スクイーズ",
+      "sourceId": "mycard-mcpro-20260924"
+    }
+  ]
+}

@@ -8,6 +8,7 @@ import {
 
 test('Gemini rule and QA provider preserves its exact packing in the prepared continuation', async () => {
   const calls = [];
+  const preloadedAssets = { geminiAssets: Promise.resolve({}), geminiIndexes: Promise.resolve({}) };
   const evidence = {
     cardTexts: [],
     userProvidedCardTexts: [],
@@ -46,6 +47,7 @@ test('Gemini rule and QA provider preserves its exact packing in the prepared co
     records: [],
     qaRecords: [],
     prepareForContinuation: true,
+    preloadedAssets,
     nonCardElapsedBeforePipelineMs: 100,
     cardModelInvoker: async () => JSON.stringify({
       cardNames: [{ name: 'unbound model value' }],
@@ -67,6 +69,8 @@ test('Gemini rule and QA provider preserves its exact packing in the prepared co
   });
 
   assert.equal(calls.length, 1);
+  assert.equal(calls[0].assetsPromise, preloadedAssets.geminiAssets);
+  assert.equal(calls[0].indexesPromise, preloadedAssets.geminiIndexes);
   assert.ok(calls[0].elapsedBeforeRetrievalMs >= 100);
   assert.equal(calls[0].userQuery, 'Synthetic integration question');
   assert.equal(calls[0].answerLocale, 'ja');
@@ -107,6 +111,7 @@ test('Gemini rule and QA provider preserves its exact packing in the prepared co
     },
   });
   assert.equal(finalPrompt, packing.prompt);
+  assert.deepEqual(final.debug.retrievalTimingsMs, { plan: 1, selection: 2 });
   assert.equal(final.usedEvidence.some((item) => item.id === 'rule-unit-1'), true);
   assert.equal(final.usedEvidence.find((item) => item.id === 'rule-unit-1').text, evidence.rawRelatedEvidence[0].text);
 });

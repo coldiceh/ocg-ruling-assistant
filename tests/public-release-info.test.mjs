@@ -1,8 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {getPublicReleaseInfo} from '../backend/publicReleaseInfo.mjs';
+import {getCardNicknameDataInfo} from '../backend/ragCardNicknameData.mjs';
 const readRelease = (...args) => {
-  const { runtimeMemory, ...release } = getPublicReleaseInfo(...args);
+  const { runtimeMemory, cardNicknames, ...release } = getPublicReleaseInfo(...args);
+  assert.deepEqual(cardNicknames, getCardNicknameDataInfo());
+  assert.ok(cardNicknames.entries > 0);
+  assert.match(cardNicknames.sha256, /^[a-f0-9]{64}$/);
   assert.deepEqual(Object.keys(runtimeMemory).sort(),
     ['arrayBuffers', 'external', 'heapLimitBytes', 'heapTotal', 'heapUsed', 'rss']);
   for (const value of Object.values(runtimeMemory)) assert.ok(Number.isFinite(value) && value >= 0);

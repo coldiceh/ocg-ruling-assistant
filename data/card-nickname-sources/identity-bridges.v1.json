@@ -1,0 +1,2203 @@
+{
+  "schemaVersion": 1,
+  "sourceId": "baige-card-identities-20261008",
+  "sourceSha256": "ceb94952cb17dfc678ffc49b6f8ddac2b89308f72645b32249584e0a74166ee9",
+  "entries": [
+    {
+      "name": "7",
+      "cardId": "6053",
+      "jaName": "7",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "AtoZ-神龙歼灭炮",
+      "cardId": "12589",
+      "jaName": "AtoZ－ドラゴン・バスターキャノン",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "B-破坏龙兽",
+      "cardId": "12583",
+      "jaName": "B－バスター・ドレイク",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "DDD 双晓王 末法神",
+      "cardId": "11994",
+      "jaName": "DDD双暁王カリ・ユガ",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "DDD 怒涛大王 决策凯撒",
+      "cardId": "13081",
+      "jaName": "DDD怒涛大王エグゼクティブ・シーザー",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "DDD 深渊王 比尔伽美斯",
+      "cardId": "14204",
+      "jaName": "DDD深淵王ビルガメス",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "DDD 赦俿王 死亡机降神",
+      "cardId": "16849",
+      "jaName": "DDD赦俿王デス・マキナ",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "No.39 希望皇 彼端超霍普",
+      "cardId": "11132",
+      "jaName": "No.39 希望皇ビヨンド・ザ・ホープ",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "No.39 希望皇 霍普·升腾",
+      "cardId": "17255",
+      "jaName": "No.39 希望皇ホープ・ライジング",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "No.59 背反之料理人",
+      "cardId": "12548",
+      "jaName": "No.59 背反の料理人",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "No.95 银河眼暗物质龙",
+      "cardId": "11651",
+      "jaName": "No.95 ギャラクシーアイズ・ダークマター・ドラゴン",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "O-超越灵魂",
+      "cardId": "6674",
+      "jaName": "O－オーバーソウル",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "PSY骨架王·Ω",
+      "cardId": "12074",
+      "jaName": "PSYフレームロード・Ω",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "PSY骨架装备·γ",
+      "cardId": "12070",
+      "jaName": "PSYフレームギア・γ",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "PSY骨架驱动者",
+      "cardId": "12067",
+      "jaName": "PSYフレーム・ドライバー",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "S：P小夜",
+      "cardId": "19188",
+      "jaName": "S：Pリトルナイト",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "“罪宝狩猎之恶魔”",
+      "cardId": "19196",
+      "jaName": "“罪宝狩りの悪魔”",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "万物创世龙",
+      "cardId": "14809",
+      "jaName": "万物創世龍",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "三叉龙之影灵衣",
+      "cardId": "11485",
+      "jaName": "トリシューラの影霊衣",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "三战之才",
+      "cardId": "15296",
+      "jaName": "三戦の才",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "五神龙",
+      "cardId": "5502",
+      "jaName": "F・G・D",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "五阵魔术师",
+      "cardId": "13690",
+      "jaName": "クインテット・マジシャン",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "亚马逊战士长",
+      "cardId": "17612",
+      "jaName": "アマゾネスの戦士長",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "亲历纯爱妖精·幸福妖精",
+      "cardId": "18004",
+      "jaName": "エピュアリィ・ハピネス",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "亲历纯爱妖精·黑暗妖精",
+      "cardId": "18831",
+      "jaName": "エピュアリィ・ノアール",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "从骑士 特露迪娅",
+      "cardId": "19373",
+      "jaName": "従騎士トゥルーデア",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "仪式魔人 解放者",
+      "cardId": "8472",
+      "jaName": "儀式魔人リリーサー",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "体温上升",
+      "cardId": "4332",
+      "jaName": "体温の上昇",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "俱舍怒威族·芬里尔狼",
+      "cardId": "17768",
+      "jaName": "クシャトリラ・フェンリル",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "俱舍怒威族·阿莱斯哈特",
+      "cardId": "18191",
+      "jaName": "クシャトリラ・アライズハート",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "假面英雄 暗爪",
+      "cardId": "11313",
+      "jaName": "M・HERO ダーク・ロウ",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "儚无水木",
+      "cardId": "14275",
+      "jaName": "儚無みずき",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "元素英雄 固态侠",
+      "cardId": "13638",
+      "jaName": "E・HERO ソリッドマン",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "元素英雄 天空侠",
+      "cardId": "6784",
+      "jaName": "E・HERO エアーマン",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "元素英雄 新宇侠",
+      "cardId": "6653",
+      "jaName": "E・HERO ネオス",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "元素英雄 水泡侠",
+      "cardId": "6393",
+      "jaName": "E・HERO バブルマン",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "元素英雄 火焰翼侠",
+      "cardId": "6344",
+      "jaName": "E・HERO フレイム・ウィングマン",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "元素英雄 绝对零度侠",
+      "cardId": "8129",
+      "jaName": "E・HERO アブソルートZero",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "元素英雄 闪光新宇翼侠",
+      "cardId": "17443",
+      "jaName": "E・HERO シャイニング・ネオス・ウィングマン",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "先史遗产 内布拉星象盘",
+      "cardId": "10972",
+      "jaName": "先史遺産ネブラ・ディスク",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "六武之门",
+      "cardId": "8602",
+      "jaName": "六武の門",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "六武众之影-紫炎",
+      "cardId": "10217",
+      "jaName": "六武衆の影－紫炎",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "兴奋童话动物家族",
+      "cardId": "15523",
+      "jaName": "わくわくメルフィーズ",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "冥王结界波",
+      "cardId": "14742",
+      "jaName": "冥王結界波",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "冰剑龙 幻冰龙",
+      "cardId": "17069",
+      "jaName": "氷剣竜ミラジェイド",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "冰水之霓石精",
+      "cardId": "16812",
+      "jaName": "氷水のエジル",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "冰狱龙 三叉龙",
+      "cardId": "13972",
+      "jaName": "氷獄龍 トリシューラ",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "冰结界之龙 三叉龙",
+      "cardId": "8732",
+      "jaName": "氷結界の龍 トリシューラ",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "冲浪检察官",
+      "cardId": "13405",
+      "jaName": "インスペクト・ボーダー",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "刚炼装勇士·银金公主",
+      "cardId": "13507",
+      "jaName": "ヘビーメタルフォーゼ・エレクトラム",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "创圣魔导王 恩底弥翁",
+      "cardId": "14439",
+      "jaName": "創聖魔導王 エンディミオン",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "劈穿壹世坏的弦声",
+      "cardId": "17813",
+      "jaName": "壱世壊を劈く弦声",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "力量结合",
+      "cardId": "6398",
+      "jaName": "パワー・ボンド",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "励辉士 入魔蝇王",
+      "cardId": "10942",
+      "jaName": "励輝士 ヴェルズビュート",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "升灵术师 奘玄",
+      "cardId": "5247",
+      "jaName": "昇霊術師 ジョウゲン",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "升阶魔法-七皇之剑",
+      "cardId": "11087",
+      "jaName": "RUM－七皇の剣",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "升阶魔法-跳越之力",
+      "cardId": "12330",
+      "jaName": "RUM－スキップ・フォース",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "半龙女仆·地慈龙女",
+      "cardId": "14758",
+      "jaName": "ドラゴンメイド・エルデ",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "半龙女仆·天风龙女",
+      "cardId": "14764",
+      "jaName": "ドラゴンメイド・ルフト",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "半龙女仆·客厅龙女",
+      "cardId": "14763",
+      "jaName": "ドラゴンメイド・パルラ",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "半龙女仆·寝室龙女",
+      "cardId": "15012",
+      "jaName": "ドラゴンメイド・チェイム",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "半龙女仆·洗衣龙女",
+      "cardId": "14759",
+      "jaName": "ドラゴンメイド・ラドリー",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "半龙女仆·育婴龙女",
+      "cardId": "14757",
+      "jaName": "ドラゴンメイド・ナサリー",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "半龙女仆·蒸馏室龙女",
+      "cardId": "14761",
+      "jaName": "ドラゴンメイド・ティルル",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "半龙女仆·赤焰龙女",
+      "cardId": "14762",
+      "jaName": "ドラゴンメイド・フランメ",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "半龙女仆·龙女管家",
+      "cardId": "14765",
+      "jaName": "ドラゴンメイド・ハスキー",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "卫星闪灵双人交叉金臂勾",
+      "cardId": "17829",
+      "jaName": "スプライト・ダブルクロス",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "历练纯爱妖精·幸福妖精",
+      "cardId": "18007",
+      "jaName": "エクスピュアリィ・ハピネス",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "历练纯爱妖精·黑暗妖精",
+      "cardId": "18008",
+      "jaName": "エクスピュアリィ・ノアール",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "原始生命态 尼比鲁",
+      "cardId": "14741",
+      "jaName": "原始生命態ニビル",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "双穹之骑士 阿斯特拉姆",
+      "cardId": "14297",
+      "jaName": "双穹の騎士アストラム",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "古代的机械合成龙",
+      "cardId": "12677",
+      "jaName": "古代の機械合成竜",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "古代的机械暗黑巨人",
+      "cardId": "19847",
+      "jaName": "古代の機械暗黒巨人",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "召唤兽 普尔加托里奥",
+      "cardId": "12847",
+      "jaName": "召喚獣プルガトリオ",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "召唤兽 梅尔卡巴",
+      "cardId": "12849",
+      "jaName": "召喚獣メルカバー",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "召唤师 阿莱斯特",
+      "cardId": "12843",
+      "jaName": "召喚師アレイスター",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "召唤限制器",
+      "cardId": "7652",
+      "jaName": "サモンリミッター",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "命运英雄 毁灭凤凰人",
+      "cardId": "16524",
+      "jaName": "D-HERO デストロイフェニックスガイ",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "命运英雄 魔性人",
+      "cardId": "6949",
+      "jaName": "D-HERO ディアボリックガイ",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "唤醒你沉睡的元素英雄",
+      "cardId": "17247",
+      "jaName": "Wake Up Your E・HERO",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "喷气同调士",
+      "cardId": "11620",
+      "jaName": "ジェット・シンクロン",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "圣杯A",
+      "cardId": "7623",
+      "jaName": "カップ・オブ・エース",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "圣殿的水遣",
+      "cardId": "16749",
+      "jaName": "聖殿の水遣い",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "块斩机 算子拉普拉斯",
+      "cardId": "14752",
+      "jaName": "塊斬機ラプラシアン",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "墓穴的指名者",
+      "cardId": "13619",
+      "jaName": "墓穴の指名者",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "增殖的G",
+      "cardId": "9455",
+      "jaName": "増殖するG",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "壹世坏-珍珠世界",
+      "cardId": "17462",
+      "jaName": "壱世壊＝ペルレイノ",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "大日女之御巫",
+      "cardId": "18017",
+      "jaName": "オオヒメの御巫",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "天球之圣刻印",
+      "cardId": "13496",
+      "jaName": "天球の聖刻印",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "天霆号 阿宙斯",
+      "cardId": "15524",
+      "jaName": "天霆號アーゼウス",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "天魔之声选器-『异响鸣琴』",
+      "cardId": "19385",
+      "jaName": "天魔の聲選器－『ヴァルモニカ』",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "太阳神之翼神龙",
+      "cardId": "5000",
+      "jaName": "ラーの翼神竜",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "太阳神之翼神龙-球体形",
+      "cardId": "11927",
+      "jaName": "ラーの翼神竜－球体形",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "太阴之咒眼",
+      "cardId": "14422",
+      "jaName": "セレンの呪眼",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "奇迹之魔导剑士",
+      "cardId": "19187",
+      "jaName": "奇跡の魔導剣士",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "奥西里斯之天空龙",
+      "cardId": "4999",
+      "jaName": "オシリスの天空竜",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "娱乐伙伴 异色眼同调士",
+      "cardId": "13129",
+      "jaName": "EMオッドアイズ・シンクロン",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "娱乐伙伴 灵摆魔术家",
+      "cardId": "11615",
+      "jaName": "EMペンデュラム・マジシャン",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "娱乐伙伴 骷髅杂技小丑",
+      "cardId": "11938",
+      "jaName": "EMドクロバット・ジョーカー",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "宇宙旋风",
+      "cardId": "12464",
+      "jaName": "コズミック・サイクロン",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "守护龙 厄尔庇",
+      "cardId": "14128",
+      "jaName": "守護竜エルピィ",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "守护龙 毗斯缇",
+      "cardId": "14129",
+      "jaName": "守護竜ピスティ",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "守护龙 阿迦佩因",
+      "cardId": "14130",
+      "jaName": "守護竜アガーペイン",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "宝玉兽 青玉飞马",
+      "cardId": "7078",
+      "jaName": "宝玉獣 サファイア・ペガサス",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "宵星之机神 丁吉尔苏",
+      "cardId": "14288",
+      "jaName": "宵星の機神ディンギルス",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "对极英雄 混沌侠",
+      "cardId": "11310",
+      "jaName": "C・HERO カオス",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "崇光之宣告者",
+      "cardId": "11377",
+      "jaName": "崇光なる宣告者",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "嵌合要塞龙",
+      "cardId": "7403",
+      "jaName": "キメラテック・フォートレス・ドラゴン",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "巨大战舰 四腕",
+      "cardId": "6498",
+      "jaName": "巨大戦艦 テトラン",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "巨斧袭击者",
+      "cardId": "4084",
+      "jaName": "アックス・レイダー",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "幻兽机 哥萨克龙",
+      "cardId": "10534",
+      "jaName": "幻獣機ドラゴサック",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "幻变骚灵·十六巫赫斯提",
+      "cardId": "13417",
+      "jaName": "オルターガイスト・ヘクスティア",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "幻变骚灵·多功能诈骗者",
+      "cardId": "13463",
+      "jaName": "オルターガイスト・マルチフェイカー",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "幻变骚灵·查询昆提兰那克",
+      "cardId": "13231",
+      "jaName": "オルターガイスト・クンティエリ",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "幻影英雄 三一人",
+      "cardId": "9196",
+      "jaName": "V・HERO トリニティー",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "幻影骑士团 无声靴",
+      "cardId": "12199",
+      "jaName": "幻影騎士団サイレントブーツ",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "幻影骑士团 沾尘袍",
+      "cardId": "12198",
+      "jaName": "幻影騎士団ダスティローブ",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "幻影骑士团 破洞鳞甲",
+      "cardId": "15482",
+      "jaName": "幻影騎士団ティアースケイル",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "幻影骑士团 裂头盔",
+      "cardId": "12201",
+      "jaName": "幻影騎士団クラックヘルム",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "幻影骑士团 锈蚀月刃斧",
+      "cardId": "14054",
+      "jaName": "幻影騎士団ラスティ・バルディッシュ",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "幻想之见习魔导师",
+      "cardId": "12817",
+      "jaName": "幻想の見習い魔導師",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "废品战士",
+      "cardId": "7696",
+      "jaName": "ジャンク・ウォリアー",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "异色眼灵摆龙",
+      "cardId": "11213",
+      "jaName": "オッドアイズ・ペンデュラム・ドラゴン",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "引导的圣女 奎姆",
+      "cardId": "18474",
+      "jaName": "導きの聖女クエム",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "强欲而谦虚之壶",
+      "cardId": "8993",
+      "jaName": "強欲で謙虚な壺",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "强欲而贪欲之壶",
+      "cardId": "12465",
+      "jaName": "強欲で貪欲な壺",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "征服斗魂 狂爱博士",
+      "cardId": "18730",
+      "jaName": "VS Dr.マッドラヴ",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "御影志士",
+      "cardId": "14663",
+      "jaName": "御影志士",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "怒炎坏兽 多哥兰",
+      "cardId": "12038",
+      "jaName": "怒炎壊獣ドゴラン",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "急袭猛禽-武库猎鹰",
+      "cardId": "12868",
+      "jaName": "RR－アーセナル・ファルコン",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "急袭猛禽-究极猎鹰",
+      "cardId": "12325",
+      "jaName": "RR－アルティメット・ファルコン",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "急袭猛禽-革命猎鹰",
+      "cardId": "11724",
+      "jaName": "RR－レヴォリューション・ファルコン",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "怪粉坏兽 加达拉",
+      "cardId": "12248",
+      "jaName": "怪粉壊獣ガダーラ",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "恐吓爪牙族·莱希哈特",
+      "cardId": "17124",
+      "jaName": "スケアクロー・ライヒハート",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "恐吓爪牙族·莱特哈特",
+      "cardId": "17452",
+      "jaName": "スケアクロー・ライトハート",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "恐龙摔跤手·潘克拉辛角龙",
+      "cardId": "13896",
+      "jaName": "ダイナレスラー・パンクラトプス",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "恶魔科学怪人",
+      "cardId": "4426",
+      "jaName": "デビル・フランケン",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "惑星探查车",
+      "cardId": "10232",
+      "jaName": "惑星探査車",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "战华之义-关云",
+      "cardId": "14821",
+      "jaName": "戦華の義－関雲",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "战华之仲-孙谋",
+      "cardId": "14817",
+      "jaName": "戦華の仲－孫謀",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "战华之叛-吕奉",
+      "cardId": "15716",
+      "jaName": "戦華の叛－呂奉",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "战华之妙-鲁敬",
+      "cardId": "14819",
+      "jaName": "戦華の妙－魯敬",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "战华之孟-曹德",
+      "cardId": "15006",
+      "jaName": "戦華の孟－曹徳",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "战华之暴-董颖",
+      "cardId": "17136",
+      "jaName": "戦華の暴－董穎",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "战华之来-张远",
+      "cardId": "15007",
+      "jaName": "戦華の来－張遠",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "战华之雄-张德",
+      "cardId": "14822",
+      "jaName": "戦華の雄－張徳",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "战华史略-三顾礼迎",
+      "cardId": "14864",
+      "jaName": "戦華史略－三顧礼迎",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "战华史略-东南之风",
+      "cardId": "15294",
+      "jaName": "戦華史略－東南之風",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "技能抽取",
+      "cardId": "5740",
+      "jaName": "スキルドレイン",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "抒情歌鸲-天青石鹡鸰",
+      "cardId": "16391",
+      "jaName": "LL－セレスト・ワグテイル",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "护宝炮妖·姬特",
+      "cardId": "17063",
+      "jaName": "スプリガンズ・キット",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "抹杀之指名者",
+      "cardId": "14627",
+      "jaName": "抹殺の指名者",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "拉比林斯迷宫欢迎",
+      "cardId": "17369",
+      "jaName": "ウェルカム・ラビュリンス",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "拉比林斯迷宫欢迎欢迎大欢迎",
+      "cardId": "18222",
+      "jaName": "ビッグウェルカム・ラビュリンス",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "指出出目",
+      "cardId": "10439",
+      "jaName": "出目出し",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "捕食植物 犀角龙",
+      "cardId": "12870",
+      "jaName": "捕食植物ドラゴスタペリア",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "捕食植物 青锁龙森蚺",
+      "cardId": "14944",
+      "jaName": "捕食植物ヴェルテ・アナコンダ",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "效果遮蒙者",
+      "cardId": "8933",
+      "jaName": "エフェクト・ヴェーラー",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "救援ACE队 消防栓",
+      "cardId": "17994",
+      "jaName": "R－ACEハイドラント",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "救援ACE队 脉冲灭火员",
+      "cardId": "17991",
+      "jaName": "R－ACEインパルス",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "救祓少女·马尔法",
+      "cardId": "17427",
+      "jaName": "エクソシスター・マルファ",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "教导的圣女 艾克莉西娅",
+      "cardId": "15239",
+      "jaName": "教導の聖女エクレシア",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "斩机 圆武",
+      "cardId": "17430",
+      "jaName": "斬機サーキュラー",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "新空间侠·水波海豚",
+      "cardId": "6768",
+      "jaName": "N・アクア・ドルフィン",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "方程式同调士",
+      "cardId": "9118",
+      "jaName": "フォーミュラ・シンクロン",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "旋风剑",
+      "cardId": "6814",
+      "jaName": "旋風剣",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "无限起动要塞 百万吨百臂狂风",
+      "cardId": "14401",
+      "jaName": "無限起動要塞メガトンゲイル",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "时空之灵摆读阵",
+      "cardId": "12913",
+      "jaName": "時空のペンデュラムグラフ",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "时间潜行者·表盘修复师",
+      "cardId": "14356",
+      "jaName": "クロノダイバー・リダン",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "星义绿廊兽",
+      "cardId": "14998",
+      "jaName": "ネメシス・コリドー",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "星刻之魔术师",
+      "cardId": "12914",
+      "jaName": "星刻の魔術師",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "星尘尾迹",
+      "cardId": "16192",
+      "jaName": "スターダスト・トレイル",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "星尘龙",
+      "cardId": "7734",
+      "jaName": "スターダスト・ドラゴン",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "星杯的神子 夏娃",
+      "cardId": "14285",
+      "jaName": "星杯の神子イヴ",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "星遗物印刻的伤痕",
+      "cardId": "13427",
+      "jaName": "星遺物が刻む傷痕",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "星霜之灵摆读阵",
+      "cardId": "12912",
+      "jaName": "星霜のペンデュラムグラフ",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "暗之诱惑",
+      "cardId": "7570",
+      "jaName": "闇の誘惑",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "曾被称为神的龟",
+      "cardId": "8808",
+      "jaName": "かつて神と呼ばれた亀",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "月女神之镞",
+      "cardId": "17469",
+      "jaName": "月女神の鏃",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "未来No.0 未来龙皇 霍普",
+      "cardId": "14958",
+      "jaName": "FNo.0 未来龍皇ホープ",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "末那愚子族·小温顺",
+      "cardId": "18477",
+      "jaName": "マナドゥム・ミーク",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "末那愚子族·里姆哈特",
+      "cardId": "18475",
+      "jaName": "マナドゥム・リウムハート",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "机甲部队·毁灭武装力量",
+      "cardId": "16514",
+      "jaName": "マシンナーズ・ルインフォース",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "机甲金属抓手兵",
+      "cardId": "15182",
+      "jaName": "マシンナーズ・メタルクランチ",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "梦幻崩界 伊娃力丝",
+      "cardId": "13571",
+      "jaName": "夢幻崩界イヴリース",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "梭之七音服·格蕾西娅",
+      "cardId": "16088",
+      "jaName": "ソドレミコード・グレーシア",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "次元吸引者",
+      "cardId": "14740",
+      "jaName": "ディメンション・アトラクター",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "欧尼斯特",
+      "cardId": "7574",
+      "jaName": "オネスト",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "欧贝利斯克之巨神兵",
+      "cardId": "4998",
+      "jaName": "オベリスクの巨神兵",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "正义的同伴 海马侠",
+      "cardId": "6298",
+      "jaName": "正義の味方 カイバーマン",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "死灵之颜",
+      "cardId": "6075",
+      "jaName": "ネクロフェイス",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "死狱乡的导化 阿鲁伯",
+      "cardId": "16195",
+      "jaName": "デスピアの導化アルベル",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "水晶机巧-继承玻纤",
+      "cardId": "13508",
+      "jaName": "水晶機巧－ハリファイバー",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "水晶翼同调龙",
+      "cardId": "12321",
+      "jaName": "クリスタルウィング・シンクロ・ドラゴン",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "波纹防护罩 -波浪之力-",
+      "cardId": "12347",
+      "jaName": "波紋のバリア －ウェーブ・フォース－",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "流天救世星龙",
+      "cardId": "16228",
+      "jaName": "シューティング・セイヴァー・スター・ドラゴン",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "海造贼-双翼之光照号",
+      "cardId": "15322",
+      "jaName": "海造賊－双翼のリュース号",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "海造贼-庄重之大地号",
+      "cardId": "18186",
+      "jaName": "海造賊－荘重のヨルズ号",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "海造贼-豪速之烈火号",
+      "cardId": "15077",
+      "jaName": "海造賊－豪速のブレンネ号",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "海造贼-静寂之暗夜号",
+      "cardId": "15078",
+      "jaName": "海造賊－静寂のメルケ号",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "海造贼-黑胡子船长",
+      "cardId": "15079",
+      "jaName": "海造賊－キャプテン黒髭",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "海龟坏兽 加美西耶勒",
+      "cardId": "12106",
+      "jaName": "海亀壊獣ガメシエル",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "消战者",
+      "cardId": "8617",
+      "jaName": "バトルフェーダー",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "深渊的潜伏者",
+      "cardId": "10354",
+      "jaName": "深淵に潜む者",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "渊眼白龙",
+      "cardId": "12488",
+      "jaName": "ディープアイズ・ホワイト・ドラゴン",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "灰流丽",
+      "cardId": "12950",
+      "jaName": "灰流うらら",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "灵摆呼唤",
+      "cardId": "11940",
+      "jaName": "ペンデュラム・コール",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "灵灭术师 海空",
+      "cardId": "5248",
+      "jaName": "霊滅術師 カイクウ",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "灾厄之星 提·丰",
+      "cardId": "19184",
+      "jaName": "厄災の星ティ・フォン",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "炎斩机 终末西格马",
+      "cardId": "14751",
+      "jaName": "炎斬機ファイナルシグマ",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "炎王兽 甘尼许",
+      "cardId": "13245",
+      "jaName": "炎王獣 ガネーシャ",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "烙印融合",
+      "cardId": "17066",
+      "jaName": "烙印融合",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "熔岩谷锁链龙",
+      "cardId": "9821",
+      "jaName": "ラヴァルバル・チェイン",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "熔岩魔神",
+      "cardId": "5496",
+      "jaName": "溶岩魔神ラヴァ・ゴーレム",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "燃料电池人",
+      "cardId": "8811",
+      "jaName": "燃料電池メン",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "爆裂龙息",
+      "cardId": "5348",
+      "jaName": "バーストブレス",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "爬虫妖女·美杜莎",
+      "cardId": "8456",
+      "jaName": "レプティレス・メデューサ",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "狮子男巫",
+      "cardId": "4584",
+      "jaName": "レオ・ウィザード",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "王之棺",
+      "cardId": "19200",
+      "jaName": "王の棺",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "王宫的敕命",
+      "cardId": "4960",
+      "jaName": "王宮の勅命",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "王家长眠之谷",
+      "cardId": "5533",
+      "jaName": "王家の眠る谷－ネクロバレー",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "珠泪哀歌族·卡雷多哈特",
+      "cardId": "17445",
+      "jaName": "ティアラメンツ・カレイドハート",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "珠泪哀歌族·水仙女人鱼",
+      "cardId": "17444",
+      "jaName": "ティアラメンツ・キトカロス",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "珠泪哀歌族·雷诺哈特",
+      "cardId": "17417",
+      "jaName": "ティアラメンツ・レイノハート",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "珠泪哀歌族型俱舍怒威族",
+      "cardId": "18153",
+      "jaName": "ティアラメンツ・クシャトリラ",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "球形栗子球",
+      "cardId": "11964",
+      "jaName": "クリボール",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "琰魔龙王 红莲魔·厄",
+      "cardId": "12080",
+      "jaName": "琰魔竜王 レッド・デーモン・カラミティ",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "电击鞭",
+      "cardId": "4322",
+      "jaName": "電撃鞭",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "电子界到临者@火灵天星",
+      "cardId": "15036",
+      "jaName": "ジ・アライバル・サイバース＠イグニスター",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "电子终结龙",
+      "cardId": "6397",
+      "jaName": "サイバー・エンド・ドラゴン",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "白银之城的拉比林斯",
+      "cardId": "17360",
+      "jaName": "白銀の城のラビュリンス",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "直播☆双子 姬丝基勒",
+      "cardId": "15624",
+      "jaName": "Live☆Twin キスキル",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "直播☆双子 姬丝基勒·霜精",
+      "cardId": "15978",
+      "jaName": "Live☆Twin キスキル・フロスト",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "直播☆双子 璃拉",
+      "cardId": "15625",
+      "jaName": "Live☆Twin リィラ",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "直播☆双子 璃拉·糖果",
+      "cardId": "15719",
+      "jaName": "Live☆Twin リィラ・トリート",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "相剑大邪-七星龙渊",
+      "cardId": "16846",
+      "jaName": "相剣大邪－七星龍淵",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "真六武众-紫炎",
+      "cardId": "9332",
+      "jaName": "真六武衆－シエン",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "真炎王 凤凰不死鸟",
+      "cardId": "19404",
+      "jaName": "真炎王 ポニクス",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "真炎龙 白界龙",
+      "cardId": "18498",
+      "jaName": "真炎竜アルビオン",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "真龙皇 法·王·兽",
+      "cardId": "12960",
+      "jaName": "真竜皇V.F.D.",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "睡狮子",
+      "cardId": "4127",
+      "jaName": "眠れる獅子",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "破械神 萨巴拉",
+      "cardId": "18806",
+      "jaName": "破械神シャバラ",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "神之宣告",
+      "cardId": "4861",
+      "jaName": "神の宣告",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "神圣防护罩 -反射镜力-",
+      "cardId": "4887",
+      "jaName": "聖なるバリア －ミラーフォース－",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "神影依·拿非利",
+      "cardId": "11258",
+      "jaName": "エルシャドール・ネフィリム",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "神影依·米德拉什",
+      "cardId": "11257",
+      "jaName": "エルシャドール・ミドラーシュ",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "神碑之泉",
+      "cardId": "17381",
+      "jaName": "神碑の泉",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "科技属 戟炮手/爆裂体",
+      "cardId": "14262",
+      "jaName": "TG ハルバード・キャノン／バスター",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "科技属 星斗守护者",
+      "cardId": "14116",
+      "jaName": "TG スター・ガーディアン",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "科技属 超图书馆员",
+      "cardId": "9554",
+      "jaName": "TG ハイパー・ライブラリアン",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "秘旋谍-天才",
+      "cardId": "12689",
+      "jaName": "SPYRAL－ジーニアス",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "积木龙",
+      "cardId": "12433",
+      "jaName": "ブロックドラゴン",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "究极传导恐兽",
+      "cardId": "13010",
+      "jaName": "究極伝導恐獣",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "究极宝玉神 虹桥龙",
+      "cardId": "13484",
+      "jaName": "究極宝玉神 レインボー・オーバー・ドラゴン",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "究极宝玉神 虹龙 超越",
+      "cardId": "17734",
+      "jaName": "究極宝玉神 レインボー・ドラゴン オーバー・ドライブ",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "究极龙魔导师",
+      "cardId": "19718",
+      "jaName": "究極竜魔導師",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "空牙团的英雄 拉法尔",
+      "cardId": "13664",
+      "jaName": "空牙団の英雄 ラファール",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "空牙团的载货 雷克斯",
+      "cardId": "17783",
+      "jaName": "空牙団の積荷 レクス",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "等级偷窃虫",
+      "cardId": "8440",
+      "jaName": "レベル・スティーラー",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "简易融合",
+      "cardId": "6901",
+      "jaName": "簡易融合",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "简素融合",
+      "cardId": "16255",
+      "jaName": "簡素融合",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "精灵兽使 薇茵妲",
+      "cardId": "12761",
+      "jaName": "精霊獣使い ウィンダ",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "红色重启",
+      "cardId": "13622",
+      "jaName": "レッド・リブート",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "红莲蔷薇龙",
+      "cardId": "15996",
+      "jaName": "ブラッド・ローズ・ドラゴン",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "红莲魔龙",
+      "cardId": "7735",
+      "jaName": "レッド・デーモンズ・ドラゴン",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "纯爱妖精",
+      "cardId": "18003",
+      "jaName": "ピュアリィ",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "纯爱妖精·夜妖精",
+      "cardId": "18481",
+      "jaName": "ピュアリィ・リリィ",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "纯爱妖精可爱回忆",
+      "cardId": "18012",
+      "jaName": "ピュアリィ・プリティメモリー",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "纯爱妖精快乐回忆",
+      "cardId": "18011",
+      "jaName": "ピュアリィ・ハッピーメモリー",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "纯爱妖精瞌睡回忆",
+      "cardId": "18524",
+      "jaName": "ピュアリィ・スリーピィメモリー",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "纯爱妖精美味回忆",
+      "cardId": "18013",
+      "jaName": "ピュアリィ・デリシャスメモリー",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "绝对王 J革命",
+      "cardId": "11642",
+      "jaName": "絶対王 バック・ジャック",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "维萨斯-斯塔弗罗斯特",
+      "cardId": "17120",
+      "jaName": "ヴィサス＝スタフロスト",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "编号系猎人",
+      "cardId": "11295",
+      "jaName": "ナンバーズハンター",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "网络小龙",
+      "cardId": "13030",
+      "jaName": "ドラコネット",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "自奏圣乐·伽拉忒亚",
+      "cardId": "13930",
+      "jaName": "オルフェゴール・ガラテア",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "艾乐隆",
+      "cardId": "17553",
+      "jaName": "エルロン",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "英雄到来",
+      "cardId": "7187",
+      "jaName": "ヒーローアライブ",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "荷鲁斯的祝福-多姆泰夫",
+      "cardId": "19154",
+      "jaName": "ホルスの祝福－ドゥアムテフ",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "薰风的巫女 薇茵妲",
+      "cardId": "9167",
+      "jaName": "ガスタの巫女 ウィンダ",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "虚无之统括者",
+      "cardId": "6888",
+      "jaName": "虚無の統括者",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "虚无空间",
+      "cardId": "9153",
+      "jaName": "虚無空間",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "虹光新宇侠",
+      "cardId": "7443",
+      "jaName": "レインボー・ネオス",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "蛇发之咒眼",
+      "cardId": "14689",
+      "jaName": "ゴルゴネイオの呪眼",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "蛇眼梣树灵",
+      "cardId": "19149",
+      "jaName": "スネークアイ・エクセル",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "融合命运",
+      "cardId": "14304",
+      "jaName": "フュージョン・デステニー",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "螺丝刺猬",
+      "cardId": "7701",
+      "jaName": "ボルト・ヘッジホッグ",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "被封印的艾克佐迪亚",
+      "cardId": "4027",
+      "jaName": "封印されしエクゾディア",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "被封印者的右足",
+      "cardId": "4023",
+      "jaName": "封印されし者の右足",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "被封印者的左足",
+      "cardId": "4024",
+      "jaName": "封印されし者の左足",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "装弹枪管增填龙",
+      "cardId": "14487",
+      "jaName": "ヴァレルロード・X・ドラゴン",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "装弹枪管暴动龙",
+      "cardId": "16522",
+      "jaName": "ヴァレルロード・R・ドラゴン",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "装弹枪管狂怒龙",
+      "cardId": "14625",
+      "jaName": "ヴァレルロード・F・ドラゴン",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "装弹枪管狞猛龙",
+      "cardId": "14114",
+      "jaName": "ヴァレルロード・S・ドラゴン",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "解码语者·炽热之魂",
+      "cardId": "14962",
+      "jaName": "デコード・トーカー・ヒートソウル",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "访问码语者",
+      "cardId": "15032",
+      "jaName": "アクセスコード・トーカー",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "赫之圣女 卡尔特西娅",
+      "cardId": "17767",
+      "jaName": "赫の聖女カルテシア",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "赫灼龙 伪装龙",
+      "cardId": "16525",
+      "jaName": "赫灼竜マスカレイド",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "超古深海王 空棘鱼",
+      "cardId": "7434",
+      "jaName": "超古深海王シーラカンス",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "超天新龙 异色眼革命龙",
+      "cardId": "13462",
+      "jaName": "超天新龍オッドアイズ・レボリューション・ドラゴン",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "超融合",
+      "cardId": "7445",
+      "jaName": "超融合",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "超魔导龙骑士-真红眼龙骑士",
+      "cardId": "14952",
+      "jaName": "超魔導竜騎士－ドラグーン・オブ・レッドアイズ",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "转辙地点",
+      "cardId": "18317",
+      "jaName": "転轍地点",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "连神龙",
+      "cardId": "14930",
+      "jaName": "L・G・D",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "迷犬 小玛栗",
+      "cardId": "16521",
+      "jaName": "迷犬メリー",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "速攻同调士",
+      "cardId": "8439",
+      "jaName": "クイック・シンクロン",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "邪恶★双子 姬丝基勒",
+      "cardId": "15626",
+      "jaName": "Evil★Twin キスキル",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "邪恶★双子 璃拉",
+      "cardId": "15627",
+      "jaName": "Evil★Twin リィラ",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "邪神 神之化身",
+      "cardId": "7091",
+      "jaName": "邪神アバター",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "重骑士 普莉梅拉",
+      "cardId": "19372",
+      "jaName": "重騎士プリメラ",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "铁兽战线 弗拉克杜尔",
+      "cardId": "15487",
+      "jaName": "鉄獣戦線 フラクトール",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "银河战士",
+      "cardId": "11114",
+      "jaName": "銀河戦士",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "闪刀姬-燎里",
+      "cardId": "13668",
+      "jaName": "閃刀姫－カガリ",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "闪刀姬-雫空",
+      "cardId": "13669",
+      "jaName": "閃刀姫－シズク",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "闪刀姬-零衣",
+      "cardId": "13670",
+      "jaName": "閃刀姫－レイ",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "闪刀姬-露世",
+      "cardId": "14829",
+      "jaName": "閃刀姫－ロゼ",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "闪刀姬-飒天",
+      "cardId": "13763",
+      "jaName": "閃刀姫－ハヤテ",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "闪刀姬-魁奈",
+      "cardId": "14132",
+      "jaName": "閃刀姫－カイナ",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "闪刀术式-剪斗交刃",
+      "cardId": "14871",
+      "jaName": "閃刀術式－シザーズクロス",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "闪刀术式-妨害波纹",
+      "cardId": "13673",
+      "jaName": "閃刀術式－ジャミングウェーブ",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "闪刀术式-烈火再燃",
+      "cardId": "13672",
+      "jaName": "閃刀術式－アフターバーナー",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "闪刀术式-爆风偏向",
+      "cardId": "13948",
+      "jaName": "閃刀術式－ベクタードブラスト",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "闪刀机-虎鲨加农炮",
+      "cardId": "13677",
+      "jaName": "閃刀機－シャークキャノン",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "闪刀机关-多任务战刀机",
+      "cardId": "13679",
+      "jaName": "閃刀機関－マルチロール",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "闭锁世界的冥神",
+      "cardId": "15741",
+      "jaName": "閉ザサレシ世界ノ冥神",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "闭锁天之月",
+      "cardId": "19932",
+      "jaName": "閉ザサレシ天ノ月",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "防火龙",
+      "cardId": "13082",
+      "jaName": "ファイアウォール・ドラゴン",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "防火龙·暗流体-新电磁泄密风",
+      "cardId": "17263",
+      "jaName": "ファイアウォール・ドラゴン・ダークフルード－ネオテンペスト",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "阿不思的落胤",
+      "cardId": "15245",
+      "jaName": "アルバスの落胤",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "降雷皇 哈蒙",
+      "cardId": "6564",
+      "jaName": "降雷皇ハモン",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "随风旅鸟×帝企",
+      "cardId": "16503",
+      "jaName": "ふわんだりぃず×えんぺん",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "零-最大",
+      "cardId": "8822",
+      "jaName": "ZERO－MAX",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "雷击坏兽 雷鸣龙王",
+      "cardId": "12390",
+      "jaName": "雷撃壊獣サンダー・ザ・キング",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "雷电龙-雷龙",
+      "cardId": "13906",
+      "jaName": "雷電龍－サンダー・ドラゴン",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "霞之谷的巨神鸟",
+      "cardId": "8110",
+      "jaName": "霞の谷の巨神鳥",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "霸王烈龙 异色眼烈火龙",
+      "cardId": "12783",
+      "jaName": "覇王烈竜オッドアイズ・レイジング・ドラゴン",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "霸王眷龙 光辉亚龙",
+      "cardId": "19144",
+      "jaName": "覇王眷竜ライトヴルム",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "霸王眷龙 凶饿毒",
+      "cardId": "13077",
+      "jaName": "覇王眷竜スターヴ・ヴェノム",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "霸王眷龙 幻透翼",
+      "cardId": "13078",
+      "jaName": "覇王眷竜クリアウィング",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "霸王眷龙 暗黑亚龙",
+      "cardId": "12933",
+      "jaName": "覇王眷竜ダークヴルム",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "霸王门 零",
+      "cardId": "12931",
+      "jaName": "覇王門零",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "霸王门之魔术师",
+      "cardId": "19143",
+      "jaName": "覇王門の魔術師",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "霸王龙 扎克-同调宇宙",
+      "cardId": "19722",
+      "jaName": "覇王龍ズァーク－シンクロ・ユニバース",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "青眼亚白龙",
+      "cardId": "12253",
+      "jaName": "青眼の亜白龍",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "青眼混沌极龙",
+      "cardId": "12487",
+      "jaName": "ブルーアイズ・カオス・MAX・ドラゴン",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "颉颃胜负",
+      "cardId": "13293",
+      "jaName": "拮抗勝負",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "额外灵摆",
+      "cardId": "17163",
+      "jaName": "EXP",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "食魂窃蛋龙",
+      "cardId": "13011",
+      "jaName": "魂喰いオヴィラプター",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "饼蛙",
+      "cardId": "12642",
+      "jaName": "餅カエル",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "魔女术代理师傅",
+      "cardId": "17037",
+      "jaName": "ウィッチクラフト・バイスマスター",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "魔女术工匠·锻造女巫",
+      "cardId": "14406",
+      "jaName": "ウィッチクラフト・シュミッタ",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "魔女术师傅·玻璃女巫",
+      "cardId": "14409",
+      "jaName": "ウィッチクラフトマスター・ヴェール",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "魔女术的怠工",
+      "cardId": "14411",
+      "jaName": "ウィッチクラフト・サボタージュ",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "魔封的芳香",
+      "cardId": "5008",
+      "jaName": "魔封じの芳香",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "魔救之奇迹-巨龙晶石",
+      "cardId": "15105",
+      "jaName": "魔救の奇跡－ドラガイト",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "魔法筒",
+      "cardId": "5124",
+      "jaName": "魔法の筒",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "魔玩具·剪刀狼",
+      "cardId": "11379",
+      "jaName": "デストーイ・シザー・ウルフ",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "魔钟洞",
+      "cardId": "14314",
+      "jaName": "魔鍾洞",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "鲜花女男爵",
+      "cardId": "16386",
+      "jaName": "フルール・ド・バロネス",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "黄金卿 黄金国巫妖",
+      "cardId": "15123",
+      "jaName": "黄金卿エルドリッチ",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "黑蔷薇龙",
+      "cardId": "7898",
+      "jaName": "ブラック・ローズ・ドラゴン",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "黑魔女 迪亚贝尔斯塔尔",
+      "cardId": "19148",
+      "jaName": "黒魔女ディアベルスター",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "齐唱僵尸",
+      "cardId": "11560",
+      "jaName": "ユニゾンビ",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "龙之溪谷",
+      "cardId": "9049",
+      "jaName": "竜の渓谷",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "龙辉巧-天棓四γ",
+      "cardId": "15637",
+      "jaName": "竜輝巧－エルγ",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "name": "龙骑兵团-元老院",
+      "cardId": "13724",
+      "jaName": "ドラグニティ－セナート",
+      "sourceId": "baige-card-identities-20261008"
+    }
+  ]
+}

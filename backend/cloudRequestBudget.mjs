@@ -11,6 +11,7 @@ import {
 } from './evidenceGenerationContract.mjs';
 
 const scope = new AsyncLocalStorage();
+const decisionsSequenceScope = new AsyncLocalStorage();
 const UNIT = 1_000_000_000;
 const GEMINI_INPUT_USD_PER_MTOK = 0.75;
 const GEMINI_CACHED_INPUT_USD_PER_MTOK = 0.075;
@@ -117,6 +118,33 @@ local cny = tonumber(redis.call('HGET', KEYS[1], 'actualNano')) + tonumber(ARGV[
 local usd = tonumber(redis.call('HGET', KEYS[1], 'theoreticalNano')) + tonumber(ARGV[3]) - ticket.theoreticalNano
 redis.call('HSET', KEYS[1], 'actualNano', tostring(cny), 'theoreticalNano', tostring(usd), ARGV[1], ARGV[4])
 return {'settled', tostring(cny), tostring(usd)}
+`;
+// Settlement is committed even when the following reservation is denied. The
+// prior request keeps its full durable upper bound until this atomic operation;
+// no capacity is released locally or before provider usage has been observed.
+export const CLOUD_BUDGET_SETTLE_AND_RESERVE = `
+local old = redis.call('HGET', KEYS[1], ARGV[12])
+if not old then return {'settlement_missing'} end
+local prior = cjson.decode(old)
+if prior.provider ~= 'openai' or prior.operation ~= 'decisions' then
+  return {'settlement_invalid'}
+end
+if prior.status == 'reserved' then
+  local settled = cjson.decode(ARGV[15])
+  if settled.id ~= prior.id or settled.status ~= 'usage_settled'
+      or settled.provider ~= prior.provider or settled.operation ~= prior.operation
+      or settled.actualNano ~= tonumber(ARGV[13]) or settled.theoreticalNano ~= tonumber(ARGV[14])
+      or settled.actualNano < 0 or settled.theoreticalNano < 0
+      or settled.actualNano > prior.actualNano or settled.theoreticalNano > prior.theoreticalNano then
+    return {'settlement_invalid'}
+  end
+  local cny = tonumber(redis.call('HGET', KEYS[1], 'actualNano')) + settled.actualNano - prior.actualNano
+  local usd = tonumber(redis.call('HGET', KEYS[1], 'theoreticalNano')) + settled.theoreticalNano - prior.theoreticalNano
+  redis.call('HSET', KEYS[1], 'actualNano', tostring(cny), 'theoreticalNano', tostring(usd), ARGV[12], ARGV[15])
+elseif prior.status ~= 'usage_settled' then
+  return {'settlement_invalid'}
+end
+${CLOUD_BUDGET_RESERVE}
 `;
 function amount(value, label, allowZero = false) {
   if(value===null || value===undefined || value==='') throw new Error(`cloud_budget_invalid_${label}`);
@@ -415,7 +443,8 @@ export async function manageCloudFinalBudget({env, fetchImpl = globalThis.fetch,
   await sendRedisCommand({env, fetchImpl}, publicFinalBudgetCommand(key, action));
 }
 
-export function createCloudRequestBudget({env, fetchImpl = globalThis.fetch, command, now = new Date(),officialDailyMigration} = {}) {
+export function createCloudRequestBudget({env, fetchImpl = globalThis.fetch, command, now = new Date(),officialDailyMigration,
+  deferDecisionsSettlements = false} = {}) {
   const {namespace, period, dayKey, key} = cloudBudgetScope(env, now);
   const separatePublicFinal = publicFinalBudgetEnabled(env);
   const finalKeys = publicFinalBudgetKeys(key);
@@ -432,6 +461,8 @@ export function createCloudRequestBudget({env, fetchImpl = globalThis.fetch, com
   const relayMultiplierValue = env.RELAY_PRICING_MULTIPLIER;
   const siteDollarCnyValue = env.RELAY_SITE_DOLLAR_CNY;
   const records=[];
+  let pendingDecisionsSettlement = null;
+  let decisionsBusy = false;
   const redis = command ? null : redisConfig(env);
   const send = command || (async (args, {signal} = {}) => {
     const timeout = AbortSignal.timeout(5000);
@@ -457,16 +488,28 @@ export function createCloudRequestBudget({env, fetchImpl = globalThis.fetch, com
     const migrationArgs=officialDailyMigration?['official_daily_v1',officialDailyMigration.startUtc,officialDailyMigration.endUtc]
       :separatePublicFinal?['public_gemini_uncapped_v1']:[];
     const splitFinal = separatePublicFinal && stage === 'final_ruling' && ['relay','bai'].includes(provider);
+    const pending = provider === 'openai' && operation === 'decisions' ? pendingDecisionsSettlement : null;
+    const reserveArgs = [ticket.id,String(ticket.actualNano),String(ticket.theoreticalNano),
+      String(nano(limits.actualCny)),String(nano(limits.theoreticalUsd)),String(nano(initial.actualCny)),String(nano(initial.theoreticalUsd)),JSON.stringify(ticket),...migrationArgs];
+    if (pending) {
+      // Keep the reserve argument positions fixed, including optional migration.
+      while (reserveArgs.length < 11) reserveArgs.push('');
+      reserveArgs.push(pending.ticket.id, String(pending.settled.actualNano), String(pending.settled.theoreticalNano), JSON.stringify(pending.settled));
+    }
     const result=await send(splitFinal
       ? publicFinalBudgetCommand(key, 'reserve', [provider, JSON.stringify(ticket), String(nano(limits.theoreticalUsd))])
-      : ['EVAL',CLOUD_BUDGET_RESERVE,officialDailyMigration?'2':'1',key,
-      ...(officialDailyMigration?[officialDailyMigration.legacyKey]:[]),ticket.id,String(ticket.actualNano),String(ticket.theoreticalNano),
-      String(nano(limits.actualCny)),String(nano(limits.theoreticalUsd)),String(nano(initial.actualCny)),String(nano(initial.theoreticalUsd)),JSON.stringify(ticket),...migrationArgs], {signal});
+      : ['EVAL',pending ? CLOUD_BUDGET_SETTLE_AND_RESERVE : CLOUD_BUDGET_RESERVE,officialDailyMigration?'2':'1',key,
+      ...(officialDailyMigration?[officialDailyMigration.legacyKey]:[]),...reserveArgs], {signal});
+    if (pending && ['reserved','blocked','existing'].includes(result[0])) {
+      Object.assign(pending.ticket, pending.settled);
+      delete pending.ticket.settlementPending;
+      pendingDecisionsSettlement = null;
+    }
     if(result[0]!=='reserved') throw new Error(result[0]==='blocked'?'cloud_budget_total_exceeded':'cloud_budget_reservation_uncertain');
     records.push(ticket);
     return ticket;
   }
-  async function settle(ticket,{actualCny,actualUpperCny=actualCny,theoreticalUsd,usage,returnedModel,
+  function prepareSettlement(ticket,{actualCny,actualUpperCny=actualCny,theoreticalUsd,usage,returnedModel,
     billableUsage,usageNormalization,billableCost}) {
     // Provider usage is observed before persistence; keep it if Redis fails.
     Object.assign(ticket,{usage,returnedModel:returnedModel||null,
@@ -479,11 +522,31 @@ export function createCloudRequestBudget({env, fetchImpl = globalThis.fetch, com
     amount(theoreticalUsd,'settled_theoretical',true);
     const settled={...ticket,status:'usage_settled',estimatedActualCny:Math.round(actualCny*UNIT)/UNIT,actualNano:nano(actualUpperCny),theoreticalNano:nano(theoreticalUsd),usage,
       returnedModel:returnedModel||null,elapsedMs:performance.now()-ticket.started,completedAtUtc:new Date().toISOString()};
+    delete settled.settlementPending;
+    return settled;
+  }
+  async function persistSettlement(ticket, settled) {
     const settlementKey = separatePublicFinal && ticket.stage === 'final_ruling' && ['relay','bai'].includes(ticket.provider)
       ? finalKeys[ticket.provider === 'relay' ? 1 : 2] : key;
     const result=await send(['EVAL',CLOUD_BUDGET_SETTLE,'1',settlementKey,ticket.id,String(settled.actualNano),String(settled.theoreticalNano),JSON.stringify(settled)]);
     if(result[0]!=='settled') throw new Error('cloud_budget_settlement_uncertain');
     Object.assign(ticket,settled);
+    delete ticket.settlementPending;
+  }
+  async function settle(ticket, usage) {
+    await persistSettlement(ticket, prepareSettlement(ticket, usage));
+  }
+  async function flushDecisionsSettlements() {
+    const pending = pendingDecisionsSettlement;
+    if (!pending) return;
+    try {
+      // Do not inherit a cancelled provider signal: this is accounting for an
+      // already observed response, bounded by the ledger's own five-second timeout.
+      await persistSettlement(pending.ticket, pending.settled);
+      pendingDecisionsSettlement = null;
+    } catch {
+      pending.ticket.uncertainty = 'provider_response_received_settlement_uncertain_reservation_retained';
+    }
   }
   async function relay({body,invoke,stage='final_ruling'}) {
     const relayMultiplier = amount(relayMultiplierValue,'relay_multiplier');
@@ -575,6 +638,12 @@ export function createCloudRequestBudget({env, fetchImpl = globalThis.fetch, com
     return result;
   }
   async function decisions({body, invoke, measurement, signal}) {
+    if (deferDecisionsSettlements && decisionsBusy) throw new Error('cloud_budget_decisions_sequence_concurrent');
+    decisionsBusy = true;
+    try { return await executeDecisions({body, invoke, measurement, signal}); }
+    finally { decisionsBusy = false; }
+  }
+  async function executeDecisions({body, invoke, measurement, signal}) {
     if (typeof invoke !== 'function') throw new Error('cloud_budget_decisions_invoke_required');
     signal?.throwIfAborted();
     const measured = checkedDecisionsMeasurement(body, measurement);
@@ -594,11 +663,19 @@ export function createCloudRequestBudget({env, fetchImpl = globalThis.fetch, com
     }
     const inputTokens = result?.usage?.input_tokens;
     if (Number.isSafeInteger(inputTokens) && inputTokens >= 0) {
+      const usageCostUsd = decisionsCostUsd(inputTokens);
       try {
-        await settle(ticket, {usage:result.usage, returnedModel:result.model || body.model,
-          actualCny:0, actualUpperCny:0, theoreticalUsd:decisionsCostUsd(inputTokens)});
-      } catch {
+        const settled = prepareSettlement(ticket, {usage:result.usage, returnedModel:result.model || body.model,
+          actualCny:0, actualUpperCny:0, theoreticalUsd:usageCostUsd});
+        if (deferDecisionsSettlements && settled.theoreticalNano <= ticket.theoreticalNano) {
+          pendingDecisionsSettlement = {ticket, settled};
+          ticket.settlementPending = true;
+        } else await persistSettlement(ticket, settled);
+      } catch (error) {
         ticket.uncertainty = 'provider_response_received_settlement_uncertain_reservation_retained';
+        // An anomalous charge above the allocation cannot safely be deferred
+        // or treated as conservatively accounted after a failed ledger write.
+        if (nano(usageCostUsd) > ticket.theoreticalNano) throw error;
       }
     } else ticket.uncertainty = 'provider_usage_missing_reservation_retained';
     return result;
@@ -946,7 +1023,7 @@ export function createCloudRequestBudget({env, fetchImpl = globalThis.fetch, com
   }
   return {relay,deepseek,openai,decisions,baiCard,sourceTranslation,bai:request=>request?.generationContract?.providerId === 'bai'
     ? baiGeneration(request) : openai({...request,provider:'bai'}),gemini,
-    beforeSend,onResponse,remainingPreparationUsd,snapshot};
+    beforeSend,onResponse,remainingPreparationUsd,snapshot,flushDecisionsSettlements};
 }
 
 export async function runCloudBudgetedQuestion({env,fetchImpl,budget},invoke) {
@@ -975,6 +1052,19 @@ export function runOfficialOpenAIRequest(request) {
 export function runOfficialDecisionsRequest(request) {
   return runOfficialBudgetRequest(request, 'decisions');
 }
+export async function runOfficialDecisionsSequence(invoke) {
+  if (typeof invoke !== 'function') throw new TypeError('decisions_sequence_callback_required');
+  // Each selection owns its accounting scope, even when multiple questions use
+  // the same provider instance concurrently. Nested selections own a new scope.
+  const sequence = {entries:[], closed:false};
+  return decisionsSequenceScope.run(sequence, async () => {
+    try { return await invoke(); }
+    finally {
+      sequence.closed = true;
+      await Promise.all(sequence.entries.map(entry => entry.controller.flushDecisionsSettlements()));
+    }
+  });
+}
 async function runOfficialBudgetRequest({env,body,invoke,measurement,signal,fetchImpl=globalThis.fetch,now=new Date()}, operation) {
   signal?.throwIfAborted();
   const daily=officialDailyConfig(env,now);
@@ -990,9 +1080,20 @@ async function runOfficialBudgetRequest({env,body,invoke,measurement,signal,fetc
     CLOUD_BUDGET_INITIAL_THEORETICAL_USD:'0',
   };
   try {
-    return await createCloudRequestBudget({env:officialEnv,fetchImpl,now,
-      officialDailyMigration:{legacyKey:daily.legacyKey,...utcDayBounds(daily.dayKey,env.API_BUDGET_TIMEZONE)}})
-      [operation]({body,invoke,measurement,signal});
+    const sequence = operation === 'decisions' ? decisionsSequenceScope.getStore() : null;
+    if (sequence?.closed) throw new Error('decisions_sequence_closed');
+    // Different days, stores, configurations and fetch adapters never share a
+    // pending ticket. Old-day entries are still flushed on sequence completion.
+    let entry = sequence?.entries.find(value => value.env === env && value.fetchImpl === fetchImpl
+      && value.dailyKey === daily.dailyKey && value.limit === daily.dailyBudgetAmount);
+    if (!entry) {
+      entry = {env,fetchImpl,dailyKey:daily.dailyKey,limit:daily.dailyBudgetAmount,
+        controller:createCloudRequestBudget({env:officialEnv,fetchImpl,now,
+          deferDecisionsSettlements:Boolean(sequence),
+          officialDailyMigration:{legacyKey:daily.legacyKey,...utcDayBounds(daily.dayKey,env.API_BUDGET_TIMEZONE)}})};
+      sequence?.entries.push(entry);
+    }
+    return await entry.controller[operation]({body,invoke,measurement,signal});
   } catch(error) {
     if(error?.message==='cloud_budget_total_exceeded') {
       const exceeded=new Error('official_daily_budget_exceeded',{cause:error});

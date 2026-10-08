@@ -4,7 +4,7 @@ import { assertPublicRulingModelProfileAvailable, resolvePublicRulingModelProfil
 import { finalizePreparedRagRulingQuestionForVersion } from "./rulingVersionRegistry.mjs";
 import { preparationError } from "./publicAnswerPreparationStore.mjs";
 import { PUBLIC_EXHAUSTED_FALLBACK_PROFILE, selectAvailablePublicProfile, withPublicGenerationInfo } from './publicGenerationInfo.mjs';
-import { updateQueryAudit } from './queryAuditStore.mjs';
+import { updateQueryAudit, safeQueryAuditRetrievalTimings } from './queryAuditStore.mjs';
 import { queryAuditAnswerPatch, queryAuditFailurePatch, saveQueryAuditUpdate } from './publicQueryAudit.mjs';
 
 export async function preparePublicAnswer({
@@ -35,6 +35,7 @@ export async function preparePublicAnswer({
   });
   await saveQueryAuditUpdate(result.auditId, {
     status: "prepared", profileId: result.latency.profileId, latencyMs: measuredProgress.totalMs,
+    ...safeQueryAuditRetrievalTimings(result.answer.continuation.ruleQueryModel?.timingsMs),
   }, env, updateAudit);
   return { preparationId, progress: measuredProgress,
     evidencePackage: { text: result.answer.continuation.promptBundle.prompt, filename: 'ocg-evidence.txt',

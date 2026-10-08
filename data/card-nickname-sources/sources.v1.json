@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "nicknameSourceId": "ocgbot-dcc1a184",
+  "sources": [
+    {
+      "id": "ocgbot-dcc1a184",
+      "url": "https://github.com/fireinsect/nonebot-plugin-ocgbot-v2/blob/dcc1a184e254f97bb31ff265b6e9c8ac309902ee/nonebot_plugin_ocgbot_v2/static/json/nickname.json",
+      "revision": "dcc1a184e254f97bb31ff265b6e9c8ac309902ee",
+      "sha256": "3bb39b50f70e4071eecdefbcffd927d5b8947afba8b117492833f572088c4896",
+      "license": "MIT",
+      "licenseFile": "data/card-nickname-sources/ocgbot-LICENSE.txt",
+      "identitySourceIds": ["baige-card-identities-20261008"]
+    },
+    {
+      "id": "baige-card-identities-20261008",
+      "url": "https://ygocdb.com/api/v0/cards.zip",
+      "revision": "2026-10-08:sha256:ceb94952cb17dfc678ffc49b6f8ddac2b89308f72645b32249584e0a74166ee9",
+      "sha256": "ceb94952cb17dfc678ffc49b6f8ddac2b89308f72645b32249584e0a74166ee9",
+      "archiveSha256": "ab58a962dc92f33f3f8df56097a128d89e1fc426f13d8adf65371ca15fbbc33e",
+      "license": "LicenseRef-Factual-References",
+      "licenseFile": "data/card-nickname-sources/FACTUAL-REFERENCES.txt",
+      "scope": "Only needed card-name/CID/Japanese-name identity facts; no card text or bulk database redistribution."
+    },
+    {
+      "id": "yugioh-slang-29ee2df4",
+      "url": "https://github.com/ColinWttt/yugioh-slang/blob/29ee2df40eca78ad72e11540e61ab78ddd91a4e3/src/content/docs/abbr/卡牌名称/合集-非泛用.md",
+      "revision": "29ee2df40eca78ad72e11540e61ab78ddd91a4e3",
+      "license": "MIT",
+      "licenseFile": "data/card-nickname-sources/yugioh-slang-LICENSE.txt",
+      "identitySourceIds": ["baige-card-identities-20261008"]
+    },
+    {
+      "id": "mycard-phoenix-short-name",
+      "url": "https://ygobbs2.com/t/409157",
+      "revision": "topic-409157:alias-fact-reviewed-2026-10-08",
+      "license": "LicenseRef-Factual-References",
+      "licenseFile": "data/card-nickname-sources/FACTUAL-REFERENCES.txt",
+      "identitySourceIds": ["baige-card-identities-20261008"],
+      "scope": "Only the short alias and card identity; no article text."
+    },
+    {
+      "id": "mycard-mcpro-20260924",
+      "url": "https://ygobbs2.com/t/584306/5",
+      "revision": "2026-09-24:topic-584306:post-5",
+      "license": "LicenseRef-Factual-References",
+      "licenseFile": "data/card-nickname-sources/FACTUAL-REFERENCES.txt",
+      "identitySourceIds": ["baige-card-identities-20261008"],
+      "scope": "Only the nickname and card identity stated in the platform update; no post text."
+    }
+  ]
+}

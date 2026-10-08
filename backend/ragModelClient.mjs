@@ -924,6 +924,7 @@ export async function callBaiJsonTask({
 export async function callCardNameExtractionModel({
   userQuery,
   cardNameReferences = [],
+  cardNicknameReferences = [],
   dataRevision = "",
   env = globalThis.process?.env || {},
   modelInvoker,
@@ -948,7 +949,7 @@ export async function callCardNameExtractionModel({
   ];
   const maxTokens = readNumber(env.RAG_CARD_MODEL_MAX_OUTPUT_TOKENS, 800);
   const prompt = buildCardNameExtractionPrompt(userQuery, {
-    typed: provider === "deepseek" || provider === "bai", cardNameReferences,
+    typed: provider === "deepseek" || provider === "bai", cardNameReferences, cardNicknameReferences,
   });
   const budgetProvider = provider;
 
@@ -5498,7 +5499,9 @@ function budgetBucketConfig(env, bucket) {
   };
 }
 
-export function buildCardNameExtractionPrompt(userQuery, { typed = false, cardNameReferences = [] } = {}) {
+export function buildCardNameExtractionPrompt(userQuery, {
+  typed = false, cardNameReferences = [], cardNicknameReferences = [],
+} = {}) {
   if (typed) {
     return [
       "你负责游戏王问题的提及抽取，不回答裁定，也不查找未给出的卡片。把问题中的名称分为两个独立数组：",
@@ -5509,6 +5512,10 @@ export function buildCardNameExtractionPrompt(userQuery, { typed = false, cardNa
       ...(cardNameReferences.length ? [
         "以下是本地匹配得到的卡库名称参考；input只是匹配到的题面片段，其余字段来自卡库。参考不代表题面一定提及该卡，不能据此添加未命名的卡。结合完整原题判断：完整单卡名称即使含有系列词也属于cardNames；只提到系列、类别或局部片段时，不得因为参考中有相似卡名就改判为单卡。",
         JSON.stringify(cardNameReferences),
+      ] : []),
+      ...(cardNicknameReferences.length ? [
+        "以下是有来源的俗称候选参考，只用于理解题面中的称呼，不代表题面一定提及该卡，也不能添加未提及的卡。仍由你结合完整问题判断cardNames与groupMentions。确定是单卡称呼时，originalText保留题面原词，name可使用对应候选的卡库名称。一个称呼对应多张卡时，只有题面提供足够区分依据才选具体名称；否则name保留原称呼，不可任挑一张。",
+        JSON.stringify(cardNicknameReferences),
       ] : []),
       "玩家问题：",
       String(userQuery || ""),

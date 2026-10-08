@@ -62,6 +62,22 @@ export function safeQueryAuditStreamMetrics(source) {
   return Object.keys(metrics).length ? { streamMetrics: metrics } : {};
 }
 
+// Numeric retrieval timings only. Nested request bodies and source text never
+// enter the audit through this projection. Stage times may overlap.
+export function safeQueryAuditRetrievalTimings(source) {
+  if (!source || typeof source !== 'object' || Array.isArray(source)) return {};
+  const timings = {};
+  for (const field of ['assetLoadWait', 'indexesWait', 'assets', 'plan', 'queryEmbedding',
+    'ruleDenseSearch', 'qaDenseSearch', 'lexicalSearch', 'navigationSearch',
+    'candidateAssembly', 'search', 'selection', 'packing', 'total']) {
+    const value = source[field];
+    if (typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 86_400_000) {
+      timings[field] = value;
+    }
+  }
+  return Object.keys(timings).length ? { retrievalTimingsMs: timings } : {};
+}
+
 export function queryAuditStorageStatus(env = globalThis.process?.env || {}) {
   if (isDisabled(env.QUERY_AUDIT_ENABLED)) {
     return { enabled: false, storage: "disabled", persistent: false };
@@ -268,6 +284,7 @@ function parseEntry(value) {
     if (Object.hasOwn(parsed, "latencyMs")) entry.latencyMs = parsed.latencyMs;
     Object.assign(entry, safeQueryAuditDiagnostics(parsed));
     Object.assign(entry, safeQueryAuditStreamMetrics(parsed.streamMetrics));
+    Object.assign(entry, safeQueryAuditRetrievalTimings(parsed.retrievalTimingsMs));
     return entry;
   } catch {
     return null;
@@ -292,7 +309,8 @@ function normalizeAuditPatch(patch) {
     }
     normalized.latencyMs = source.latencyMs;
   }
-  return { ...normalized, ...safeQueryAuditDiagnostics(source), ...safeQueryAuditStreamMetrics(source.streamMetrics) };
+  return { ...normalized, ...safeQueryAuditDiagnostics(source), ...safeQueryAuditStreamMetrics(source.streamMetrics),
+    ...safeQueryAuditRetrievalTimings(source.retrievalTimingsMs) };
 }
 
 function optionalString(field, value) {

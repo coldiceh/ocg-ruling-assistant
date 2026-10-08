@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
 import { createGeminiBoundedEvidenceProvider, boundedPlanBody,
-  boundedSelectionBody } from "../backend/geminiBoundedEvidenceProvider.mjs";
+  boundedSelectionBody, prepareBoundedEvidenceIndexes } from "../backend/geminiBoundedEvidenceProvider.mjs";
 import { buildRuleStructureMapping, makeQaSourceUnits, stableJson } from "../backend/evidenceSourceStructure.mjs";
 import { createFocusedQaView } from "../backend/geminiFocusedQaView.mjs";
 import { createQaTools } from "../backend/geminiQaTools.mjs";
@@ -54,6 +54,88 @@ const unrestrictedEvidenceEnv = { ...input.env,
   EVIDENCE_GENERATION_OUTPUT_LIMIT: 'provider',
   GEMINI_EVIDENCE_DEADLINE_MS: '0', GEMINI_EVIDENCE_MAX_CNY: '0',
   GEMINI_EVIDENCE_MAX_PROMPT_CHARS: '15000' };
+
+test('local index preload and ordinary retrieval preserve all model requests and delivered evidence', async () => {
+  const cold = fixture();
+  const baseline = await cold.provider.retrieve(input);
+  const assets = schema3Assets();
+  const calls = [];
+  const loaders = {
+    loadDenseSearch: async ({ rules }) => {
+      calls.push('rules');
+      return { searchAsync: async () => [...rules.units.values()] };
+    },
+    loadQaSearch: async ({ items }) => {
+      calls.push('qa');
+      return { searchAsync: async () => items };
+    },
+  };
+  const indexesPromise = prepareBoundedEvidenceIndexes(assets, loaders);
+  const again = prepareBoundedEvidenceIndexes(assets, loaders);
+  const [prepared, shared] = await Promise.all([indexesPromise, again]);
+  assert.deepEqual(calls, ['rules', 'qa']);
+  assert.equal(prepared.dense, shared.dense);
+  assert.equal(prepared.qaDense, shared.qaDense);
+  const warm = fixture({ assets });
+  const result = await warm.provider.retrieve({ ...input, assetsPromise: Promise.resolve(assets), indexesPromise });
+  assert.deepEqual(warm.requests, cold.requests);
+  assert.equal(result.packing.prompt, baseline.packing.prompt);
+  assert.deepEqual(result.telemetry.bounded.reading, baseline.telemetry.bounded.reading);
+  assert.equal(result.telemetry.indexesPreloaded, true);
+  for (const key of ['assetLoadWait', 'indexesWait', 'ruleDenseSearch', 'qaDenseSearch',
+    'lexicalSearch', 'navigationSearch', 'candidateAssembly']) {
+    assert.ok(Number.isFinite(result.telemetry.timingsMs[key]), key);
+  }
+});
+
+test('preloaded indexes must belong to the exact assets consumed by retrieval', async () => {
+  const assets = schema3Assets();
+  const { provider } = fixture({ assets });
+  await assert.rejects(provider.retrieve({ ...input, indexesPromise: Promise.resolve({ assets: schema3Assets() }) }),
+    /gemini_rule_qa_preload_asset_mismatch/);
+});
+
+test('failed shared index initialization is observed, surfaced and can be retried locally', async () => {
+  const assets = schema3Assets();
+  const failure = new Error('fixture-dense-load-failure');
+  let qaLoads = 0;
+  const loadQaSearch = async () => { qaLoads++; return { searchAsync: async () => [] }; };
+  const failed = prepareBoundedEvidenceIndexes(assets, {
+    loadDenseSearch: async () => { throw failure; }, loadQaSearch,
+  });
+  await assert.rejects(failed, error => error === failure);
+  const { provider } = fixture({ assets });
+  await assert.rejects(provider.retrieve({ ...input, indexesPromise: failed }), error => error === failure);
+  const repaired = await prepareBoundedEvidenceIndexes(assets, {
+    loadDenseSearch: async () => ({ searchAsync: async () => [] }), loadQaSearch,
+  });
+  assert.equal(qaLoads, 1);
+  assert.equal(typeof repaired.dense.searchAsync, 'function');
+});
+
+test('identical query text shares search work but preserves every independent need lane', async () => {
+  const plan = { needs: [{ id: 'first', question: 'first need', ruleQuery: input.userQuery, qaQuery: input.userQuery },
+    { id: 'second', question: 'second need', ruleQuery: input.userQuery, qaQuery: input.userQuery }] };
+  const assets = schema3Assets();
+  let ruleScans = 0, qaScans = 0;
+  const indexesPromise = prepareBoundedEvidenceIndexes(assets, {
+    loadDenseSearch: async ({ rules }) => ({ searchAsync: async () => { ruleScans++; return [...rules.units.values()]; } }),
+    loadQaSearch: async ({ items }) => ({ searchAsync: async () => { qaScans++; return items; } }),
+  });
+  const { provider } = fixture({ plan, assets });
+  const result = await provider.retrieve({ ...input, indexesPromise });
+  assert.deepEqual(result.telemetry.searchStats, { uniqueQueries: 1, reusedQueries: 4 });
+  assert.equal(ruleScans, 1);
+  assert.equal(qaScans, 1);
+  const lanes = result.telemetry.bounded.reading.lanes;
+  for (const queryVariantId of ['n1.zh', 'n1.ja', 'n2.zh', 'n2.ja']) {
+    const actual = lanes.filter(lane => lane.queryVariantId === queryVariantId);
+    const original = lanes.filter(lane => lane.queryVariantId === 'original');
+    assert.equal(actual.length, original.length);
+    assert.deepEqual(actual.map(({ needId, queryVariantId, ...row }) => row),
+      original.map(({ needId, queryVariantId, ...row }) => row));
+  }
+});
 
 test('production request can omit output, single-question cost and deadline limits', async () => {
   const { provider, requests } = fixture({ countTokens: 100000 });
