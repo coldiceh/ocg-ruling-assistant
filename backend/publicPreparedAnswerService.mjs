@@ -1,4 +1,4 @@
-import { answerPublicRulingQuestion } from "./publicAnswerService.mjs";
+import { answerPublicRulingQuestion, shouldClassifyPublicQuestion } from "./publicAnswerService.mjs";
 import { createPublicAnswerModelEnv } from "./ragModelClient.mjs";
 import { assertPublicRulingModelProfileAvailable, resolvePublicRulingModelProfile } from "./publicRulingModelConfig.mjs";
 import { finalizePreparedRagRulingQuestionForVersion } from "./rulingVersionRegistry.mjs";
@@ -73,6 +73,9 @@ export async function finalizePublicAnswer({
 } = {}) {
   try {
   signal?.throwIfAborted();
+  if (shouldClassifyPublicQuestion(env) && preparation?.requestDiagnostics?.scope?.scope !== 'in_scope') {
+    throw preparationError("资料未通过当前用途检查，请重新提交问题", "answer_preparation_scope_unverified", 409);
+  }
   const finalizeStartedAt = now();
   const selection = await selectProfile(preparation.profileId, env);
   let profile = selection.profile;

@@ -144,6 +144,22 @@ export async function clearPublicOfftopicRiskControl({
 
 export const unlockPublicOfftopicRiskControl = clearPublicOfftopicRiskControl;
 
+export function buildPublicOutOfScopeAnswer({ answerLocale = "zh-CN" } = {}) {
+  const messages = {
+    "zh-CN": "本站仅回答游戏王规则与裁定问题，请提交相关卡片互动、场面或规则问题。",
+    en: "This service answers Yu-Gi-Oh! rules and ruling questions only. Please ask about a card interaction, game state, or rule.",
+    ja: "このサービスは遊戯王のルール・裁定に関する質問のみを受け付けています。カードの相互作用、盤面、ルールについて質問してください。",
+  };
+  return {
+    answerLevel: "out_of_scope",
+    reason: "not_ruling_question",
+    shortAnswer: messages[answerLocale] || messages["zh-CN"],
+    answerLocale,
+    reasoning: [], usedCards: [], usedEvidence: [], missingInfo: [],
+    riskFlags: ["out_of_scope"],
+  };
+}
+
 export function buildPublicOfftopicRiskControlAnswer({
   status = {},
   triggered = status.triggered === true,

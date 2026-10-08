@@ -15,6 +15,7 @@ test("public exact shortcut is disabled while the ordinary RAG answer still runs
     payload: { question: "官方原题入口停用后仍应执行普通资料检索。" },
     env: { MODEL_PROVIDER: "mock" },
     appendAudit: async () => null,
+    classifyScope: async () => ({ scope: 'in_scope' }),
     answerOfficialExact: async () => {
       exactCalls += 1;
       return { answerLevel: "official_confirmed" };

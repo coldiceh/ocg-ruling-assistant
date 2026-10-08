@@ -1335,6 +1335,7 @@ async function readRelayChatCompletionSse(response, {
     requestToFirstByteMs: null,
     requestToFirstEventMs: null,
     requestToFirstContentMs: null,
+    requestToDoneMs: null,
     requestToCompleteMs: null,
   };
   let buffer = "";
@@ -1343,7 +1344,11 @@ async function readRelayChatCompletionSse(response, {
     requestToFirstByteMs: state.requestToFirstByteMs,
     requestToFirstEventMs: state.requestToFirstEventMs,
     requestToFirstContentMs: state.requestToFirstContentMs,
+    requestToDoneMs: state.requestToDoneMs,
     requestToCompleteMs: state.requestToCompleteMs,
+    responseBodyReadMs: state.requestToCompleteMs !== null && requestToResponseHeadersMs !== null
+      ? Math.max(0, state.requestToCompleteMs - requestToResponseHeadersMs)
+      : null,
     networkChunkCount: state.networkChunks,
     sseEventCount: state.chunks,
     visibleContentChunkCount: state.contentChunks,
@@ -1396,6 +1401,7 @@ async function readRelayChatCompletionSse(response, {
     const data = dataLines.join("\n").trim();
     if (data === "[DONE]") {
       state.done = true;
+      state.requestToDoneMs = elapsedMonotonicMs(clock, requestStartedAt);
       return;
     }
     let chunk;
@@ -1530,9 +1536,13 @@ async function readRelayChatCompletionSse(response, {
       }
       buffer += decoder.decode(value, { stream: true });
       processBufferedFrames();
+      if (state.done) break;
     }
     buffer += decoder.decode();
     processBufferedFrames({ flush: true });
+    // [DONE] terminates the completion even if the provider keeps HTTP open.
+    // Validate bytes already received, then stop without awaiting cancellation.
+    if (state.done) cancelReaderWithoutWaiting(reader);
   } catch (cause) {
     cancelReaderWithoutWaiting(reader, cause);
     if (cause instanceof RulingModelProviderError) throw cause;
@@ -1578,7 +1588,7 @@ async function readRelayChatCompletionSse(response, {
       "relay_stream_empty_content",
     );
   }
-  state.requestToCompleteMs = elapsedMonotonicMs(clock, requestStartedAt);
+  state.requestToCompleteMs = state.requestToDoneMs ?? elapsedMonotonicMs(clock, requestStartedAt);
   return {
     ...(state.id ? { id: state.id } : {}),
     ...(state.model ? { model: state.model } : {}),
@@ -1624,7 +1634,9 @@ function makeRelayStreamMetrics(value = {}) {
     requestToFirstByteMs: null,
     requestToFirstEventMs: null,
     requestToFirstContentMs: null,
+    requestToDoneMs: null,
     requestToCompleteMs: null,
+    responseBodyReadMs: null,
     networkChunkCount: 0,
     sseEventCount: 0,
     visibleContentChunkCount: 0,
@@ -1655,7 +1667,9 @@ function copySafeRelayStreamMetrics(value) {
     requestToFirstByteMs: duration("requestToFirstByteMs"),
     requestToFirstEventMs: duration("requestToFirstEventMs"),
     requestToFirstContentMs: duration("requestToFirstContentMs"),
+    requestToDoneMs: duration("requestToDoneMs"),
     requestToCompleteMs: duration("requestToCompleteMs"),
+    responseBodyReadMs: duration("responseBodyReadMs"),
     networkChunkCount: count("networkChunkCount"),
     sseEventCount: count("sseEventCount"),
     visibleContentChunkCount: count("visibleContentChunkCount"),

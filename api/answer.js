@@ -6,7 +6,7 @@ import {
   parsePublicAnswerPayload,
   persistPublicAnswerLatency,
   publicAnswerHttpError,
-  shouldApplyPublicOfftopicRiskControl,
+  readPublicAnswerAvailability,
 } from "../backend/publicAnswerService.mjs";
 import {
   classifyPublicRequestChannel,
@@ -20,11 +20,11 @@ import {
 } from "../backend/publicAnswerProgress.mjs";
 import { createPublicAnswerPreparationStore } from "../backend/publicAnswerPreparationStore.mjs";
 import { translatePublicSource } from "../backend/publicSourceTranslation.mjs";
+import { enforcePublicRequestRateLimit } from "../backend/publicRequestRateLimit.mjs";
 import { readQueryAuditRequestContext } from "../backend/publicQueryAudit.mjs";
 import { preparePublicAnswer, finalizePublicAnswer, preparedAnswerProgress } from "../backend/publicPreparedAnswerService.mjs";
 import {
   buildPublicOfftopicRiskControlAnswer,
-  publicOfftopicRiskControlStorageStatus,
   readPublicOfftopicRiskControl,
 } from "../backend/publicOfftopicRiskControl.mjs";
 
@@ -36,6 +36,9 @@ export function createPublicAnswerHandler({
   prepare = preparePublicAnswer,
   finalize = finalizePublicAnswer,
   readRiskControl = readPublicOfftopicRiskControl,
+  rateLimit = enforcePublicRequestRateLimit,
+  answer = answerPublicRulingQuestion,
+  translate = translatePublicSource,
   now = Date.now,
 } = {}) {
 return async function handler(request, response) {
@@ -62,8 +65,13 @@ return async function handler(request, response) {
     const payload = parsePublicAnswerPayload(request.body, {
       declaredBytes: declaredRequestBodyBytes(request),
     });
+    await rateLimit({ request, env, action: payload.action, signal: requestAbort.signal });
     if (payload.action === "translate_source") {
-      const result = await translatePublicSource({ payload, store: createStore({ env }), env,
+      const availability = await readPublicAnswerAvailability({ env, readRiskControl });
+      if (availability?.active) {
+        throw Object.assign(new Error("服务暂时暂停，请稍后重试。"), { code: "public_service_paused", statusCode: 503 });
+      }
+      const result = await translate({ payload, store: createStore({ env }), env,
         signal: requestAbort.signal });
       response.status(result.status === "pending" ? 202 : 200).json(result);
       return;
@@ -80,28 +88,31 @@ return async function handler(request, response) {
         requestAbort,
         requestChannel,
         payload,
+        env,
+        answer,
       });
       return;
     }
-    const result = await answerPublicRulingQuestion({
+    const result = await answer({
       payload,
-      env: process.env,
-      requestContext: readQueryAuditRequestContext(request, process.env),
+      env,
+      requestContext: readQueryAuditRequestContext(request, env),
       signal: requestAbort.signal,
     });
     response.status(200).json(presentPublicAnswer(result.answer, {
       channel: requestChannel,
-      env: process.env,
+      env,
     }));
     // The answer is already on the wire. This best-effort write cannot replace
     // or delay the successful response observed by the client.
     await persistPublicAnswerLatency({
       latency: result.latency,
-      env: process.env,
+      env,
     }).catch(() => null);
   } catch (error) {
     if (requestAbort.signal.aborted) return;
     const httpError = publicAnswerHttpError(error);
+    if (httpError.payload.retryAfterSeconds) response.setHeader("Retry-After", String(httpError.payload.retryAfterSeconds));
     response.status(httpError.statusCode).json(httpError.payload);
   } finally {
     requestAbort.cleanup();
@@ -127,10 +138,8 @@ async function answerInSeparateRequest({ request, response, requestAbort, reques
     });
     return;
   }
-  if (payload.action === "finalize"
-      && shouldApplyPublicOfftopicRiskControl(env)
-      && publicOfftopicRiskControlStorageStatus(env).enabled) {
-    const activeControl = await readRiskControl({ env }).catch(() => null);
+  if (payload.action === "finalize") {
+    const activeControl = await readPublicAnswerAvailability({ env, readRiskControl });
     if (activeControl?.active === true) {
       const answer = presentPublicAnswer(
         buildPublicOfftopicRiskControlAnswer({ status: activeControl, env }),
@@ -277,6 +286,8 @@ async function answerWithProgressStream({
   requestAbort,
   requestChannel,
   payload,
+  env,
+  answer,
 }) {
   beginPublicAnswerEventStream(response);
   const progress = createPublicAnswerProgress({
@@ -286,24 +297,24 @@ async function answerWithProgressStream({
   const tickTimer = setInterval(() => progress.tick(), 1_000);
   tickTimer.unref?.();
   try {
-    const result = await answerPublicRulingQuestion({
+    const result = await answer({
       payload,
-      env: process.env,
-      requestContext: readQueryAuditRequestContext(request, process.env),
+      env,
+      requestContext: readQueryAuditRequestContext(request, env),
       signal: requestAbort.signal,
       progress,
     });
     const measuredProgress = progress.complete();
     const answer = presentPublicAnswer(result.answer, {
       channel: requestChannel,
-      env: process.env,
+      env,
     });
     sendPublicAnswerEvent(response, "answer", { answer, progress: measuredProgress });
     sendPublicAnswerEvent(response, "end", measuredProgress);
     response.end();
     await persistPublicAnswerLatency({
       latency: result.latency,
-      env: process.env,
+      env,
     }).catch(() => null);
   } catch (error) {
     if (requestAbort.signal.aborted) return;
@@ -327,4 +338,5 @@ function setCors(response) {
   response.setHeader("access-control-allow-origin", allowedOrigin);
   response.setHeader("access-control-allow-methods", "GET,POST,OPTIONS");
   response.setHeader("access-control-allow-headers", "content-type");
+  response.setHeader("access-control-expose-headers", "Retry-After");
 }

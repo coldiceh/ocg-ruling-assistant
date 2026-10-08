@@ -24,6 +24,43 @@ end
 return nil
 `.trim();
 const AUDIT_STATUSES = new Set(["preparing", "prepared", "completed", "blocked", "failed"]);
+const AUDIT_DIAGNOSTIC_VALUES = {
+  scopeResult: new Set(["in_scope", "out_of_scope", "uncertain"]),
+  scopeReason: new Set(["ruling_question", "not_ruling_question", "ambiguous", "disabled",
+    "private_or_dry_run", "deepseek_not_configured", "classifier_unavailable",
+    "classifier_timeout", "classifier_public_query_scope_timeout", "classifier_failed"]),
+  errorStage: new Set(["scope", "request_admission", "evidence_selection", "preparation", "generation"]),
+};
+
+// Diagnostic additions are enums, never arbitrary provider text or prompts.
+// Apply the same filter before storage and when reading existing records.
+export function safeQueryAuditDiagnostics(source) {
+  return Object.fromEntries(Object.entries(AUDIT_DIAGNOSTIC_VALUES)
+    .filter(([field, allowed]) => allowed.has(source?.[field]))
+    .map(([field]) => [field, source[field]]));
+}
+
+// Timing diagnostics only: no model text, provider identifiers or request IDs.
+// Filter on both write and read so old records cannot expand the projection.
+export function safeQueryAuditStreamMetrics(source) {
+  if (!source || typeof source !== 'object' || Array.isArray(source)) return {};
+  const metrics = {};
+  const durations = ['requestToResponseHeadersMs', 'requestToFirstByteMs', 'requestToFirstEventMs',
+    'requestToFirstContentMs', 'requestToDoneMs', 'requestToCompleteMs', 'responseBodyReadMs'];
+  const counts = ['networkChunkCount', 'sseEventCount', 'visibleContentChunkCount'];
+  const bytes = ['responseBytes', 'visibleContentBytes'];
+  for (const field of [...durations, ...counts, ...bytes]) {
+    const value = source[field];
+    const duration = durations.includes(field);
+    if (value === null && duration) metrics[field] = null;
+    else if (typeof value === 'number' && Number.isFinite(value) && value >= 0
+        && (duration ? value <= 86_400_000 : Number.isSafeInteger(value)
+          && value <= (counts.includes(field) ? 250_000 : 32 * 1024 * 1024))) {
+      metrics[field] = value;
+    }
+  }
+  return Object.keys(metrics).length ? { streamMetrics: metrics } : {};
+}
 
 export function queryAuditStorageStatus(env = globalThis.process?.env || {}) {
   if (isDisabled(env.QUERY_AUDIT_ENABLED)) {
@@ -229,6 +266,8 @@ function parseEntry(value) {
       if (Object.hasOwn(parsed, field)) entry[field] = parsed[field];
     }
     if (Object.hasOwn(parsed, "latencyMs")) entry.latencyMs = parsed.latencyMs;
+    Object.assign(entry, safeQueryAuditDiagnostics(parsed));
+    Object.assign(entry, safeQueryAuditStreamMetrics(parsed.streamMetrics));
     return entry;
   } catch {
     return null;
@@ -253,7 +292,7 @@ function normalizeAuditPatch(patch) {
     }
     normalized.latencyMs = source.latencyMs;
   }
-  return normalized;
+  return { ...normalized, ...safeQueryAuditDiagnostics(source), ...safeQueryAuditStreamMetrics(source.streamMetrics) };
 }
 
 function optionalString(field, value) {

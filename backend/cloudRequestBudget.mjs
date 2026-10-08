@@ -434,9 +434,12 @@ export function createCloudRequestBudget({env, fetchImpl = globalThis.fetch, com
   const records=[];
   const redis = command ? null : redisConfig(env);
   const send = command || (async (args, {signal} = {}) => {
+    const timeout = AbortSignal.timeout(5000);
+    const requestSignal = signal ? AbortSignal.any([signal, timeout]) : timeout;
+    requestSignal.throwIfAborted();
     const response = await fetchImpl(redis.url, {
       method:'POST',headers:{authorization:`Bearer ${redis.token}`,'content-type':'application/json'},
-      body:JSON.stringify(args), signal:signal || AbortSignal.timeout(5000),
+      body:JSON.stringify(args), signal:requestSignal,
     });
     if (!response.ok) throw new Error(`cloud_budget_store_http_${response.status}`);
     const payload = await response.json();

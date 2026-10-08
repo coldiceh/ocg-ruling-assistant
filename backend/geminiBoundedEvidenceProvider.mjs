@@ -911,19 +911,38 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
           try {
             await onEvent({ type: 'request', stage: 'selection', step, body: request, measurement: measured, contract: contracts.selection });
             const raw = await transports.selection.invoke(request, { signal, measurement: measured,
-              onDispatch: () => { submitted = true; } });
+              beforeRetry: () => {
+                if (spentUsd + reserve > perQuestionMaxUsd) throw new Error('evidence_request_budget_exceeded');
+              },
+              onDispatch: ({attempt = 1} = {}) => {
+                submitted = true; row.dispatchCount = (row.dispatchCount || 0) + 1; row.attemptCount = attempt;
+                if (attempt > 1) { row.reservedUsd += reserve; row.accountedUsd += reserve; spentUsd += reserve; }
+              } });
+            if (raw.decisionsTransport) {
+              row.attempts = raw.decisionsTransport.attempts;
+              row.attemptCount = raw.decisionsTransport.attemptCount;
+              row.dispatchCount = raw.decisionsTransport.dispatchCount;
+              row.unknownReservedUsd = raw.decisionsTransport.unknownReservedUsd;
+            }
             row.usage = raw.usage || null;
             const used = raw.usage?.input_tokens;
             if (Number.isSafeInteger(used) && used >= 0) {
-              row.accountedUsd = decisionsCostUsd(used); spentUsd += row.accountedUsd - reserve;
+              const observedUsd = decisionsCostUsd(used);
+              row.accountedUsd += observedUsd - reserve; spentUsd += observedUsd - reserve;
               row.billableUsage = { inputTokens: used, billableOutputTokens: 0, cachedInputTokens: 0 };
-              row.billableCost = { amountUsd: row.accountedUsd, status: 'known', basis: 'openai_decisions_input_tokens' };
+              row.billableCost = { amountUsd: observedUsd, status: 'known', basis: 'openai_decisions_input_tokens' };
             }
             await onEvent({ type: 'response', stage: 'selection', step, raw });
             const answers = parseDecisionsAnswers(raw, request);
             row.status = 'success'; return answers;
           } catch (error) {
             if (!submitted) { spentUsd -= row.accountedUsd; row.accountedUsd = 0; row.submitted = false; }
+            if (error.decisionsFailure) {
+              row.decisionsFailure = error.decisionsFailure;
+              row.attemptCount = error.decisionsFailure.attemptCount;
+              row.dispatchCount = error.decisionsFailure.dispatchCount;
+              row.unknownReservedUsd = error.decisionsFailure.unknownReservedUsd;
+            }
             row.status = 'failed'; row.error = error.message; throw error;
           } finally { row.elapsedMs = performance.now() - requestedAt; }
         } });
@@ -977,7 +996,8 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
         evidenceSelector: useDecisions ? 'decisions' : 'luna',
         dryRun: false, warnings: [], ...revisions, assetsCacheHit: cacheHit,
         elapsedBeforeRetrievalMs, elapsedMs: timingsMs.total, timingsMs, tokenUsage,
-        rounds: calls.filter(row => ['generate_content', 'decisions'].includes(row.operation)).length,
+        rounds: calls.reduce((total, row) => total + (row.operation === 'decisions'
+          ? row.dispatchCount || 0 : row.operation === 'generate_content' ? 1 : 0), 0),
         estimatedCostUsd: spentUsd, estimatedCostCny: spentUsd * fx, actualCostKnown: false,
         costBasis: 'provider_list_theoretical', cacheProvisionUsd: 0, queryPlan,
         bounded: { calls, tokenCounts: counts, finalModelCalls: 0, reading: completedReading,
@@ -995,6 +1015,7 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
       error.boundedRetrieval = { calls, tokenCounts: counts, estimatedCostUsd: spentUsd,
         elapsedBeforeRetrievalMs, elapsedMs: performance.now() - started, timingsMs: { ...timingsMs },
         finalModelCalls: 0, completedPlan, reading: completedReading,
+        ...(error.decisionsFailure ? { decisionsFailure: error.decisionsFailure } : {}),
         ...(error.selectionFailure ? { selectionFailure: error.selectionFailure } : {}),
         ...(error.packing ? { packingFailure: { actualPromptChars: error.packing.promptChars,
           prompt: error.packing.prompt, allowedEvidenceIds: error.packing.allowedEvidenceIds } } : {}) };

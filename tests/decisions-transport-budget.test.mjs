@@ -45,9 +45,9 @@ function ledger({settlementFailure = false} = {}) {
   return {fetchImpl, hashes, commands, tickets};
 }
 
-function productionTransport(store, provider, customEnv = env) {
+function productionTransport(store, provider, customEnv = env, options = {}) {
   let providerCalls = 0;
-  const transport = createDecisionsTransport({env:customEnv, fetchImpl:async (url, options) => {
+  const transport = createDecisionsTransport({...options, env:customEnv, fetchImpl:async (url, options) => {
     if (url === env.UPSTASH_BUDGET_KV_REST_API_URL) return store.fetchImpl(url, options);
     assert.equal(url, DECISIONS_ENDPOINT);
     providerCalls += 1;
@@ -140,6 +140,113 @@ test('unknown HTTP outcomes retain the durable reservation and never retry or fa
     assert.equal(store.commands.length, 1);
     assert.equal(store.tickets()[0].status, 'reserved');
   }
+});
+
+test('an explicit 504 retries identical bytes once with a fresh ticket and preserves unknown spend', async () => {
+  const store = ledger(), sent = [], pauses = [];
+  const transport = productionTransport(store, async (_url, options) => {
+    sent.push(options.body);
+    return sent.length === 1 ? new Response('ignored gateway body', {status:504, headers:{'x-request-id':'req_failed'}})
+      : Response.json(response(), {headers:{'x-request-id':'req_success'}});
+  }, env, {waitBeforeRetry:async delay => pauses.push(delay)});
+  const result = await transport.invoke(body);
+  assert.deepEqual(sent, [JSON.stringify(body), JSON.stringify(body)]);
+  assert.equal(pauses.length, 1);
+  const tickets = store.tickets();
+  assert.equal(tickets.length, 2); assert.notEqual(tickets[0].id, tickets[1].id);
+  assert.deepEqual(tickets.map(ticket => ticket.status), ['reserved', 'usage_settled']);
+  assert.equal(tickets[0].theoreticalNano, Math.ceil(transport.measure(body).estimatedCostUsd * 1e9));
+  assert.equal(tickets[1].theoreticalNano, 100000);
+  const {decisionsTransport:metadata, ...received} = result;
+  assert.deepEqual(received, response());
+  assert.equal(metadata.attemptCount, 2); assert.equal(metadata.dispatchCount, 2);
+  assert.equal(metadata.unknownReservedUsd, transport.measure(body).estimatedCostUsd);
+  assert.deepEqual(metadata.attempts.map(item => [item.httpStatus, item.requestId]), [[504,'req_failed'],[200,'req_success']]);
+});
+
+test('a second 504 stops and exposes only mechanical failure metadata', async () => {
+  const store = ledger();
+  const transport = productionTransport(store, async () => new Response('SECRET_BODY_DO_NOT_RETAIN',
+    {status:504, headers:{'x-request-id':'req_gateway'}}), env, {waitBeforeRetry:async () => {}});
+  await assert.rejects(transport.invoke(body), error => {
+    assert.equal(error.statusCode, 504); assert.equal(error.status, 504);
+    assert.equal(error.decisionsFailure.upstreamHttpStatus, 504);
+    assert.equal(error.decisionsFailure.attemptCount, 2); assert.equal(error.decisionsFailure.dispatchCount, 2);
+    assert.equal(error.decisionsFailure.requestId, 'req_gateway');
+    assert.equal(error.decisionsFailure.unknownReservedUsd, transport.measure(body).estimatedCostUsd * 2);
+    assert(!JSON.stringify(error).includes('SECRET_BODY_DO_NOT_RETAIN'));
+    return true;
+  });
+  assert.equal(transport.providerCalls(), 2);
+  assert.deepEqual(store.tickets().map(ticket => ticket.status), ['reserved','reserved']);
+});
+
+test('a retry response without usage retains both unknown reservations', async () => {
+  const store = ledger(); let count = 0;
+  const transport = productionTransport(store, async () => ++count === 1
+    ? new Response('',{status:504}) : Response.json(response(null)), env, {waitBeforeRetry:async()=>{}});
+  const result = await transport.invoke(body);
+  assert.equal(result.decisionsTransport.unknownReservedUsd, 2 * transport.measure(body).estimatedCostUsd);
+  assert.deepEqual(store.tickets().map(ticket=>ticket.status),['reserved','reserved']);
+});
+
+test('the actual local timeout does not retry or become an upstream HTTP 504', async () => {
+  const store = ledger(); let pauses = 0;
+  const transport = productionTransport(store, async (_url,{signal})=>new Promise((_resolve,reject)=>{
+    const keepAlive=setTimeout(()=>reject(new Error('local timeout did not abort')),100);
+    signal.addEventListener('abort',()=>{clearTimeout(keepAlive);reject(signal.reason);},{once:true});
+  }), {...env,OPENAI_DECISIONS_TIMEOUT_MS:'10'}, {waitBeforeRetry:async()=>{pauses+=1;}});
+  await assert.rejects(transport.invoke(body), error=>{
+    assert.equal(error.name,'TimeoutError');assert.equal(error.decisionsFailure.upstreamHttpStatus,null);
+    assert.equal(error.decisionsFailure.dispatchCount,1);assert.equal(error.statusCode,undefined);return true;
+  });
+  assert.equal(transport.providerCalls(),1);assert.equal(pauses,0);
+});
+
+test('only the explicit transient HTTP allowlist retries', async () => {
+  for (const status of [502,503,504,520,521,522,523,524]) {
+    const store = ledger(); let count = 0, pauses = 0;
+    const transport = productionTransport(store, async () => ++count === 1
+      ? new Response('', {status}) : Response.json(response()), env,
+    {waitBeforeRetry:async () => {pauses += 1;}});
+    await transport.invoke(body);
+    assert.equal(count,2); assert.equal(pauses,1);
+  }
+  for (const failure of [new Error('unknown connection failure'), new DOMException('local timeout','TimeoutError')]) {
+    const store = ledger(); let pauses = 0;
+    const transport = productionTransport(store, async () => {throw failure;}, env,
+      {waitBeforeRetry:async () => {pauses += 1;}});
+    await assert.rejects(transport.invoke(body), error => error === failure);
+    assert.equal(transport.providerCalls(),1); assert.equal(pauses,0);
+  }
+});
+
+test('second-attempt budget denial cannot issue a second HTTP request or release the first ticket', async () => {
+  const store = ledger();
+  const transport = productionTransport(store, async () => new Response('',{status:504}),
+    {...env, PUBLIC_OPENAI_DAILY_LIMIT_USD:'0.0006'}, {waitBeforeRetry:async () => {}});
+  await assert.rejects(transport.invoke(body), error => {
+    assert.equal(error.code,'official_daily_budget_exceeded');
+    assert.equal(error.decisionsFailure.attemptCount,2); assert.equal(error.decisionsFailure.dispatchCount,1);
+    assert.equal(error.decisionsFailure.attempts[1].dispatched,false);
+    return true;
+  });
+  assert.equal(transport.providerCalls(),1); assert.equal(store.tickets().length,1);
+  assert.equal(store.tickets()[0].status,'reserved');
+});
+
+test('caller cancellation during retry backoff stops before another reservation', async () => {
+  const store = ledger(), controller = new AbortController(), reason = new Error('cancel retry');
+  let reachedWait;
+  const waiting = new Promise(resolve => {reachedWait=resolve;});
+  const transport = productionTransport(store, async () => new Response('',{status:504}), env,
+    {waitBeforeRetry:async (_delay,{signal}) => new Promise((_resolve,reject) => {
+      signal.addEventListener('abort',()=>reject(signal.reason),{once:true}); reachedWait();
+    })});
+  const pending=transport.invoke(body,{signal:controller.signal});
+  const rejected=assert.rejects(pending,error=>error===reason);
+  await waiting; controller.abort(reason); await rejected;
+  assert.equal(transport.providerCalls(),1); assert.equal(store.tickets().length,1);
 });
 
 test('abort after reservation is propagated and cannot release uncertain spend', async () => {

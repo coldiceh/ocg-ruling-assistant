@@ -263,6 +263,50 @@ test("legacy answer still completes with only the prepare request", async () => 
   assert.equal(calls, 1);
 });
 
+test("a local out-of-scope refusal validates and renders without a finalize request", async () => {
+  let calls = 0;
+  const answer = { answerLevel: "out_of_scope", shortAnswer: "仅支持游戏王规则与裁定问题。", riskFlags: ["out_of_scope"] };
+  const clientInstance = createClient(async () => {
+    calls++;
+    return sse({ type: "answer", data: { answer } }, endEvent());
+  });
+  const result = await clientInstance.request("Synthetic unrelated request", "latest");
+  assert.equal(result.answerLevel, "out_of_scope");
+  assert.equal(result.effectiveRulingVersion, "latest");
+  assert.equal(calls, 1);
+
+  const renderSource = app.slice(app.indexOf("function renderBackendAnswer"), app.indexOf("function renderAnswerVersion"));
+  let rendered;
+  const render = new Function("renderRagAnswer", `
+    let lastRenderedBackendAnswer;
+    const ui = { stepsTitle: {}, stepsList: {} };
+    function completePendingStages() {}
+    function renderAnswerVersion() {}
+    function renderEngineSimulation() {}
+    ${renderSource}
+    return renderBackendAnswer;
+  `)((value) => { rendered = value; });
+  render(result);
+  assert.equal(rendered, result);
+  assert.match(app, /out_of_scope: \{ confidence: "服务范围", className: "is-caution", title: "本题不在服务范围"/u);
+
+  const risks = app.slice(app.indexOf("function publicRiskLines"), app.indexOf("function ragBudgetLines"));
+  const publicRiskLines = new Function(`function formatRiskFlag(value) { return value; } ${risks}; return publicRiskLines;`)();
+  assert.deepEqual(publicRiskLines(["out_of_scope"]), []);
+});
+
+test("a refusal does not bypass explicit ruling-version validation", async () => {
+  for (const versions of [
+    { rulingVersion: "invalid-version" },
+    { effectiveRulingVersion: "latest", rulingVersion: "invalid-version" },
+  ]) {
+    const clientInstance = createClient(async () => sse({
+      type: "answer", data: { answer: { answerLevel: "out_of_scope", ...versions } },
+    }, endEvent()));
+    await assert.rejects(clientInstance.request("Synthetic input", "latest"), { code: "ruling_version_response_invalid" });
+  }
+});
+
 test("preparation progress is applied once and remains accumulated through finalization", async () => {
   const totals = [];
   const clientInstance = createClient(async (_url, options) => {

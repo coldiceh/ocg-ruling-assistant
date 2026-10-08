@@ -22,6 +22,7 @@ export function sourceTranslationFields(source) {
 
 export async function translatePublicSource({ payload, store, env = process.env,
   fetchImpl = globalThis.fetch, createBudget = createCloudRequestBudget, signal } = {}) {
+  signal?.throwIfAborted();
   const { sourceSnapshotId, sourceId, targetLocale } = payload || {};
   if (!isPublicPreparationId(sourceSnapshotId) || typeof sourceId !== "string" || !sourceId
       || sourceId.length > 200 || !LOCALES.includes(targetLocale)) {
@@ -67,9 +68,12 @@ export async function translatePublicSource({ payload, store, env = process.env,
   if (!apiKey) throw preparationError("翻译服务尚未配置", "source_translation_configuration_invalid", 503);
   const budget = createBudget({ env: budgetEnv, fetchImpl });
   const raw = await budget.sourceTranslation({ body, signal, invoke: async () => {
+    signal?.throwIfAborted();
+    const timeoutSignal = AbortSignal.timeout(90000);
+    const providerSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
     const response = await fetchImpl(endpoint, { method: "POST",
       headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
-      body: JSON.stringify(body), signal: signal || AbortSignal.timeout(90000) });
+      body: JSON.stringify(body), signal: providerSignal });
     if (!response.ok) throw preparationError("翻译服务暂不可用", `source_translation_provider_http_${response.status}`, 503);
     return response.json();
   } });

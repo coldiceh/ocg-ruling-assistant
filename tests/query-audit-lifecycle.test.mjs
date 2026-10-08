@@ -8,6 +8,7 @@ import {
 } from "../backend/publicPreparedAnswerService.mjs";
 
 const AUDIT_ID = "audit-private-7b6e5d4c";
+const SCOPE = Object.freeze({ scope: "in_scope", confidence: "high", reasonCode: "ruling_question" });
 const PRIVATE_CONTEXT = Object.freeze({
   ip: "203.0.113.42",
   ipSource: "vercel",
@@ -56,6 +57,7 @@ function preparedAnswer() {
       requestDiagnostics: {
         requestId: "public-request-diagnostic",
         durationMs: 17,
+        scope: SCOPE,
       },
     },
   };
@@ -83,6 +85,7 @@ test("answer service appends request identity and exposes auditId only in its pr
   const result = await answerPublicRulingQuestion({
     payload: PAYLOAD,
     env: ENV,
+    classifyScope: async () => SCOPE,
     requestContext: PRIVATE_CONTEXT,
     appendAudit: async (input) => {
       appendInput = input;
@@ -122,7 +125,7 @@ test("risk-control early return marks the audit that was appended as blocked", a
     requestContext: PRIVATE_CONTEXT,
     appendAudit: async () => auditRecord(),
     updateAudit: async (input) => updates.push(input),
-    readRiskControl: async () => ({ active: true, remainingMinutes: 4 }),
+    readRiskControl: async () => ({ ok: true, active: true, remainingMinutes: 4 }),
     classifyScope: async () => assert.fail("an active lock must skip classification"),
     answerRuling: async () => assert.fail("an active lock must skip ruling generation"),
   });
@@ -139,6 +142,7 @@ test("answer preparation envelope does not mark the audit complete before storag
   const result = await answerPublicRulingQuestion({
     payload: PAYLOAD,
     env: ENV,
+    classifyScope: async () => SCOPE,
     requestContext: PRIVATE_CONTEXT,
     prepareForContinuation: true,
     appendAudit: async () => auditRecord(),
@@ -157,6 +161,7 @@ test("answer audit append and update failures remain observational", async () =>
     const result = await answerPublicRulingQuestion({
       payload: PAYLOAD,
       env: ENV,
+      classifyScope: async () => SCOPE,
       requestContext: PRIVATE_CONTEXT,
       appendAudit: async () => {
         if (failurePoint === "append") throw new Error("synthetic append failure");
@@ -259,7 +264,7 @@ test("finalize updates the saved audit with completed answer metadata", async ()
       startedAt: 100,
       preparedAt: 120,
       progress: { totalMs: 20 },
-      requestDiagnostics: { requestId: "public-request-diagnostic" },
+      requestDiagnostics: { requestId: "public-request-diagnostic", scope: SCOPE },
       requestContext: PRIVATE_CONTEXT,
     },
     env: ENV,
@@ -295,6 +300,7 @@ test("finalize failure records only a bounded error code", async () => {
     code: "supplier_timeout",
   });
   const preparation = {
+    requestDiagnostics: { scope: SCOPE },
     auditId: AUDIT_ID,
     profileId: PROFILE.id,
     pipeline: "rag_baseline",
@@ -322,6 +328,7 @@ test("finalize failure records only a bounded error code", async () => {
 test("audit update failure cannot replace a successful final answer", async () => {
   const result = await finalizePublicAnswer({
     preparation: {
+      requestDiagnostics: { scope: SCOPE },
       auditId: AUDIT_ID,
       profileId: PROFILE.id,
       pipeline: "rag_baseline",
@@ -348,6 +355,7 @@ test("audit update failure cannot replace the original finalization error", asyn
   });
   await assert.rejects(finalizePublicAnswer({
     preparation: {
+      requestDiagnostics: { scope: SCOPE },
       auditId: AUDIT_ID,
       profileId: PROFILE.id,
       pipeline: "rag_baseline",
@@ -362,10 +370,11 @@ test("audit update failure cannot replace the original finalization error", asyn
   }), (error) => error === original);
 });
 
-test("legacy preparation without auditId stays compatible and skips audit updates", async () => {
+test("scope-verified preparation without auditId stays compatible and skips audit updates", async () => {
   let updateCalls = 0;
   const result = await finalizePublicAnswer({
     preparation: {
+      requestDiagnostics: { scope: SCOPE },
       profileId: PROFILE.id,
       pipeline: "rag_baseline",
       continuation: CONTINUATION,

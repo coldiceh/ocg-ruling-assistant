@@ -13,6 +13,7 @@ test("public latency reports no exact-match duration while the shortcut is disab
       payload: { question: "timing probe" },
       env: { MODEL_PROVIDER: "mock" },
       appendAudit: async () => null,
+      classifyScope: async () => ({ scope: 'in_scope' }),
       answerOfficialExact: async () => {
         exactCalls += 1;
         now += 700;

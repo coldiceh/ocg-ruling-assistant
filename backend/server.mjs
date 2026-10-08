@@ -32,6 +32,7 @@ import {
 } from "./publicAnswerProgress.mjs";
 import { readRequestBody as readBody } from "./requestBodyReader.mjs";
 import { readQueryAuditRequestContext } from "./publicQueryAudit.mjs";
+import { enforcePublicRequestRateLimit } from "./publicRequestRateLimit.mjs";
 
 const port = Number(process.env.PORT || 8787);
 const host = String(process.env.HOST || "127.0.0.1").trim();
@@ -122,6 +123,7 @@ const server = createServer(async (request, response) => {
       });
       const requestChannel = classifyPublicRequestChannel(body);
       const payload = parsePublicAnswerPayload(body);
+      await enforcePublicRequestRateLimit({ request, env: process.env, action: payload.action, signal: requestAbort.signal });
       if (wantsPublicAnswerProgress(request, requestChannel)) {
         await answerWithProgressStream({
           request,
@@ -151,6 +153,7 @@ const server = createServer(async (request, response) => {
     } catch (error) {
       if (requestAbort.signal.aborted) return;
       const httpError = publicAnswerHttpError(error);
+      if (httpError.payload.retryAfterSeconds) response.setHeader("Retry-After", String(httpError.payload.retryAfterSeconds));
       sendJson(response, httpError.statusCode, httpError.payload);
     } finally {
       requestAbort.cleanup();
@@ -221,6 +224,7 @@ function setCors(response) {
   response.setHeader("access-control-allow-origin", allowedOrigin);
   response.setHeader("access-control-allow-methods", "GET,POST,OPTIONS");
   response.setHeader("access-control-allow-headers", "content-type,authorization,x-budget-reset-password,x-budget-reset-token");
+  response.setHeader("access-control-expose-headers", "Retry-After");
 }
 
 function sendJson(response, status, payload) {
