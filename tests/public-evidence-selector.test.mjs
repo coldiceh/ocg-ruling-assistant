@@ -74,3 +74,40 @@ test("public capabilities expose the default and both evidence selectors", async
     { id: "luna", label: "Luna" },
   ]);
 });
+
+test("only Decisions receives its dedicated key after public model environment sanitization", async () => {
+  const env = {
+    PUBLIC_RULING_MODEL_PROFILE: "bai-astra-low",
+    BAI_API_KEY: "synthetic-final-bai-key",
+    OPENAI_DECISIONS_API_KEY: "synthetic-decisions-key",
+    OPENAI_API_KEY: "synthetic-generic-openai-key",
+    OPENAI_BASE_URL: "https://untrusted.example.test/v1",
+    OCG_FINAL_OPENAI_API_KEY: "synthetic-other-final-key",
+    GLM_API_KEY: "synthetic-glm-key",
+    KIMI_API_KEY: "synthetic-kimi-key",
+    RELAY_API_KEY: "synthetic-relay-key",
+    ADMIN_API_KEY: "synthetic-admin-key",
+  };
+  for (const evidenceSelector of [undefined, "decisions", "luna"]) {
+    let actualEnv;
+    await answerPublicRulingQuestion({
+      payload: { ...webBody, ...(evidenceSelector ? { evidenceSelector } : {}) },
+      env,
+      prepareForContinuation: true,
+      appendAudit: async () => null,
+      preloadAssets: () => ({}),
+      answerRuling: async ({ env: runtimeEnv }) => {
+        actualEnv = runtimeEnv;
+        return { status: "evidence_prepared" };
+      },
+    });
+    assert.equal(actualEnv.OPENAI_DECISIONS_API_KEY,
+      evidenceSelector === "luna" ? undefined : env.OPENAI_DECISIONS_API_KEY);
+    assert.equal(actualEnv.BAI_API_KEY, env.BAI_API_KEY);
+    for (const key of ["OPENAI_API_KEY", "OPENAI_BASE_URL", "OCG_FINAL_OPENAI_API_KEY",
+      "GLM_API_KEY", "KIMI_API_KEY", "RELAY_API_KEY", "ADMIN_API_KEY"]) {
+      assert.equal(Object.hasOwn(actualEnv, key), false, `${key} stays isolated`);
+    }
+  }
+  assert.equal(env.OPENAI_DECISIONS_API_KEY, "synthetic-decisions-key");
+});

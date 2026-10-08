@@ -346,6 +346,11 @@ export async function answerPublicRulingQuestion({
     ...createPublicAnswerModelEnv(env, profile.id),
     EVIDENCE_SELECTOR: normalizedPayload.evidenceSelector || DEFAULT_PUBLIC_EVIDENCE_SELECTOR,
   };
+  // Evidence selection has its own official credential. Preserve only that
+  // dedicated key after the final-model environment removes OPENAI_* values.
+  if (publicEnv.EVIDENCE_SELECTOR === "decisions" && typeof env.OPENAI_DECISIONS_API_KEY === "string") {
+    publicEnv.OPENAI_DECISIONS_API_KEY = env.OPENAI_DECISIONS_API_KEY.trim();
+  }
     let answer = await answerRuling({
       rulingVersion: normalizedPayload.rulingVersion,
       question: normalizedPayload.question,
