@@ -92,3 +92,68 @@ test("a paid translation remains readable when its cache write fails", async () 
   assert.equal(result.cachePersisted, false);
   assert.equal(f.calls, 1);
 });
+
+test("translation retains its own 90-second timeout when a parent signal exists", async t => {
+  const f = fixture();
+  const parent = new AbortController();
+  const originalTimeout = AbortSignal.timeout.bind(AbortSignal);
+  let timeouts = 0;
+  t.mock.method(AbortSignal, "timeout", milliseconds => {
+    assert.equal(milliseconds, 90000);
+    timeouts += 1;
+    return originalTimeout(5);
+  });
+  let providerCalls = 0;
+  await assert.rejects(translatePublicSource({ payload, store: f.store,
+    env: { SOURCE_TRANSLATION_DAILY_BUDGET_USD: "1", BAI_API_KEY: "fixture-secret" },
+    createBudget: f.createBudget, signal: parent.signal,
+    fetchImpl: async (url, options) => {
+      providerCalls += 1;
+      return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => resolve(f.fetchImpl(url, options)), 50);
+        options.signal.addEventListener("abort", () => {
+          clearTimeout(timer);
+          reject(options.signal.reason);
+        }, { once: true });
+      });
+    },
+  }), { name: "TimeoutError" });
+  assert.equal(providerCalls, 1);
+  assert.equal(timeouts, 1);
+  assert.equal(parent.signal.aborted, false);
+  assert.equal(f.cache.size, 0);
+});
+
+test("a pre-cancelled parent prevents translation storage, budget and provider work", async () => {
+  const f = fixture();
+  const parent = new AbortController();
+  const reason = new Error("parent already cancelled");
+  parent.abort(reason);
+  let reads = 0;
+  let providerCalls = 0;
+  const originalRead = f.store.readSourceSnapshot;
+  f.store.readSourceSnapshot = async () => { reads += 1; return originalRead(); };
+  await assert.rejects(translatePublicSource({ payload, store: f.store,
+    env: { SOURCE_TRANSLATION_DAILY_BUDGET_USD: "1", BAI_API_KEY: "fixture-secret" },
+    createBudget: f.createBudget, signal: parent.signal,
+    fetchImpl: async (...args) => { providerCalls += 1; return f.fetchImpl(...args); },
+  }), error => error === reason);
+  assert.equal(reads, 0);
+  assert.equal(f.calls, 0);
+  assert.equal(providerCalls, 0);
+});
+
+test("parent cancellation still interrupts a translation with its own timeout", async () => {
+  const f = fixture();
+  const parent = new AbortController();
+  const reason = new Error("parent cancelled during provider work");
+  await assert.rejects(translatePublicSource({ payload, store: f.store,
+    env: { SOURCE_TRANSLATION_DAILY_BUDGET_USD: "1", BAI_API_KEY: "fixture-secret" },
+    createBudget: f.createBudget, signal: parent.signal,
+    fetchImpl: async (_url, { signal }) => {
+      parent.abort(reason);
+      signal.throwIfAborted();
+    },
+  }), error => error === reason);
+  assert.equal(f.cache.size, 0);
+});

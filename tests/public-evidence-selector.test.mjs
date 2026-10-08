@@ -52,6 +52,7 @@ test("new requests default to Decisions and isolate explicit Luna from other req
         payload: { question: "Synthetic question", ...(requested ? { evidenceSelector: requested } : {}) },
         env,
         prepareForContinuation,
+        classifyScope: async () => ({ scope: "in_scope" }),
         appendAudit: async () => null,
         preloadAssets: () => ({}),
         answerRuling: async (options) => {
@@ -94,6 +95,7 @@ test("only Decisions receives its dedicated key after public model environment s
       payload: { ...webBody, ...(evidenceSelector ? { evidenceSelector } : {}) },
       env,
       prepareForContinuation: true,
+      classifyScope: async () => ({ scope: "in_scope" }),
       appendAudit: async () => null,
       preloadAssets: () => ({}),
       answerRuling: async ({ env: runtimeEnv }) => {

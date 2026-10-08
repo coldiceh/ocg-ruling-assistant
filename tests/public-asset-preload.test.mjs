@@ -4,8 +4,8 @@ import { answerPublicRulingQuestion } from '../backend/publicAnswerService.mjs';
 import { createGeminiRuleQaEvidenceProvider } from '../backend/geminiRuleQaEvidenceProvider.mjs';
 import { preloadRagRequestAssets } from '../backend/ragRulingPipeline.mjs';
 
-// Claim: local snapshot work overlaps classification only after the active
-// lock is checked, and the exact promise is passed forward. A failure means
+// Claim: snapshot work begins only after public admission, and its exact
+// promise is passed forward. A failure means
 // the scheduling change must not ship; this makes no semantic evidence claim.
 const env = { MODEL_PROVIDER: 'mock', UPSTASH_REDIS_REST_URL: 'https://redis.example.test',
   UPSTASH_REDIS_REST_TOKEN: 'test-token' };
@@ -52,7 +52,7 @@ test('prepared route preloads the explicit card-only snapshot while other routes
   assert.deepEqual(calls, ['prepared', 'full']);
 });
 
-test('public request starts one local preload after inactive lock and before classification', async () => {
+test('public request starts one local preload after scope approval and inactive lock', async () => {
   const calls = [];
   const preloadedAssets = { data: Promise.resolve({}), geminiAssets: Promise.resolve({}) };
   await answerPublicRulingQuestion({ payload: { question: 'fixture' }, env,
@@ -71,7 +71,7 @@ test('public request starts one local preload after inactive lock and before cla
     },
     prepareForContinuation: true,
   });
-  assert.deepEqual(calls, ['lock', 'preload', 'classify', 'pipeline']);
+  assert.deepEqual(calls, ['lock', 'classify', 'preload', 'pipeline']);
 });
 
 test('active public lock does not start snapshot work', async () => {

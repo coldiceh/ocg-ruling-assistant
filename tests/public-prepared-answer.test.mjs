@@ -95,6 +95,7 @@ function fixture({
     ? { ...redis.store, complete: async () => { throw completeFailure; } }
     : redis.store;
   const handler = createPublicAnswerHandler({ env, createStore: () => handlerStore,
+    rateLimit: async () => ({ allowed: true }),
     readRiskControl,
     prepare: (options) => preparePublicAnswer({ ...options, answerPublic: async (input) => {
       counts.prepare++;
@@ -103,7 +104,7 @@ function fixture({
       input.progress.transition("extract_card_names"); input.progress.transition("retrieve_card_texts"); input.progress.transition("retrieve_rulings");
       return { answer: earlyAnswer ? { shortAnswer: "Early synthetic answer", rulingVersion: "latest" } : {
         status: "evidence_prepared", continuation, rulingVersion: "latest",
-        debug: { cloudCosts: { actualCny: 0.1, theoreticalUsd: 0.2, calls: [{ id: "preparation" }] } },
+        debug: { requestDiagnostics: { scope: { scope: 'in_scope' } }, cloudCosts: { actualCny: 0.1, theoreticalUsd: 0.2, calls: [{ id: "preparation" }] } },
       }, latency: { profileId: body.rulingModelProfile } };
     } }),
     finalize: (options) => finalizePublicAnswer({ ...options, finalize: async (input) => {
@@ -198,6 +199,7 @@ test("concurrent finalize, failed finalize and lost claim acknowledgement cannot
   assert.equal(f.counts.final, 1);
   let calls = 0;
   const uncertain = createPublicAnswerHandler({ env,
+    rateLimit: async () => ({ allowed: true }), readRiskControl: async () => ({ ok: true, active: false }),
     createStore: () => ({ claim: async () => { throw Error("unacknowledged claim"); } }),
     finalize: async () => { calls++; },
   });
@@ -349,6 +351,7 @@ test("finalize latency adds active preparation and finalization time without the
     rulingVersion: "latest",
     startedAt: 0,
     progress: { totalMs: 35_531 },
+    requestDiagnostics: { scope: { scope: 'in_scope' } },
   };
   const profile = { id: "official-astra-low", provider: "openai" };
 

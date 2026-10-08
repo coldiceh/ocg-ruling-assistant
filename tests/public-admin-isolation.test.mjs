@@ -85,9 +85,8 @@ test("public answer payload cannot select an admin-only provider or depend on Op
       },
     }, response);
 
-    assert.equal(response.statusCode, 200);
-    assert.equal(response.payload.mode, "rag_baseline");
-    assert.equal(response.payload.debug.providerUsed, "mock");
+    assert.equal(response.statusCode, 400);
+    assert.equal(response.payload.code, "unsupported_request_field");
     assert.equal(openAiCalls, 0);
   } finally {
     globalThis.fetch = previousFetch;

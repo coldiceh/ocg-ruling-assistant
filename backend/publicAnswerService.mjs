@@ -29,14 +29,13 @@ import { isPublicPreparationId } from "./publicAnswerPreparationStore.mjs";
 import { preloadRagRequestAssets } from './ragRulingPipeline.mjs';
 import { selectAvailablePublicProfile, withPublicGenerationInfo } from './publicGenerationInfo.mjs';
 import {
-  activatePublicOfftopicRiskControl,
+  buildPublicOutOfScopeAnswer,
   buildPublicOfftopicRiskControlAnswer,
   publicOfftopicRiskControlStorageStatus,
   readPublicOfftopicRiskControl,
 } from "./publicOfftopicRiskControl.mjs";
 import {
   classifyPublicQueryScope,
-  shouldTriggerPublicQueryRisk,
 } from "./publicQueryScopeClassifier.mjs";
 
 export const PUBLIC_ANSWER_REQUEST_BODY_LIMIT_BYTES = 64 * 1024;
@@ -118,6 +117,13 @@ export function parsePublicAnswerPayload(body, {
   }
   if (payload.action !== undefined && payload.action !== "prepare") {
     throw publicAnswerRequestError("Unsupported answer action", "invalid_answer_action");
+  }
+  const allowedFields = ["action", "question", "mode", "rulingModelProfile", "rulingVersion", "answerLocale", "evidenceSelector"];
+  if (Object.keys(payload).some(key => !allowedFields.includes(key))) {
+    throw publicAnswerRequestError("Unsupported public request field", "unsupported_request_field");
+  }
+  if (payload.mode !== undefined && String(payload.mode).toLowerCase() !== 'rag') {
+    throw publicAnswerRequestError("Only the evidence-grounded RAG answer mode is public", "unsupported_answer_mode");
   }
 
   if (typeof payload.question !== "string" || !payload.question.trim()) {
@@ -228,7 +234,6 @@ export async function answerPublicRulingQuestion({
   requestContext,
   readRiskControl = readPublicOfftopicRiskControl,
   classifyScope = classifyPublicQueryScope,
-  activateRiskControl = activatePublicOfftopicRiskControl,
   answerOfficialExact = answerExactOfficialQaQuestionForVersion,
   answerRuling = answerRagRulingQuestionForVersion,
   preloadAssets = preloadRagRequestAssets,
@@ -276,46 +281,41 @@ export async function answerPublicRulingQuestion({
   };
 
   try {
-  // Risk control runs at the shared public entry before exact matching, model
-  // profile selection, card extraction, retrieval, or final ruling generation.
-  if (shouldApplyPublicOfftopicRiskControl(env)) {
-    const storage = publicOfftopicRiskControlStorageStatus(env);
-    if (storage.enabled) {
-      const activeControl = await readRiskControl({ env }).catch(() => null);
-      if (activeControl?.active === true) {
-        const answer = buildPublicOfftopicRiskControlAnswer({ status: activeControl, env });
-        await auditResult(answer, "blocked");
-        return {
-          answer,
-          latency: null,
-        };
-      }
+  // Retain existing administrator/shared locks, but an unrelated question no
+  // longer creates a global lock that would deny service to other users.
+  const activeControl = await readPublicAnswerAvailability({ env, readRiskControl });
+  if (activeControl?.active === true) {
+    const answer = buildPublicOfftopicRiskControlAnswer({ status: activeControl, env });
+    await auditResult(answer, "blocked");
+    return { answer, latency: null };
+  }
 
-      // Storage and classifier failures retain the old fail-open behavior.
-      // If the current lock cannot be read, skip the classifier and lock write.
-      if (activeControl?.ok === true) {
-        startAssetPreload();
-        const scopeStartedAt = Date.now();
-        const scopeDecision = await classifyScope({
-          question: normalizedPayload.question,
-          env,
-          signal,
-        }).catch(() => null);
-        requestDiagnostics.scope = scopeDiagnostic(scopeDecision, Date.now() - scopeStartedAt);
-        if (shouldTriggerPublicQueryRisk(scopeDecision)) {
-          const activated = await activateRiskControl({ env, diagnostic: { requestId: requestDiagnostics.requestId, ...requestDiagnostics.scope } }).catch(() => null);
-          if (activated?.active === true) {
-            const answer = buildPublicOfftopicRiskControlAnswer({
-              status: activated, triggered: activated.triggered === true, env,
-            });
-            await auditResult(answer, "blocked");
-            return {
-              answer,
-              latency: null,
-            };
-          }
-        }
-      }
+  // Every new public question needs an explicit in-scope model decision before
+  // retrieval. This per-request admission does not depend on shared lock storage
+  // or its optional switch; classifier outages must not admit unrelated work.
+  if (shouldClassifyPublicQuestion(env)) {
+    const scopeStartedAt = Date.now();
+    let scopeDecision;
+    try {
+      scopeDecision = await classifyScope({ question: normalizedPayload.question, env, signal });
+    } catch (error) {
+      if (signal?.aborted) throw error;
+      scopeDecision = { scope: "uncertain", reasonCode: "classifier_failed" };
+    }
+    signal?.throwIfAborted();
+    requestDiagnostics.scope = scopeDiagnostic(scopeDecision, Date.now() - scopeStartedAt);
+    if (scopeDecision?.scope === "out_of_scope") {
+      const answer = {
+        ...buildPublicOutOfScopeAnswer({ answerLocale: normalizedPayload.answerLocale }),
+        debug: { requestDiagnostics },
+      };
+      await auditResult(answer, "blocked");
+      return { answer, latency: null };
+    }
+    if (scopeDecision?.scope !== "in_scope") {
+      throw Object.assign(new Error("问题范围检查暂不可用，本次请求已暂停，请稍后重试。"), {
+        code: "public_query_scope_unavailable", statusCode: 503,
+      });
     }
   }
 
@@ -397,7 +397,8 @@ export async function answerPublicRulingQuestion({
 
 function scopeDiagnostic(decision, durationMs) {
   return {
-    scope: decision?.scope || 'uncertain', confidence: decision?.confidence || 'low',
+    scope: ['in_scope', 'out_of_scope'].includes(decision?.scope) ? decision.scope : 'uncertain',
+    confidence: decision?.confidence || 'low',
     reasonCode: decision?.reasonCode || 'classifier_failed', model: decision?.model || null,
     returnedModel: decision?.returnedModel || null, provider: decision?.provider || null,
     thinkingMode: decision?.thinkingMode || null, durationMs: Math.max(0, durationMs),
@@ -405,12 +406,29 @@ function scopeDiagnostic(decision, durationMs) {
   };
 }
 
-export function shouldApplyPublicOfftopicRiskControl(env = process.env) {
+export function shouldClassifyPublicQuestion(env = process.env) {
   if (isServerOwnedPrivateEvaluationEnv(env)) return false;
   if (/^(?:1|true|yes|on)$/iu.test(String(env.RAG_DRY_RUN || "").trim())) return false;
+  return true;
+}
+
+export function shouldApplyPublicOfftopicRiskControl(env = process.env) {
+  if (!shouldClassifyPublicQuestion(env)) return false;
   return !/^(?:0|false|off|no)$/iu.test(
     String(env.PUBLIC_OFFTOPIC_RISK_CONTROL_ENABLED || "").trim(),
   );
+}
+
+// Shared with continuation and translation routes. A configured lock that
+// cannot be read must not silently authorize further paid work.
+export async function readPublicAnswerAvailability({ env = process.env, readRiskControl = readPublicOfftopicRiskControl } = {}) {
+  if (!shouldApplyPublicOfftopicRiskControl(env) || !publicOfftopicRiskControlStorageStatus(env).enabled) return null;
+  let status;
+  try { status = await readRiskControl({ env }); } catch { /* handled below */ }
+  if (status?.ok !== true) {
+    throw publicAnswerRequestError("服务状态检查暂不可用，请稍后重试。", "public_request_rate_limit_unavailable", 503);
+  }
+  return status;
 }
 
 export async function persistPublicAnswerLatency({ latency, env = process.env } = {}) {
@@ -424,7 +442,7 @@ export async function persistPublicAnswerLatency({ latency, env = process.env } 
 
 export function publicAnswerHttpError(error) {
   const inferredStatus = error?.code === "request_body_too_large" ? 413 : error?.statusCode;
-  const statusCode = [400, 409, 410, 413, 503].includes(inferredStatus) ? inferredStatus : 500;
+  const statusCode = [400, 409, 410, 413, 429, 502, 503, 504].includes(inferredStatus) ? inferredStatus : 500;
   const publicMessage = error?.code === "rag_data_unavailable"
     && error?.expose === true
     && String(error?.publicMessage || "").trim()
@@ -443,11 +461,13 @@ export function publicAnswerHttpError(error) {
     payload: {
       error: publicMessage || (error instanceof Error ? error.message : String(error)),
       code: error?.code || "answer_failed",
+      ...(statusCode === 429 ? { retryAfterSeconds: Math.max(1, Math.ceil(Number(error?.retryAfterSeconds) || 60)) } : {}),
       ...(officialQaBodyDetails ? { details: officialQaBodyDetails } : {}),
-      ...((error?.cloudCosts || error?.requestDiagnostics || error?.boundedRetrieval) ? {debug:{
+      ...((error?.cloudCosts || error?.requestDiagnostics || error?.boundedRetrieval || error?.decisionsFailure) ? {debug:{
         ...(error.cloudCosts ? {cloudCosts:error.cloudCosts} : {}),
         ...(error.requestDiagnostics ? {requestDiagnostics:error.requestDiagnostics} : {}),
         ...(error.boundedRetrieval ? {boundedRetrieval:error.boundedRetrieval} : {}),
+        ...(error.decisionsFailure ? {decisionsFailure:error.decisionsFailure} : {}),
       }} : {}),
     },
   };

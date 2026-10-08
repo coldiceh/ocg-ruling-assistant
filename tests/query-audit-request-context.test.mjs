@@ -98,12 +98,13 @@ test('query audit accepts only platform IP or the direct socket and never payloa
 test('HTTP prepare passes private context separately and does not serialize it in the public result', async () => {
   let input;
   const handler = createPublicAnswerHandler({ env: {VERCEL:'1'}, createStore:()=>({}),
+    rateLimit: async () => ({ allowed: true }),
     prepare: async options => { input = options; return {preparationId:'a'.repeat(64),progress:{totalMs:0},evidencePackage:{text:'fixture'}}; },
   });
   const response = {setHeader(){}, status(n){this.statusCode=n;return this;},json(value){this.payload=value;return this;},end(){}};
   for (const [body, requestChannel] of [
     [{ action: 'prepare', ...WEB_BODY }, 'web'],
-    [{ action: 'prepare', question: 'fixture', ip: '198.51.100.20' }, 'unknown'],
+    [{ action: 'prepare', question: 'fixture' }, 'unknown'],
   ]) {
     await handler({method:'POST',headers:{'x-vercel-forwarded-for':'203.0.113.9'},body},response);
     assert.equal(response.statusCode,200);
@@ -112,6 +113,12 @@ test('HTTP prepare passes private context separately and does not serialize it i
     assert.equal(JSON.stringify(response.payload).includes('198.51.100.20'),false);
     assert.equal(JSON.stringify(response.payload).includes('requestChannel'),false);
   }
+  input = undefined;
+  await handler({method:'POST',headers:{'x-vercel-forwarded-for':'203.0.113.9'},body:{
+    action:'prepare',question:'fixture',ip:'198.51.100.20',
+  }},response);
+  assert.equal(response.statusCode,400);
+  assert.equal(input,undefined,'payload IP is rejected before preparation');
 });
 
 test('non-generated answers omit unrecorded model fields and retain the exact answer body', () => {

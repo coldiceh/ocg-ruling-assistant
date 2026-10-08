@@ -3324,6 +3324,7 @@ function summarizeGenerationAttempt(response = {}, index = 0) {
     reasoningContentPresent: response.reasoningContentPresent === true,
     reasoningContentChars: Number(response.reasoningContentChars || 0),
     usage: normalizeUsage("deepseek", response.usage),
+    streamMetrics: safeProviderStreamMetrics(response.streamMetrics),
   };
 }
 
@@ -3428,7 +3429,9 @@ function safeProviderStreamMetrics(value) {
     "requestToFirstByteMs",
     "requestToFirstEventMs",
     "requestToFirstContentMs",
+    "requestToDoneMs",
     "requestToCompleteMs",
+    "responseBodyReadMs",
     "networkChunkCount",
     "sseEventCount",
     "visibleContentChunkCount",

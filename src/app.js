@@ -83,6 +83,7 @@ Object.assign(uiTranslations.en, {
   "已有资料可供分析，但部分条件仍需核对": "Available sources support analysis, but some conditions need review",
   "缺少作出判断所需的场景或卡片资料": "The scenario or card information is incomplete",
   "API 预算守卫": "API budget limit", "非规则问题风控": "Question access control",
+  "服务范围": "Service scope", "本题不在服务范围": "Question outside service scope", "仅支持游戏王规则与裁定": "Yu-Gi-Oh! rules and rulings only",
   "卡片 FAQ": "Card FAQ", "规则资料": "Rule source", "官方 Q&A": "Official Q&A", "百鸽卡片文本": "Baige card text",
   "规则书资料": "Rulebook", "逐步证据判读": "Evidence analysis", "形式规则验证": "Formal rule check", "相关资料": "Related source",
 });
@@ -112,6 +113,7 @@ Object.assign(uiTranslations.ja, {
   "已有资料可供分析，但部分条件仍需核对": "資料に基づいて分析できますが、一部の条件は確認が必要です",
   "缺少作出判断所需的场景或卡片资料": "判断に必要な状況またはカード資料が不足しています",
   "API 预算守卫": "API 利用枠", "非规则问题风控": "質問の利用制限",
+  "服务范围": "対応範囲", "本题不在服务范围": "この質問は対応範囲外です", "仅支持游戏王规则与裁定": "遊戯王のルール・裁定に対応",
   "卡片 FAQ": "カード FAQ", "规则资料": "ルール資料", "官方 Q&A": "公式 Q&A", "百鸽卡片文本": "百鴿カードテキスト",
   "试用版 · 复杂裁定请核对依据": "試用版 · 複雑な裁定は根拠を確認してください",
   "未配置模型能力接口；默认 GPT-6 Astra low 尚未确认可用。": "モデルの利用状況を取得する設定がありません。既定の GPT-6 Astra low は利用可能か確認できていません。",
@@ -1085,6 +1087,7 @@ async function postPublicAnswerProgressRequest({
       publicMessage: typeof payload?.error === "string"
         ? payload.error
         : typeof payload?.message === "string" ? payload.message : "",
+      retryAfterSeconds: payload?.retryAfterSeconds,
     });
   }
   const contentType = String(response.headers?.get?.("content-type") || "").toLowerCase();
@@ -1295,6 +1298,7 @@ async function readPublicAnswerProgressStream(response, requestedRulingVersion, 
               code,
               status,
               publicMessage: message,
+              retryAfterSeconds: payload.retryAfterSeconds,
             });
           error.message = message;
           if (requestId === null || requestId === analysisRequestId) {
@@ -1445,12 +1449,15 @@ function createRulingVersionError({
   return error;
 }
 
-function createBackendRequestError({ code, status = 0, publicMessage = "", cause }) {
+function createBackendRequestError({ code, status = 0, publicMessage = "", retryAfterSeconds, cause }) {
   const error = new Error(publicMessage || code, cause ? { cause } : undefined);
   error.code = code;
   error.status = status;
   error.publicMessage = publicMessage;
   error.requestFailure = true;
+  if (Number.isInteger(retryAfterSeconds) && retryAfterSeconds > 0 && retryAfterSeconds <= 86400) {
+    error.retryAfterSeconds = retryAfterSeconds;
+  }
   return error;
 }
 
@@ -1539,7 +1546,8 @@ function renderBackendAnswer(answer) {
   renderEngineSimulation(null, null);
   if (answer?.mode === "rag_baseline"
       || answer?.mode === "cloud_evidence_v1"
-      || answer?.answerLevel === "risk_control") {
+      || answer?.answerLevel === "risk_control"
+      || answer?.answerLevel === "out_of_scope") {
     renderRagAnswer(answer);
     return;
   }
@@ -1666,6 +1674,61 @@ function renderBackendVersionError(error, requestedRulingVersion) {
 }
 
 function publicRequestFailurePresentation(error) {
+  const code = String(error?.code || "");
+  if (code === "public_query_scope_unavailable") {
+    return {
+      title: lt("问题范围检查暂不可用", "Question scope check unavailable", "質問の範囲を確認できません"),
+      status: tr("暂不可用"),
+      basis: lt("范围检查未完成", "Scope check incomplete", "対応範囲の確認未完了"),
+      message: lt("系统未能确认本题是否属于游戏王规则与裁定。本次请求已停止，未开始检索或生成裁定。", "The service could not confirm whether this question concerns Yu-Gi-Oh! rules. This request stopped before retrieval or ruling generation.", "遊戯王のルール・裁定に関する質問か確認できなかったため、検索と裁定生成の前に処理を停止しました。"),
+      step: lt("请确认问题中包含需要判断的规则或卡片互动，再稍后重试。", "Include the rule or card interaction to be judged, then try again later.", "確認したいルールやカードの相互作用を含めて、しばらくしてから再送信してください。"),
+    };
+  }
+  if (code === "public_request_rate_limited") {
+    const seconds = error.retryAfterSeconds;
+    return {
+      title: lt("请求过于频繁", "Too many requests", "リクエストが多すぎます"),
+      status: lt("请稍后重试", "Try again later", "しばらくお待ちください"),
+      basis: lt("请求频率限制", "Request rate limit", "リクエスト頻度の制限"),
+      message: Number.isInteger(seconds) && seconds > 0 && seconds <= 86400
+        ? lt(`本次请求被频率限制拦截。请等待约 ${seconds} 秒后再提交。`, `This request was rate-limited. Please wait about ${seconds} seconds before submitting again.`, `このリクエストは頻度制限で停止しました。約 ${seconds} 秒待ってから再送信してください。`)
+        : lt("本次请求被频率限制拦截，请稍后再提交。", "This request was rate-limited. Please submit again later.", "このリクエストは頻度制限で停止しました。しばらくしてから再送信してください。"),
+      step: lt("本次未启动新的裁定处理，请避免连续重复提交。", "No new ruling processing started. Avoid repeated submissions.", "新しい裁定処理は開始していません。連続した送信をお控えください。"),
+    };
+  }
+  if (code === "public_request_rate_limit_unavailable" || code === "public_service_paused") {
+    const paused = code === "public_service_paused";
+    return {
+      title: paused ? lt("公开问答已暂停", "Public answers paused", "公開質問を停止中")
+        : lt("请求检查暂不可用", "Request check unavailable", "リクエストを確認できません"),
+      status: tr("暂不可用"),
+      basis: lt("服务状态检查", "Service availability check", "サービス状態の確認"),
+      message: paused
+        ? lt("公开问答当前已暂停，本次请求未继续处理。", "Public answers are currently paused. This request did not proceed.", "公開質問は現在停止中です。このリクエストの処理は進んでいません。")
+        : lt("服务未能完成请求检查，本次请求已停止。", "The service could not complete the request check. This request stopped.", "リクエストの確認を完了できなかったため、処理を停止しました。"),
+      step: lt("请稍后重试。", "Please try again later.", "しばらくしてから再試行してください。"),
+    };
+  }
+  if (code === "answer_preparation_scope_unverified") {
+    return {
+      title: lt("需要重新提交问题", "Submit the question again", "質問を再送信してください"),
+      status: lt("资料需重新准备", "Evidence must be prepared again", "資料の再準備が必要です"),
+      basis: lt("旧资料未完成范围检查", "Scope check missing from saved evidence", "保存済み資料の範囲確認なし"),
+      message: lt("这份已保存资料缺少当前要求的问题范围检查，系统已停止最终裁定。", "The saved evidence lacks the required question scope check. Final ruling generation was stopped.", "保存済み資料には必要な質問範囲の確認がないため、最終裁定の生成を停止しました。"),
+      step: lt("请重新提交原问题以准备资料。", "Resubmit the original question to prepare evidence.", "元の質問を再送信して資料を準備してください。"),
+    };
+  }
+  if (/^decisions_http_(?:502|503|504|52[0-4])$/u.test(code)
+      || code === "decisions_service_unavailable"
+      || (code === "decisions_http_error" && Number(error?.status) >= 500)) {
+    return {
+      title: lt("Decisions 选证暂不可用", "Decisions evidence selection unavailable", "Decisions の根拠選択を利用できません"),
+      status: tr("暂不可用"),
+      basis: lt("证据准备失败", "Evidence preparation failed", "根拠資料の準備に失敗"),
+      message: lt("Decisions 服务超时或暂时出错，证据准备未完成。本次请求已停止，未调用最终裁定模型。", "Decisions timed out or returned a temporary error. Evidence preparation stopped before the final ruling model was called.", "Decisions がタイムアウトまたは一時的なエラーを返しました。最終裁定モデルを呼び出す前に資料の準備を停止しました。"),
+      step: lt("可稍后重试，或选择 Luna 准备证据后重新提交。", "Try again later, or select Luna for evidence preparation and resubmit.", "しばらくしてから再試行するか、根拠準備に Luna を選んで再送信してください。"),
+    };
+  }
   if (error?.code === "evidence_model_unable_to_select") {
     return {
       title: "证据选材未完成",
@@ -1782,6 +1845,7 @@ function renderRagAnswer(answer) {
     needs_more_info: { confidence: "需要补充", className: "is-caution", title: "需要补充信息", basis: "缺少作出判断所需的场景或卡片资料" },
     budget_limited: { confidence: "预算限制", className: "is-risky", title: "今日预算已用完", basis: "API 预算守卫" },
     risk_control: { confidence: "风控提醒", className: "is-caution", title: "公开问答暂时受限", basis: "非规则问题风控" },
+    out_of_scope: { confidence: "服务范围", className: "is-caution", title: "本题不在服务范围", basis: "仅支持游戏王规则与裁定" },
   };
   const providerFailureState = providerFailurePresentation(answer?.riskFlags);
   const systemFailureState = publicSystemFailurePresentation(answer?.riskFlags);
@@ -1880,6 +1944,7 @@ function publicRiskLines(flags) {
     "trusted_local_semantic_execution",
     "semantic_state_transition_applied",
     "final_model_skipped",
+    "out_of_scope",
     "public_final_nonblocking_semantic_diagnostic",
     "public_final_repair_nonblocking_semantic_diagnostic",
   ]);

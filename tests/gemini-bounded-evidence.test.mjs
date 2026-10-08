@@ -167,6 +167,26 @@ test('Decisions HTTP failure never silently dispatches Luna selection', async ()
   assert.ok(requests[1].questions);
 });
 
+test('a transient Decisions error retries only that step and accounts for the retained unknown reservation', async () => {
+  let nominations=0, statusCalls=0;
+  const {provider,requests}=fixture({decisions:body=>{
+    if(body.questions[0].name==='next_source'){nominations+=1;return 'NONE';}
+    return ++statusCalls===1 ? new Response('gateway',{status:504}) : 'NEEDS_EVIDENCE';
+  }});
+  const result=await provider.retrieve({...input,env:{...unrestrictedEvidenceEnv,EVIDENCE_SELECTOR:'decisions',
+    OPENAI_DECISIONS_API_KEY:'fixture'}});
+  assert.equal(nominations,1);assert.equal(statusCalls,2);
+  assert.equal(requests.filter(request=>request.contents).length,1,'planning is not repeated');
+  const decisions=requests.filter(request=>request.questions);
+  assert.deepEqual(decisions[1],decisions[2],'only identical failed step is retried');
+  const calls=result.telemetry.bounded.calls.filter(row=>row.operation==='decisions');
+  assert.equal(calls.length,2);assert.equal(calls[1].attemptCount,2);assert.equal(calls[1].dispatchCount,2);
+  assert.equal(result.telemetry.rounds,4,'planning plus three actual Decisions dispatches');
+  assert.ok(Math.abs(calls[1].accountedUsd-(calls[1].measurement.estimatedCostUsd+0.00007))<1e-12);
+  assert.equal(calls[1].unknownReservedUsd,calls[1].measurement.estimatedCostUsd);
+  assert.equal(calls[1].billableCost.amountUsd,0.00007,'observed success usage is not the unknown reservation');
+});
+
 test('Decisions budget rejection before dispatch is recorded as zero new spend', async () => {
   const {provider,requests} = fixture({reserveRequest:request => {
     if (request.body.questions) throw new Error('official_daily_budget_exceeded');
