@@ -42,6 +42,8 @@ import {
 export const PUBLIC_ANSWER_REQUEST_BODY_LIMIT_BYTES = 64 * 1024;
 export const PUBLIC_ANSWER_QUESTION_LIMIT_CHARACTERS = 12_000;
 export const PUBLIC_ANSWER_LOCALES = Object.freeze(["zh-CN", "en", "ja"]);
+export const PUBLIC_EVIDENCE_SELECTORS = Object.freeze(["decisions", "luna"]);
+export const DEFAULT_PUBLIC_EVIDENCE_SELECTOR = "decisions";
 // The public exact-question shortcut is temporarily disabled. Keep the
 // underlying matcher and pipeline available for internal evaluation and a
 // future, explicitly reviewed re-enable.
@@ -136,6 +138,9 @@ export function parsePublicAnswerPayload(body, {
   if (!PUBLIC_ANSWER_LOCALES.includes(answerLocale)) {
     throw publicAnswerRequestError("Unsupported answerLocale", "invalid_answer_locale", 400);
   }
+  if (payload.evidenceSelector !== undefined && !PUBLIC_EVIDENCE_SELECTORS.includes(payload.evidenceSelector)) {
+    throw publicAnswerRequestError("Unsupported evidenceSelector", "invalid_evidence_selector", 400);
+  }
 
   return {
     ...payload,
@@ -203,6 +208,11 @@ export async function getPublicAnswerModelInfo({ env = process.env } = {}) {
     pipeline: env.RAG_EVIDENCE_PIPELINE === 'cloud_evidence_v1' ? 'cloud_evidence_v1' : 'rag_baseline',
     legacyModes: [],
     answerExecution: "prepared_v1",
+    defaultEvidenceSelector: DEFAULT_PUBLIC_EVIDENCE_SELECTOR,
+    evidenceSelectors: PUBLIC_EVIDENCE_SELECTORS.map((id) => ({
+      id,
+      label: id === "decisions" ? "Decisions" : "Luna",
+    })),
     release: getPublicReleaseInfo(env),
   };
 }
@@ -332,7 +342,10 @@ export async function answerPublicRulingQuestion({
   const selection = await selectAvailablePublicProfile(normalizedPayload.rulingModelProfile || env.PUBLIC_RULING_MODEL_PROFILE, env);
   const profile = selection.profile;
   assertPublicRulingModelProfileAvailable(profile, env);
-  const publicEnv = createPublicAnswerModelEnv(env, profile.id);
+  const publicEnv = {
+    ...createPublicAnswerModelEnv(env, profile.id),
+    EVIDENCE_SELECTOR: normalizedPayload.evidenceSelector || DEFAULT_PUBLIC_EVIDENCE_SELECTOR,
+  };
     let answer = await answerRuling({
       rulingVersion: normalizedPayload.rulingVersion,
       question: normalizedPayload.question,

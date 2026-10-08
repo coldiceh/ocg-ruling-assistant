@@ -122,6 +122,7 @@ test("prepare/finalize sends the exact two body shapes in serial order", async (
     question: "Synthetic question",
     mode: "rag",
     rulingModelProfile: "official-astra-low",
+    evidenceSelector: "decisions",
     rulingVersion: "latest",
     answerLocale: "ja",
     action: "prepare",
@@ -207,7 +208,47 @@ test("prepare-only sends one prepare request and retains the downloadable packag
   assert.equal(result.kind, "prepared");
   assert.equal(requests.length, 1);
   assert.equal(requests[0].action, "prepare");
+  assert.equal(requests[0].evidenceSelector, "decisions");
   assert.deepEqual(clientInstance.getPreparedEvidencePackage(), evidencePackage);
+});
+
+test("Luna choice reaches both evidence-only and complete workflows without a finalize override", async () => {
+  for (const prepareOnly of [true, false]) {
+    const requests = [];
+    const clientInstance = createClient(async (_url, options) => {
+      requests.push(JSON.parse(options.body));
+      return requests.length === 1
+        ? sse(preparedEvent(), endEvent())
+        : sse(answerEvent(), endEvent());
+    });
+    await clientInstance.request("Synthetic question", "latest", { evidenceSelector: "luna", prepareOnly });
+    assert.equal(requests[0].evidenceSelector, "luna");
+    assert.equal(requests.length, prepareOnly ? 1 : 2);
+    if (!prepareOnly) assert.deepEqual(requests[1], { action: "finalize", preparationId: "a".repeat(64) });
+  }
+});
+
+test("the evidence selector defaults to Decisions and is labeled in all supported languages", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  assert.match(html, /<label[^>]+for="evidenceSelector"/u);
+  assert.match(html, /value="decisions" selected>Decisions（默认）/u);
+  assert.match(html, /<option value="luna">Luna<\/option>/u);
+  assert.match(app, /evidenceSelector: ui\.evidenceSelector\?\.value \|\| "decisions"/u);
+  assert.match(app, /"准备证据": "Evidence preparation"/u);
+  assert.match(app, /"准备证据": "根拠資料の準備"/u);
+  const pendingSource = app.slice(app.indexOf("function setQueryPending"), app.indexOf("function syncRulingVersionButtons"));
+  const select = { disabled: false, setAttribute() {} };
+  const setPending = new Function("ui", `
+    function selectedRulingModelIsAvailable() { return true; }
+    function syncRulingModelSelect() {}
+    function syncRulingVersionButtons() {}
+    ${pendingSource}
+    return setQueryPending;
+  `)({ analyzeButton: { setAttribute() {} }, evidenceSelector: select });
+  setPending(true);
+  assert.equal(select.disabled, true);
+  setPending(false);
+  assert.equal(select.disabled, false);
 });
 
 test("legacy answer still completes with only the prepare request", async () => {

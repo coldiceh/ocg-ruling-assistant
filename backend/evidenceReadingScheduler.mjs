@@ -87,7 +87,7 @@ export function createReadingLanes(lanes) {
 }
 
 export function admitWholeReadingUnits({ lanes, materialize, measure, maxChars,
-  getReferences = () => [], signal, omissionLimit = 24 }) {
+  getReferences = () => [], signal, omissionLimit = 24, maxEntries = Infinity }) {
   // Recreate all cursors for every assembly, including a smaller budget retry.
   const state = createReadingLanes(lanes);
   const offered = [], omitted = [], seen = new Set(), offeredIds = new Set();
@@ -121,14 +121,15 @@ export function admitWholeReadingUnits({ lanes, materialize, measure, maxChars,
         const entries = bundle.entries.filter(entry => !offeredIds.has(entry.id));
         const proposed = [...offered, { ...bundle, entries, hits: state.allHits.get(hit.unitKey) || [hit] }];
         const chars = measure(proposed);
-        if (chars <= maxChars) {
+        const fitsEntries = offeredIds.size + entries.length <= maxEntries;
+        if (chars <= maxChars && fitsEntries) {
           offered.push(proposed.at(-1));
           for (const entry of entries) offeredIds.add(entry.id);
           measuredChars = chars;
           break;
         }
         omitted.push({ unitKey: bundle.unitKey, title: bundle.title || '', sourceKind: bundle.sourceKind,
-          size: measure([bundle]), reason: 'reading_capacity', hit });
+          size: measure([bundle]), reason: fitsEntries ? 'reading_capacity' : 'selection_choice_capacity', hit });
       }
     }
   } while (advanced);

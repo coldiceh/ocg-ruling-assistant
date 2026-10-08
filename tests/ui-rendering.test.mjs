@@ -538,6 +538,7 @@ test("versioned backend answers require a matching server confirmation", async (
     question: "问题",
     mode: "rag",
     rulingModelProfile: "deepseek-v4-flash-high",
+    evidenceSelector: "decisions",
     rulingVersion: "latest",
     answerLocale: "zh-CN",
     action: "prepare",
@@ -726,8 +727,8 @@ test("backend answers bypass persistent browser cache and bust static assets", a
     readFile(new URL("../config.json", import.meta.url), "utf8"),
   ]);
   const config = JSON.parse(configText.replace(/^\uFEFF/u, ""));
-  assert.match(html, /src\/app\.js\?v=20261002-evidence-selection-1/u);
-  assert.match(html, /src\/styles\.css\?v=20260923-locale-glass-1/u);
+  assert.match(html, /src\/app\.js\?v=20261008-evidence-selector-1/u);
+  assert.match(html, /src\/styles\.css\?v=20261008-evidence-selector-1/u);
   assert.equal(config.answerApiUrl, "https://ocg-ruling-assistant.vercel.app/api/answer");
   assert.match(app, /cache: "no-store"/u);
   assert.doesNotMatch(app, /backendAnswerCacheTtlMs|buildBackendCacheKey|readCachedBackendAnswer|writeCachedBackendAnswer|ocg-ruling-answer:v/u);

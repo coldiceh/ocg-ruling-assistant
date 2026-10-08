@@ -7,6 +7,20 @@ const lane = (needId, queryVariantId, sourceKind, channel, keys) => ({ needId, q
 const materialize = (unitKey) => ({ unitKey, sourceKind: 'rule', entries: [{ id: unitKey, chars: 1 }] });
 const measure = bundles => bundles.flatMap(bundle => bundle.entries).reduce((sum, entry) => sum + entry.chars, 0);
 
+test('choice capacity admits complete dependency bundles without cutting bodies', () => {
+  const bundles = {
+    first: {unitKey:'first',entries:[{id:'a',chars:1},{id:'context',chars:1}]},
+    large: {unitKey:'large',entries:[{id:'b',chars:1},{id:'c',chars:1}]},
+    shared: {unitKey:'shared',entries:[{id:'d',chars:1},{id:'context',chars:1}]},
+  };
+  const result = admitWholeReadingUnits({maxChars:100,maxEntries:3,measure,
+    materialize:key=>bundles[key],lanes:[lane('original','original','rule','dense',['first','large','shared'])]});
+  assert.deepEqual(result.offeredIds,['a','context','d']);
+  assert.equal(result.omitted[0].unitKey,'large');
+  assert.equal(result.omitted[0].reason,'selection_choice_capacity');
+  assert.equal(result.offered[0].entries.length,2);
+});
+
 test('one admission per need and language/source/channel cursors survive rounds', () => {
   const result = admitWholeReadingUnits({ materialize, measure, maxChars: 6, lanes: [
     lane('original','original','rule','dense',['o1','o2']),

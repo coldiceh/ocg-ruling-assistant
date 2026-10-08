@@ -430,6 +430,10 @@ button:focus-visible {
   font-weight: 800;
 }
 
+.evidence-selector-label {
+  grid-template-columns: max-content minmax(120px, 1fr);
+}
+
 .model-tier-label select {
   min-width: 0;
   border: 0;

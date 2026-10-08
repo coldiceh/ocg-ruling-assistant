@@ -79,13 +79,13 @@ test('removing generation limits still rejects a final evidence prompt over 1500
 });
 
 function fixture({ assets = schema3Assets(), plan, select, countTokens = 500,
-  denseRules, denseQa, remainingBudget, onEvent } = {}) {
+  denseRules, denseQa, remainingBudget, onEvent, decisions, reserveRequest } = {}) {
   const requests = [];
   const provider = createGeminiBoundedEvidenceProvider({
     loadAssets: async () => assets,
     loadDenseSearch: async ({ rules }) => ({ searchAsync: async () => denseRules || [...rules.units.values()] }),
     loadQaSearch: async ({ items }) => ({ searchAsync: async () => denseQa || items }),
-    budgetedRequest: request => request.invoke(),
+    budgetedRequest: reserveRequest || (request => request.invoke()),
     ...(remainingBudget ? { remainingBudget } : {}),
     ...(onEvent ? { onEvent } : {}),
     fetchImpl: async (url, init) => {
@@ -97,6 +97,13 @@ function fixture({ assets = schema3Assets(), plan, select, countTokens = 500,
         embeddings: body.requests.map(() => ({ values: Array(768).fill(1) })),
         usageMetadata: { promptTokenCount: 100 } });
       requests.push(body);
+      if (url === 'https://api.openai.com/v1/decisions') {
+        assert.equal(typeof decisions, 'function', 'unexpected Decisions request');
+        const answer = decisions(body);
+        if (answer instanceof Response) return answer;
+        return Response.json({model: 'gpt-6-luna', answers: [{type:'choice',name:body.questions[0].name,choice:answer}],
+          usage: {input_tokens: 700}});
+      }
       const delivered = JSON.parse(body.contents ? body.contents[0].parts[1].text
         : body.input.find(message => message.role === 'user').content.split('\n').at(-1));
       const output = requests.length === 1
@@ -116,6 +123,75 @@ function fixture({ assets = schema3Assets(), plan, select, countTokens = 500,
   });
   return { provider, requests };
 }
+
+test('Decisions runs through production retrieval, delivers actual pack and accounts input-only usage', async () => {
+  let nominations = 0;
+  const events = [];
+  const { provider, requests } = fixture({ onEvent: event => events.push(event), decisions: body => {
+    const q = body.questions[0];
+    if (q.name === 'next_source') return nominations++ ? 'NONE' : q.choices[0].value;
+    if (q.name === 'action') return 'KEEP';
+    return 'NEEDS_EVIDENCE';
+  } });
+  const result = await provider.retrieve({ ...input, env: { ...unrestrictedEvidenceEnv,
+    EVIDENCE_SELECTOR:'decisions', OPENAI_DECISIONS_API_KEY:'fixture' } });
+  assert.equal(result.telemetry.evidenceSelector,'decisions');
+  assert.equal(result.telemetry.stageTelemetry.selection.provider,'openai');
+  assert.equal(result.telemetry.stageTelemetry.selection.model,'gpt-6-luna');
+  assert.equal(requests.filter(body => body.questions).length,4);
+  assert.equal(requests.filter(body => body.contents || Array.isArray(body.input)).length,1);
+  assert.equal(result.telemetry.bounded.decisions.modelReportedStatus,'NEEDS_EVIDENCE');
+  assert.ok(result.packing.promptChars <= 15000);
+  assert.ok(result.packing.modelEvidence.rawRelatedEvidence.length > 0);
+  assert.equal(result.packing.promptTruncated,false);
+  const selectionCalls = result.telemetry.bounded.calls.filter(row => row.operation === 'decisions');
+  assert.ok(selectionCalls.every(row => row.billableUsage.inputTokens === 700 && row.billableUsage.billableOutputTokens === 0));
+  assert.ok(selectionCalls.every(row => Math.abs(row.accountedUsd - 0.00007) < 1e-12));
+  assert.equal(events.find(event => event.type === 'packed').packing.prompt,result.packing.prompt);
+});
+
+test('missing Decisions credential stops before upstream dispatch and Luna remains separately usable', async () => {
+  const {provider,requests} = fixture();
+  await assert.rejects(provider.retrieve({...input,env:{...unrestrictedEvidenceEnv,EVIDENCE_SELECTOR:'decisions'}}),/decisions_api_key_required/);
+  assert.equal(requests.length,0);
+  const luna = await provider.retrieve({...input,env:{...unrestrictedEvidenceEnv,EVIDENCE_SELECTOR:'luna'}});
+  assert.equal(luna.telemetry.evidenceSelector,'luna');
+  assert.equal(requests.length,2);
+});
+
+test('Decisions HTTP failure never silently dispatches Luna selection', async () => {
+  const {provider,requests} = fixture({decisions:() => new Response('{}',{status:429})});
+  await assert.rejects(provider.retrieve({...input,env:{...unrestrictedEvidenceEnv,EVIDENCE_SELECTOR:'decisions',
+    OPENAI_DECISIONS_API_KEY:'fixture'}}), /decisions.*429/);
+  assert.equal(requests.length,2);
+  assert.ok(requests[1].questions);
+});
+
+test('Decisions budget rejection before dispatch is recorded as zero new spend', async () => {
+  const {provider,requests} = fixture({reserveRequest:request => {
+    if (request.body.questions) throw new Error('official_daily_budget_exceeded');
+    return request.invoke();
+  }});
+  await assert.rejects(provider.retrieve({...input,env:{...unrestrictedEvidenceEnv,EVIDENCE_SELECTOR:'decisions',
+    OPENAI_DECISIONS_API_KEY:'fixture'}}), error => {
+    assert.equal(error.message,'official_daily_budget_exceeded');
+    assert.equal(error.boundedRetrieval.calls.at(-1).accountedUsd,0);
+    assert.equal(error.boundedRetrieval.calls.at(-1).submitted,false);
+    return true;
+  });
+  assert.equal(requests.length,1);
+});
+
+test('malformed Decisions answer still records observed input usage before reporting failure', async () => {
+  const {provider} = fixture({decisions:() => Response.json({model:'gpt-6-luna',answers:[],usage:{input_tokens:700}})});
+  await assert.rejects(provider.retrieve({...input,env:{...unrestrictedEvidenceEnv,EVIDENCE_SELECTOR:'decisions',
+    OPENAI_DECISIONS_API_KEY:'fixture'}}), error => {
+    assert.equal(error.message,'decisions_answer_count_mismatch');
+    assert.ok(Math.abs(error.boundedRetrieval.calls.at(-1).accountedUsd - 0.00007)<1e-12);
+    assert.equal(error.boundedRetrieval.calls.at(-1).billableUsage.inputTokens,700);
+    return true;
+  });
+});
 
 test('bounded production packing honors answer locale without rewriting source text', async () => {
   const baseline = await fixture().provider.retrieve(input);

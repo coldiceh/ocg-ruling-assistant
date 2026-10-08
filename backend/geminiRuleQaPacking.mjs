@@ -1,3 +1,4 @@
+import { renderQaProjectedPrompt, renderSectionProjectedPrompt } from './decisionsEvidenceDisplay.mjs';
 import { renderReadableData, readableRuleUnit } from './readableEvidenceText.mjs';
 import { buildRagRulingPromptBundle } from './ragRulingPrompt.mjs';
 
@@ -41,7 +42,9 @@ function renderRuleSources(prefix, marker, payload, fields = RULE_SOURCE_FIELDS)
     : { prompt: original, prefix, payload };
 }
 
-function renderSelectedPrompt(prefix, marker, payload) {
+function renderSelectedPrompt(prefix, marker, payload, compactDisplay = false) {
+  if (compactDisplay) return renderSectionProjectedPrompt(prefix, marker, payload,
+    (p, m, v) => renderQaProjectedPrompt(p, m, v, renderRuleSources));
   return renderRuleSources(prefix, marker, payload);
 }
 
@@ -134,7 +137,7 @@ function selectedBodiesForSelection(selection) {
   }))];
 }
 
-export function packGeminiSelection({ selection, userQuery, answerLocale = 'zh-CN', cardResolution, retrievedEvidence = {}, maxPromptChars = GEMINI_EVIDENCE_MAX_PROMPT_CHARS }) {
+export function packGeminiSelection({ selection, userQuery, answerLocale = 'zh-CN', cardResolution, retrievedEvidence = {}, maxPromptChars = GEMINI_EVIDENCE_MAX_PROMPT_CHARS, compactDisplay = false }) {
   const selectedBodies = selectedBodiesForSelection(selection);
   const baseEvidence = { userProvidedCardTexts: retrievedEvidence.userProvidedCardTexts || [],
     cardTexts: retrievedEvidence.cardTexts || [] };
@@ -148,7 +151,7 @@ export function packGeminiSelection({ selection, userQuery, answerLocale = 'zh-C
   payload.allowedEvidenceIds = [...new Set([
     ...(base.allowedEvidenceIds || []), ...selectedBodies.map(item => item.id),
   ])];
-  const rendered = renderSelectedPrompt(base.prompt.slice(0, at), marker, readableSelectedPayload(payload, selection));
+  const rendered = renderSelectedPrompt(base.prompt.slice(0, at), marker, readableSelectedPayload(payload, selection), compactDisplay);
   const { prompt } = rendered;
   const packing = { ...base, prompt, promptPayload: rendered.payload, promptChars: prompt.length, promptTruncated: false,
     modelEvidence: payload.evidence, allowedEvidenceIds: payload.allowedEvidenceIds,

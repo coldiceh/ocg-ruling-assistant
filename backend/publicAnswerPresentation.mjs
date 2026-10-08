@@ -33,17 +33,19 @@ export function classifyPublicRequestChannel(rawBody) {
   if (keys.length === 1 && keys[0] === "question") {
     return PUBLIC_REQUEST_CHANNELS.EXTERNAL_API;
   }
+  const webKeys = keys.filter((key) => key !== "evidenceSelector");
   if (
-    (sameStringList(keys, WEB_REQUEST_KEYS)
-      || sameStringList(keys, [...WEB_REQUEST_KEYS, "answerLocale"].sort())
+    (sameStringList(webKeys, WEB_REQUEST_KEYS)
+      || sameStringList(webKeys, [...WEB_REQUEST_KEYS, "answerLocale"].sort())
       || (body.action === "prepare" && (
-        sameStringList(keys, ["action", ...WEB_REQUEST_KEYS])
-        || sameStringList(keys, ["action", ...WEB_REQUEST_KEYS, "answerLocale"].sort())
+        sameStringList(webKeys, ["action", ...WEB_REQUEST_KEYS])
+        || sameStringList(webKeys, ["action", ...WEB_REQUEST_KEYS, "answerLocale"].sort())
       )))
     && body.mode === "rag"
     && nonEmptyString(body.rulingModelProfile)
     && nonEmptyString(body.rulingVersion)
     && (body.answerLocale === undefined || ["zh-CN", "en", "ja"].includes(body.answerLocale))
+    && (body.evidenceSelector === undefined || ["decisions", "luna"].includes(body.evidenceSelector))
   ) {
     return PUBLIC_REQUEST_CHANNELS.WEB;
   }
