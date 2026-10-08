@@ -1,10 +1,56 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { queryAuditAnswerPatch, queryAuditFailurePatch } from "../backend/publicQueryAudit.mjs";
-import { listQueryAudits, updateQueryAudit } from "../backend/queryAuditStore.mjs";
+import { listQueryAudits, updateQueryAudit, safeQueryAuditRetrievalTimings } from "../backend/queryAuditStore.mjs";
+import { preparePublicAnswer } from "../backend/publicPreparedAnswerService.mjs";
 
 const env = { UPSTASH_REDIS_REST_URL: "https://redis.example.test", UPSTASH_REDIS_REST_TOKEN: "synthetic-key" };
 const scope = { scope: "in_scope", reasonCode: "ruling_question", prompt: "private-prompt-marker", usage: { private: "private-usage-marker" } };
+
+test('retrieval timing projection stores only bounded numeric stages on success and failure', async () => {
+  const timings = { plan: 12.5, search: 0, selection: 100, indexesWait: 3,
+    prompt: 'private-prompt-marker', request: { secret: 'private-key-marker' },
+    assets: -1, packing: Infinity, total: 86_400_001, lexicalSearch: '12' };
+  const expected = { indexesWait: 3, plan: 12.5, search: 0, selection: 100 };
+  assert.deepEqual(safeQueryAuditRetrievalTimings(timings), { retrievalTimingsMs: expected });
+  const failed = queryAuditFailurePatch({ code: 'evidence_failed', boundedRetrieval: { timingsMs: timings } });
+  assert.deepEqual(failed.retrievalTimingsMs, expected);
+  const completed = queryAuditAnswerPatch({ debug: { retrievalTimingsMs: timings } });
+  assert.deepEqual(completed.retrievalTimingsMs, expected);
+  let patch;
+  await preparePublicAnswer({ payload: {}, env, progress: { complete: () => ({ totalMs: 200 }) },
+    store: { create: async () => 'fixture' },
+    answerPublic: async () => ({ answer: { status: 'evidence_prepared',
+      continuation: { ruleQueryModel: { timingsMs: timings }, promptBundle: { prompt: 'fixture' } } },
+      latency: { profileId: 'fixture' }, auditId: 'audit-1' }),
+    updateAudit: async input => { patch = input.patch; },
+  });
+  assert.deepEqual(patch.retrievalTimingsMs, expected);
+  assert.doesNotMatch(JSON.stringify(patch), /private-/);
+});
+
+test('retrieval numeric timings survive storage round trip and old records cannot leak arbitrary fields', async () => {
+  const entry = { id: 'audit-1', question: 'Synthetic question', createdAt: '2026-10-08T00:00:00.000Z' };
+  let persisted;
+  const fetchImpl = async (_url, options) => {
+    const command = JSON.parse(options.body);
+    if (command[0] === 'EVAL') {
+      persisted = JSON.parse(command[5]); Object.assign(entry, persisted);
+      return Response.json({ result: JSON.stringify(entry) });
+    }
+    return Response.json({ result: [JSON.stringify({ ...entry, retrievalTimingsMs: {
+      ...entry.retrievalTimingsMs, request: 'private-marker', packing: -5,
+    } })] });
+  };
+  const updated = await updateQueryAudit({ id: entry.id, env, fetchImpl,
+    patch: { retrievalTimingsMs: { plan: 2, total: 10, body: 'private-marker' } } });
+  const listed = await listQueryAudits({ env, fetchImpl });
+  assert.deepEqual(persisted, { retrievalTimingsMs: { plan: 2, total: 10 } });
+  for (const record of [updated.entry, listed.entries[0]]) {
+    assert.deepEqual(record.retrievalTimingsMs, { plan: 2, total: 10 });
+    assert.doesNotMatch(JSON.stringify(record), /private-marker/);
+  }
+});
 
 test("audit patches include only controlled scope summaries and failure stages", () => {
   const success = queryAuditAnswerPatch({ shortAnswer: "Synthetic answer", debug: { requestDiagnostics: { scope } } });

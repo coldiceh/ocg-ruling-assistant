@@ -1,0 +1,2681 @@
+{
+  "schemaVersion": 1,
+  "revision": "sha256:be4f45b211ce7fcb5970198f08701708a6dd2c9e9bf0ab87f975f4d9b2065342",
+  "sources": [
+    {
+      "id": "baige-card-identities-20261008",
+      "url": "https://ygocdb.com/api/v0/cards.zip",
+      "revision": "2026-10-08:sha256:ceb94952cb17dfc678ffc49b6f8ddac2b89308f72645b32249584e0a74166ee9",
+      "sha256": "ceb94952cb17dfc678ffc49b6f8ddac2b89308f72645b32249584e0a74166ee9",
+      "archiveSha256": "ab58a962dc92f33f3f8df56097a128d89e1fc426f13d8adf65371ca15fbbc33e",
+      "license": "LicenseRef-Factual-References",
+      "licenseFile": "data/card-nickname-sources/FACTUAL-REFERENCES.txt",
+      "scope": "Only needed card-name/CID/Japanese-name identity facts; no card text or bulk database redistribution."
+    },
+    {
+      "id": "mycard-mcpro-20260924",
+      "url": "https://ygobbs2.com/t/584306/5",
+      "revision": "2026-09-24:topic-584306:post-5",
+      "license": "LicenseRef-Factual-References",
+      "licenseFile": "data/card-nickname-sources/FACTUAL-REFERENCES.txt",
+      "identitySourceIds": [
+        "baige-card-identities-20261008"
+      ],
+      "scope": "Only the nickname and card identity stated in the platform update; no post text."
+    },
+    {
+      "id": "mycard-phoenix-short-name",
+      "url": "https://ygobbs2.com/t/409157",
+      "revision": "topic-409157:alias-fact-reviewed-2026-10-08",
+      "license": "LicenseRef-Factual-References",
+      "licenseFile": "data/card-nickname-sources/FACTUAL-REFERENCES.txt",
+      "identitySourceIds": [
+        "baige-card-identities-20261008"
+      ],
+      "scope": "Only the short alias and card identity; no article text."
+    },
+    {
+      "id": "ocgbot-dcc1a184",
+      "url": "https://github.com/fireinsect/nonebot-plugin-ocgbot-v2/blob/dcc1a184e254f97bb31ff265b6e9c8ac309902ee/nonebot_plugin_ocgbot_v2/static/json/nickname.json",
+      "revision": "dcc1a184e254f97bb31ff265b6e9c8ac309902ee",
+      "sha256": "3bb39b50f70e4071eecdefbcffd927d5b8947afba8b117492833f572088c4896",
+      "license": "MIT",
+      "licenseFile": "data/card-nickname-sources/ocgbot-LICENSE.txt",
+      "identitySourceIds": [
+        "baige-card-identities-20261008"
+      ]
+    },
+    {
+      "id": "yugioh-slang-29ee2df4",
+      "url": "https://github.com/ColinWttt/yugioh-slang/blob/29ee2df40eca78ad72e11540e61ab78ddd91a4e3/src/content/docs/abbr/卡牌名称/合集-非泛用.md",
+      "revision": "29ee2df40eca78ad72e11540e61ab78ddd91a4e3",
+      "license": "MIT",
+      "licenseFile": "data/card-nickname-sources/yugioh-slang-LICENSE.txt",
+      "identitySourceIds": [
+        "baige-card-identities-20261008"
+      ]
+    }
+  ],
+  "entries": [
+    {
+      "alias": "01",
+      "cardId": "13670",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "14星大怪",
+      "cardId": "14262",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "165",
+      "cardId": "13417",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "65门",
+      "cardId": "8602",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "B3狼",
+      "cardId": "17768",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "BYD霍普",
+      "cardId": "11132",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "B三狼",
+      "cardId": "17768",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "B哥",
+      "cardId": "12583",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "CXK",
+      "cardId": "13231",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "DDD 机械降神",
+      "cardId": "16849",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "DDD本家椅子王",
+      "cardId": "16849",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "EXP",
+      "cardId": "17163",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "FAKER",
+      "cardId": "13463",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "FK",
+      "cardId": "13463",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "GENSHIN",
+      "cardId": "17430",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "PCALL",
+      "cardId": "11940",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "P头",
+      "cardId": "12070",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "QQ壶",
+      "cardId": "8993",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "Q宝",
+      "cardId": "17452",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "THE饼",
+      "cardId": "12642",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "UZI",
+      "cardId": "8808",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "VFD",
+      "cardId": "12960",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "一刀哥",
+      "cardId": "12487",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "丁真世界",
+      "cardId": "17462",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "七",
+      "cardId": "6053",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "万岁爷",
+      "cardId": "14809",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "万碎龙",
+      "cardId": "14809",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "三家姓奴",
+      "cardId": "15716",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "三狼",
+      "cardId": "17768",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "三顾茅庐",
+      "cardId": "14864",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "上下翅膀",
+      "cardId": "14130",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "上海王",
+      "cardId": "14439",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "下水道",
+      "cardId": "10354",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "不死之身",
+      "cardId": "16524",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "东雪莲",
+      "cardId": "16846",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "丝袜",
+      "cardId": "8933",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "两面宿傩",
+      "cardId": "16195",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "中国人",
+      "cardId": "16386",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "中白",
+      "cardId": "18004",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "中黑",
+      "cardId": "18831",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "义父",
+      "cardId": "15716",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "义父杀手",
+      "cardId": "15716",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "乌拉拉",
+      "cardId": "12950",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "书书的老婆",
+      "cardId": "17037",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "亏卡侠",
+      "cardId": "6653",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "五帝龙",
+      "cardId": "5502",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "五重魔术师",
+      "cardId": "13690",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "亚索",
+      "cardId": "14663",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "亡语侠",
+      "cardId": "8129",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "交个朋友",
+      "cardId": "11313",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "亲妈谷",
+      "cardId": "5533",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "亲妈长眠之谷",
+      "cardId": "5533",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "人渣",
+      "cardId": "7574",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "人马",
+      "cardId": "15487",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "伞兵",
+      "cardId": "17553",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "你们的老婆",
+      "cardId": "8456",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "使不得",
+      "cardId": "4861",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "借东风",
+      "cardId": "15294",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "假眼",
+      "cardId": "14689",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "做爱博士",
+      "cardId": "18730",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "做牌龙",
+      "cardId": "9821",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "偷星虫",
+      "cardId": "8440",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "偷蛋龙",
+      "cardId": "13011",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "光头",
+      "cardId": "12067",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "光男",
+      "cardId": "18475",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "光男人",
+      "cardId": "18475",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "光眷",
+      "cardId": "19144",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "光船",
+      "cardId": "15322",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "光车",
+      "cardId": "12849",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "克罗",
+      "cardId": "17612",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "全家的希望",
+      "cardId": "7078",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "关羽",
+      "cardId": "14821",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "养老院",
+      "cardId": "13724",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "内奸龙",
+      "cardId": "4999",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "农夫三拳",
+      "cardId": "9196",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "冰箱",
+      "cardId": "15637",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "冰蛆",
+      "cardId": "17069",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "冲厕所",
+      "cardId": "13619",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "冲马桶",
+      "cardId": "13619",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "凤凰人",
+      "cardId": "16524",
+      "sourceId": "yugioh-slang-29ee2df4"
+    },
+    {
+      "alias": "凤雏",
+      "cardId": "16524",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "刀门臣",
+      "cardId": "13670",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "列车难题",
+      "cardId": "18317",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "刘华强",
+      "cardId": "14627",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "初生",
+      "cardId": "16524",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "刹帝利",
+      "cardId": "17768",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "刻晴",
+      "cardId": "16088",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "剑指",
+      "cardId": "14627",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "劈叉战士",
+      "cardId": "7696",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "劈声",
+      "cardId": "17813",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "力量债卷",
+      "cardId": "6398",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "劳模侠",
+      "cardId": "6344",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "勾罕见",
+      "cardId": "16846",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "华强",
+      "cardId": "14627",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "博士",
+      "cardId": "12689",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "卡密哒",
+      "cardId": "4998",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "卡手剑",
+      "cardId": "11087",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "卧龙",
+      "cardId": "14952",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "友尽侠",
+      "cardId": "11313",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "友尽洞",
+      "cardId": "14314",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "只狼",
+      "cardId": "17768",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "右翅膀",
+      "cardId": "14128",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "吃瘪王",
+      "cardId": "15245",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "吃货",
+      "cardId": "15239",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "吃饭",
+      "cardId": "18013",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "向晚",
+      "cardId": "15719",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "吕布",
+      "cardId": "15716",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "吸毒壶",
+      "cardId": "12465",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "呜喵王",
+      "cardId": "15123",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "命融",
+      "cardId": "14304",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "命运英雄 毁灭凤凰人",
+      "cardId": "16524",
+      "sourceId": "baige-card-identities-20261008"
+    },
+    {
+      "alias": "哥斯拉",
+      "cardId": "12038",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "唐僧",
+      "cardId": "5247",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "唐可可",
+      "cardId": "16391",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "嘉然",
+      "cardId": "15978",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "囚服大姐",
+      "cardId": "17263",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "四万",
+      "cardId": "6498",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "园神",
+      "cardId": "17430",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "地刀",
+      "cardId": "14132",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "地术",
+      "cardId": "14871",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "地船",
+      "cardId": "18186",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "场地小车",
+      "cardId": "10232",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "城之内",
+      "cardId": "16228",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "城之内龙",
+      "cardId": "16228",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "基多拉",
+      "cardId": "12390",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "塔玛希",
+      "cardId": "7735",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "多用途战机",
+      "cardId": "13679",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "大凯撒",
+      "cardId": "13081",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "大奶婆",
+      "cardId": "17360",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "大妹纸",
+      "cardId": "18017",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "大姐",
+      "cardId": "13082",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "大宇宙人",
+      "cardId": "14740",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "大宝贝",
+      "cardId": "5496",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "大怒涛",
+      "cardId": "13081",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "大欢迎",
+      "cardId": "18222",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "大白",
+      "cardId": "18007",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "大眼",
+      "cardId": "13129",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "大粉",
+      "cardId": "14758",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "大红",
+      "cardId": "14762",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "大绿",
+      "cardId": "14764",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "大蓝",
+      "cardId": "12106",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "大虚无",
+      "cardId": "6888",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "大象",
+      "cardId": "13245",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "大飞机",
+      "cardId": "10534",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "大鸟",
+      "cardId": "12325",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "大黑",
+      "cardId": "18008",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "天球",
+      "cardId": "13496",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "太美丽了",
+      "cardId": "17444",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "太阳神的翼神龙",
+      "cardId": "5000",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "太阳蛋",
+      "cardId": "11927",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "奥特曼",
+      "cardId": "6653",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "奥西里斯的天空龙",
+      "cardId": "4999",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "奶盖",
+      "cardId": "19187",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "妹龙星",
+      "cardId": "14285",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "姐姐波",
+      "cardId": "14742",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "姬哥",
+      "cardId": "17063",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "孙十万",
+      "cardId": "14817",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "孙权",
+      "cardId": "14817",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "家人除外神",
+      "cardId": "17734",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "对双穹宝具",
+      "cardId": "11724",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "导圣",
+      "cardId": "18474",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "小偷",
+      "cardId": "14356",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "小喷",
+      "cardId": "11620",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "小夜",
+      "cardId": "19188",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "小姨子",
+      "cardId": "12253",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "小布",
+      "cardId": "14116",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "小欢迎",
+      "cardId": "17369",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "小白",
+      "cardId": "18003",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "小眷龙",
+      "cardId": "12933",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "小米",
+      "cardId": "11257",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "小米",
+      "cardId": "12761",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "小米",
+      "cardId": "9167",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "小粉",
+      "cardId": "14757",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "小红",
+      "cardId": "14761",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "小绿",
+      "cardId": "14763",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "小蓝",
+      "cardId": "12106",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "小蓝",
+      "cardId": "14759",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "小车",
+      "cardId": "9118",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "小金人",
+      "cardId": "15123",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "小青",
+      "cardId": "14944",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "小鸟",
+      "cardId": "19404",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "小黑",
+      "cardId": "15012",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "小黑",
+      "cardId": "18481",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "崇高力量",
+      "cardId": "4887",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "崩妹",
+      "cardId": "13571",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "左翅膀",
+      "cardId": "14129",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "巨肥鸟",
+      "cardId": "8110",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "帝骑",
+      "cardId": "16503",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "帝骑哥",
+      "cardId": "16503",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "康师傅",
+      "cardId": "11377",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "开放世界的原神",
+      "cardId": "15741",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "弓形",
+      "cardId": "17430",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "弗兰肯",
+      "cardId": "4426",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "张八百",
+      "cardId": "15007",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "张辽",
+      "cardId": "15007",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "张飞",
+      "cardId": "14822",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "强欲之壶的背刺",
+      "cardId": "7623",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "强欲侠",
+      "cardId": "6393",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "强欲而心变之番兵",
+      "cardId": "15296",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "强欲而心变的番兵",
+      "cardId": "15296",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "彩流体",
+      "cardId": "17263",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "德莱文",
+      "cardId": "6814",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "恐龙王",
+      "cardId": "13010",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "我觉得不行",
+      "cardId": "10439",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "我超",
+      "cardId": "6674",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "手抓饼",
+      "cardId": "15182",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "打工猎鹰",
+      "cardId": "12868",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "打架王",
+      "cardId": "14297",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "打铁",
+      "cardId": "14406",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "技抽",
+      "cardId": "5740",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "抽4狗",
+      "cardId": "19154",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "抽爹",
+      "cardId": "11938",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "拉之翼神龙",
+      "cardId": "5000",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "拉拉米娅",
+      "cardId": "15032",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "拉的翼神龙",
+      "cardId": "5000",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "拉闸",
+      "cardId": "13622",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "拉鸡",
+      "cardId": "5000",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "拔螺丝",
+      "cardId": "7701",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "拿妈",
+      "cardId": "11258",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "挖掘机",
+      "cardId": "14401",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "摆烂人",
+      "cardId": "12548",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "摸鱼",
+      "cardId": "14411",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "效分",
+      "cardId": "8933",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "效遮",
+      "cardId": "8933",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "救祓陀螺",
+      "cardId": "17427",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "敕命",
+      "cardId": "4960",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "文盲胜负",
+      "cardId": "13293",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "斐济杯",
+      "cardId": "12106",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "斗子哥",
+      "cardId": "11295",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "斧王",
+      "cardId": "4084",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "斩机弓形",
+      "cardId": "17430",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "新生",
+      "cardId": "16524",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "无语靴",
+      "cardId": "12199",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "时间怪盗 盘面重塑者",
+      "cardId": "14356",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "时间管理大师",
+      "cardId": "15123",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "星刻",
+      "cardId": "12914",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "星渣",
+      "cardId": "7734",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "暗刀",
+      "cardId": "15032",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "暗征龙",
+      "cardId": "11651",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "暗抽",
+      "cardId": "7570",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "暗眷",
+      "cardId": "12933",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "暗船",
+      "cardId": "15078",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "暗雷龙",
+      "cardId": "13906",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "暗黑佟大为",
+      "cardId": "19847",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "曹操",
+      "cardId": "15006",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "曹贼",
+      "cardId": "15006",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "曾被称为剑皇的龟",
+      "cardId": "12106",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "最强之神",
+      "cardId": "14759",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "最美出生",
+      "cardId": "16524",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "最美新生",
+      "cardId": "16524",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "最美校花",
+      "cardId": "12849",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "月女神",
+      "cardId": "17469",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "朋友侠",
+      "cardId": "11313",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "机械降神",
+      "cardId": "16849",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "机界骑士天神荡",
+      "cardId": "13427",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "机车手",
+      "cardId": "19372",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "杂鱼粉碎机",
+      "cardId": "12487",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "杯面",
+      "cardId": "6901",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "松果痰抖闪电鞭",
+      "cardId": "4322",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "柠檬",
+      "cardId": "14114",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "柠檬龙",
+      "cardId": "14114",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "树皮",
+      "cardId": "19149",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "栗神龙",
+      "cardId": "11964",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "校花",
+      "cardId": "12849",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "校草",
+      "cardId": "16524",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "椅子王",
+      "cardId": "11994",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "欧贝利斯克的巨神兵",
+      "cardId": "4998",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "死人",
+      "cardId": "12067",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "死人脸",
+      "cardId": "6075",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "毁灭凤凰人",
+      "cardId": "16524",
+      "sourceId": "mycard-phoenix-short-name"
+    },
+    {
+      "alias": "毛裤",
+      "cardId": "6949",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "毛裤人",
+      "cardId": "6949",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "水刀",
+      "cardId": "13669",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "水晶翼",
+      "cardId": "12321",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "水术",
+      "cardId": "13673",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "水机",
+      "cardId": "13508",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "水球",
+      "cardId": "18477",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "水男人",
+      "cardId": "17417",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "水箭龟",
+      "cardId": "17069",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "水罩",
+      "cardId": "12347",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "水魔救",
+      "cardId": "15105",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "永火零",
+      "cardId": "8822",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "汉诺伊的崇高力量",
+      "cardId": "4887",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "汉诺崇高2.0",
+      "cardId": "5124",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "汉诺崇高力量",
+      "cardId": "4887",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "汉诺的崇高力量",
+      "cardId": "4887",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "汉诺骑士的崇高力量",
+      "cardId": "4887",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "沾点袍",
+      "cardId": "12198",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "法法",
+      "cardId": "12960",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "法海",
+      "cardId": "5248",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "泡面",
+      "cardId": "6901",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "泥头车",
+      "cardId": "16514",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "洗手池",
+      "cardId": "17381",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "洗澡",
+      "cardId": "18012",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "洗脚龙",
+      "cardId": "12870",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "洛琪希",
+      "cardId": "16749",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "流天类星龟",
+      "cardId": "12106",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "海豚哥",
+      "cardId": "6768",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "海马人",
+      "cardId": "6298",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "海龟",
+      "cardId": "12106",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "消防员",
+      "cardId": "17991",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "消防栓",
+      "cardId": "17994",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "渣男",
+      "cardId": "12843",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "滑动变阻器",
+      "cardId": "19385",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "滑板",
+      "cardId": "13405",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "火刀",
+      "cardId": "13668",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "火召",
+      "cardId": "12847",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "火术",
+      "cardId": "13672",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "火码",
+      "cardId": "14962",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "火船",
+      "cardId": "15077",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "灰",
+      "cardId": "12950",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "灰流丽到来",
+      "cardId": "7187",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "灰流丽诱捕器",
+      "cardId": "17066",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "灰流到来",
+      "cardId": "7187",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "灵摆爹",
+      "cardId": "11615",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "炎斩机 终末西格玛",
+      "cardId": "14751",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "烧烤龙",
+      "cardId": "5000",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "烧血龙",
+      "cardId": "16525",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "焯融合",
+      "cardId": "7445",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "燃料",
+      "cardId": "19373",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "爆发祝福",
+      "cardId": "5348",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "爱姬儿",
+      "cardId": "16812",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "爱的假人",
+      "cardId": "5496",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "牛仔",
+      "cardId": "8439",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "狗男",
+      "cardId": "17124",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "狗男人",
+      "cardId": "17124",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "狗罕剑",
+      "cardId": "16846",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "狗罕见",
+      "cardId": "16846",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "狼神神威",
+      "cardId": "11379",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "獠牙王牌",
+      "cardId": "11310",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "玩球",
+      "cardId": "18011",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "球形体",
+      "cardId": "11927",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "理塘",
+      "cardId": "17462",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "电子龙战士",
+      "cardId": "11114",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "电车难题",
+      "cardId": "18317",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "男人",
+      "cardId": "17120",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "畜牲",
+      "cardId": "16524",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "畜生",
+      "cardId": "16524",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "疯狂星期四",
+      "cardId": "15524",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "白三叉",
+      "cardId": "8732",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "白丝",
+      "cardId": "11377",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "白嫁",
+      "cardId": "12488",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "白宙读",
+      "cardId": "19143",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "白小强",
+      "cardId": "10942",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "白扎克",
+      "cardId": "19722",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "白枪管",
+      "cardId": "14114",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "白爹",
+      "cardId": "19718",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "白狗",
+      "cardId": "16521",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "白眷",
+      "cardId": "13078",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "白紫炎",
+      "cardId": "9332",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "皮蛋",
+      "cardId": "7091",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "真正的康师傅",
+      "cardId": "12589",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "真眼",
+      "cardId": "14422",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "真神",
+      "cardId": "4584",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "真红眼龙骑兵",
+      "cardId": "14952",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "睡觉",
+      "cardId": "18524",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "破防甲",
+      "cardId": "15482",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "神之假身",
+      "cardId": "4127",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "神宣",
+      "cardId": "4861",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "祭品兵",
+      "cardId": "4998",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "秀逗斧",
+      "cardId": "14054",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "秋姐",
+      "cardId": "16192",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "积哥",
+      "cardId": "12433",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "究极宝玉神 哈蒙",
+      "cardId": "6564",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "究极宝玉神哈蒙",
+      "cardId": "6564",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "空气侠",
+      "cardId": "6784",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "空牙团的饭桶",
+      "cardId": "17783",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "章鱼哥",
+      "cardId": "17445",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "篝",
+      "cardId": "13668",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "米得拉什",
+      "cardId": "11257",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "精子风",
+      "cardId": "12464",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "紫三叉",
+      "cardId": "13972",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "紫枪管",
+      "cardId": "14625",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "紫眷",
+      "cardId": "13077",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "红人鱼",
+      "cardId": "18153",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "红温",
+      "cardId": "4332",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "红爹",
+      "cardId": "14952",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "红狗子",
+      "cardId": "18806",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "红管人",
+      "cardId": "15624",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "红管人",
+      "cardId": "15626",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "红莲魔龙厄",
+      "cardId": "12080",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "红蛆",
+      "cardId": "14952",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "红阵",
+      "cardId": "12913",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "红高达",
+      "cardId": "18191",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "纯爱战士",
+      "cardId": "12783",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "纯爱战神",
+      "cardId": "12783",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "绑架王",
+      "cardId": "12074",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "结婚龙",
+      "cardId": "18498",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "绿豆饼",
+      "cardId": "10972",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "绿阵",
+      "cardId": "12912",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "罕见",
+      "cardId": "16846",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "罗志祥",
+      "cardId": "15123",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "群C",
+      "cardId": "9455",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "群友的老婆",
+      "cardId": "8456",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "翻车王",
+      "cardId": "11642",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "翼神龙蛋",
+      "cardId": "11927",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "老I",
+      "cardId": "4027",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "老伙计",
+      "cardId": "6397",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "老头",
+      "cardId": "9554",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "老婆",
+      "cardId": "15741",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "老朋友",
+      "cardId": "6397",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "老艾",
+      "cardId": "4027",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "肉丝",
+      "cardId": "4023",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "肖战",
+      "cardId": "8617",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "肖梓池",
+      "cardId": "11560",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "肥婆鸟",
+      "cardId": "8472",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "肥鸟",
+      "cardId": "8110",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "脆皮鸡",
+      "cardId": "12325",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "脚心黑",
+      "cardId": "4998",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "舔狗",
+      "cardId": "14275",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "船长",
+      "cardId": "15079",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "花爹",
+      "cardId": "15996",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "花龙",
+      "cardId": "7898",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "荷包蛋",
+      "cardId": "11927",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "董公",
+      "cardId": "17136",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "董卓",
+      "cardId": "17136",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "蓝三叉",
+      "cardId": "11485",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "蓝妹妹",
+      "cardId": "13930",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "蓝枪管",
+      "cardId": "16522",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "蓝树皮",
+      "cardId": "19149",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "蓝管人",
+      "cardId": "15625",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "蓝管人",
+      "cardId": "15627",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "蔡徐坤",
+      "cardId": "13231",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "薇儿",
+      "cardId": "14409",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "虎鲨炮",
+      "cardId": "13677",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "虚假的康师傅",
+      "cardId": "11377",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "虚无",
+      "cardId": "9153",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "虹爹",
+      "cardId": "7443",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "蚌埠盔",
+      "cardId": "12201",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "蚺蚺",
+      "cardId": "14944",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "蟹哥",
+      "cardId": "14765",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "裤裆小龙",
+      "cardId": "13030",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "裤裆藏龙",
+      "cardId": "13030",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "裸足",
+      "cardId": "4024",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "访问码语姬",
+      "cardId": "15032",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "诈尸鸟",
+      "cardId": "5000",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "诚哥",
+      "cardId": "7574",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "调料包",
+      "cardId": "16255",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "谷爱凌",
+      "cardId": "16386",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "赫圣",
+      "cardId": "17767",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "走地鸡",
+      "cardId": "11213",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "起床人",
+      "cardId": "17247",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "超天酱",
+      "cardId": "13462",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "超越驱动",
+      "cardId": "13484",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "超量的终点",
+      "cardId": "15524",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "超量终点",
+      "cardId": "15524",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "足控",
+      "cardId": "4023",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "跳楼机",
+      "cardId": "13679",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "跳跃之力",
+      "cardId": "12330",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "轮胎龙",
+      "cardId": "7403",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "逆零",
+      "cardId": "14829",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "通缉令",
+      "cardId": "19196",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "醒醒侠",
+      "cardId": "17247",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "金抓钩",
+      "cardId": "17829",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "金闪闪",
+      "cardId": "14204",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "钢甲侠",
+      "cardId": "13638",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "银金",
+      "cardId": "13507",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "链神龙",
+      "cardId": "14930",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "门铃",
+      "cardId": "12931",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "闪兵艾乐隆",
+      "cardId": "17553",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "闪刀姬 篝",
+      "cardId": "13668",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "闪刀姬 腕",
+      "cardId": "14132",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "闪刀姬 萝杰",
+      "cardId": "14829",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "闪刀姬 逆零",
+      "cardId": "14829",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "闪刀姬 零一",
+      "cardId": "13670",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "闪刀姬 零依",
+      "cardId": "13670",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "闪刀姬篝",
+      "cardId": "13668",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "闪刀姬腕",
+      "cardId": "14132",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "闪刀姬逆零",
+      "cardId": "14829",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "闪刀姬零一",
+      "cardId": "13670",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "闪刀姬零依",
+      "cardId": "13670",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "闪刀机 鲨鱼加农炮",
+      "cardId": "13677",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "闪刀机关 多用途战机",
+      "cardId": "13679",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "闪新",
+      "cardId": "17443",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "闪闪",
+      "cardId": "14204",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "问心无愧",
+      "cardId": "13896",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "闺女",
+      "cardId": "19932",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "防火墙龙",
+      "cardId": "13082",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "阿尔卑斯",
+      "cardId": "15245",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "阿尔白丝",
+      "cardId": "15245",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "阿莱",
+      "cardId": "12843",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "限制器",
+      "cardId": "7652",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "陨石",
+      "cardId": "14741",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "零一",
+      "cardId": "13670",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "雷绿龙",
+      "cardId": "14998",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "霍普 升阶",
+      "cardId": "17255",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "霍普升阶",
+      "cardId": "17255",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "非常友好龙",
+      "cardId": "12960",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "面包车",
+      "cardId": "19200",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "风刀",
+      "cardId": "13763",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "风术",
+      "cardId": "13948",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "饭桶",
+      "cardId": "15239",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "饮水机",
+      "cardId": "8811",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "馆长",
+      "cardId": "9554",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "高达",
+      "cardId": "15524",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "高达驾驶员",
+      "cardId": "15523",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "魔封",
+      "cardId": "5008",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "魔斯拉",
+      "cardId": "12248",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "魔术爹",
+      "cardId": "11615",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "鱼王",
+      "cardId": "7434",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "鲁肃",
+      "cardId": "14819",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "鲨鱼加农炮",
+      "cardId": "13677",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "鸟蛋",
+      "cardId": "11927",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "黄金卿 埃尔德里奇",
+      "cardId": "15123",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "黄金脆皮鸡",
+      "cardId": "12325",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "黑三叉",
+      "cardId": "14752",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "黑丝",
+      "cardId": "13571",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "黑哥哥",
+      "cardId": "14288",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "黑妹",
+      "cardId": "12817",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "黑妹妹",
+      "cardId": "13571",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "黑暗大法师",
+      "cardId": "4027",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "黑枪管",
+      "cardId": "14487",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "黑紫炎",
+      "cardId": "10217",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "黑衣大奶",
+      "cardId": "19148",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "黑高达",
+      "cardId": "19184",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "齐格飞",
+      "cardId": "13664",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "齿轮肥机杯",
+      "cardId": "12677",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "龙皇",
+      "cardId": "14958",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "龙蛋",
+      "cardId": "11927",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "龙谷",
+      "cardId": "9049",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "龙魔导",
+      "cardId": "14952",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "龟G",
+      "cardId": "23548",
+      "sourceId": "mycard-mcpro-20260924"
+    },
+    {
+      "alias": "龟饲料",
+      "cardId": "15036",
+      "sourceId": "ocgbot-dcc1a184"
+    },
+    {
+      "alias": "龟龟",
+      "cardId": "12106",
+      "sourceId": "ocgbot-dcc1a184"
+    }
+  ]
+}

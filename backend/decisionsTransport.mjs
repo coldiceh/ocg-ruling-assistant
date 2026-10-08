@@ -1,4 +1,4 @@
-import { decisionsCostUsd, measureDecisionsRequest, runOfficialDecisionsRequest } from './cloudRequestBudget.mjs';
+import { decisionsCostUsd, measureDecisionsRequest, runOfficialDecisionsRequest, runOfficialDecisionsSequence } from './cloudRequestBudget.mjs';
 import { setTimeout as delay } from 'node:timers/promises';
 
 export { decisionsCostUsd };
@@ -146,5 +146,10 @@ export function createDecisionsTransport({env = process.env, fetchImpl = globalT
       }
     }
   }
-  return {measure, invoke};
+  return {measure, invoke,
+    // Injected budget adapters retain their own accounting contract. Production
+    // selection explicitly wraps its sequential work so the last ticket is
+    // settled on every exit path, including selection/validation failures.
+    runSequence:callback => budgetedRequest === runOfficialDecisionsRequest
+      ? runOfficialDecisionsSequence(callback) : callback()};
 }

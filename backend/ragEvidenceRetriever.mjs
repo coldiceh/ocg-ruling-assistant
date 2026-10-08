@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { searchCards } from "./baigeCardProvider.mjs";
 import { createLocalCardDataProvider } from "./cardDataProvider.mjs";
 import { normalizeCardKey } from "./ragCardExtractor.mjs";
+import { hasSourceBoundNicknameIdentity } from './ragCardNicknames.mjs';
 import {
   classifyOfficialQaQuestionType,
   extractOfficialQaEffectPhrases,
@@ -5854,6 +5855,7 @@ function cardInputNeedsIdentityVerification(card = {}, canonicalCards = []) {
   // Only a loader-gated, non-serializable replay attestation can settle a
   // completed verification. Plain object fields are never an authorization.
   if (hasTrustedFrozenResolvedCardAttestation(card)) return false;
+  if (hasSourceBoundNicknameIdentity(card, canonicalCards)) return false;
   if (card.retrievalIdentityMatchKind === "local_fuzzy") return true;
   // Edit-distance candidates are hypotheses, even when a display alias has
   // already copied the user's surface. They must never self-verify through

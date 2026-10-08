@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
 import { extractRagCards, normalizeCardKey } from "./ragCardExtractor.mjs";
+import { buildCardNicknameReferences, applyCardNicknameResolution } from './ragCardNicknames.mjs';
+import { loadCardNicknameData } from './ragCardNicknameData.mjs';
 import {
   loadRagData,
   loadPreparedRagCardData,
@@ -15,13 +17,15 @@ import {
 import { buildRagRulingPromptBundle } from "./ragRulingPrompt.mjs";
 import { createCloudEvidenceProvider } from './cloudEvidenceProvider.mjs';
 import { generateCloudEvidencePlan } from './cloudEvidencePlan.mjs';
-import { createGeminiBoundedEvidenceProvider as createGeminiRuleQaEvidenceProvider } from './geminiBoundedEvidenceProvider.mjs';
+import { createGeminiBoundedEvidenceProvider as createGeminiRuleQaEvidenceProvider,
+  prepareBoundedEvidenceIndexes } from './geminiBoundedEvidenceProvider.mjs';
 import { loadGeminiRuleQaAssets } from './geminiRuleQaAssets.mjs';
 import { fileURLToPath } from 'node:url';
 import { runCloudBudgetedQuestion, cloudSiliconFlowCallbacks } from './cloudRequestBudget.mjs';
 import { hasNumberedCardIdentityConflict } from "./numberedCardIdentity.mjs";
 import { retrieveExactOfficialQaDirect } from "./officialQaExactDirect.mjs";
 import { resolveRagDataRevision } from "./ragDataRevisionManifest.mjs";
+import { safeQueryAuditRetrievalTimings } from './queryAuditStore.mjs';
 import {
   beginPrivateEvaluationStage,
   createPrivateEvaluationDiagnostics,
@@ -41,6 +45,7 @@ export function preloadRagRequestAssets({
   loadData = loadRagData,
   loadPreparedData = loadPreparedRagCardData,
   loadGeminiAssets = loadGeminiRuleQaAssets,
+  prepareGeminiIndexes = prepareBoundedEvidenceIndexes,
   officialQaExactAlreadyChecked = false,
 } = {}) {
   if (env.RAG_EVIDENCE_PIPELINE !== 'cloud_evidence_v1'
@@ -52,11 +57,17 @@ export function preloadRagRequestAssets({
     return promise;
   };
   const data = observe((officialQaExactAlreadyChecked ? loadPreparedData : loadData)(dataDir));
+  const geminiAssets = observe(loadGeminiAssets({
+    dataDir: env.GEMINI_RULE_QA_DATA_DIR || fileURLToPath(new URL('../data', import.meta.url)),
+  }));
+  const geminiIndexes = observe(Promise.all([data, geminiAssets]).then(async ([, assets]) => {
+    // Yield once after card data becomes ready. This is early local work, not
+    // a worker thread: synchronous index construction still uses the main loop.
+    await new Promise(resolve => setImmediate(resolve));
+    return prepareGeminiIndexes(assets);
+  }));
   return {
-    data,
-    geminiAssets: observe(loadGeminiAssets({
-      dataDir: env.GEMINI_RULE_QA_DATA_DIR || fileURLToPath(new URL('../data', import.meta.url)),
-    })),
+    data, geminiAssets, geminiIndexes,
   };
 }
 const TRUSTED_FROZEN_IDENTITY_RESOLUTION_SOURCES = new Set([
@@ -321,6 +332,7 @@ async function finalizePreparedRagRulingQuestionCore({
     formalEngine: { ...DISABLED_FORMAL_ENGINE },
     legacyLua: { ...DISABLED_LEGACY_LUA },
     debug: {
+      ...safeQueryAuditRetrievalTimings(ruleQueryModel.timingsMs),
       cloudEvidence: evidence.debug?.cloudEvidence || null,
       ...(cloudEvidence && env.VERCEL_ENV === "preview" ? {
         cloudEvidenceCapture: {
@@ -672,11 +684,13 @@ async function answerRagRulingQuestionInternal({
     const localCardResolution = extractRagCards(query, {
       cards: data.cards || [],
     });
+    const cardNicknameReferences = buildCardNicknameReferences(query, data.cards || [], loadCardNicknameData());
     timingsMs.deterministicPreflight = elapsedMs(preflightStartedAt);
 
     const auxiliaryExtractionStartedAt = Date.now();
     cardNameModel = await callCardNameExtractionModel({
       userQuery: query,
+      cardNicknameReferences,
       cardNameReferences: localCardResolution.resolvedCards.flatMap((match) => {
         // This explicit provenance tag identifies a card-text expansion, not
         // a query match. Omitting its name hint does not remove any evidence
@@ -697,7 +711,7 @@ async function answerRagRulingQuestionInternal({
       now,
       signal,
     });
-    const extractedCardResolution = cardNameModel.typedMentionSetProvided === true
+    const baseCardResolution = cardNameModel.typedMentionSetProvided === true
       ? extractRagCards(query, {
         cards: data.cards || [],
         modelCardNameCandidates: cardNameModel.candidates || [],
@@ -709,6 +723,9 @@ async function answerRagRulingQuestionInternal({
         modelCardNameCandidates: cardNameModel.candidates,
       })
       : localCardResolution;
+    const extractedCardResolution = applyCardNicknameResolution(baseCardResolution, {
+      query, cards: data.cards || [], references: cardNicknameReferences,
+    });
     const trustedFrozenCardResolution = normalizeFrozenCardResolution(frozenCardResolution, {
       questionSha256: sha256Text(query),
       dataRevision,
@@ -807,6 +824,7 @@ async function answerRagRulingQuestionInternal({
             env,
             signal,
             assetsPromise: preloadedAssets?.geminiAssets,
+            indexesPromise: preloadedAssets?.geminiIndexes,
             elapsedBeforeRetrievalMs,
             packEvidence: (selectedEvidence) => buildRagRulingPromptBundle({
               userQuery: query,

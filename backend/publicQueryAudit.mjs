@@ -1,5 +1,5 @@
 import { isIP } from "node:net";
-import { safeQueryAuditDiagnostics, safeQueryAuditStreamMetrics, updateQueryAudit } from "./queryAuditStore.mjs";
+import { safeQueryAuditDiagnostics, safeQueryAuditStreamMetrics, safeQueryAuditRetrievalTimings, updateQueryAudit } from "./queryAuditStore.mjs";
 import { classifyPublicRequestChannel } from "./publicAnswerPresentation.mjs";
 
 // Only the HTTP adapter creates this private context. Never accept it from a
@@ -38,6 +38,7 @@ export function queryAuditAnswerPatch(answer, { status = "completed", latencyMs,
     ...auditDiagnostics(answer?.debug?.requestDiagnostics, answer?.answerLevel === "out_of_scope"
       ? "scope" : errorCode ? "generation" : undefined),
     ...safeQueryAuditStreamMetrics(lastAttemptStreamMetrics(answer?.debug?.generationAttempts)),
+    ...safeQueryAuditRetrievalTimings(answer?.debug?.retrievalTimingsMs),
   };
 }
 
@@ -67,6 +68,7 @@ export function queryAuditFailurePatch(error) {
     status: "failed", completedAt: new Date().toISOString(), errorCode: code,
     ...auditDiagnostics(error?.requestDiagnostics, explicitStage || auditErrorStage(code)),
     ...safeQueryAuditStreamMetrics(error?.streamMetrics || error?.providerFailure?.streamMetrics),
+    ...safeQueryAuditRetrievalTimings(error?.boundedRetrieval?.timingsMs),
   };
 }
 

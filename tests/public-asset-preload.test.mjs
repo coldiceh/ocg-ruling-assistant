@@ -26,13 +26,18 @@ test('request asset preload starts both loaders immediately and preserves their 
       calls.push(['gemini', dataDir]);
       return geminiPromise;
     },
+    prepareGeminiIndexes: (assets) => {
+      calls.push(['indexes', assets]);
+      return { assets };
+    },
   });
 
   assert.deepEqual(calls.map(([name]) => name), ['data', 'gemini']);
   assert.equal(preloaded.data, dataPromise);
   assert.equal(preloaded.geminiAssets, geminiPromise);
   resolveData({ kind: 'rag-data' });
-  await Promise.all([preloaded.data, preloaded.geminiAssets]);
+  assert.equal((await preloaded.geminiIndexes).assets, await geminiPromise);
+  assert.deepEqual(calls.map(([name]) => name), ['data', 'gemini', 'indexes']);
 });
 
 test('prepared route preloads the explicit card-only snapshot while other routes keep the full loader', async () => {
@@ -43,6 +48,7 @@ test('prepared route preloads the explicit card-only snapshot while other routes
     loadData: () => { calls.push('full'); return Promise.resolve({ scope: 'complete' }); },
     loadPreparedData: () => { calls.push('prepared'); return Promise.resolve({ scope: 'prepared_cards_only' }); },
     loadGeminiAssets: () => Promise.resolve({ kind: 'gemini-assets' }),
+    prepareGeminiIndexes: (assets) => ({ assets }),
   };
 
   const prepared = preloadRagRequestAssets({ ...common, officialQaExactAlreadyChecked: true });
@@ -50,6 +56,41 @@ test('prepared route preloads the explicit card-only snapshot while other routes
   const full = preloadRagRequestAssets(common);
   assert.equal((await full.data).scope, 'complete');
   assert.deepEqual(calls, ['prepared', 'full']);
+  await Promise.all([prepared.geminiIndexes, full.geminiIndexes]);
+});
+
+test('index preload waits for card data and defers CPU work to let the card pipeline proceed', async () => {
+  let releaseCards;
+  const calls = [];
+  const data = new Promise(resolve => { releaseCards = resolve; });
+  const assets = { fixture: true };
+  const preload = preloadRagRequestAssets({
+    env: { RAG_EVIDENCE_PIPELINE: 'cloud_evidence_v1', GEMINI_RULE_QA_ENABLED: 'true' },
+    loadData: () => data,
+    loadGeminiAssets: async () => assets,
+    prepareGeminiIndexes: received => {
+      assert.equal(received, assets);
+      calls.push('indexes');
+      return { assets: received };
+    },
+  });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(calls, []);
+  const cardStage = preload.data.then(() => { calls.push('card-stage'); });
+  releaseCards({});
+  await Promise.all([cardStage, preload.geminiIndexes]);
+  assert.deepEqual(calls, ['card-stage', 'indexes']);
+});
+
+test('unused index preload observes rejection while preserving the failure for the consumer', async () => {
+  const failure = new Error('fixture-index-failure');
+  const preload = preloadRagRequestAssets({
+    env: { RAG_EVIDENCE_PIPELINE: 'cloud_evidence_v1', GEMINI_RULE_QA_ENABLED: 'true' },
+    loadData: async () => ({}), loadGeminiAssets: async () => ({}),
+    prepareGeminiIndexes: async () => { throw failure; },
+  });
+  await new Promise(resolve => setImmediate(() => setImmediate(resolve)));
+  await assert.rejects(preload.geminiIndexes, error => error === failure);
 });
 
 test('public request starts one local preload after scope approval and inactive lock', async () => {

@@ -453,6 +453,28 @@ export function prepareBoundedEvidenceSnapshot(assets) {
   return { snapshot, cacheHit: false };
 }
 
+// All work here is local and depends only on the immutable asset revision.
+// The public pipeline may start it while card identity requests are in flight.
+export async function prepareBoundedEvidenceIndexes(assets, {
+  loadDenseSearch = loadRuleDenseSearch, loadQaSearch = loadQaDenseSearch,
+} = {}) {
+  const { snapshot, cacheHit } = prepareBoundedEvidenceSnapshot(assets);
+  if (!snapshot.dense) snapshot.dense = Promise.resolve().then(() => loadDenseSearch({
+    rules: snapshot.rules, denseRevision: assets.ruleDenseRevision,
+    mapping: assets.structureMapping, dataDir: fileURLToPath(new URL('../data/rule-embedding-v1', import.meta.url)),
+  })).catch(error => { delete snapshot.dense; throw error; });
+  if (!snapshot.qaDense) snapshot.qaDense = Promise.resolve().then(() => loadQaSearch({
+    qaRevision: assets.qaRevision, denseRevision: assets.qaDenseRevision,
+    mapping: assets.structureMapping, items: snapshot.qaTools.readSelected(snapshot.qaTools.snapshotHandles),
+    dataDir: fileURLToPath(new URL('../data/qa-embedding-v1', import.meta.url)),
+  })).catch(error => { delete snapshot.qaDense; throw error; });
+  // Observe both failures, including a failure in a preload never consumed by
+  // an abandoned request. The normal retrieval still receives the same error.
+  const results = await Promise.allSettled([snapshot.dense, snapshot.qaDense]);
+  for (const result of results) if (result.status === 'rejected') throw result.reason;
+  return { assets, snapshot, cacheHit, dense: results[0].value, qaDense: results[1].value };
+}
+
 // Consume only a globally ordered QA parent prefix when the first 32 mapped
 // units of both source lanes are already fixed. If a lane needs later mapping
 // ordinals, exhaust the finite stream so future ordinal-zero parents cannot
@@ -493,7 +515,7 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
       : runCloudGeminiRequest(request)
   ));
   return { async retrieve({ userQuery, answerLocale = 'zh-CN', cardResolution, retrievedEvidence = {}, dataRevision,
-    env = {}, signal: outerSignal, assetsPromise, elapsedBeforeRetrievalMs = 0 }) {
+    env = {}, signal: outerSignal, assetsPromise, indexesPromise, elapsedBeforeRetrievalMs = 0 }) {
     const started = performance.now();
     const deadlineMs = offlineLimits?.deadlineMs
       ?? (String(env.GEMINI_EVIDENCE_DEADLINE_MS) === '0' ? null
@@ -680,20 +702,16 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
       const assetReady = (async () => {
         const at = performance.now();
         const assets = await waitForShared(assetsPromise || loadAssets({ dataDir: env.GEMINI_RULE_QA_DATA_DIR || fileURLToPath(new URL('../data', import.meta.url)) }), signal);
+        timingsMs.assetLoadWait = performance.now() - at;
         if (assets.dataRevision !== dataRevision) throw new Error('gemini_rule_qa_asset_revision_mismatch');
-        const { snapshot, cacheHit } = prepareBoundedEvidenceSnapshot(assets);
-        if (!snapshot.dense) snapshot.dense = loadDenseSearch({ rules: snapshot.rules, denseRevision: assets.ruleDenseRevision,
-          mapping: assets.structureMapping, dataDir: fileURLToPath(new URL('../data/rule-embedding-v1', import.meta.url)) })
-          .catch(error => { delete snapshot.dense; throw error; });
-        if (!snapshot.qaDense) snapshot.qaDense = loadQaSearch({ qaRevision: assets.qaRevision,
-          denseRevision: assets.qaDenseRevision, mapping: assets.structureMapping,
-          items: snapshot.qaTools.readSelected(snapshot.qaTools.snapshotHandles),
-          dataDir: fileURLToPath(new URL('../data/qa-embedding-v1', import.meta.url)) })
-          .catch(error => { delete snapshot.qaDense; throw error; });
-        const denseResults = await Promise.allSettled([waitForShared(snapshot.dense, signal), waitForShared(snapshot.qaDense, signal)]);
-        for (const result of denseResults) if (result.status === 'rejected') throw result.reason;
+        const indexAt = performance.now();
+        const prepared = await waitForShared(indexesPromise || prepareBoundedEvidenceIndexes(assets, {
+          loadDenseSearch, loadQaSearch,
+        }), signal);
+        if (prepared.assets !== assets) throw new Error('gemini_rule_qa_preload_asset_mismatch');
+        timingsMs.indexesWait = performance.now() - indexAt;
         timingsMs.assets = performance.now() - at;
-        return { assets, snapshot, cacheHit, dense: denseResults[0].value, qaDense: denseResults[1].value };
+        return prepared;
       })();
       const planReady = (async () => {
         const at = performance.now();
@@ -737,26 +755,47 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
       async function searchDense(search, vector) {
         return search.searchAsync ? search.searchAsync(vector, { signal }) : search.search(vector);
       }
+      const channelCache = new Map();
+      const searchStats = { uniqueQueries: 0, reusedQueries: 0 };
+      for (const key of ['ruleDenseSearch', 'qaDenseSearch', 'lexicalSearch', 'navigationSearch']) timingsMs[key] = 0;
       for (const query of queries) {
         signal.throwIfAborted();
+        if (channelCache.has(query.text)) {
+          searchStats.reusedQueries++;
+          for (const [sourceKind, channel, hits] of channelCache.get(query.text)) lanes.push({
+            needId: query.needId, queryVariantId: query.queryVariantId, sourceKind, channel, hits,
+          });
+          continue;
+        }
+        searchStats.uniqueQueries++;
         const channels = [];
         const vector = queryVectors.get(query.text);
         if (vector) {
+          let searchAt = performance.now();
           channels.push(['rule', 'original_dense', mapRankedUnits(await searchDense(dense, vector), ruleKeys)]);
+          timingsMs.ruleDenseSearch += performance.now() - searchAt;
+          searchAt = performance.now();
           channels.push(['qa', 'original_dense', mapRankedUnits(await searchDense(qaDense, vector), qaKeys)]);
+          timingsMs.qaDenseSearch += performance.now() - searchAt;
         }
+        let searchAt = performance.now();
         channels.push(['rule', 'original_lexical', mapRankedUnits(snapshot.ruleSearch.search([query.text]), ruleKeys)]);
         const qaLexical = mapBoundedQaLexicalLanes({ qaTools, queries: [query.text],
           mapResult: qaKeys, sourceKindForUnit: key => units.get(key)?.sourceKind });
         for (const kind of ['qa','faq']) channels.push([kind, 'original_lexical', qaLexical[kind]]);
+        timingsMs.lexicalSearch += performance.now() - searchAt;
+        searchAt = performance.now();
         const navigation = snapshot.navigationSearch.searchBySourceKind(query.text, {
           sourceKinds: ['rule','qa','faq'], limit: 32,
         });
         for (const kind of ['rule','qa','faq']) channels.push([kind, 'navigation_lexical',
           mapRankedUnits(navigation[kind], hit => [hit.unitKey])]);
+        timingsMs.navigationSearch += performance.now() - searchAt;
+        channelCache.set(query.text, channels);
         for (const [sourceKind, channel, hits] of channels) lanes.push({ needId: query.needId,
           queryVariantId: query.queryVariantId, sourceKind, channel, hits });
       }
+      const assemblyAt = performance.now();
       const aliases = new Map(), entries = new Map();
       const expandDecisionSources = useDecisions
         ? createDecisionsSourceResolver({ sourceAtoms: rules.sourceAtoms, records: assets.rulesRecords }) : null;
@@ -842,6 +881,7 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
         maxEntries: useDecisions ? 253 : Infinity,
         measure: offered => JSON.stringify(selectionBody(offered)).length });
       let admitted = assemble(readChars);
+      timingsMs.candidateAssembly = performance.now() - assemblyAt;
       timingsMs.search = performance.now() - at;
       let body = selectionBody(admitted.offered, admitted.unread, admitted.omittedCount), measurement;
       if (!useDecisions) {
@@ -898,7 +938,7 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
           sourceAtoms: rules.sourceAtoms, records: assets.rulesRecords });
         const flow = createDecisionsSelectionFlow({ entries: visibleEntries, input: selectionInput, dependencies,
           userQuery, answerLocale, cardResolution, retrievedEvidence, maxPromptChars });
-        decisionsState = await executeSelectionFlow(flow, { ask: async (step, request) => {
+        decisionsState = await transports.selection.runSequence(() => executeSelectionFlow(flow, { ask: async (step, request) => {
           signal.throwIfAborted();
           const measured = transports.selection.measure(request), reserve = measured.estimatedCostUsd;
           if (spentUsd + reserve > perQuestionMaxUsd) throw new Error('evidence_request_budget_exceeded');
@@ -945,7 +985,7 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
             }
             row.status = 'failed'; row.error = error.message; throw error;
           } finally { row.elapsedMs = performance.now() - requestedAt; }
-        } });
+        } }));
         decisionsResult = flow.pack(decisionsState.selectedIds);
         return { selectedIds: decisionsResult.ids, unableToSelect: false,
           note: '', modelReportedStatus: decisionsState.finalStatus };
@@ -995,6 +1035,7 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
         generationProfileHash: profileHash, generationContracts: contracts, strategy: 'source_preprocessed_v1',
         evidenceSelector: useDecisions ? 'decisions' : 'luna',
         dryRun: false, warnings: [], ...revisions, assetsCacheHit: cacheHit,
+        indexesPreloaded: Boolean(indexesPromise), searchStats,
         elapsedBeforeRetrievalMs, elapsedMs: timingsMs.total, timingsMs, tokenUsage,
         rounds: calls.reduce((total, row) => total + (row.operation === 'decisions'
           ? row.dispatchCount || 0 : row.operation === 'generate_content' ? 1 : 0), 0),

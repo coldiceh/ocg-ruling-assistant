@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { getHeapStatistics } from 'node:v8';
 import { getLoadedGeminiEvidenceReleaseInfo } from './geminiRuleQaAssets.mjs';
+import { getCardNicknameDataInfo } from './ragCardNicknameData.mjs';
 
 const evidenceRevisionProjection = value => value ? Object.freeze({
   assetSchemaVersion: value.assetSchemaVersion ?? null,
@@ -22,6 +23,7 @@ export function getPublicReleaseInfo(env = process.env, read = readFileSync,
     commit: env.VERCEL_GIT_COMMIT_SHA || build?.commit || null,
     dataRevision: manifest?.revision || null,
     builtAt: build?.builtAt || null,
+    cardNicknames: getCardNicknameDataInfo(),
     runtimeMemory: {
       heapLimitBytes: getHeapStatistics().heap_size_limit,
       ...process.memoryUsage(),
