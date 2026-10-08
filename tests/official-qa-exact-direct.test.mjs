@@ -104,6 +104,86 @@ test("an explicit Chinese qaData question surface matches the same current offic
   assert.equal(result.officialAnswerJapanese, materialize(current.rawAnswer));
 });
 
+test("frozen card dictionaries support matching across multiple official question surfaces", async () => {
+  const current = recordsById.get("910005");
+  const originalCards = structuredClone(fixture.cards);
+  const cards = Object.freeze(originalCards.map((card) => Object.freeze({
+    ...card,
+    aliases: Object.freeze([...card.aliases]),
+  })));
+  const question = materialize(current.rawDetailedQuestion);
+  const result = await retrieveExactOfficialQaDirect({
+    question,
+    cards,
+    qaRecords: [{ ...current, rawQuestion: question, question: current.rawDetailedQuestion }],
+    candidatePoolComplete: true,
+    fetchImpl: neverFetch,
+  });
+
+  assert.equal(result.status, "matched");
+  assert.equal(result.qaId, current.sourceId);
+  assert.equal(result.officialQuestionJapanese, question);
+  assert.equal(result.officialAnswerJapanese, materialize(current.rawAnswer));
+  assert.deepEqual(cards, originalCards);
+});
+
+test("card alias changes between requests never reuse an earlier dictionary", async () => {
+  const current = recordsById.get("910005");
+  const cards = structuredClone(fixture.cards);
+  const options = {
+    question: materialize(current.rawDetailedQuestion),
+    cards,
+    qaRecords: [current],
+    candidatePoolComplete: true,
+    fetchImpl: neverFetch,
+  };
+  const before = await retrieveExactOfficialQaDirect(options);
+  assert.equal(before.status, "matched");
+
+  // Reuse the same array, but change it only after the first request has completed.
+  cards.push({ id: "999999", jaName: "別の合成カード", aliases: ["合成カードG"] });
+  const ambiguous = await retrieveExactOfficialQaDirect(options);
+  assert.equal(ambiguous.status, "not_matched");
+  assert.equal(ambiguous.reason, "card_identity_not_unique");
+
+  cards.pop();
+  assert.deepEqual(await retrieveExactOfficialQaDirect(options), before);
+});
+
+test("card alias reads do not grow with the number of official question surfaces", async () => {
+  const current = recordsById.get("910005");
+  const question = `${materialize(current.rawDetailedQuestion)} 追加の別条件がありますか？`;
+  async function retrieveAndCount(record) {
+    let aliasReads = 0;
+    const cards = fixture.cards.map((card) => ({
+      ...card,
+      get aliases() {
+        aliasReads += 1;
+        return card.aliases;
+      },
+    }));
+    const result = await retrieveExactOfficialQaDirect({
+      question,
+      cards,
+      qaRecords: [record],
+      candidatePoolComplete: true,
+      fetchImpl: neverFetch,
+    });
+    return { result, aliasReads };
+  }
+
+  const fewer = await retrieveAndCount(current);
+  const more = await retrieveAndCount({
+    ...current,
+    rawQuestion: materialize(current.rawDetailedQuestion),
+    question: `${current.rawDetailedQuestion} 別の質問表面です。`,
+  });
+  assert.equal(fewer.result.reason, "exact_question_hash_not_found");
+  assert.deepEqual(more.result, fewer.result);
+  assert.ok(fewer.aliasReads > 0, "the supplied dictionary must actually be read");
+  assert.equal(more.aliasReads, fewer.aliasReads, "extra question surfaces must not rescan card aliases");
+});
+
 test("same-card different official questions remain distinct", async () => {
   const other = recordsById.get("910003");
   const result = await retrieveExactOfficialQaDirect({
@@ -183,6 +263,40 @@ test("a newly updated multi-card Q&A body is fetched by the unique discovery int
   assert.deepEqual(calls, ["https://db.ygoresources.com/data/qa/910006"]);
   assert.equal(result.officialQuestionJapanese, materialize(target.rawDetailedQuestion));
   assert.equal(result.officialAnswerJapanese, materialize(target.rawAnswer));
+});
+
+test("the exact route propagates cancellation while fetching a missing official body", { timeout: 5000 }, async () => {
+  const controller = new AbortController();
+  const reason = Object.assign(new Error("fixture_caller_disconnected"), { code: "caller_disconnected" });
+  const calls = [];
+  let receivedSignal;
+  let notifyFetchStarted;
+  const fetchStarted = new Promise((resolve) => { notifyFetchStarted = resolve; });
+  const pending = retrieveExactOfficialQaDirect({
+    question: fixture.positiveCases.find((item) => item.qaId === "910006").question,
+    cards: fixture.cards,
+    qaRecords: fixture.records.filter((record) => record.sourceId !== "910006"),
+    qaDiscovery: fixture.discovery,
+    signal: controller.signal,
+    env: { RAG_OFFICIAL_EXACT_TIMEOUT_MS: "60000" },
+    fetchImpl: async (url, options = {}) => {
+      calls.push(String(url));
+      receivedSignal = options.signal;
+      return await new Promise((resolve, reject) => {
+        options.signal?.addEventListener("abort", () => reject(options.signal.reason), { once: true });
+        notifyFetchStarted();
+      });
+    },
+  });
+  const rejected = assert.rejects(pending, (error) => error === reason);
+  await fetchStarted;
+  controller.abort(reason);
+  await rejected;
+
+  assert.deepEqual(calls, ["https://db.ygoresources.com/data/qa/910006"]);
+  assert.equal(receivedSignal instanceof AbortSignal, true);
+  assert.equal(receivedSignal.aborted, true);
+  assert.equal(receivedSignal.reason, reason);
 });
 
 test("a unique discovered Q&A with an unavailable body fails closed before every model stage", async () => {
@@ -320,6 +434,45 @@ test("an ambiguous card alias never certifies an exact route", async () => {
 
   assert.equal(result.status, "not_matched");
   assert.equal(result.reason, "card_identity_not_unique");
+});
+
+test("duplicate records and question surfaces for one Q&A retain one exact source", async () => {
+  const current = recordsById.get("910005");
+  const options = {
+    question: materialize(current.rawDetailedQuestion),
+    cards: fixture.cards,
+    candidatePoolComplete: true,
+    fetchImpl: neverFetch,
+  };
+  const single = await retrieveExactOfficialQaDirect({ ...options, qaRecords: [current] });
+  const duplicate = {
+    ...current,
+    id: "duplicate-current",
+    rawQuestion: current.rawDetailedQuestion,
+    question: materialize(current.rawDetailedQuestion),
+  };
+  const repeated = await retrieveExactOfficialQaDirect({ ...options, qaRecords: [current, duplicate] });
+
+  assert.equal(single.status, "matched");
+  assert.deepEqual(repeated, single);
+  assert.deepEqual(repeated.candidateQaIds, [current.sourceId]);
+});
+
+test("two current Q&A IDs with the same question and answer remain non-unique", async () => {
+  const current = recordsById.get("910005");
+  const other = { ...current, id: "ygoresources-qa-99997", sourceId: "99997" };
+  const result = await retrieveExactOfficialQaDirect({
+    question: materialize(current.rawDetailedQuestion),
+    cards: fixture.cards,
+    qaRecords: [current, other],
+    candidatePoolComplete: true,
+    fetchImpl: neverFetch,
+  });
+
+  assert.equal(result.status, "not_matched");
+  assert.equal(result.route, "ordinary_rag");
+  assert.equal(result.reason, "exact_question_not_unique");
+  assert.deepEqual(result.matchedQaIds, [current.sourceId, other.sourceId]);
 });
 
 test("incompatible current answers for one exact identity raise DATA_INTEGRITY_ERROR", async () => {
