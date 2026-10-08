@@ -55,8 +55,11 @@ export function hashOfficialQaExactText(value) {
 }
 
 export function canonicalizeOfficialQaExactQuestion(question, cards = []) {
+  return canonicalizeWithAliasCatalog(question, buildUniqueCardAliasCatalog(cards));
+}
+
+function canonicalizeWithAliasCatalog(question, aliases) {
   let canonical = decodeMechanicalHtml(question).normalize("NFKC");
-  const aliases = buildUniqueCardAliasCatalog(cards);
   const mentionedCardIds = new Set();
   const ambiguousCardSurfaces = [];
 
@@ -90,7 +93,8 @@ export async function retrieveExactOfficialQaDirect({
   env = globalThis.process?.env || {},
   signal,
 } = {}) {
-  const query = canonicalizeOfficialQaExactQuestion(question, cards);
+  const aliases = buildUniqueCardAliasCatalog(cards);
+  const query = canonicalizeWithAliasCatalog(question, aliases);
   if (!query.normalized || query.ambiguousCardSurfaces.length) {
     return noMatch("card_identity_not_unique", query);
   }
@@ -167,7 +171,7 @@ export async function retrieveExactOfficialQaDirect({
   for (const qaId of pool.qaIds) {
     for (const record of recordsByQaId.get(qaId) || []) {
       for (const surface of officialQuestionSurfaces(record)) {
-        const projected = canonicalizeOfficialQaExactQuestion(surface, cards);
+        const projected = canonicalizeWithAliasCatalog(surface, aliases);
         if (projected.hash !== query.hash || projected.normalized !== query.normalized) continue;
         exactMatches.push({ qaId, record, surface });
       }
