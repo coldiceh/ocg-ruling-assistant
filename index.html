@@ -15,7 +15,7 @@
       property="og:description"
       content="结合卡片文本、公开规则资料与官方 Q&amp;A，分析游戏王 OCG 裁定问题。"
     />
-    <link rel="stylesheet" href="src/styles.css?v=20260926-share-star-1" />
+    <link rel="stylesheet" href="src/styles.css?v=20261008-evidence-selector-1" />
   </head>
   <body class="theme-night">
     <div class="page-background" aria-hidden="true"></div>
@@ -75,6 +75,13 @@
               </select>
               <small id="rulingModelStatus" hidden></small>
               <small id="rulingModelLatency" class="model-latency" aria-live="polite">正在读取平均出答案时间</small>
+            </label>
+            <label class="model-tier-label evidence-selector-label" for="evidenceSelector">
+              <span id="evidenceSelectorLabel">准备证据</span>
+              <select id="evidenceSelector">
+                <option id="evidenceSelectorDefault" value="decisions" selected>Decisions（默认）</option>
+                <option value="luna">Luna</option>
+              </select>
             </label>
             <div class="model-strip" aria-live="polite">
               <span>裁定流程</span>
@@ -261,6 +268,6 @@
       </main>
     </div>
 
-    <script src="src/app.js?v=20261002-evidence-selection-1"></script>
+    <script src="src/app.js?v=20261008-evidence-selector-1"></script>
   </body>
 </html>

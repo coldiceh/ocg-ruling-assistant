@@ -507,6 +507,7 @@ function buildPreparedContinuation({
       "queries",
       "candidateAssessments",
       "generationProfileHash", "generationContracts", "strategy", "dataRevision",
+      "evidenceSelector", "stageTelemetry",
       "bundleRevision", "ruleRevision", "qaRevision", "navigationRevision",
       "structureMappingRevision", "ruleDenseRevision", "qaDenseRevision",
       "assetsCacheHit", "rounds", "actualCostKnown", "costBasis", "cacheProvisionUsd",

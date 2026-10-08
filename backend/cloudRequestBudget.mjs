@@ -1,5 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { estimateOpenAIModelCost, estimateRelayModelCost, getModelPricingConfig } from './modelPricing.mjs';
 import { publicFinalBudgetEnabled, publicFinalBudgetKeys, publicFinalBudgetCommand, publicFinalPoolStatus } from './cloudFinalBudget.mjs';
 import {
@@ -17,6 +17,41 @@ const GEMINI_CACHED_INPUT_USD_PER_MTOK = 0.075;
 const GEMINI_OUTPUT_USD_PER_MTOK = 3.75;
 const GEMINI_EMBEDDING_INPUT_USD_PER_MTOK = 0.20;
 const GEMINI_CACHE_STORAGE_USD_PER_MTOK_HOUR = 0.50;
+// Decisions bills input only; these are not the generative Luna rates.
+export function decisionsCostUsd(inputTokens) {
+  if (!Number.isSafeInteger(inputTokens) || inputTokens < 0) {
+    throw new Error('decisions_input_tokens_invalid');
+  }
+  return inputTokens * 0.10 * (inputTokens > 272000 ? 2 : 1) / 1_000_000;
+}
+
+export function measureDecisionsRequest(body) {
+  if (body?.model !== 'gpt-6-luna' || typeof body.input !== 'string'
+      || !Array.isArray(body.questions) || !body.questions.length
+      || body.questions.length > 200
+      || Object.keys(body).some(key => !['model', 'input', 'questions'].includes(key))) {
+    throw new Error('decisions_request_contract_invalid');
+  }
+  const wire = JSON.stringify(body);
+  const requestBodyBytes = Buffer.byteLength(wire, 'utf8');
+  // The entire text-only wire body bounds its encoded text. Reserve additional
+  // framing per request and question; this is an allocation, not a token count.
+  const inputTokensUpperBound = requestBodyBytes + 4096 + 256 * body.questions.length;
+  return Object.freeze({
+    requestSha256:createHash('sha256').update(wire, 'utf8').digest('hex'),
+    requestBodyBytes, inputTokensUpperBound,
+    estimatedCostUsd:decisionsCostUsd(inputTokensUpperBound),
+    basis:'utf8_bytes_plus_protocol_overhead', exact:false,
+  });
+}
+
+function checkedDecisionsMeasurement(body, measurement) {
+  const measured = measureDecisionsRequest(body);
+  if (measurement !== undefined && Object.keys(measured).some(key => measurement?.[key] !== measured[key])) {
+    throw new Error('decisions_measurement_mismatch');
+  }
+  return measured;
+}
 // Mechanical invariant: every actual dispatch holds a durable reservation in
 // both authorized currencies. Signals are amounts, limits, request IDs and
 // provider usage; no evidence or answer meaning is inspected. A conservative
@@ -536,6 +571,35 @@ export function createCloudRequestBudget({env, fetchImpl = globalThis.fetch, com
     } else ticket.uncertainty='provider_usage_missing_reservation_retained';
     return result;
   }
+  async function decisions({body, invoke, measurement, signal}) {
+    if (typeof invoke !== 'function') throw new Error('cloud_budget_decisions_invoke_required');
+    signal?.throwIfAborted();
+    const measured = checkedDecisionsMeasurement(body, measurement);
+    const ticket = await reserve({provider:'openai', model:body.model, operation:'decisions',
+      stage:'evidence_preparation', actualCny:0, theoreticalUsd:measured.estimatedCostUsd,
+      pricingBasis:'openai_decisions_input_only_context_tiered_20261008', signal,
+      reservationMetadata:measured});
+    let result;
+    try {
+      signal?.throwIfAborted();
+      result = await invoke();
+    } catch (error) {
+      // The durable ticket remains reserved even when dispatch or receipt is
+      // uncertain. Never release it based only on a transport error or abort.
+      ticket.uncertainty = 'request_or_settlement_failed_reservation_retained';
+      throw error;
+    }
+    const inputTokens = result?.usage?.input_tokens;
+    if (Number.isSafeInteger(inputTokens) && inputTokens >= 0) {
+      try {
+        await settle(ticket, {usage:result.usage, returnedModel:result.model || body.model,
+          actualCny:0, actualUpperCny:0, theoreticalUsd:decisionsCostUsd(inputTokens)});
+      } catch {
+        ticket.uncertainty = 'provider_response_received_settlement_uncertain_reservation_retained';
+      }
+    } else ticket.uncertainty = 'provider_usage_missing_reservation_retained';
+    return result;
+  }
   async function baiGeneration({body, invoke, operation, model, measurement, generationContract, signal}) {
     if (operation !== 'generate_content' || generationContract?.providerId !== 'bai') {
       throw new Error('cloud_budget_bai_generation_contract_required');
@@ -877,7 +941,7 @@ export function createCloudRequestBudget({env, fetchImpl = globalThis.fetch, com
         accountedActualUpperCny:['bai','gemini'].includes(r.provider)?null:r.actualNano/UNIT,
         theoreticalUsd:r.theoreticalNano/UNIT}))};
   }
-  return {relay,deepseek,openai,baiCard,sourceTranslation,bai:request=>request?.generationContract?.providerId === 'bai'
+  return {relay,deepseek,openai,decisions,baiCard,sourceTranslation,bai:request=>request?.generationContract?.providerId === 'bai'
     ? baiGeneration(request) : openai({...request,provider:'bai'}),gemini,
     beforeSend,onResponse,remainingPreparationUsd,snapshot};
 }
@@ -902,7 +966,14 @@ export function runCloudRelayRequest({body,invoke,stage='final_ruling'}) {
   const controller=scope.getStore();
   return controller?controller.relay({body,invoke,stage}):invoke();
 }
-export async function runOfficialOpenAIRequest({env,body,invoke,fetchImpl=globalThis.fetch,now=new Date()}) {
+export function runOfficialOpenAIRequest(request) {
+  return runOfficialBudgetRequest(request, 'openai');
+}
+export function runOfficialDecisionsRequest(request) {
+  return runOfficialBudgetRequest(request, 'decisions');
+}
+async function runOfficialBudgetRequest({env,body,invoke,measurement,signal,fetchImpl=globalThis.fetch,now=new Date()}, operation) {
+  signal?.throwIfAborted();
   const daily=officialDailyConfig(env,now);
   const officialEnv={
     ...env,
@@ -918,7 +989,7 @@ export async function runOfficialOpenAIRequest({env,body,invoke,fetchImpl=global
   try {
     return await createCloudRequestBudget({env:officialEnv,fetchImpl,now,
       officialDailyMigration:{legacyKey:daily.legacyKey,...utcDayBounds(daily.dayKey,env.API_BUDGET_TIMEZONE)}})
-      .openai({body,invoke});
+      [operation]({body,invoke,measurement,signal});
   } catch(error) {
     if(error?.message==='cloud_budget_total_exceeded') {
       const exceeded=new Error('official_daily_budget_exceeded',{cause:error});

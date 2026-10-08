@@ -15,6 +15,14 @@ import { createNavigationSearch } from './evidenceNavigationSearch.mjs';
 import { loadEvidenceGenerationContract, generationContractSha256, buildEvidenceInputMeasurement,
   normalizeEvidenceGenerationUsage, estimateGenerationUpperBoundUsd, assertGenerationCapacity } from './evidenceGenerationContract.mjs';
 import { createEvidenceGenerationTransport } from './evidenceGenerationTransport.mjs';
+import { createDecisionsTransport, parseDecisionsAnswers, decisionsCostUsd } from './decisionsTransport.mjs';
+import { createDecisionsSelectionFlow, executeSelectionFlow } from './decisionsSelectionFlow.mjs';
+import { createDecisionsSourceResolver, createDecisionsReadingDependencies } from './decisionsReadingDependencies.mjs';
+
+const DECISIONS_SELECTION_CONTRACT = Object.freeze({ providerId: 'openai', modelId: 'gpt-6-luna',
+  api: 'decisions', profileId: 'openai-decisions-v4', maxBillableOutputTokens: 0,
+  pricingContract: { inputUsdPerMillion: 0.10, outputUsdPerMillion: 0,
+    longContextThreshold: 272000, longContextMultiplier: 2 } });
 
 const snapshots = new WeakMap();
 const BASE = 'https://generativelanguage.googleapis.com/v1beta';
@@ -502,13 +510,18 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
       ?? positiveIntegerConfig(env, 'GEMINI_EVIDENCE_MAX_PROMPT_CHARS', GEMINI_EVIDENCE_MAX_PROMPT_CHARS, MAX_PROMPT_CHARS);
     let maxUsd = perQuestionMaxUsd;
     const readChars = positiveConfig(env, 'GEMINI_EVIDENCE_READING_TARGET_CHARS', INITIAL_READ_CHARS);
+    const useDecisions = env.EVIDENCE_SELECTOR === 'decisions';
+    if (useDecisions && !(env.OPENAI_DECISIONS_API_KEY || env.OPENAI_API_KEY)) {
+      throw new Error('decisions_api_key_required');
+    }
     const contracts = Object.freeze({
       plan: loadGenerationContract('planning', { env }),
-      selection: loadGenerationContract('selection', { env }),
+      selection: useDecisions ? DECISIONS_SELECTION_CONTRACT : loadGenerationContract('selection', { env }),
     });
     const transports = Object.freeze({
       plan: createEvidenceGenerationTransport({ contract: contracts.plan, env, fetchImpl }),
-      selection: createEvidenceGenerationTransport({ contract: contracts.selection, env, fetchImpl }),
+      selection: useDecisions ? createDecisionsTransport({ env, fetchImpl, ...(budgetedRequest ? { budgetedRequest } : {}) })
+        : createEvidenceGenerationTransport({ contract: contracts.selection, env, fetchImpl }),
     });
     const profileHash = hash(JSON.stringify(contracts));
     const timingsMs = {}, calls = [], counts = [], denseSkipped = [];
@@ -745,6 +758,8 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
           queryVariantId: query.queryVariantId, sourceKind, channel, hits });
       }
       const aliases = new Map(), entries = new Map();
+      const expandDecisionSources = useDecisions
+        ? createDecisionsSourceResolver({ sourceAtoms: rules.sourceAtoms, records: assets.rulesRecords }) : null;
       function entryFor(id, kind, body) {
         if (!aliases.has(id)) aliases.set(id, `${kind === 'rule' ? 'A' : 'Q'}${aliases.size + 1}`);
         if (!entries.has(id)) entries.set(id, { id, kind, body, alias: aliases.get(id) });
@@ -777,6 +792,12 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
             const context = units.get(ref);
             if (!context) throw new Error('evidence_context_binding_invalid');
             add(context);
+          }
+        }
+        if (expandDecisionSources) {
+          const required = expandDecisionSources(bundleEntries.filter(entry => entry.kind === 'rule').map(entry => entry.id));
+          for (const id of required) if (!seen.has(id)) {
+            seen.add(id); bundleEntries.push(entryFor(id, 'rule', rules.sourceAtoms.get(id)));
           }
         }
         return { unitKey, sourceKind: confirmedFaq ? 'faq' : bundleUnits[0].sourceKind,
@@ -818,9 +839,12 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
           unread: unread.map(({ title, sourceKind, size, reason }) => ({ title, sourceKind, size, reason })), omittedCount }, aliasCosts);
       }
       const assemble = maxChars => admitWholeReadingUnits({ lanes, materialize, getReferences, maxChars, signal,
+        maxEntries: useDecisions ? 253 : Infinity,
         measure: offered => JSON.stringify(selectionBody(offered)).length });
       let admitted = assemble(readChars);
       timingsMs.search = performance.now() - at;
+      let body = selectionBody(admitted.offered, admitted.unread, admitted.omittedCount), measurement;
+      if (!useDecisions) {
       const fixedBody = selectionBody([]);
       const fixed = await measure(fixedBody, 'selection', 'selection_base');
       const contract = contracts.selection;
@@ -837,8 +861,7 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
         ['requestBodyBytes', contract.capacityContract.maxRequestBodyBytes ?? Infinity],
       ];
       const withinLimits = measurement => limits.every(([key, limit]) => !Number.isFinite(limit) || measurement[key] <= limit);
-      let body = selectionBody(admitted.offered, admitted.unread, admitted.omittedCount);
-      let measurement = await measure(body, 'selection');
+      measurement = await measure(body, 'selection');
       if (!withinLimits(measurement)) {
         const fixedChars = JSON.stringify(fixedBody).length;
         const ratio = Math.max(0, Math.min(1, ...limits.filter(([, limit]) => Number.isFinite(limit))
@@ -861,13 +884,53 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
           bundle.entries.map(entry => entry.id)))];
         admitted.measuredChars = JSON.stringify(body).length;
       }
+      }
       completedReading = { offered: admitted.offered.map(bundle => ({ unitKey: bundle.unitKey,
         atomIds: bundle.entries.map(entry => entry.id), hits: bundle.hits })), omitted: admitted.omitted,
         lanes: lanes.map(lane => ({ ...lane, hits: lane.hits })), denseSkipped };
       await onEvent({ type: 'reading', ...completedReading });
       const visibleEntries = new Map(admitted.offered.flatMap(bundle => bundle.entries.map(entry => [entry.alias, entry])));
       at = performance.now();
-      const selection = await generate(body, measurement, 'selection', async (raw, context) => {
+      let decisionsResult = null, decisionsState = null;
+      const selection = useDecisions ? await (async () => {
+        const selectionInput = JSON.parse(body.contents[0].parts.at(-1).text);
+        const { dependencies } = createDecisionsReadingDependencies({ entries: visibleEntries,
+          sourceAtoms: rules.sourceAtoms, records: assets.rulesRecords });
+        const flow = createDecisionsSelectionFlow({ entries: visibleEntries, input: selectionInput, dependencies,
+          userQuery, answerLocale, cardResolution, retrievedEvidence, maxPromptChars });
+        decisionsState = await executeSelectionFlow(flow, { ask: async (step, request) => {
+          signal.throwIfAborted();
+          const measured = transports.selection.measure(request), reserve = measured.estimatedCostUsd;
+          if (spentUsd + reserve > perQuestionMaxUsd) throw new Error('evidence_request_budget_exceeded');
+          const row = { stage: 'selection', step, operation: 'decisions', providerId: 'openai', model: request.model,
+            measurement: measured, countedInputTokens: measured.inputTokensUpperBound,
+            requestSha256: measured.requestSha256, reservedUsd: reserve, accountedUsd: reserve, status: 'pending' };
+          calls.push(row); spentUsd += reserve;
+          const requestedAt = performance.now();
+          let submitted = false;
+          try {
+            await onEvent({ type: 'request', stage: 'selection', step, body: request, measurement: measured, contract: contracts.selection });
+            const raw = await transports.selection.invoke(request, { signal, measurement: measured,
+              onDispatch: () => { submitted = true; } });
+            row.usage = raw.usage || null;
+            const used = raw.usage?.input_tokens;
+            if (Number.isSafeInteger(used) && used >= 0) {
+              row.accountedUsd = decisionsCostUsd(used); spentUsd += row.accountedUsd - reserve;
+              row.billableUsage = { inputTokens: used, billableOutputTokens: 0, cachedInputTokens: 0 };
+              row.billableCost = { amountUsd: row.accountedUsd, status: 'known', basis: 'openai_decisions_input_tokens' };
+            }
+            await onEvent({ type: 'response', stage: 'selection', step, raw });
+            const answers = parseDecisionsAnswers(raw, request);
+            row.status = 'success'; return answers;
+          } catch (error) {
+            if (!submitted) { spentUsd -= row.accountedUsd; row.accountedUsd = 0; row.submitted = false; }
+            row.status = 'failed'; row.error = error.message; throw error;
+          } finally { row.elapsedMs = performance.now() - requestedAt; }
+        } });
+        decisionsResult = flow.pack(decisionsState.selectedIds);
+        return { selectedIds: decisionsResult.ids, unableToSelect: false,
+          note: '', modelReportedStatus: decisionsState.finalStatus };
+      })() : await generate(body, measurement, 'selection', async (raw, context) => {
         const value = raw?.result ?? raw;
         if (value?.selectedIds === undefined || (value.unableToSelect !== undefined && typeof value.unableToSelect !== 'boolean')) throw new Error('evidence_selection_fields_absent');
         const selection = { selectedIds: strings(value.selectedIds, 'selected_ids'), unableToSelect: value.unableToSelect ?? false, note: value.note ?? '' };
@@ -898,7 +961,7 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
         qaHandles: [...selectedQa.keys()] }, rules: canonicalRules, qaTools: { qaRevision: assets.qaRevision,
         readSelected: ids => ids.map(id => selectedQa.get(id)) } });
       at = performance.now();
-      const result = packGeminiSelection({ selection: resolved, userQuery, answerLocale, cardResolution, retrievedEvidence, maxPromptChars });
+      const result = decisionsResult || packGeminiSelection({ selection: resolved, userQuery, answerLocale, cardResolution, retrievedEvidence, maxPromptChars });
       if (result.packing.capacityExceeded) throw Object.assign(new Error('gemini_bounded_pack_capacity_exceeded'), { packing: result.packing });
       timingsMs.packing = performance.now() - at; signal.throwIfAborted();
       timingsMs.total = performance.now() - started;
@@ -911,13 +974,16 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
         stageTelemetry: { planning: generationStageTelemetry(contracts.plan),
           selection: generationStageTelemetry(contracts.selection) },
         generationProfileHash: profileHash, generationContracts: contracts, strategy: 'source_preprocessed_v1',
+        evidenceSelector: useDecisions ? 'decisions' : 'luna',
         dryRun: false, warnings: [], ...revisions, assetsCacheHit: cacheHit,
         elapsedBeforeRetrievalMs, elapsedMs: timingsMs.total, timingsMs, tokenUsage,
-        rounds: calls.filter(row => row.operation === 'generate_content').length,
+        rounds: calls.filter(row => ['generate_content', 'decisions'].includes(row.operation)).length,
         estimatedCostUsd: spentUsd, estimatedCostCny: spentUsd * fx, actualCostKnown: false,
         costBasis: 'provider_list_theoretical', cacheProvisionUsd: 0, queryPlan,
         bounded: { calls, tokenCounts: counts, finalModelCalls: 0, reading: completedReading,
           schedulerContract: READING_SCHEDULER_CONTRACT, coverageScope: assets.coverageScope,
+          ...(decisionsState ? { decisions: { acquisitionStop: decisionsState.acquisitionStop,
+            modelReportedStatus: decisionsState.finalStatus, events: decisionsState.events } } : {}),
           readGroupIds: admitted.offered.map(bundle => bundle.unitKey), selectedIds: selection.selectedIds,
           omittedGroupIds: admitted.omitted.map(unit => unit.unitKey), estimatedCostUsd: spentUsd,
           maxPromptChars, deadlineMs, readTargetChars: readChars,
