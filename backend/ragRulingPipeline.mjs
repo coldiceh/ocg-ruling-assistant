@@ -70,6 +70,83 @@ export function preloadRagRequestAssets({
     data, geminiAssets, geminiIndexes,
   };
 }
+/**
+ * Card-name extraction only needs the question and the card snapshot, so the
+ * public entry can start it while the scope classifier is still running. The
+ * pipeline consumes the result when it reaches the extraction stage and only
+ * reuses it when the snapshot identity and data revision match its own.
+ */
+export function startCardNameExtraction({
+  question,
+  env = globalThis.process?.env || {},
+  preloadedAssets,
+  dataDir,
+  cards,
+  cardModelInvoker,
+  fetchImpl,
+  dryRun,
+  now,
+  signal,
+  loadPreparedData = loadPreparedRagCardData,
+} = {}) {
+  const startedAt = Date.now();
+  const query = String(question || "").trim();
+  const work = (async () => {
+    const data = cards
+      ? { cards }
+      : await (preloadedAssets?.data || loadPreparedData(dataDir));
+    const dataRevision = buildRagDataRevision(data, env, { cacheByIdentity: !cards });
+    const dataLoadMs = elapsedMs(startedAt);
+    signal?.throwIfAborted?.();
+    const prepared = prepareCardNameExtractionInput(query, data);
+    const modelStartedAt = Date.now();
+    const cardNameModel = await callCardNameExtractionModel({
+      userQuery: query,
+      cardNicknameReferences: prepared.cardNicknameReferences,
+      cardNameReferences: prepared.cardNameReferences,
+      dataRevision,
+      env,
+      modelInvoker: cardModelInvoker,
+      fetchImpl,
+      dryRun,
+      now,
+      signal,
+    });
+    return {
+      data, dataRevision, query,
+      localCardResolution: prepared.localCardResolution,
+      cardNicknameReferences: prepared.cardNicknameReferences,
+      cardNameModel,
+      timingsMs: { dataLoad: dataLoadMs, deterministicPreflight: prepared.preflightMs,
+        auxiliaryExtractionModels: elapsedMs(modelStartedAt), total: elapsedMs(startedAt) },
+      startedAt,
+    };
+  })();
+  // The pipeline awaits this later; an early rejection must not surface as an
+  // unhandled rejection when the request is denied before extraction.
+  work.catch(() => {});
+  return work;
+}
+
+function prepareCardNameExtractionInput(query, data) {
+  const preflightStartedAt = Date.now();
+  const localCardResolution = extractRagCards(query, { cards: data.cards || [] });
+  const cardNicknameReferences = buildCardNicknameReferences(query, data.cards || [], loadCardNicknameData());
+  const cardNameReferences = localCardResolution.resolvedCards.flatMap((match) => {
+    // This explicit provenance tag identifies a card-text expansion, not
+    // a query match. Omitting its name hint does not remove any evidence
+    // or override the model; the existing tag is the direct observation.
+    if (match.resolutionSource === "card_text_reference") return [];
+    const card = (data.cards || []).find((item) => String(item.id) === String(match.id));
+    if (!card) return [];
+    // Read names from the canonical record: resolved aliases can include
+    // a query fragment inferred by local matching.
+    return [{ input: match.input, name: card.name || "", cnName: card.cnName || "",
+      jaName: card.jaName || "", enName: card.enName || "", aliases: card.aliases || [] }];
+  });
+  return { localCardResolution, cardNicknameReferences, cardNameReferences, preflightMs: elapsedMs(preflightStartedAt) };
+}
+
 const TRUSTED_FROZEN_IDENTITY_RESOLUTION_SOURCES = new Set([
   "query",
   "external_identity_verification",
@@ -607,6 +684,7 @@ async function answerRagRulingQuestionInternal({
   prepareForContinuation = false,
   answerLocale = "zh-CN",
   preloadedAssets,
+  preloadedCardNameExtraction,
   nonCardElapsedBeforePipelineMs = 0,
   progress,
 } = {}) {
@@ -680,37 +758,48 @@ async function answerRagRulingQuestionInternal({
   let ruleQueryModel = {...DISABLED_AUXILIARY_STAGE, queries:[], candidateAssessments:[]};
   let cardResolution;
   let frozenCardResolutionRejections = [];
+  let earlyCardNameExtraction = null;
   try {
-    const localCardResolution = extractRagCards(query, {
-      cards: data.cards || [],
-    });
-    const cardNicknameReferences = buildCardNicknameReferences(query, data.cards || [], loadCardNicknameData());
+    // A preloaded extraction is reused only when it was computed on this exact
+    // snapshot object and data revision; anything else runs the ordinary path.
+    const early = preloadedCardNameExtraction
+      ? await Promise.resolve(preloadedCardNameExtraction).catch(() => null)
+      : null;
+    const earlyUsable = Boolean(early)
+      && early.query === query
+      && early.data === data
+      && String(early.dataRevision || "") === String(dataRevision || "")
+      && early.cardNameModel && typeof early.cardNameModel === "object";
+    const prepared = earlyUsable
+      ? { localCardResolution: early.localCardResolution, cardNicknameReferences: early.cardNicknameReferences }
+      : prepareCardNameExtractionInput(query, data);
+    const localCardResolution = prepared.localCardResolution;
+    const cardNicknameReferences = prepared.cardNicknameReferences;
     timingsMs.deterministicPreflight = elapsedMs(preflightStartedAt);
 
     const auxiliaryExtractionStartedAt = Date.now();
-    cardNameModel = await callCardNameExtractionModel({
-      userQuery: query,
-      cardNicknameReferences,
-      cardNameReferences: localCardResolution.resolvedCards.flatMap((match) => {
-        // This explicit provenance tag identifies a card-text expansion, not
-        // a query match. Omitting its name hint does not remove any evidence
-        // or override the model; the existing tag is the direct observation.
-        if (match.resolutionSource === "card_text_reference") return [];
-        const card = (data.cards || []).find((item) => String(item.id) === String(match.id));
-        if (!card) return [];
-        // Read names from the canonical record: resolved aliases can include
-        // a query fragment inferred by local matching.
-        return [{ input: match.input, name: card.name || "", cnName: card.cnName || "",
-          jaName: card.jaName || "", enName: card.enName || "", aliases: card.aliases || [] }];
-      }),
-      dataRevision,
-      env,
-      modelInvoker: cardModelInvoker,
-      fetchImpl,
-      dryRun,
-      now,
-      signal,
-    });
+    if (earlyUsable) {
+      cardNameModel = early.cardNameModel;
+      earlyCardNameExtraction = {
+        reused: true,
+        startedBeforePipelineMs: Math.max(0, pipelineStartedAt - Number(early.startedAt || pipelineStartedAt)),
+        timingsMs: early.timingsMs || {},
+      };
+    } else {
+      if (preloadedCardNameExtraction) earlyCardNameExtraction = { reused: false };
+      cardNameModel = await callCardNameExtractionModel({
+        userQuery: query,
+        cardNicknameReferences,
+        cardNameReferences: prepared.cardNameReferences,
+        dataRevision,
+        env,
+        modelInvoker: cardModelInvoker,
+        fetchImpl,
+        dryRun,
+        now,
+        signal,
+      });
+    }
     const baseCardResolution = cardNameModel.typedMentionSetProvided === true
       ? extractRagCards(query, {
         cards: data.cards || [],
@@ -742,6 +831,12 @@ async function answerRagRulingQuestionInternal({
         }
       : extractedCardResolution;
     timingsMs.auxiliaryExtractionModels = elapsedMs(auxiliaryExtractionStartedAt);
+    if (earlyCardNameExtraction?.reused) {
+      // The stage above only waited for an extraction that started before the
+      // pipeline; record the overlapped model time and its head start too.
+      timingsMs.earlyCardNameExtraction = Number(earlyCardNameExtraction.timingsMs.auxiliaryExtractionModels || 0);
+      timingsMs.earlyCardNameHeadStart = earlyCardNameExtraction.startedBeforePipelineMs;
+    }
     extractionStage.end();
   } catch (error) {
     extractionStage.fail(error);

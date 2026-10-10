@@ -88,7 +88,10 @@ test("out-of-scope requests never enter retrieval regardless of confidence, risk
           classifyScope: async () => { classified++; return { scope: "out_of_scope", confidence }; },
           readRiskControl: async () => ({ ok: true, active: false }),
           activateRiskControl: async () => { throw new Error("synthetic storage failure"); },
-          preloadAssets: () => assert.fail("rejected question must not preload retrieval assets"),
+          // Local snapshot preparation may start before the admission decision; it
+          // makes no model request. Paid downstream work must still never start.
+          preloadAssets: () => ({}),
+          startCardExtraction: () => assert.fail("rejected non-cloud question must not start card extraction"),
           answerOfficialExact: async () => assert.fail("rejected question must not match official questions"),
           answerRuling: async () => assert.fail("rejected question must not enter paid downstream work"),
         });
@@ -113,7 +116,8 @@ test("uncertain, malformed or failed scope checks pause with 503 and no downstre
           if (decision === "throws") throw new Error("sensitive provider detail must not escape");
           return decision;
         },
-        preloadAssets: () => assert.fail("uncertain question must not preload retrieval assets"),
+        preloadAssets: () => ({}),
+        startCardExtraction: () => assert.fail("uncertain non-cloud question must not start card extraction"),
         readRiskControl: async () => assert.fail("scope failure must not need Redis"),
         activateRiskControl: async () => assert.fail("uncertain question must not lock other users"),
         answerRuling: async () => assert.fail("uncertain question must not enter downstream work"),
@@ -134,7 +138,8 @@ test("the real disabled or unconfigured classifier cannot silently admit a publi
       payload: { question: "Synthetic question" },
       env: { MODEL_PROVIDER: "mock", PUBLIC_OFFTOPIC_RISK_CONTROL_ENABLED: "false", ...extra },
       appendAudit: async () => null,
-      preloadAssets: () => assert.fail("unavailable classifier must not preload"),
+      preloadAssets: () => ({}),
+      startCardExtraction: () => assert.fail("unavailable classifier must not start card extraction"),
       answerRuling: async () => assert.fail("unavailable classifier must not invoke downstream"),
     }), { code: "public_query_scope_unavailable", statusCode: 503 });
   }
@@ -150,7 +155,9 @@ test("only an explicit in-scope result enters downstream after the availability 
     preloadAssets: () => { calls.push("preload"); return {}; },
     answerRuling: async () => { calls.push("downstream"); return { shortAnswer: "Synthetic ruling" }; },
   });
-  assert.deepEqual(calls, ["lock", "scope", "preload", "downstream"]);
+  // Local preload starts right after the availability check so it overlaps
+  // the scope decision; downstream still waits for the explicit in-scope result.
+  assert.deepEqual(calls, ["lock", "preload", "scope", "downstream"]);
   assert.equal(result.answer.shortAnswer, "Synthetic ruling");
   assert.equal(result.answer.debug.requestDiagnostics.scope.scope, "in_scope");
 });
@@ -181,4 +188,83 @@ test("dry-run and server-owned private evaluation paths bypass public risk contr
   assert.equal(shouldApplyPublicOfftopicRiskControl({
     PUBLIC_OFFTOPIC_RISK_CONTROL_ENABLED: "false",
   }), false);
+});
+
+const CLOUD_PUBLIC_ENV = {
+  ...PUBLIC_ENV,
+  MODEL_PROVIDER: "bai",
+  BAI_API_KEY: "synthetic-bai-key",
+  PUBLIC_RULING_MODEL_PROFILE: "bai-astra-low",
+  RAG_EVIDENCE_PIPELINE: "cloud_evidence_v1",
+  CLOUD_BUDGET_RUN_ID: "overlap-test",
+  CLOUD_BUDGET_ACTUAL_LIMIT_CNY: "1",
+  CLOUD_BUDGET_THEORETICAL_LIMIT_USD: "1",
+};
+
+test("cloud questions start card-name extraction in parallel with the scope decision and hand it to the pipeline", async () => {
+  const calls = [];
+  let extractionSignal = null;
+  const result = await answerPublicRulingQuestion({
+    payload: { question: "Synthetic question" }, env: CLOUD_PUBLIC_ENV,
+    appendAudit: async () => null,
+    readRiskControl: async () => { calls.push("lock"); return { ok: true, active: false }; },
+    preloadAssets: () => { calls.push("preload"); return { data: Promise.resolve({ cards: [] }) }; },
+    startCardExtraction: ({ question, env, preloadedAssets, signal }) => {
+      calls.push("card-extraction-start");
+      assert.equal(question, "Synthetic question");
+      assert.equal(env.RAG_EVIDENCE_PIPELINE, "cloud_evidence_v1");
+      assert.ok(preloadedAssets?.data);
+      extractionSignal = signal;
+      return Promise.resolve({ cardNameModel: { modelUsed: "fixture-card-model" } });
+    },
+    classifyScope: async () => { calls.push("scope"); return { scope: "in_scope", confidence: "high" }; },
+    answerRuling: async (options) => {
+      calls.push("downstream");
+      const early = await options.preloadedCardNameExtraction;
+      assert.equal(early.cardNameModel.modelUsed, "fixture-card-model");
+      assert.ok(options.cloudBudget, "the pipeline must reuse the budget scope that accounted the early extraction");
+      return { shortAnswer: "Synthetic ruling" };
+    },
+  });
+  assert.deepEqual(calls, ["lock", "preload", "card-extraction-start", "scope", "downstream"]);
+  assert.equal(extractionSignal.aborted, false);
+  assert.equal(result.answer.shortAnswer, "Synthetic ruling");
+});
+
+test("a denied cloud question aborts the early card-name extraction and never reaches the pipeline", async () => {
+  for (const decision of [{ scope: "out_of_scope", confidence: "high" }, { scope: "uncertain" }]) {
+    let extractionSignal = null;
+    const outcome = answerPublicRulingQuestion({
+      payload: { question: "Synthetic question" }, env: CLOUD_PUBLIC_ENV,
+      appendAudit: async () => null,
+      readRiskControl: async () => ({ ok: true, active: false }),
+      preloadAssets: () => ({ data: Promise.resolve({ cards: [] }) }),
+      startCardExtraction: ({ signal }) => { extractionSignal = signal; return new Promise(() => {}); },
+      classifyScope: async () => decision,
+      answerRuling: async () => assert.fail("denied question must not enter the pipeline"),
+    });
+    if (decision.scope === "out_of_scope") {
+      const result = await outcome;
+      assert.equal(result.answer.answerLevel, "out_of_scope");
+    } else {
+      await assert.rejects(outcome, { code: "public_query_scope_unavailable", statusCode: 503 });
+    }
+    assert.equal(extractionSignal.aborted, true, `${decision.scope} must abort the early extraction`);
+  }
+});
+
+test("PUBLIC_CARD_EXTRACTION_OVERLAP_SCOPE=off keeps card-name extraction inside the pipeline", async () => {
+  let downstream = null;
+  await answerPublicRulingQuestion({
+    payload: { question: "Synthetic question" },
+    env: { ...CLOUD_PUBLIC_ENV, PUBLIC_CARD_EXTRACTION_OVERLAP_SCOPE: "off" },
+    appendAudit: async () => null,
+    readRiskControl: async () => ({ ok: true, active: false }),
+    preloadAssets: () => ({ data: Promise.resolve({ cards: [] }) }),
+    startCardExtraction: () => assert.fail("overlap is disabled"),
+    classifyScope: async () => ({ scope: "in_scope", confidence: "high" }),
+    answerRuling: async (options) => { downstream = options; return { shortAnswer: "Synthetic ruling" }; },
+  });
+  assert.equal(downstream.preloadedCardNameExtraction, undefined);
+  assert.ok(downstream.cloudBudget);
 });

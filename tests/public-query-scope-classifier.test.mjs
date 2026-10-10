@@ -182,22 +182,19 @@ test("disabled, dry-run and server-owned private evaluation paths bypass classif
   assert.equal(result.scope, "uncertain");
 });
 
-test("leftover b.ai and relay keys cannot enable or dispatch the public classifier", async () => {
-  const legacyProviderOnlyEnv = {
-    BAI_API_KEY: "leftover-bai-key-must-not-be-used",
-    BAI_BASE_URL: "https://api.b.ai/v1",
+test("relay keys alone cannot enable the public classifier", async () => {
+  const relayOnlyEnv = {
     RELAY_API_KEY: "leftover-relay-key-must-not-be-used",
     RELAY_BASE_URL: "https://relay.example.test/v1",
   };
-  assert.deepEqual(publicQueryScopeClassifierStatus(legacyProviderOnlyEnv), {
+  assert.deepEqual(publicQueryScopeClassifierStatus(relayOnlyEnv), {
     enabled: false,
-    reason: "deepseek_not_configured",
+    reason: "scope_provider_not_configured",
   });
-
   let calls = 0;
   const result = await classifyPublicQueryScope({
     question: "这是不是一个裁定问题？",
-    env: legacyProviderOnlyEnv,
+    env: relayOnlyEnv,
     fetchImpl: async () => {
       calls += 1;
       throw new Error("must not dispatch");
@@ -205,7 +202,60 @@ test("leftover b.ai and relay keys cannot enable or dispatch the public classifi
   });
   assert.equal(calls, 0);
   assert.equal(result.scope, "uncertain");
-  assert.equal(result.reasonCode, "deepseek_not_configured");
+  assert.equal(result.reasonCode, "scope_provider_not_configured");
+});
+
+test("a b.ai credential selects GPT-6 Luna with reasoning none; DeepSeek stays an explicit or fallback choice", () => {
+  const baiEnv = { BAI_API_KEY: "test-bai-key", BAI_BASE_URL: "https://api.b.ai/v1", ...CONFIGURED_ENV };
+  assert.deepEqual(publicQueryScopeClassifierStatus(baiEnv), {
+    enabled: true, reason: "configured", provider: "bai", model: "gpt-6-luna",
+    thinkingMode: "not_applicable", reasoningEffort: "none",
+  });
+  assert.deepEqual(publicQueryScopeClassifierStatus({ ...baiEnv, PUBLIC_QUERY_SCOPE_PROVIDER: "deepseek" }), {
+    enabled: true, reason: "configured", provider: "deepseek", model: "deepseek-flash",
+    thinkingMode: "disabled", reasoningEffort: null,
+  });
+  assert.deepEqual(publicQueryScopeClassifierStatus(CONFIGURED_ENV), {
+    enabled: true, reason: "configured", provider: "deepseek", model: "deepseek-flash",
+    thinkingMode: "disabled", reasoningEffort: null,
+  });
+  assert.deepEqual(publicQueryScopeClassifierStatus({ ...CONFIGURED_ENV, PUBLIC_QUERY_SCOPE_PROVIDER: "bai" }), {
+    enabled: false, reason: "bai_not_configured",
+  });
+  assert.deepEqual(publicQueryScopeClassifierStatus({ ...baiEnv, PUBLIC_QUERY_SCOPE_PROVIDER: "gemini" }), {
+    enabled: false, reason: "scope_provider_unsupported:gemini",
+  });
+});
+
+test("the Luna route dispatches one Responses request on the card-extraction credential and keeps the decision contract", async () => {
+  const requests = [];
+  const fetchImpl = async (url, init) => {
+    requests.push({ url: String(url), init });
+    return new Response(JSON.stringify({
+      id: "resp_scope", status: "completed", model: "gpt-6-luna",
+      output: [{ type: "message", content: [{ type: "output_text",
+        text: JSON.stringify({ scope: "in_scope", confidence: "high", reasonCode: "ruling_question" }) }] }],
+      usage: { input_tokens: 300, output_tokens: 20 },
+    }), { status: 200, headers: { "content-type": "application/json" } });
+  };
+  const result = await classifyPublicQueryScope({
+    question: "连锁处理时对象不在场了，效果还处理吗？",
+    env: { BAI_CARD_API_KEY: "test-bai-card-key", BAI_CARD_BASE_URL: "https://api.b.ai/v1", API_BUDGET_MODE: "off" },
+    fetchImpl,
+  });
+  assert.equal(result.scope, "in_scope");
+  assert.equal(result.provider, "bai");
+  assert.equal(result.model, "gpt-6-luna");
+  assert.equal(result.reasoningEffort, "none");
+  assert.equal(result.returnedModel, "gpt-6-luna");
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].url, "https://api.b.ai/v1/responses");
+  const body = JSON.parse(requests[0].init.body);
+  assert.equal(body.model, "gpt-6-luna");
+  assert.deepEqual(body.reasoning, { effort: "none" });
+  assert.equal(body.max_output_tokens, 256);
+  assert.match(body.input, /访问范围分类器/u);
+  assert.equal(requests[0].init.headers.authorization, "Bearer test-bai-card-key");
 });
 
 test("a caller abort remains an abort instead of becoming a fail-open decision", async () => {

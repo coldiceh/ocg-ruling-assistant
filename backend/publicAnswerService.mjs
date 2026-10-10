@@ -26,7 +26,8 @@ import {
   getRulingVersionCapabilities,
 } from "./rulingVersionRegistry.mjs";
 import { isPublicPreparationId } from "./publicAnswerPreparationStore.mjs";
-import { preloadRagRequestAssets } from './ragRulingPipeline.mjs';
+import { preloadRagRequestAssets, startCardNameExtraction } from './ragRulingPipeline.mjs';
+import { createCloudRequestBudget, runCloudBudgetedQuestion } from './cloudRequestBudget.mjs';
 import { selectAvailablePublicProfile, withPublicGenerationInfo } from './publicGenerationInfo.mjs';
 import {
   buildPublicOutOfScopeAnswer,
@@ -39,6 +40,7 @@ import {
 } from "./publicQueryScopeClassifier.mjs";
 
 export const PUBLIC_ANSWER_REQUEST_BODY_LIMIT_BYTES = 64 * 1024;
+const CLOUD_BUDGET_PROVIDERS = new Set(["relay", "openai", "bai", "deepseek", "glm"]);
 export const PUBLIC_ANSWER_QUESTION_LIMIT_CHARACTERS = 12_000;
 export const PUBLIC_ANSWER_LOCALES = Object.freeze(["zh-CN", "en", "ja"]);
 export const PUBLIC_EVIDENCE_SELECTORS = Object.freeze(["decisions", "luna"]);
@@ -237,6 +239,7 @@ export async function answerPublicRulingQuestion({
   answerOfficialExact = answerExactOfficialQaQuestionForVersion,
   answerRuling = answerRagRulingQuestionForVersion,
   preloadAssets = preloadRagRequestAssets,
+  startCardExtraction = startCardNameExtraction,
   prepareForContinuation = false,
 } = {}) {
   const publicRequestStartedAt = Date.now();
@@ -290,6 +293,51 @@ export async function answerPublicRulingQuestion({
     return { answer, latency: null };
   }
 
+  // Local snapshot and index preparation starts immediately: it makes no model
+  // request and is needed by every admitted question.
+  startAssetPreload();
+
+  const selection = await selectAvailablePublicProfile(normalizedPayload.rulingModelProfile || env.PUBLIC_RULING_MODEL_PROFILE, env);
+  const profile = selection.profile;
+  assertPublicRulingModelProfileAvailable(profile, env);
+  const publicEnv = {
+    ...createPublicAnswerModelEnv(env, profile.id),
+    EVIDENCE_SELECTOR: normalizedPayload.evidenceSelector || DEFAULT_PUBLIC_EVIDENCE_SELECTOR,
+  };
+  // Evidence selection has its own official credential. Preserve only that
+  // dedicated key after the final-model environment removes OPENAI_* values.
+  if (publicEnv.EVIDENCE_SELECTOR === "decisions" && typeof env.OPENAI_DECISIONS_API_KEY === "string") {
+    publicEnv.OPENAI_DECISIONS_API_KEY = env.OPENAI_DECISIONS_API_KEY.trim();
+  }
+
+  // The scope classifier and card-name extraction both read only the question,
+  // so the extraction starts in parallel with the admission decision inside the
+  // question's own cloud-budget scope. A question that is then denied aborts the
+  // extraction; the pipeline reuses the result only on its own snapshot and
+  // data revision. Set PUBLIC_CARD_EXTRACTION_OVERLAP_SCOPE=off to keep the
+  // two steps serial.
+  // The scope mirrors answerRagRulingQuestion's own wrapper: a mock provider or
+  // a non-cloud pipeline runs without a shared budget controller as before.
+  const cloudBudget = publicEnv.RAG_EVIDENCE_PIPELINE === "cloud_evidence_v1"
+      && CLOUD_BUDGET_PROVIDERS.has(String(publicEnv.RAG_MODEL_PROVIDER || "bai"))
+    ? createCloudRequestBudget({ env: publicEnv, fetchImpl: globalThis.fetch })
+    : null;
+  const inQuestionBudgetScope = cloudBudget
+    ? (work) => runCloudBudgetedQuestion({ env: publicEnv, budget: cloudBudget }, work)
+    : (work) => work();
+  const overlapCardExtraction = Boolean(cloudBudget)
+    && shouldClassifyPublicQuestion(env)
+    && !/^(?:0|false|off|no)$/iu.test(String(env.PUBLIC_CARD_EXTRACTION_OVERLAP_SCOPE || "").trim());
+  const earlyExtractionAbort = new AbortController();
+  let preloadedCardNameExtraction;
+  if (overlapCardExtraction) {
+    const earlySignal = signal ? AbortSignal.any([signal, earlyExtractionAbort.signal]) : earlyExtractionAbort.signal;
+    preloadedCardNameExtraction = inQuestionBudgetScope(() => startCardExtraction({
+      question: normalizedPayload.question, env: publicEnv, preloadedAssets, signal: earlySignal,
+    }));
+    preloadedCardNameExtraction.catch(() => {});
+  }
+
   // Every new public question needs an explicit in-scope model decision before
   // retrieval. This per-request admission does not depend on shared lock storage
   // or its optional switch; classifier outages must not admit unrelated work.
@@ -297,7 +345,7 @@ export async function answerPublicRulingQuestion({
     const scopeStartedAt = Date.now();
     let scopeDecision;
     try {
-      scopeDecision = await classifyScope({ question: normalizedPayload.question, env, signal });
+      scopeDecision = await inQuestionBudgetScope(() => classifyScope({ question: normalizedPayload.question, env, signal }));
     } catch (error) {
       if (signal?.aborted) throw error;
       scopeDecision = { scope: "uncertain", reasonCode: "classifier_failed" };
@@ -305,6 +353,7 @@ export async function answerPublicRulingQuestion({
     signal?.throwIfAborted();
     requestDiagnostics.scope = scopeDiagnostic(scopeDecision, Date.now() - scopeStartedAt);
     if (scopeDecision?.scope === "out_of_scope") {
+      earlyExtractionAbort.abort(new Error("public_query_out_of_scope"));
       const answer = {
         ...buildPublicOutOfScopeAnswer({ answerLocale: normalizedPayload.answerLocale }),
         debug: { requestDiagnostics },
@@ -313,13 +362,13 @@ export async function answerPublicRulingQuestion({
       return { answer, latency: null };
     }
     if (scopeDecision?.scope !== "in_scope") {
+      earlyExtractionAbort.abort(new Error("public_query_scope_unavailable"));
       throw Object.assign(new Error("问题范围检查暂不可用，本次请求已暂停，请稍后重试。"), {
         code: "public_query_scope_unavailable", statusCode: 503,
       });
     }
   }
 
-  startAssetPreload();
   // Do not invoke the exact-question route from public requests. The RAG
   // pipeline still searches ordinary official Q&A and FAQ evidence.
   let exactMatchMs = 0;
@@ -334,23 +383,12 @@ export async function answerPublicRulingQuestion({
     });
     exactMatchMs = Math.max(0, Date.now() - exactMatchStartedAt);
     if (exactAnswer) {
+      earlyExtractionAbort.abort(new Error("public_exact_answer"));
       await auditResult(exactAnswer, "completed");
       return { answer: exactAnswer, latency: null };
     }
   }
 
-  const selection = await selectAvailablePublicProfile(normalizedPayload.rulingModelProfile || env.PUBLIC_RULING_MODEL_PROFILE, env);
-  const profile = selection.profile;
-  assertPublicRulingModelProfileAvailable(profile, env);
-  const publicEnv = {
-    ...createPublicAnswerModelEnv(env, profile.id),
-    EVIDENCE_SELECTOR: normalizedPayload.evidenceSelector || DEFAULT_PUBLIC_EVIDENCE_SELECTOR,
-  };
-  // Evidence selection has its own official credential. Preserve only that
-  // dedicated key after the final-model environment removes OPENAI_* values.
-  if (publicEnv.EVIDENCE_SELECTOR === "decisions" && typeof env.OPENAI_DECISIONS_API_KEY === "string") {
-    publicEnv.OPENAI_DECISIONS_API_KEY = env.OPENAI_DECISIONS_API_KEY.trim();
-  }
     let answer = await answerRuling({
       rulingVersion: normalizedPayload.rulingVersion,
       question: normalizedPayload.question,
@@ -360,6 +398,8 @@ export async function answerPublicRulingQuestion({
       officialQaExactAlreadyChecked: true,
       progress,
       preloadedAssets,
+      ...(preloadedCardNameExtraction ? { preloadedCardNameExtraction } : {}),
+      ...(cloudBudget ? { cloudBudget } : {}),
       onEvidenceEvent: event => event?.type === 'selection_identity_failure'
         ? saveSelectionDiagnostic({ event, requestId: requestDiagnostics.requestId, env }) : undefined,
       nonCardElapsedBeforePipelineMs: Math.max(0, Date.now() - publicRequestStartedAt),

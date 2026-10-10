@@ -921,6 +921,96 @@ export async function callBaiJsonTask({
   };
 }
 
+/**
+ * Lightweight JSON classification/extraction task on b.ai GPT-6 Luna with
+ * reasoning effort "none". This shares the card-extraction transport, budget
+ * accounting and timeout so the public scope classifier can run on the same
+ * model and credential as card-name extraction.
+ */
+export async function callBaiLunaJsonTask({
+  prompt,
+  maxTokens = null,
+  env = globalThis.process?.env || {},
+  fetchImpl = globalThis.fetch,
+  signal,
+  now = new Date(),
+  timeoutMs = null,
+  timeoutMessage = "bai_luna_json_task_timeout",
+} = {}) {
+  const normalizedPrompt = String(prompt || "").trim();
+  if (!normalizedPrompt) throw new TypeError("b.ai Luna JSON task prompt must not be empty");
+  const providerEnv = createBaiCardEnv(env);
+  if (!String(providerEnv.BAI_API_KEY || "").trim()) {
+    const error = new Error("b.ai is not configured");
+    error.code = "bai_not_configured";
+    throw error;
+  }
+  if (typeof fetchImpl !== "function") throw new TypeError("b.ai Luna JSON task requires fetch");
+  if (signal?.aborted) throw abortSignalError(signal);
+  baiChatCompletionsUrl(providerEnv.BAI_BASE_URL);
+  const modelName = modelNameForCardExtractionProvider("bai", env);
+  const resolvedMaxTokens = optionalPositiveInteger(maxTokens) || DEFAULT_JSON_TASK_MAX_OUTPUT_TOKENS;
+  const execution = await runBudgetedAuxiliaryModelCall({
+    provider: "deepseek",
+    stage: "evidence_preparation",
+    modelName,
+    prompt: normalizedPrompt,
+    maxTokens: resolvedMaxTokens,
+    env: providerEnv,
+    fetchImpl,
+    now,
+    signal,
+    invoke: () => runLightweightCardProviderOperation({
+      provider: "bai",
+      prompt: normalizedPrompt,
+      env,
+      providerEnv,
+      modelName,
+      maxTokens: resolvedMaxTokens,
+      fetchImpl,
+      reasoningEffort: "none",
+      signal,
+      timeoutMs: readPositiveNumber(timeoutMs, DEFAULT_LIGHTWEIGHT_EXTRACTION_TIMEOUT_MS),
+      timeoutMessage,
+      allowUnledgeredDispatch: true,
+    }),
+  });
+  if (execution.blocked) {
+    const error = new Error("evidence-preparation budget is exhausted");
+    error.code = "api_daily_budget_exceeded";
+    error.budgetStatus = execution.budgetStatus;
+    error.budgetWarnings = execution.warnings;
+    throw error;
+  }
+  const response = execution.value || {};
+  let parsed;
+  try {
+    parsed = parseStrictJsonObject(response.rawText);
+  } catch (caught) {
+    const error = new Error("b.ai Luna JSON task returned an invalid JSON object", {
+      cause: caught instanceof Error ? caught : undefined,
+    });
+    error.name = "BaiJsonTaskContentError";
+    error.code = "bai_json_task_invalid_json";
+    error.usage = execution.usage;
+    error.budgetStatus = execution.budgetStatus;
+    throw error;
+  }
+  return {
+    ...parsed,
+    rawText: response.rawText,
+    usage: execution.usage,
+    warnings: [...(response.warnings || []), ...(execution.warnings || [])],
+    providerUsed: "bai",
+    requestedModel: modelName,
+    returnedModel: String(response.responseModel || "") || null,
+    thinkingMode: "not_applicable",
+    reasoningEffort: "none",
+    ...cardExtractionCostResultFields("bai", execution),
+    budgetStatus: execution.budgetStatus,
+  };
+}
+
 export async function callCardNameExtractionModel({
   userQuery,
   cardNameReferences = [],
@@ -2918,7 +3008,7 @@ async function callDeepSeek({
   };
 }
 
-async function callBaiCard({ prompt, env, modelName, maxTokens, fetchImpl, signal }) {
+async function callBaiCard({ prompt, env, modelName, maxTokens, fetchImpl, signal, allowUnledgeredDispatch = false }) {
   const endpoint = baiChatCompletionsUrl(env.BAI_CARD_BASE_URL || env.BAI_BASE_URL)
     .replace(/\/chat\/completions$/u, "/responses");
   const body = {
@@ -2938,9 +3028,14 @@ async function callBaiCard({ prompt, env, modelName, maxTokens, fetchImpl, signa
     return readProviderJson(response, { signal });
   };
   const request = { body, invoke, signal };
+  // Inside a question's budget scope the request joins that ledger. A caller
+  // that explicitly allows it may dispatch without a cloud ledger when no cloud
+  // budget namespace is configured at all (local or non-cloud deployments).
   const payload = cloudRequestBudgetActive()
     ? await runCloudBaiCardRequest(request)
-    : await createCloudRequestBudget({ env, fetchImpl }).baiCard(request);
+    : allowUnledgeredDispatch && !String(env.CLOUD_BUDGET_RUN_ID || "").trim()
+      ? await invoke()
+      : await createCloudRequestBudget({ env, fetchImpl }).baiCard(request);
   // A Responses completion status is an explicit protocol fact. Do not cache
   // partial JSON from a failed or interrupted request; its usage is already recorded.
   if (payload?.status !== "completed") {
@@ -6553,6 +6648,7 @@ function runLightweightCardProviderOperation({
   signal,
   timeoutMs,
   timeoutMessage,
+  allowUnledgeredDispatch = false,
 }) {
   return runAbortableProviderOperation({ signal, timeoutMs, timeoutMessage }, (requestSignal) => (
     provider === "deepseek"
@@ -6578,6 +6674,7 @@ function runLightweightCardProviderOperation({
         maxTokens,
         fetchImpl,
         signal: requestSignal,
+        allowUnledgeredDispatch,
       })
       : provider === "gemini"
       ? callGemini({

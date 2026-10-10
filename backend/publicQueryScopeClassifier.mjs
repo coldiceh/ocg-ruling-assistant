@@ -1,14 +1,47 @@
 import {
+  callBaiLunaJsonTask,
   callDeepSeekJsonTask,
   isServerOwnedPrivateEvaluationEnv,
+  modelNameForCardExtractionProvider,
 } from "./ragModelClient.mjs";
 import { DEFAULT_PUBLIC_DEEPSEEK_MODEL } from "./publicRulingModelConfig.mjs";
 
-const CLASSIFIER_MODEL = DEFAULT_PUBLIC_DEEPSEEK_MODEL;
-const CLASSIFIER_THINKING_MODE = "disabled";
-const CLASSIFIER_REASONING_EFFORT = null;
+// Scope classification runs on the same GPT-6 Luna (reasoning "none") route
+// and credential as card-name extraction. DeepSeek remains available as an
+// explicit or fallback provider when no b.ai credential is configured.
+const SCOPE_PROVIDERS = Object.freeze({
+  bai: {
+    thinkingMode: "not_applicable",
+    reasoningEffort: "none",
+    model: (env) => modelNameForCardExtractionProvider("bai", env),
+    configured: (env) => Boolean(String(env.BAI_CARD_API_KEY || env.BAI_API_KEY || "").trim()),
+    missingReason: "bai_not_configured",
+  },
+  deepseek: {
+    thinkingMode: "disabled",
+    reasoningEffort: null,
+    model: () => DEFAULT_PUBLIC_DEEPSEEK_MODEL,
+    configured: (env) => Boolean(String(env.DEEPSEEK_API_KEY || "").trim()),
+    missingReason: "deepseek_not_configured",
+  },
+});
 const DEFAULT_TIMEOUT_MS = 12_000;
 const DEFAULT_MAX_OUTPUT_TOKENS = 256;
+
+export function resolvePublicQueryScopeProvider(env = globalThis.process?.env || {}) {
+  const requested = String(env.PUBLIC_QUERY_SCOPE_PROVIDER || "").trim().toLowerCase();
+  if (requested) {
+    if (!Object.hasOwn(SCOPE_PROVIDERS, requested)) {
+      return { provider: null, reason: `scope_provider_unsupported:${requested.slice(0, 32)}` };
+    }
+    return SCOPE_PROVIDERS[requested].configured(env)
+      ? { provider: requested, reason: "configured" }
+      : { provider: null, reason: SCOPE_PROVIDERS[requested].missingReason };
+  }
+  if (SCOPE_PROVIDERS.bai.configured(env)) return { provider: "bai", reason: "configured" };
+  if (SCOPE_PROVIDERS.deepseek.configured(env)) return { provider: "deepseek", reason: "configured" };
+  return { provider: null, reason: "scope_provider_not_configured" };
+}
 
 export function publicQueryScopeClassifierStatus(env = globalThis.process?.env || {}) {
   if (isDisabled(env.PUBLIC_QUERY_SCOPE_CLASSIFIER_ENABLED)) {
@@ -17,16 +50,16 @@ export function publicQueryScopeClassifierStatus(env = globalThis.process?.env |
   if (isEnabled(env.RAG_DRY_RUN) || isServerOwnedPrivateEvaluationEnv(env)) {
     return { enabled: false, reason: "private_or_dry_run" };
   }
-  if (!String(env.DEEPSEEK_API_KEY || "").trim()) {
-    return { enabled: false, reason: "deepseek_not_configured" };
-  }
+  const resolution = resolvePublicQueryScopeProvider(env);
+  if (!resolution.provider) return { enabled: false, reason: resolution.reason };
+  const definition = SCOPE_PROVIDERS[resolution.provider];
   return {
     enabled: true,
     reason: "configured",
-    provider: "deepseek",
-    model: CLASSIFIER_MODEL,
-    thinkingMode: CLASSIFIER_THINKING_MODE,
-    reasoningEffort: CLASSIFIER_REASONING_EFFORT,
+    provider: resolution.provider,
+    model: definition.model(env),
+    thinkingMode: definition.thinkingMode,
+    reasoningEffort: definition.reasoningEffort,
   };
 }
 
@@ -35,11 +68,13 @@ export async function classifyPublicQueryScope({
   env = globalThis.process?.env || {},
   fetchImpl = globalThis.fetch,
   signal,
-  invoke = callDeepSeekJsonTask,
+  invoke,
 } = {}) {
   const status = publicQueryScopeClassifierStatus(env);
   const normalizedQuestion = String(question || "").trim();
-  if (!status.enabled || !normalizedQuestion || typeof invoke !== "function") {
+  const resolvedInvoke = invoke
+    ?? (status.provider === "bai" ? callBaiLunaJsonTask : callDeepSeekJsonTask);
+  if (!status.enabled || !normalizedQuestion || typeof resolvedInvoke !== "function") {
     return uncertainDecision(status.reason || "classifier_unavailable");
   }
 
@@ -51,9 +86,9 @@ export async function classifyPublicQueryScope({
   );
   const timeout = createAbortTimeout({ signal, timeoutMs });
   try {
-    const payload = await invoke({
+    const payload = await resolvedInvoke({
       prompt: buildPublicQueryScopePrompt(normalizedQuestion),
-      modelName: CLASSIFIER_MODEL,
+      modelName: status.model,
       maxTokens: boundedInteger(
         env.PUBLIC_QUERY_SCOPE_MAX_OUTPUT_TOKENS,
         DEFAULT_MAX_OUTPUT_TOKENS,
@@ -63,12 +98,14 @@ export async function classifyPublicQueryScope({
       env,
       fetchImpl,
       signal: timeout.signal,
+      timeoutMs,
+      timeoutMessage: "public_query_scope_timeout",
     });
     return normalizeScopeDecision(payload, {
-      provider: "deepseek",
-      model: CLASSIFIER_MODEL,
-      thinkingMode: CLASSIFIER_THINKING_MODE,
-      reasoningEffort: CLASSIFIER_REASONING_EFFORT,
+      provider: status.provider,
+      model: status.model,
+      thinkingMode: status.thinkingMode,
+      reasoningEffort: status.reasoningEffort,
       usage: payload?.usage || {},
       returnedModel: payload?.returnedModel || null,
       estimatedCostCny: Number(payload?.estimatedCostCny || 0),
