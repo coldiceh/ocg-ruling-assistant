@@ -93,7 +93,7 @@ test('unused index preload observes rejection while preserving the failure for t
   await assert.rejects(preload.geminiIndexes, error => error === failure);
 });
 
-test('public request starts one local preload after scope approval and inactive lock', async () => {
+test('public request starts one local preload after the inactive lock check and before scope approval', async () => {
   const calls = [];
   const preloadedAssets = { data: Promise.resolve({}), geminiAssets: Promise.resolve({}) };
   await answerPublicRulingQuestion({ payload: { question: 'fixture' }, env,
@@ -112,7 +112,9 @@ test('public request starts one local preload after scope approval and inactive 
     },
     prepareForContinuation: true,
   });
-  assert.deepEqual(calls, ['lock', 'classify', 'preload', 'pipeline']);
+  // Snapshot preparation is local work with no model request, so it overlaps
+  // the scope decision; the pipeline still waits for an explicit in-scope result.
+  assert.deepEqual(calls, ['lock', 'preload', 'classify', 'pipeline']);
 });
 
 test('active public lock does not start snapshot work', async () => {
