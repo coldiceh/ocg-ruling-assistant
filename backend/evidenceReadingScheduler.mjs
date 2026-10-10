@@ -120,9 +120,11 @@ export function admitWholeReadingUnits({ lanes, materialize, measure, maxChars,
         }
         const entries = bundle.entries.filter(entry => !offeredIds.has(entry.id));
         const proposed = [...offered, { ...bundle, entries, hits: state.allHits.get(hit.unitKey) || [hit] }];
-        const chars = measure(proposed);
+        // The entry cap is an exact count, so it is checked before the serialized
+        // measurement; a bundle that cannot fit by count is never measured whole.
         const fitsEntries = offeredIds.size + entries.length <= maxEntries;
-        if (chars <= maxChars && fitsEntries) {
+        const chars = fitsEntries ? measure(proposed) : null;
+        if (fitsEntries && chars <= maxChars) {
           offered.push(proposed.at(-1));
           for (const entry of entries) offeredIds.add(entry.id);
           measuredChars = chars;

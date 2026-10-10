@@ -11,6 +11,7 @@ import { runCloudBaiRequest, runCloudGeminiRequest, currentCloudPreparationRemai
 import { loadRuleDenseSearch, queryEmbeddingText, RULE_EMBEDDING_MODEL,
   RULE_EMBEDDING_DIMENSION } from './geminiRuleDenseSearch.mjs';
 import { admitWholeReadingUnits, mapRankedUnits, READING_SCHEDULER_CONTRACT } from './evidenceReadingScheduler.mjs';
+import { createReadingMeasure, resolveReadingMeasurePolicy } from './evidenceReadingMeasure.mjs';
 import { createNavigationSearch } from './evidenceNavigationSearch.mjs';
 import { loadEvidenceGenerationContract, generationContractSha256, buildEvidenceInputMeasurement,
   normalizeEvidenceGenerationUsage, estimateGenerationUpperBoundUsd, assertGenerationCapacity } from './evidenceGenerationContract.mjs';
@@ -877,9 +878,30 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
         return boundedSelectionBody(input, queryPlan, groups, { ...revisions,
           unread: unread.map(({ title, sourceKind, size, reason }) => ({ title, sourceKind, size, reason })), omittedCount }, aliasCosts);
       }
-      const assemble = maxChars => admitWholeReadingUnits({ lanes, materialize, getReferences, maxChars, signal,
-        maxEntries: useDecisions ? 253 : Infinity,
-        measure: offered => JSON.stringify(selectionBody(offered)).length });
+      const exactWindowChars = offered => JSON.stringify(selectionBody(offered)).length;
+      const readingMeasurePolicy = resolveReadingMeasurePolicy(env.EVIDENCE_READING_MEASURE_POLICY);
+      let readingMeasure = null;
+      const assemble = maxChars => {
+        readingMeasure = createReadingMeasure({ exactMeasure: exactWindowChars, maxChars, policy: readingMeasurePolicy });
+        const result = admitWholeReadingUnits({ lanes, materialize, getReferences, maxChars, signal,
+          maxEntries: useDecisions ? 253 : Infinity, measure: readingMeasure.measure });
+        // The admitted window is verified once against the exact serialized
+        // request. The additive policy admits by an upper bound, so this check
+        // normally passes without removing anything; it is the mechanical
+        // guarantee that the offered request never exceeds the window.
+        let exactChars = exactWindowChars(result.offered);
+        while (exactChars > maxChars && result.offered.length) {
+          const removed = result.offered.pop();
+          result.omitted.unshift({ unitKey: removed.unitKey, title: removed.title || '', sourceKind: removed.sourceKind,
+            size: exactWindowChars([removed]), reason: 'reading_capacity', hit: removed.hits?.[0] });
+          exactChars = exactWindowChars(result.offered);
+        }
+        result.measuredChars = exactChars;
+        result.offeredIds = [...new Set(result.offered.flatMap(bundle => bundle.entries.map(entry => entry.id)))];
+        result.unread = result.omitted.slice(0, 24);
+        result.omittedCount = result.omitted.length;
+        return result;
+      };
       let admitted = assemble(readChars);
       timingsMs.candidateAssembly = performance.now() - assemblyAt;
       timingsMs.search = performance.now() - at;
@@ -1042,7 +1064,7 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
         estimatedCostUsd: spentUsd, estimatedCostCny: spentUsd * fx, actualCostKnown: false,
         costBasis: 'provider_list_theoretical', cacheProvisionUsd: 0, queryPlan,
         bounded: { calls, tokenCounts: counts, finalModelCalls: 0, reading: completedReading,
-          schedulerContract: READING_SCHEDULER_CONTRACT, coverageScope: assets.coverageScope,
+          schedulerContract: READING_SCHEDULER_CONTRACT, readingMeasure: readingMeasure?.stats || null, coverageScope: assets.coverageScope,
           ...(decisionsState ? { decisions: { acquisitionStop: decisionsState.acquisitionStop,
             modelReportedStatus: decisionsState.finalStatus, events: decisionsState.events } } : {}),
           readGroupIds: admitted.offered.map(bundle => bundle.unitKey), selectedIds: selection.selectedIds,
