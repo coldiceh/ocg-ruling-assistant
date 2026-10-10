@@ -16,7 +16,7 @@
     "RAG_RUNTIME_BUNDLE_REQUIRED": "true",
     "GEMINI_RULE_QA_ENABLED": "true",
     "RAG_EVIDENCE_PIPELINE": "cloud_evidence_v1",
-    "EVIDENCE_PLANNING_PROFILE": "gemini-3.8-flash-medium-planning-room",
+    "EVIDENCE_PLANNING_PROFILE": "gemini-3.8-flash-medium-planning-room-theoretical",
     "EVIDENCE_SELECTION_PROFILE": "bai-gpt-6-luna-high-theoretical",
     "EVIDENCE_SELECTOR": "decisions",
     "EVIDENCE_GENERATION_OUTPUT_LIMIT": "provider",

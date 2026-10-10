@@ -1,0 +1,73 @@
+{
+  "profileId": "evidence-gemini-3.8-flash-medium-planning-room-theoretical-20261010",
+  "status": "ready",
+  "providerId": "gemini",
+  "modelId": "gemini-3.8-flash",
+  "apiContractVersion": "google-generative-language-v1beta-generateContent-20260914",
+  "reasoningConfig": {
+    "thinkingConfig": {
+      "thinkingLevel": "medium"
+    }
+  },
+  "outputLimitConfig": {
+    "field": "generationConfig.maxOutputTokens",
+    "covers": [
+      "visible_output",
+      "thinking_output"
+    ]
+  },
+  "responseFormatConfig": {
+    "responseMimeType": "application/json"
+  },
+  "priceVersion": "google-gemini-3.8-flash-standard-intro-through-2026-12-31",
+  "countingContractVersion": "google-theoretical-utf8-bytes-v1",
+  "capacityContract": {
+    "version": "google-gemini-3.8-flash-model-and-inline-request-limits-20260914",
+    "contextCountingContractVersion": "google-v1beta-countTokens-generateContentRequest-20260914",
+    "maxInputTokens": 1048576,
+    "maxOutputTokens": 65536,
+    "maxSharedContextTokens": 1048576,
+    "maxRequestBodyBytes": 20000000,
+    "sharedContextRuleId": "input_plus_max_billable_output_lte_shared_context"
+  },
+  "pricingContract": {
+    "currency": "USD",
+    "billingMode": "standard",
+    "inputUsdPerMillion": 0.75,
+    "cachedInputUsdPerMillion": 0.075,
+    "outputUsdPerMillion": 3.75,
+    "outputIncludesThinking": true,
+    "cachedInputMode": "usage_reported",
+    "requestCachingMode": "none",
+    "validThrough": "2026-12-31"
+  },
+  "measurementContract": {
+    "status": "user_authorized_theoretical",
+    "basis": "user_authorized_theoretical",
+    "exact": false,
+    "legacyFieldAnnotation": "inputTokensUpperBound is an estimated budget allocation, not an exact count or guaranteed token upper bound; the reservation is settled from the provider's reported usage",
+    "estimator": {
+      "version": "google-utf8-bytes-theoretical-v1",
+      "formula": "ceil(request_utf8_bytes / bytes_per_token) + fixed_allowance_tokens",
+      "bytesPerToken": 2,
+      "fixedAllowanceTokens": 256
+    }
+  },
+  "sources": {
+    "model": "https://ai.google.dev/gemini-api/docs/models/gemini-3.8-flash",
+    "pricing": "https://ai.google.dev/gemini-api/docs/pricing",
+    "counting": "theoretical estimate authorized for the planning stage on 2026-10-10 to remove the serial countTokens round trip; bytes_per_token 2 over-reserves CJK input (about 2.3-3 UTF-8 bytes per Gemini token) and is settled from usage",
+    "requestSize": "https://ai.google.dev/gemini-api/docs/file-prompting-strategies"
+  },
+  "stages": {
+    "planning": {
+      "maxBillableOutputTokens": 4096
+    },
+    "selection": {
+      "maxBillableOutputTokens": 2048
+    },
+    "navigation": {
+      "maxBillableOutputTokens": 1024
+    }
+  }
+}

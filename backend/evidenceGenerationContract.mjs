@@ -146,19 +146,32 @@ export function validateEvidenceGenerationContract(contract) {
         || contract.transportContract?.endpoint !== '/v1/responses') {
       throw new Error('evidence_generation_contract_invalid_transport');
     }
-    const measurement = contract.measurementContract;
-    if (measurement?.status !== 'user_authorized_theoretical'
-        || measurement?.basis !== 'user_authorized_theoretical'
-        || measurement?.exact !== false
-        || measurement?.estimator?.formula !== 'ceil(request_utf8_bytes / bytes_per_token) + fixed_allowance_tokens'
-        || !Number.isFinite(measurement?.estimator?.bytesPerToken)
-        || measurement.estimator.bytesPerToken <= 0
-        || !Number.isSafeInteger(measurement?.estimator?.fixedAllowanceTokens)
-        || measurement.estimator.fixedAllowanceTokens < 0) {
-      throw new Error('evidence_generation_contract_invalid_theoretical_measurement');
-    }
+    assertTheoreticalMeasurementContract(contract.measurementContract);
+  }
+  // A Gemini profile counts tokens with the provider by default. It may instead
+  // declare the same user-authorized theoretical estimator as b.ai profiles,
+  // which removes the remote countTokens round trip before each generation.
+  if (contract.providerId === 'gemini' && contract.measurementContract !== undefined) {
+    assertTheoreticalMeasurementContract(contract.measurementContract);
   }
   return contract;
+}
+
+export function usesTheoreticalMeasurement(contract) {
+  return contract?.measurementContract?.status === 'user_authorized_theoretical';
+}
+
+function assertTheoreticalMeasurementContract(measurement) {
+  if (measurement?.status !== 'user_authorized_theoretical'
+      || measurement?.basis !== 'user_authorized_theoretical'
+      || measurement?.exact !== false
+      || measurement?.estimator?.formula !== 'ceil(request_utf8_bytes / bytes_per_token) + fixed_allowance_tokens'
+      || !Number.isFinite(measurement?.estimator?.bytesPerToken)
+      || measurement.estimator.bytesPerToken <= 0
+      || !Number.isSafeInteger(measurement?.estimator?.fixedAllowanceTokens)
+      || measurement.estimator.fixedAllowanceTokens < 0) {
+    throw new Error('evidence_generation_contract_invalid_theoretical_measurement');
+  }
 }
 
 function configuredProfileUrl(stage, env = {}) {
@@ -235,7 +248,7 @@ function assertGenerationRequestProfile(body, contract) {
 
 function buildBaiTheoreticalInputMeasurement({ body, contract, checkCapacity = true }) {
   validateEvidenceGenerationContract(contract);
-  if (contract.providerId !== 'bai') {
+  if (!usesTheoreticalMeasurement(contract)) {
     throw new Error('evidence_generation_measurement_provider_unsupported');
   }
   assertGenerationRequestProfile(body, contract);
@@ -267,14 +280,20 @@ function buildBaiTheoreticalInputMeasurement({ body, contract, checkCapacity = t
 }
 
 export async function buildEvidenceInputMeasurement(options) {
-  if (options?.contract?.providerId === 'gemini') return buildGeminiInputMeasurement(options);
-  if (options?.contract?.providerId === 'bai') return buildBaiTheoreticalInputMeasurement(options);
+  if (options?.contract?.providerId === 'gemini' && !usesTheoreticalMeasurement(options.contract)) {
+    return buildGeminiInputMeasurement(options);
+  }
+  if (options?.contract?.providerId === 'gemini' || options?.contract?.providerId === 'bai') {
+    return buildBaiTheoreticalInputMeasurement(options);
+  }
   throw new Error('evidence_generation_measurement_provider_unsupported');
 }
 
 export async function buildGeminiInputMeasurement({ body, contract, countTokens, checkCapacity = true }) {
   validateEvidenceGenerationContract(contract);
-  if (contract.providerId !== 'gemini') throw new Error('evidence_generation_measurement_provider_unsupported');
+  if (contract.providerId !== 'gemini' || usesTheoreticalMeasurement(contract)) {
+    throw new Error('evidence_generation_measurement_provider_unsupported');
+  }
   if (typeof countTokens !== 'function') throw new Error('evidence_generation_count_tokens_required');
   assertGenerationRequestProfile(body, contract);
   const serialized = requestJson(body);
@@ -327,11 +346,11 @@ export function assertGenerationCapacity({ body, contract, measurement }) {
   if (!MEASUREMENT_BASES.has(measurement.basis) || typeof measurement.exact !== 'boolean') {
     throw new Error('evidence_generation_measurement_invalid');
   }
-  if (contract.providerId === 'gemini'
+  if (contract.providerId === 'gemini' && !usesTheoreticalMeasurement(contract)
       && (measurement.basis !== 'provider_count' || measurement.exact !== true)) {
     throw new Error('evidence_generation_measurement_invalid');
   }
-  if (contract.providerId === 'bai'
+  if ((contract.providerId === 'bai' || usesTheoreticalMeasurement(contract))
       && (contract.measurementContract?.status !== 'user_authorized_theoretical'
         || measurement.basis !== 'user_authorized_theoretical'
         || measurement.exact !== false
@@ -384,7 +403,7 @@ export function estimateGenerationUpperBoundUsd({ measurement, contract }) {
     inputTokenUpperBound: input,
     outputTokenUpperBound: output,
     priceVersion: contract.priceVersion,
-    basis: contract.providerId === 'bai'
+    basis: usesTheoreticalMeasurement(contract)
       ? 'user_authorized_theoretical_estimated_input_and_max_billable_output'
       : 'all_uncached_input_and_max_billable_output',
   };
