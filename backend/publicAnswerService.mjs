@@ -26,7 +26,7 @@ import {
   getRulingVersionCapabilities,
 } from "./rulingVersionRegistry.mjs";
 import { isPublicPreparationId } from "./publicAnswerPreparationStore.mjs";
-import { preloadRagRequestAssets, startCardNameExtraction } from './ragRulingPipeline.mjs';
+import { preloadRagRequestAssets, ragRequestAssetsResident, startCardNameExtraction } from './ragRulingPipeline.mjs';
 import { createCloudRequestBudget, runCloudBudgetedQuestion } from './cloudRequestBudget.mjs';
 import { selectAvailablePublicProfile, withPublicGenerationInfo } from './publicGenerationInfo.mjs';
 import {
@@ -239,6 +239,7 @@ export async function answerPublicRulingQuestion({
   answerOfficialExact = answerExactOfficialQaQuestionForVersion,
   answerRuling = answerRagRulingQuestionForVersion,
   preloadAssets = preloadRagRequestAssets,
+  assetsResident = ragRequestAssetsResident,
   startCardExtraction = startCardNameExtraction,
   prepareForContinuation = false,
 } = {}) {
@@ -293,9 +294,14 @@ export async function answerPublicRulingQuestion({
     return { answer, latency: null };
   }
 
-  // Local snapshot and index preparation starts immediately: it makes no model
-  // request and is needed by every admitted question.
-  startAssetPreload();
+  // On a warm instance the snapshot and indexes are already resident, so the
+  // preload is cheap and starts immediately. On a cold instance it parses and
+  // builds indexes synchronously for several seconds; running that alongside
+  // the scope classifier blocked the event loop past the classifier timeout
+  // (observed 2026-10-11 on the first request after a deployment). A cold
+  // instance therefore decides scope first and loads afterwards.
+  const assetsWarm = assetsResident() === true;
+  if (assetsWarm) startAssetPreload();
 
   const selection = await selectAvailablePublicProfile(normalizedPayload.rulingModelProfile || env.PUBLIC_RULING_MODEL_PROFILE, env);
   const profile = selection.profile;
@@ -325,7 +331,10 @@ export async function answerPublicRulingQuestion({
   const inQuestionBudgetScope = cloudBudget
     ? (work) => runCloudBudgetedQuestion({ env: publicEnv, budget: cloudBudget }, work)
     : (work) => work();
+  // Early card extraction needs the card snapshot, so it overlaps scope only
+  // when that snapshot is already resident (same reason as the preload above).
   const overlapCardExtraction = Boolean(cloudBudget)
+    && assetsWarm
     && shouldClassifyPublicQuestion(env)
     && !/^(?:0|false|off|no)$/iu.test(String(env.PUBLIC_CARD_EXTRACTION_OVERLAP_SCOPE || "").trim());
   const earlyExtractionAbort = new AbortController();
@@ -368,6 +377,10 @@ export async function answerPublicRulingQuestion({
       });
     }
   }
+
+  // Admitted (or classification-exempt) questions always load; this is a no-op
+  // when the warm path above already started it.
+  startAssetPreload();
 
   // Do not invoke the exact-question route from public requests. The RAG
   // pipeline still searches ordinary official Q&A and FAQ evidence.

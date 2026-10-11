@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { answerPublicRulingQuestion } from '../backend/publicAnswerService.mjs';
 import { createGeminiRuleQaEvidenceProvider } from '../backend/geminiRuleQaEvidenceProvider.mjs';
-import { preloadRagRequestAssets } from '../backend/ragRulingPipeline.mjs';
+import { preloadRagRequestAssets, ragRequestAssetsResident } from '../backend/ragRulingPipeline.mjs';
 
 // Claim: snapshot work begins only after public admission, and its exact
 // promise is passed forward. A failure means
@@ -93,11 +93,12 @@ test('unused index preload observes rejection while preserving the failure for t
   await assert.rejects(preload.geminiIndexes, error => error === failure);
 });
 
-test('public request starts one local preload after the inactive lock check and before scope approval', async () => {
+test('a warm instance starts one local preload after the inactive lock check and before scope approval', async () => {
   const calls = [];
   const preloadedAssets = { data: Promise.resolve({}), geminiAssets: Promise.resolve({}) };
   await answerPublicRulingQuestion({ payload: { question: 'fixture' }, env,
     appendAudit: async () => null,
+    assetsResident: () => true,
     readRiskControl: async () => { calls.push('lock'); return { ok: true, active: false }; },
     preloadAssets: (options) => {
       calls.push('preload');
@@ -112,9 +113,40 @@ test('public request starts one local preload after the inactive lock check and 
     },
     prepareForContinuation: true,
   });
-  // Snapshot preparation is local work with no model request, so it overlaps
-  // the scope decision; the pipeline still waits for an explicit in-scope result.
+  // Resident snapshots make the preload cheap, so it overlaps the scope
+  // decision; the pipeline still waits for an explicit in-scope result.
   assert.deepEqual(calls, ['lock', 'preload', 'classify', 'pipeline']);
+});
+
+test('a cold instance decides scope before starting the synchronous snapshot and index work', async () => {
+  const calls = [];
+  const preloadedAssets = { data: Promise.resolve({}), geminiAssets: Promise.resolve({}) };
+  await answerPublicRulingQuestion({ payload: { question: 'fixture' }, env,
+    appendAudit: async () => null,
+    assetsResident: () => false,
+    readRiskControl: async () => { calls.push('lock'); return { ok: true, active: false }; },
+    preloadAssets: () => { calls.push('preload'); return preloadedAssets; },
+    classifyScope: async () => { calls.push('classify'); return { scope: 'in_scope' }; },
+    answerRuling: async (options) => {
+      calls.push('pipeline');
+      assert.equal(options.preloadedAssets, preloadedAssets);
+      return { status: 'evidence_prepared' };
+    },
+    prepareForContinuation: true,
+  });
+  assert.deepEqual(calls, ['lock', 'classify', 'preload', 'pipeline']);
+});
+
+test('a cold instance does not load snapshots for an out-of-scope question', async () => {
+  const result = await answerPublicRulingQuestion({ payload: { question: 'fixture' }, env,
+    appendAudit: async () => null,
+    assetsResident: () => false,
+    readRiskControl: async () => ({ ok: true, active: false }),
+    preloadAssets: () => assert.fail('cold out-of-scope request must not load snapshots'),
+    classifyScope: async () => ({ scope: 'out_of_scope', confidence: 'high' }),
+    answerRuling: async () => assert.fail('out-of-scope request must not prepare'),
+  });
+  assert.equal(result.answer.answerLevel, 'out_of_scope');
 });
 
 test('active public lock does not start snapshot work', async () => {
@@ -155,4 +187,16 @@ test('provider uses a preloaded snapshot and reports the local preparation stage
   for (const key of ['assetLoadWait', 'ruleContext', 'qaRequestView', 'initialQaSearch']) {
     assert.ok(Number.isFinite(result.telemetry.timingsMs[key]));
   }
+});
+
+test('a completed index preload marks request assets resident for later warm requests', async () => {
+  const preload = preloadRagRequestAssets({
+    env: { RAG_EVIDENCE_PIPELINE: 'cloud_evidence_v1', GEMINI_RULE_QA_ENABLED: 'true' },
+    loadPreparedData: async () => ({ cards: [] }), loadData: async () => ({ cards: [] }),
+    loadGeminiAssets: async () => ({ fixture: true }),
+    prepareGeminiIndexes: async (assets) => ({ assets }),
+    officialQaExactAlreadyChecked: true,
+  });
+  await preload.geminiIndexes;
+  assert.equal(ragRequestAssetsResident(), true);
 });

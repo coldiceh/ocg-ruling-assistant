@@ -37,6 +37,17 @@ import {
 
 const defaultSnapshotRevisionCache = new WeakMap();
 
+// Set once a preload has finished building the card snapshot and evidence
+// indexes in this process. Before that, the preload runs synchronous parsing and
+// index construction on the main loop for several seconds (cold start). Callers
+// use this mechanical fact to avoid running that work concurrently with a
+// latency-bounded model call, whose reply could not be processed in time.
+let requestAssetsResident = false;
+
+export function ragRequestAssetsResident() {
+  return requestAssetsResident;
+}
+
 // This only starts local, version-bound snapshot work. No network cache or
 // model request is created until the ordinary retrieval stage consumes it.
 export function preloadRagRequestAssets({
@@ -64,7 +75,9 @@ export function preloadRagRequestAssets({
     // Yield once after card data becomes ready. This is early local work, not
     // a worker thread: synchronous index construction still uses the main loop.
     await new Promise(resolve => setImmediate(resolve));
-    return prepareGeminiIndexes(assets);
+    const indexes = await prepareGeminiIndexes(assets);
+    requestAssetsResident = true;
+    return indexes;
   }));
   return {
     data, geminiAssets, geminiIndexes,

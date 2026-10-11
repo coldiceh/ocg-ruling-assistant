@@ -146,20 +146,26 @@ test("the real disabled or unconfigured classifier cannot silently admit a publi
 });
 
 test("only an explicit in-scope result enters downstream after the availability check succeeds", async () => {
-  const calls = [];
-  const result = await answerPublicRulingQuestion({
-    payload: { question: "Synthetic question" }, env: PUBLIC_ENV,
-    appendAudit: async () => null,
-    classifyScope: async () => { calls.push("scope"); return { scope: "in_scope", confidence: "low" }; },
-    readRiskControl: async () => { calls.push("lock"); return { ok: true, active: false }; },
-    preloadAssets: () => { calls.push("preload"); return {}; },
-    answerRuling: async () => { calls.push("downstream"); return { shortAnswer: "Synthetic ruling" }; },
-  });
-  // Local preload starts right after the availability check so it overlaps
-  // the scope decision; downstream still waits for the explicit in-scope result.
-  assert.deepEqual(calls, ["lock", "preload", "scope", "downstream"]);
-  assert.equal(result.answer.shortAnswer, "Synthetic ruling");
-  assert.equal(result.answer.debug.requestDiagnostics.scope.scope, "in_scope");
+  // Warm instances preload before the scope decision; cold instances load only
+  // after it, so synchronous index work cannot delay the classifier reply.
+  for (const [warm, expected] of [
+    [true, ["lock", "preload", "scope", "downstream"]],
+    [false, ["lock", "scope", "preload", "downstream"]],
+  ]) {
+    const calls = [];
+    const result = await answerPublicRulingQuestion({
+      payload: { question: "Synthetic question" }, env: PUBLIC_ENV,
+      appendAudit: async () => null,
+      assetsResident: () => warm,
+      classifyScope: async () => { calls.push("scope"); return { scope: "in_scope", confidence: "low" }; },
+      readRiskControl: async () => { calls.push("lock"); return { ok: true, active: false }; },
+      preloadAssets: () => { calls.push("preload"); return {}; },
+      answerRuling: async () => { calls.push("downstream"); return { shortAnswer: "Synthetic ruling" }; },
+    });
+    assert.deepEqual(calls, expected, `warm=${warm}`);
+    assert.equal(result.answer.shortAnswer, "Synthetic ruling");
+    assert.equal(result.answer.debug.requestDiagnostics.scope.scope, "in_scope");
+  }
 });
 
 test("configured shared-control read failures stop before scope classification or downstream work", async () => {
@@ -201,12 +207,13 @@ const CLOUD_PUBLIC_ENV = {
   CLOUD_BUDGET_THEORETICAL_LIMIT_USD: "1",
 };
 
-test("cloud questions start card-name extraction in parallel with the scope decision and hand it to the pipeline", async () => {
+test("on a warm instance cloud questions start card-name extraction in parallel with the scope decision and hand it to the pipeline", async () => {
   const calls = [];
   let extractionSignal = null;
   const result = await answerPublicRulingQuestion({
     payload: { question: "Synthetic question" }, env: CLOUD_PUBLIC_ENV,
     appendAudit: async () => null,
+    assetsResident: () => true,
     readRiskControl: async () => { calls.push("lock"); return { ok: true, active: false }; },
     preloadAssets: () => { calls.push("preload"); return { data: Promise.resolve({ cards: [] }) }; },
     startCardExtraction: ({ question, env, preloadedAssets, signal }) => {
@@ -231,12 +238,31 @@ test("cloud questions start card-name extraction in parallel with the scope deci
   assert.equal(result.answer.shortAnswer, "Synthetic ruling");
 });
 
+test("on a cold instance cloud questions keep card-name extraction inside the pipeline", async () => {
+  const calls = [];
+  let downstream = null;
+  await answerPublicRulingQuestion({
+    payload: { question: "Synthetic question" }, env: CLOUD_PUBLIC_ENV,
+    appendAudit: async () => null,
+    assetsResident: () => false,
+    readRiskControl: async () => { calls.push("lock"); return { ok: true, active: false }; },
+    preloadAssets: () => { calls.push("preload"); return { data: Promise.resolve({ cards: [] }) }; },
+    startCardExtraction: () => assert.fail("cold instance must not extract while scope is pending"),
+    classifyScope: async () => { calls.push("scope"); return { scope: "in_scope", confidence: "high" }; },
+    answerRuling: async (options) => { calls.push("downstream"); downstream = options; return { shortAnswer: "Synthetic ruling" }; },
+  });
+  assert.deepEqual(calls, ["lock", "scope", "preload", "downstream"]);
+  assert.equal(downstream.preloadedCardNameExtraction, undefined);
+  assert.ok(downstream.preloadedAssets?.data);
+});
+
 test("a denied cloud question aborts the early card-name extraction and never reaches the pipeline", async () => {
   for (const decision of [{ scope: "out_of_scope", confidence: "high" }, { scope: "uncertain" }]) {
     let extractionSignal = null;
     const outcome = answerPublicRulingQuestion({
       payload: { question: "Synthetic question" }, env: CLOUD_PUBLIC_ENV,
       appendAudit: async () => null,
+      assetsResident: () => true,
       readRiskControl: async () => ({ ok: true, active: false }),
       preloadAssets: () => ({ data: Promise.resolve({ cards: [] }) }),
       startCardExtraction: ({ signal }) => { extractionSignal = signal; return new Promise(() => {}); },
