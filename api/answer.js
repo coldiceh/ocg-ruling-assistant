@@ -305,11 +305,14 @@ async function answerWithProgressStream({
       progress,
     });
     const measuredProgress = progress.complete();
-    const answer = presentPublicAnswer(result.answer, {
+    // Named differently from the injected `answer` function above: a block-scoped
+    // `const answer` here would shadow it and make the `await answer(...)` call a
+    // temporal-dead-zone error, which broke this single-request stream route.
+    const presented = presentPublicAnswer(result.answer, {
       channel: requestChannel,
       env,
     });
-    sendPublicAnswerEvent(response, "answer", { answer, progress: measuredProgress });
+    sendPublicAnswerEvent(response, "answer", { answer: presented, progress: measuredProgress });
     sendPublicAnswerEvent(response, "end", measuredProgress);
     response.end();
     await persistPublicAnswerLatency({
