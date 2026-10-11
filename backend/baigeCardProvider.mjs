@@ -24,6 +24,8 @@ export async function searchBaigeCards(query, {
   fetchImpl = globalThis.fetch,
   env = globalThis.process?.env || {},
   limit = 8,
+  maxRequests = Infinity,
+  candidatesOnly = false,
   now = Date.now(),
   signal,
 } = {}) {
@@ -36,8 +38,9 @@ export async function searchBaigeCards(query, {
   }
 
   const cacheKey = normalizeSearchKey(normalizedQuery);
+  const searchCacheKey = candidatesOnly ? `${cacheKey}:candidates:${maxRequests}` : cacheKey;
   const ttlMs = readPositiveNumber(env.BAIGE_CACHE_TTL_MS, DEFAULT_CACHE_TTL_MS);
-  const cached = searchCache.get(cacheKey);
+  const cached = searchCache.get(searchCacheKey);
   if (cached && cached.expiresAt > now) {
     return {
       provider: "baige",
@@ -55,7 +58,7 @@ export async function searchBaigeCards(query, {
     timeoutMs: readPositiveNumber(env.BAIGE_TIMEOUT_MS, DEFAULT_TIMEOUT_MS),
   });
   try {
-    for (const searchQuery of buildBaigeSearchQueries(normalizedQuery)) {
+    for (const searchQuery of buildBaigeSearchQueries(normalizedQuery).slice(0, maxRequests)) {
       throwIfAborted(requestAbort.signal);
       const url = new URL(BAIGE_API_BASE);
       url.searchParams.set("search", searchQuery);
@@ -72,7 +75,7 @@ export async function searchBaigeCards(query, {
       }
       payload = await response.json();
       const payloadCards = collectBaigeCards(payload);
-      const hasCompatibleCard = payloadCards.some((card) => !hasNumberedCardIdentityConflict(
+      const hasCompatibleCard = candidatesOnly || payloadCards.some((card) => !hasNumberedCardIdentityConflict(
         normalizedQuery,
         [readFirst(card, ["cn_name", "cnName", "sc_name", "zh_name", "nwbbs_n", "name", "title"]), readFirst(card, ["jp_name", "ja_name"]), readFirst(card, ["en_name"])].filter(Boolean).join(" "),
       ));
@@ -100,7 +103,7 @@ export async function searchBaigeCards(query, {
   const normalizedCards = rawCards
     .map((card) => normalizeBaigeCard(card, normalizedQuery, warnings))
     .filter((card) => card.name || card.text || card.id)
-    .filter((card) => !hasNumberedCardIdentityConflict(normalizedQuery, [card.name, card.cnName, card.jpName, card.enName, ...(card.aliases || [])].filter(Boolean).join(" ")));
+    .filter((card) => candidatesOnly || !hasNumberedCardIdentityConflict(normalizedQuery, [card.name, card.cnName, card.jpName, card.enName, ...(card.aliases || [])].filter(Boolean).join(" ")));
   const exactPrimaryNameMatches = normalizedCards.filter((card) => (
     providerPrimaryCardNames(card).some((name) => normalizeSearchKey(name) === cacheKey)
   ));
@@ -132,7 +135,7 @@ export async function searchBaigeCards(query, {
     .sort((left, right) => right.confidence - left.confidence || String(left.name).localeCompare(String(right.name), "zh-Hans-CN"))
     .slice(0, limit);
 
-  searchCache.set(cacheKey, {
+  searchCache.set(searchCacheKey, {
     results,
     warnings,
     expiresAt: now + ttlMs,

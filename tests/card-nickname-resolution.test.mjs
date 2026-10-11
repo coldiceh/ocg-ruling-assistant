@@ -54,7 +54,11 @@ for (const [id, input] of [['16524', '毁灭凤凰人'], ['23548', '龟G']]) {
   for (const output of ['surface', 'canonical']) test(`${input}: model ${output} name resolves its source-bound local card`, async () => {
     const canonical = cards.find(card => card.id === id);
     const { question, raw, result } = resolve(input, output === 'surface' ? input : canonical.cnName || canonical.name);
-    assert.equal(raw.resolvedCards.length, 0, 'the existing extractor alone cannot resolve this nickname');
+    if (output === 'surface') assert.equal(raw.resolvedCards.length, 0, 'surface-only nickname still needs its sourced reference');
+    else {
+      assert.deepEqual(raw.resolvedCards.map(card=>card.id),[id]);
+      assert.equal(raw.resolvedCards[0].resolutionSource,'model_canonical_exact');
+    }
     assert.deepEqual(result.resolvedCards.map(card => card.id), [id]);
     const resolved = result.resolvedCards[0];
     assert.equal(resolved.input, input);

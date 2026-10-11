@@ -73,7 +73,8 @@ test("passive alias scanning does not extract short card names from inside longe
   assert.ok(!resolution.resolvedCards.some((card) => String(card.id) === "4030"));
 });
 
-test("all exact mention sources share longest non-overlapping query spans", () => {
+// 2026-10-11 规则变更: the model owns its mention set; local span scanning cannot delete model entries.
+test("model exact names bind independently while query scanning retains longest spans", () => {
   const cards = [{
     id: "span-long",
     name: "匿名破坏龙G",
@@ -93,14 +94,14 @@ test("all exact mention sources share longest non-overlapping query spans", () =
     {
       cards,
       maxCards: 8,
-      // Deliberately put the covered short candidate first: model seed order
-      // must not bypass the same span disambiguation used by alias scanning.
+      // Both model interpretations survive; the extractor checks formal-name
+      // catalog membership rather than interpreting overlapping query spans.
       modelCardNameCandidates: ["匿名破坏龙", "匿名破坏龙G"],
     },
   );
   assert.deepEqual(
     new Set(covered.resolvedCards.map((card) => String(card.id))),
-    new Set(["span-long"]),
+    new Set(["span-long", "span-short"]),
   );
 
   const unquotedCovered = extractRagCards(
@@ -113,8 +114,10 @@ test("all exact mention sources share longest non-overlapping query spans", () =
   );
   assert.deepEqual(
     new Set(unquotedCovered.resolvedCards.map((card) => String(card.id))),
-    new Set(["span-long"]),
+    new Set(["span-long", "span-short"]),
   );
+  const scanned = extractRagCards("发动「匿名破坏龙G」的效果。", { cards });
+  assert.deepEqual(scanned.resolvedCards.map(card => card.id), ["span-long"]);
 
   const independent = extractRagCards(
     "「匿名破坏龙G」处理后，匿名破坏龙发动「匿名场地」的效果。",
@@ -130,7 +133,8 @@ test("all exact mention sources share longest non-overlapping query spans", () =
   );
 });
 
-test("an exact full normalized model surface survives similar cards and suppresses overlapping short aliases", () => {
+// 2026-10-11 规则变更: formal names bind by exact catalog identity, without a second local surface interpretation.
+test("model formal names survive neighbours without local span reinterpretation", () => {
   const cards = [{
     id: "model-full",
     name: "匿名星辉・力量",
@@ -149,9 +153,8 @@ test("an exact full normalized model surface survives similar cards and suppress
     maxCards: 8,
     modelCardNameCandidates: [{
       name: "匿名星辉・力量",
-      // The preparation model normalized the separator instead of copying the
-      // user's spelling. The identity is still grounded only because the
-      // corresponding normalized span exists in the question.
+      // The model interprets the original spelling; normalized formal-name
+      // membership is the extractor's mechanical contract.
       originalText: "匿名星辉・力量",
       confidence: "high",
     }, {
@@ -161,8 +164,8 @@ test("an exact full normalized model surface survives similar cards and suppress
     }],
   });
 
-  assert.deepEqual(resolution.resolvedCards.map((card) => card.id), ["model-full"]);
-  assert.equal(resolution.resolvedCards.some((card) => card.id === "overlapping-short"), false);
+  assert.deepEqual(resolution.resolvedCards.map((card) => card.id), ["model-full", "overlapping-short"]);
+  assert.equal(resolution.resolvedCards.some((card) => card.id === "overlapping-short"), true);
   assert.equal(resolution.resolvedCards.some((card) => card.id === "near-neighbour"), false);
 
   const ungrounded = extractRagCards("这里只出现别的表述。", {
@@ -174,7 +177,8 @@ test("an exact full normalized model surface survives similar cards and suppress
       confidence: "high",
     }],
   });
-  assert.equal(ungrounded.resolvedCards.some((card) => card.id === "model-full"), false);
+  assert.deepEqual(ungrounded.resolvedCards.map(card => card.id), ["model-full"]);
+  assert.equal(ungrounded.resolvedCards[0].resolutionSource, "model_canonical_exact");
 
   const externalSeed = extractRagCards("发动「星辉」的效果。", {
     cards: [],
@@ -218,7 +222,8 @@ test("ambiguous fuzzy model surfaces remain unresolved even when later context f
   assert.ok(resolution.unresolvedMentions.some((mention) => mention.input === surface));
 });
 
-test("a unique nearest edit wins over farther candidates while tied nearest edits remain unresolved", () => {
+// 2026-10-11 规则变更: edit ranking may supply candidates but cannot bind model mentions.
+test("nearest and tied edit-only model names both remain unconfirmed", () => {
   const surface = "匿名长名测试龙甲";
   const cards = [{
     id: "nearest-one-edit",
@@ -235,8 +240,8 @@ test("a unique nearest edit wins over farther candidates while tied nearest edit
     modelCardNameCandidates: [{ name: surface, originalText: surface, confidence: "high" }],
   });
 
-  assert.deepEqual(resolution.resolvedCards.map((card) => card.id), ["nearest-one-edit"]);
-  assert.equal(resolution.unresolvedMentions.some((mention) => mention.input === surface), false);
+  assert.deepEqual(resolution.resolvedCards, []);
+  assert.equal(resolution.unresolvedMentions.some((mention) => mention.input === surface), true);
 
   const tiedSurface = "匿名长名测试龙丙";
   const tied = extractRagCards(`「${tiedSurface}」可以发动吗？`, {
@@ -256,7 +261,8 @@ test("a unique nearest edit wins over farther candidates while tied nearest edit
   assert.ok(tied.unresolvedMentions.some((mention) => mention.input === tiedSurface));
 });
 
-test("fuzzy neighbours do not veto a stronger exact contextual short-name resolution", () => {
+// 2026-10-11 规则变更: local context cannot replace a model mention with a guessed formal name.
+test("context and fuzzy neighbours cannot silently confirm a model short name", () => {
   const shortName = "小水龙";
   const cards = [{
     id: "series-context",
@@ -286,12 +292,13 @@ test("fuzzy neighbours do not veto a stronger exact contextual short-name resolu
     },
   );
 
-  assert.ok(resolution.resolvedCards.some((card) => card.id === "contextual-short-target"));
+  assert.deepEqual(resolution.resolvedCards, []);
   assert.equal(resolution.resolvedCards.some((card) => /^unrelated-near-/u.test(card.id)), false);
-  assert.equal(resolution.unresolvedMentions.some((mention) => mention.input === shortName), false);
+  assert.equal(resolution.unresolvedMentions.some((mention) => mention.input === shortName), true);
 });
 
-test("an external exact expansion maps back to the local identity and unlocks its FAQ", async () => {
+// 2026-10-11 规则变更: the model's unique local formal name already confirms identity; external surface convergence is unnecessary.
+test("a model exact formal name binds the local identity and unlocks its FAQ without another lookup", async () => {
   const userSurface = "匿名外查简称";
   const canonicalName = "匿名规范外查龙";
   const localCard = {
@@ -308,9 +315,10 @@ test("an external exact expansion maps back to the local identity and unlocks it
     maxCards: 8,
     modelCardNameCandidates: [{ name: canonicalName, originalText: userSurface, confidence: "high" }],
   });
-  assert.ok(cardResolution.unresolvedMentions.some((mention) => (
-    mention.input === userSurface && mention.searchTexts.includes(canonicalName)
-  )));
+  assert.deepEqual(cardResolution.resolvedCards.map(card => card.id), [localCard.id]);
+  assert.equal(cardResolution.resolvedCards[0].input, userSurface);
+  assert.equal(cardResolution.resolvedCards[0].resolutionSource, "model_canonical_exact");
+  assert.deepEqual(cardResolution.unresolvedMentions, []);
 
   const evidence = await retrieveRagEvidence({
     userQuery: question,
@@ -325,28 +333,9 @@ test("an external exact expansion maps back to the local identity and unlocks it
       title: "匿名外查 FAQ",
       text: "这张卡的发动条件说明。",
     }],
-    fetchImpl: async (url) => {
-      const decoded = decodeURIComponent(String(url)).replace(/\+/gu, " ");
-      if (!decoded.includes(canonicalName)) {
-        return { ok: true, status: 200, json: async () => ({ result: [], next: 0 }) };
-      }
-      return {
-        ok: true,
-        status: 200,
-        json: async () => ({
-          result: [{
-            cid: Number(localCard.id),
-            id: 87654321,
-            cn_name: canonicalName,
-            text: { desc: "这张卡可以发动。" },
-          }],
-          next: 0,
-        }),
-      };
-    },
+    fetchImpl: async () => { throw Error("confirmed_local_identity_must_not_need_external_lookup"); },
     env: {
       RAG_LIVE_OFFICIAL_QA: "false",
-      RAG_LOCAL_FUZZY_MIN_CONFIDENCE: "1.01",
     },
   });
 
@@ -355,7 +344,8 @@ test("an external exact expansion maps back to the local identity and unlocks it
   assert.equal(evidence.cardResolution.unresolvedMentions.some((mention) => mention.input === userSurface), false);
 });
 
-test("an unknown longer seed cannot suppress a nested exact known card name", () => {
+// 2026-10-11 规则变更: scan names must not be unioned into a supplied model mention set.
+test("an unknown model mention stays pending without adding a nested scan name", () => {
   const cards = [{
     id: "known-card",
     name: "匿名真实长卡名",
@@ -373,7 +363,7 @@ test("an unknown longer seed cannot suppress a nested exact known card name", ()
 
   assert.deepEqual(
     new Set(resolution.resolvedCards.map((card) => String(card.id))),
-    new Set(["known-card"]),
+    new Set(),
   );
   assert.ok(
     resolution.unresolvedMentions.some((mention) => mention.input === unknownLongMention),

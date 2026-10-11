@@ -5594,13 +5594,18 @@ function budgetBucketConfig(env, bucket) {
 export function buildCardNameExtractionPrompt(userQuery, {
   typed = false, cardNameReferences = [], cardNicknameReferences = [],
 } = {}) {
+  const identityInstructions = [
+    "当前规则体系：OCG。你负责判断题面中的单卡称呼指向哪张卡；本地只检查所给正式名是否精确对应唯一一张卡，不会根据原词相似程度判断。",
+    'name 填写你判断的完整正式卡名，originalText 保留题面原词。每项必须包含 enName，填写同一卡的官方英文完整卡名；jaName、cnName 选填，分别填写同一卡的日文、中文正式名。可选 canonicalNames 数组也只能包含同一卡的其他正式名。不能把不同候选卡混作同一卡的多语言名称。无法判断时 name 保留原称呼，enName 填空字符串，不编造正式名。',
+  ];
   if (typed) {
     return [
       "你负责游戏王问题的提及抽取，不回答裁定，也不查找未给出的卡片。把问题中的名称分为两个独立数组：",
       "cardNames：明确命名的单张卡，或有上下文依据的单卡简称、俗称、可能写错的名字。包括双方及句中其他被点名的卡，无括号也要提取。保留完整名称，不拆出其中系列部分；不知道正式名也可保留该单卡原称呼。",
       "groupMentions：系列、种族、属性、卡片种类等集合名称，以及只由这些特征描述而未给出个体名称的卡。指向场上某一只实际怪兽，并不等于给出了该怪兽的卡名；“我方”“一只”“作为对象”等限定不能把集合名变成单卡简称。引号也不决定属于哪类。只有上下文给出某个具体卡名与简称的对应，或该称呼本身就是单卡名称，才归cardNames。",
       "每项只放入其实际类别。不能猜测未命名对象是该系列的哪张卡。动作、效果、区域、连锁编号不放入任一数组。重复提及合并。",
-      "只输出JSON：{\"cardNames\":[{\"name\":\"单卡称呼\",\"originalText\":\"对应原文\",\"confidence\":\"high或medium或low\"}],\"groupMentions\":[\"系列或类别原文\"]}。没有内容的数组为空。",
+      ...identityInstructions,
+      "只输出JSON：{\"cardNames\":[{\"name\":\"你判断的正式卡名或未知原称呼\",\"enName\":\"官方英文完整卡名，未知时为空字符串\",\"jaName\":\"日文正式名（选填）\",\"cnName\":\"中文正式名（选填）\",\"originalText\":\"对应原文\",\"confidence\":\"high或medium或low\"}],\"groupMentions\":[\"系列或类别原文\"]}。没有内容的数组为空。",
       ...(cardNameReferences.length ? [
         "以下是本地匹配得到的卡库名称参考；input只是匹配到的题面片段，其余字段来自卡库。参考不代表题面一定提及该卡，不能据此添加未命名的卡。结合完整原题判断：完整单卡名称即使含有系列词也属于cardNames；只提到系列、类别或局部片段时，不得因为参考中有相似卡名就改判为单卡。",
         JSON.stringify(cardNameReferences),
@@ -5615,20 +5620,20 @@ export function buildCardNameExtractionPrompt(userQuery, {
   }
   const example = {
     cardNames: [
-      { name: "正式或可能的卡名", originalText: "玩家原文片段", confidence: "medium" },
+      { name: "正式或可能的卡名", enName: "官方英文完整卡名，未知时为空字符串", jaName: "日文正式名（选填）", cnName: "中文正式名（选填）", originalText: "玩家原文片段", confidence: "medium" },
     ],
   };
   return [
     "你只负责从玩家的游戏王 OCG 裁定问题中提取所有可能的卡名候选，不要回答裁定。",
     "把问题中出现的每一张卡都列出，包括没有括号的卡名、简称、俗称、错别字、漏字、缺少间隔点、系列内短称和后文简称。",
-    "中文问题优先把 name 写成可用于中文卡查/百鸽搜索的中文或日文卡名；除非玩家原文就是英文，不要只翻译成英文名。",
+    ...identityInstructions,
     "如果玩家先写完整卡名、后文用简称指代同一张卡，name 尽量输出可检索的完整卡名，originalText 保留后文实际片段。",
     "如果不能确信，也要输出为候选，只把 confidence 设为 low；后续检索会负责确认。",
     "不要因为卡名不在【】《》「」中就跳过。不要因为不熟悉该卡就跳过。",
     "C1、C2、CL3 等连锁编号不是卡名；系列名或卡片类别只有在题面明确用它指代某一张具体卡时才可作为简称候选。不要输出整段效果文本、普通规则句、动作或状态短语。",
     "保留玩家原文片段 originalText。",
     "输出必须是单个 JSON 对象，不要 markdown，不要解释。",
-    "JSON 只包含 cardNames 数组；每项包含 name、originalText、confidence。",
+    "JSON 只包含 cardNames 数组；每项必须包含 name、enName、originalText、confidence，jaName 和 cnName 选填。",
     "不要输出效果名、动作、场地区域、玩家称谓、数值、处理结果或规则术语。",
     "示例结构如下，示例不是本题答案：",
     JSON.stringify(example),
@@ -5931,6 +5936,9 @@ function normalizeCardNameCandidates(rawText, { preserveTypedMentions = false } 
             ? typedCardMentionOriginalText(item)
             : item?.originalText || item?.surface || item?.mention || item?.input || item?.name || "",
           confidence: item?.confidence || item?.confidenceSelfEstimate || "medium",
+          ...(Array.isArray(item?.canonicalNames) ? {canonicalNames:item.canonicalNames} : {}),
+          ...Object.fromEntries(['enName','jaName','cnName']
+            .filter(field=>typeof item?.[field]==='string').map(field=>[field,item[field]])),
         })
     .map((item) => ({
       name: nonEmpty(item.name).slice(0, 80),
@@ -5939,6 +5947,10 @@ function normalizeCardNameCandidates(rawText, { preserveTypedMentions = false } 
         ? String(item.confidence).toLowerCase()
         : "medium",
       source: "model_card_name_extractor",
+      ...(Array.isArray(item.canonicalNames) ? {canonicalNames:[...new Set(item.canonicalNames
+        .filter(name => typeof name === 'string').map(name => nonEmpty(name)).filter(Boolean))]} : {}),
+      ...Object.fromEntries(['enName','jaName','cnName']
+        .filter(field=>typeof item[field]==='string').map(field=>[field,nonEmpty(item[field])])),
     }))
     .filter((item) => preserveTypedMentions
       ? Boolean(item.name && item.originalText)
@@ -6670,6 +6682,7 @@ function runLightweightCardProviderOperation({
         modelName,
         maxTokens,
         fetchImpl,
+        reasoningEffort,
         signal: requestSignal,
         allowUnledgeredDispatch,
       })

@@ -1,0 +1,22 @@
+# OCG card identity confirmation
+
+The extraction model owns the individual-card mention set. Each mention retains the player's original wording and formal names in `name`, `enName`, optional `jaName` / `cnName`, and optional `canonicalNames`. All these fields, including `originalText`, are matched exactly against the catalog's formal-name fields. One distinct identity binds; multiple identities remain ambiguous; no match remains unresolved. Query scanning is not unioned into a supplied model mention set.
+
+Only remaining pending mentions enter candidate confirmation. Existing local name-index ranking and Baige search supply actual card records. Ranking cannot bind identity. The existing Luna selector receives the original question and candidate handles once; a null, absent or invalid selection keeps the mention pending. The preload result is reused by the ruling pipeline, and downstream approximate matching cannot replace an explicit non-selection.
+
+Hard limits per question:
+
+- Two pending mentions, in existing mention order.
+- Two actual Baige HTTP requests total, with at most one request per processed mention. This also bounds numbered-name fallback searches.
+- Four local and four Baige results per mention; stable-CID deduplication leaves at most six candidates per mention and twelve per question.
+- One extra Luna call, using the existing `none` default. Confirmed identities skip candidate work.
+
+The per-question allowance also survives an invalidated preload. The invariant is one confirmation attempt with bounded search requests; the observed signals are the same original query and the preload's recorded request/call counts. The check depends only on these mechanical facts, independently of whether the old identity snapshot is still usable. A false positive skips optional confirmation and leaves identity pending. Snapshot compatibility alone cannot enforce the allowance, because discarding a snapshot does not undo its completed requests. This boundary was reproduced by a failing regression and fixed without another paid run.
+
+The final OCG prompt and evidence selection are unchanged. The displayed answer includes the confirmed card-name interpretation. TCG sources, text projection and ruleset integration remain outside this branch.
+
+The six superseded contracts in `tests/card-alias-consistency.test.mjs` are marked `2026-10-11 规则变更`. Candidate tests check actual extraction/preload/retrieval routing, request counts, handle binding, CID deduplication, canonical-text preservation and pending-state retention. Fixture selections verify routing only; they do not establish real-model identity accuracy.
+
+The focused free suite passed 105 of 107 checks. The six updated contracts passed. Two assertions remain unchanged: the previously recorded B2B retrieval failure, and a legacy quoted-role test that asks local code to remove model-supplied mentions by interpreting their roles. The latter conflicts with the model-owned mention contract and the project's prohibition on local semantic filtering. It was outside the six authorized test updates; no semantic filter was restored to make it pass. After the preload allowance fix, all 24 relevant candidate/preload/presentation checks passed, including the new regression. Both inputs were also replayed through the current extraction entry with all four saved model replies and two saved source replies matched exactly; no new network/model call was made.
+
+On 2026-10-11, four saved none responses were replayed with the production Responses reader and parser, without network/model calls. Two authorized live extraction inputs then each used one initial Luna request and one candidate confirmation. Both selected the intended catalog identity (22588 and 9702); the generic field-spell mention remained unbound. Confirmation added 2.986 s and 3.657 s respectively. Configured-rate usage estimate: $0.00039105, below the $0.05 ceiling. Full ruling generation and delivery of card text to the final ruling model were not run. This two-input result does not establish general accuracy.

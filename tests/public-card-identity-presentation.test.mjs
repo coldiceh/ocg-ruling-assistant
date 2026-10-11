@@ -39,15 +39,21 @@ test('final answer exposes every pending identity in ordinary API text without c
     '「简称」尚未确认。现有候选（未确认）：候选甲、候选乙、候选丙。请补充完整卡名、卡号或卡片原文。',
     '「单候选简称」尚未确认。现有候选（未确认）：唯一搜索候选。请补充完整卡名、卡号或卡片原文。',
   ];
-  assert.equal(result.shortAnswer, `原有模型回答。\n\n卡片身份待确认：\n${lines.map(line => `- ${line}`).join('\n')}`);
+  assert.equal(result.shortAnswer, `原有模型回答。\n\n本次按以下卡片理解：已确认测试卡。\n\n卡片身份待确认：\n${lines.map(line => `- ${line}`).join('\n')}`);
   for (const line of lines) assert.ok(result.missingInfo.includes(line));
   assert.deepEqual(result.resolvedCards.map(card => card.id), ['confirmed']);
   const { debug, ...ordinaryAnswer } = result;
   const publicAnswer = presentPublicAnswer(ordinaryAnswer, { channel: PUBLIC_REQUEST_CHANNELS.EXTERNAL_API, env: {} });
-  assert.equal(publicAnswer.shortAnswer, result.shortAnswer);
+  assert.equal(publicAnswer.shortAnswer, `${result.shortAnswer}\n\n网页端体验完整内容：https://coldiceh.github.io/ocg-ruling-assistant/`);
 });
 
 test('final answer with no pending identities preserves the original answer text', async () => {
   const result = await finalize({ resolvedCards: [], unresolvedMentions: [], ambiguousMentions: [] });
   assert.equal(result.shortAnswer, '原有模型回答。');
+});
+
+test('final answer shows model interpretation and both catalog names without another model request', async () => {
+  const result=await finalize({resolvedCards:[{id:'22588',input:'密告',name:'神之密告',cnName:'神之密告',
+    enName:'Solemn Accusation',resolutionSource:'model_canonical_exact'}],unresolvedMentions:[],ambiguousMentions:[]});
+  assert.equal(result.shortAnswer,'原有模型回答。\n\n本次按以下卡片理解：密告 → 神之密告（Solemn Accusation）。');
 });

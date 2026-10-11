@@ -171,16 +171,20 @@ export async function retrieveRagEvidence({
   const unresolvedMentions = cardResolution.unresolvedMentions || [];
   const parentheticalAliasKeys = collectParentheticalAliasMentionKeys(unresolvedMentions, resolvedCards);
   const unresolvedResolutionCandidates = unresolvedMentions
-    .filter((mention) => !parentheticalAliasKeys.has(normalizeCardKey(mention?.input)));
-  const fuzzyCards = resolveUnresolvedMentionCards(unresolvedResolutionCandidates, cardProvider, limits, retrievalWarnings);
+    .filter((mention) => mention.identitySelectionOwner === 'model_candidate_confirmation'
+      || !parentheticalAliasKeys.has(normalizeCardKey(mention?.input)));
+  const fuzzyCards = resolveUnresolvedMentionCards(unresolvedResolutionCandidates
+    .filter(mention => !Array.isArray(mention.canonicalNames) && mention.identitySelectionOwner !== 'model_candidate_confirmation'), cardProvider, limits, retrievalWarnings);
   const providedNameKeys = new Set(providedTexts.map((item) => normalizeCardKey(item.name)).filter(Boolean));
   const unresolvedForBaige = unresolvedResolutionCandidates
+    .filter(mention => !Array.isArray(mention.canonicalNames) && mention.identitySelectionOwner !== 'model_candidate_confirmation')
     .filter((mention) => !providedNameKeys.has(normalizeCardKey(mention.input)));
   // A local short-name or locale gap can produce several fragment candidates
   // even though an external card index has one exact primary-name match. Keep
   // the local ambiguity fail-closed, but let the identity provider try to
   // resolve the user surface instead of silently skipping it.
   const ambiguousForBaige = (cardResolution.ambiguousMentions || [])
+    .filter(mention => mention.reason !== 'model_canonical_name_ambiguous' && mention.identitySelectionOwner !== 'model_candidate_confirmation')
     .filter((mention) => !providedNameKeys.has(normalizeCardKey(mention.input)))
     .map((mention) => ({
       ...mention,
@@ -5070,7 +5074,7 @@ async function resolveUnresolvedMentionCardsWithBaige(unresolvedMentions, {
     };
     const modelExpansionQueries = modelIdentityExpansionQueries(mention);
     if (modelExpansionQueries.length) {
-      const intersection = await resolveModelExpansionByStableCidIntersection({
+      const intersection = await resolveModelCanonicalName({
         surface: mention.input,
         expansionQueries: modelExpansionQueries,
         fetchImpl,
@@ -5085,13 +5089,13 @@ async function resolveUnresolvedMentionCardsWithBaige(unresolvedMentions, {
         if (intersection.candidates.length > 1) {
           debug.ambiguousMentions.push({
             input: mention.input,
-            reason: "conflicting_model_expansion_cid_intersection",
+            reason: "conflicting_model_canonical_exact",
             source: "retrieval_identity_reconciliation",
             candidateCards: intersection.candidates.slice(0, 3).map((card) => ({
               id: card.id || card.cardId || "",
               cid: card.cid ?? null,
               name: card.name || card.cnName || card.jpName || card.enName || "",
-              source: "baige_model_expansion_cid_intersection",
+              source: "baige_model_canonical_exact",
               confidence: card.confidence || 0,
             })),
           });
@@ -5108,9 +5112,9 @@ async function resolveUnresolvedMentionCardsWithBaige(unresolvedMentions, {
         externalIdentityUniqueConvergence: true,
         identityVerificationStatus: "verified_external_resolution",
         identityVerificationSource: intersection.usedExpansion
-          ? "model_expansion_cid_intersection"
+          ? "model_canonical_exact"
           : "provider_surface_unique_identity",
-        ...(intersection.usedExpansion ? { modelExpansionCidIntersectionVerified: true } : {}),
+        ...(intersection.usedExpansion ? { modelCanonicalExactVerified: true } : {}),
         originalSurfaceStableCids: intersection.originalSurfaceCids,
         modelExpansionExactCids: intersection.expansionCids,
       };
@@ -5266,137 +5270,33 @@ function modelIdentityExpansionQueries(value = {}) {
     .slice(0, 3);
 }
 
-async function resolveModelExpansionByStableCidIntersection({
-  surface,
-  expansionQueries,
-  fetchImpl,
-  env,
-  limits,
-  warnings,
-  debug,
-  signal,
-  onCandidates,
+async function resolveModelCanonicalName({
+  surface, expansionQueries, fetchImpl, env, limits, warnings, debug, signal, onCandidates,
 }) {
-  const originalSearch = await searchBaige(surface, { fetchImpl, env, limits, debug, signal });
-  warnings.push(...originalSearch.warnings);
-  const originalResults = originalSearch.results || [];
-  onCandidates?.(originalResults);
-  const originalEligibleResults = originalResults.filter((candidate) => (
-    Number(candidate?.confidence || 0) >= 0.72
-      && providerPrimaryNameMechanicallyMatchesSurface(candidate, surface)
-  ));
-  const originalCandidatesByCid = stableExternalCidCandidates(originalEligibleResults);
-  const originalSelection = selectUniqueBaigeCandidate(originalResults, 0.72, {
-    surface,
-    query: surface,
-  });
-  const originalSurfaceCids = [...originalCandidatesByCid.keys()].sort();
-  if (originalSelection.card) {
-    return {
-      card: originalSelection.card,
-      matchedQuery: surface,
-      resolutionKind: originalSelection.resolutionKind || "single_eligible_identity",
-      surfaceMatchKind: originalSelection.surfaceMatchKind || "",
-      usedExpansion: false,
-      originalSurfaceCids,
-      expansionCids: [],
-      candidates: originalSelection.candidates || [originalSelection.card],
-    };
-  }
-
-  // A canonical/model expansion may confirm or disambiguate identities already
-  // returned for the user's original surface, but it must never create an
-  // identity when that surface produced no stable CID at all.
-  if (!originalCandidatesByCid.size) {
-    warnings.push(`baige_model_expansion_stable_identity_unverified:${surface}->${expansionQueries[0] || "candidate"}`);
-    warnings.push(`baige_model_expansion_original_surface_has_no_stable_identity:${surface}`);
-    return {
-      card: null,
-      matchedQuery: "",
-      resolutionKind: "",
-      surfaceMatchKind: "",
-      usedExpansion: false,
-      originalSurfaceCids,
-      expansionCids: [],
-      candidates: originalSelection.candidates || [],
-    };
-  }
-
-  // A model expansion may confirm one mechanically compatible identity, but it
-  // must not choose between multiple identities returned for the user's own
-  // surface. Otherwise the model-generated name would become the deciding
-  // identity fact and could unlock the wrong card text and card-scoped Q&A.
-  if (originalCandidatesByCid.size > 1) {
-    warnings.push(`baige_model_expansion_stable_identity_unverified:${surface}->${expansionQueries[0] || "candidate"}`);
-    warnings.push(
-      `baige_model_expansion_original_surface_identity_ambiguous:${surface}:${originalSurfaceCids.join(",")}`,
-    );
-    return {
-      card: null,
-      matchedQuery: "",
-      resolutionKind: "",
-      surfaceMatchKind: "",
-      usedExpansion: false,
-      originalSurfaceCids,
-      expansionCids: [],
-      candidates: originalSelection.candidates || originalEligibleResults,
-    };
-  }
-
-  const expansionCandidatesByCid = new Map();
-  const matchedQueryByCid = new Map();
-
+  // The model already interpreted the surface. Confirm only a unique exact
+  // canonical provider name with stable CID; do not ask the nickname to prove it.
+  const byCid = new Map(), queryByCid = new Map();
   for (const query of expansionQueries) {
-    const searchResult = await searchBaige(query, { fetchImpl, env, limits, debug, signal });
-    warnings.push(...searchResult.warnings);
-    onCandidates?.(searchResult.results || []);
-    for (const candidate of searchResult.results || []) {
-      if (!providerIdentityNameExactlyMatches(candidate, query)) continue;
-      const cid = verifiedExternalCardCid(candidate);
+    const response = await searchBaige(query, {fetchImpl, env, limits, debug, signal});
+    warnings.push(...response.warnings);
+    const rows = response.results || [];
+    onCandidates?.(rows);
+    for (const card of rows) {
+      const nameKey = normalizeCardKey(query);
+      if (![card.name, card.cnName, card.jaName, card.jpName, card.enName]
+        .some(name => name && normalizeCardKey(name) === nameKey)) continue;
+      const cid = verifiedExternalCardCid(card);
       if (!cid) continue;
-      const previous = expansionCandidatesByCid.get(cid);
-      if (!previous || Number(candidate.confidence || 0) > Number(previous.confidence || 0)) {
-        expansionCandidatesByCid.set(cid, candidate);
-        matchedQueryByCid.set(cid, query);
-      }
+      if (!byCid.has(cid)) { byCid.set(cid, card); queryByCid.set(cid, query); }
     }
   }
-
-  const expansionCids = [...expansionCandidatesByCid.keys()].sort();
-  const intersectingCids = expansionCids.filter((cid) => originalCandidatesByCid.has(cid));
-  if (intersectingCids.length !== 1) {
-    warnings.push(`baige_model_expansion_stable_identity_unverified:${surface}->${expansionQueries[0] || "candidate"}`);
-    warnings.push(
-      intersectingCids.length
-        ? `baige_model_expansion_cid_intersection_ambiguous:${surface}:${intersectingCids.join(",")}`
-        : `baige_model_expansion_cid_intersection_empty:${surface}`,
-    );
-    return {
-      card: null,
-      matchedQuery: "",
-      resolutionKind: "",
-      surfaceMatchKind: "",
-      usedExpansion: true,
-      originalSurfaceCids,
-      expansionCids,
-      candidates: intersectingCids.map((cid) => expansionCandidatesByCid.get(cid)).filter(Boolean),
-    };
-  }
-
-  const cid = intersectingCids[0];
-  warnings.push(`baige_model_expansion_cid_intersection_verified:${surface}:${cid}`);
-  return {
-    card: expansionCandidatesByCid.get(cid),
-    matchedQuery: matchedQueryByCid.get(cid) || expansionQueries[0],
-    resolutionKind: "model_expansion_exact_cid_intersection",
-    surfaceMatchKind: "stable_cid_intersection",
-    usedExpansion: true,
-    originalSurfaceCids,
-    expansionCids,
-    candidates: [expansionCandidatesByCid.get(cid)].filter(Boolean),
-  };
+  const cids = [...byCid.keys()];
+  const card = cids.length === 1 ? byCid.get(cids[0]) : null;
+  warnings.push(`model_canonical_name_${card ? 'exact' : cids.length ? 'ambiguous' : 'not_found'}:${surface}`);
+  return {card, matchedQuery:card ? queryByCid.get(cids[0]) : '',
+    resolutionKind:card ? 'model_canonical_exact' : '', surfaceMatchKind:card ? 'catalog_canonical_exact' : '',
+    usedExpansion:true, originalSurfaceCids:[], expansionCids:cids, candidates:[...byCid.values()]};
 }
-
 async function selectPendingProviderCards({ userQuery, mentions, pendingIdentityCandidates,
   alreadyResolved, canonicalCards, select, warnings, signal }) {
   if (typeof select !== 'function') return [];
@@ -5543,10 +5443,10 @@ async function enrichCardsWithBaige(cards, {
     let externalIdentityUniqueConvergence = false;
     let verifiedByCanonicalLookup = false;
     let verifiedByCanonicalCidIntersection = false;
-    let verifiedByModelCidIntersection = false;
+    let verifiedByModelCanonicalName = false;
     let primarySearchResults = [];
     if (modelExpansionQueries.length) {
-      const intersection = await resolveModelExpansionByStableCidIntersection({
+      const intersection = await resolveModelCanonicalName({
         surface: card.input || nameQuery,
         expansionQueries: modelExpansionQueries,
         fetchImpl,
@@ -5566,7 +5466,7 @@ async function enrichCardsWithBaige(cards, {
       externalSurfaceMatchKind = intersection.surfaceMatchKind;
       externalSurfaceCompatible = true;
       externalIdentityUniqueConvergence = true;
-      verifiedByModelCidIntersection = intersection.usedExpansion === true;
+      verifiedByModelCanonicalName = intersection.usedExpansion === true;
     } else {
       const searchResult = await searchBaige(nameQuery, { fetchImpl, env, limits, debug, signal });
       warnings.push(...searchResult.warnings);
@@ -5654,8 +5554,8 @@ async function enrichCardsWithBaige(cards, {
         externalSurfaceCompatible,
         externalIdentityUniqueConvergence,
       } : {}),
-      ...(verifiedByModelCidIntersection ? {
-        modelExpansionCidIntersectionVerified: true,
+      ...(verifiedByModelCanonicalName ? {
+        modelCanonicalExactVerified: true,
       } : {}),
       ...(verifiedByCanonicalCidIntersection ? {
         canonicalLookupCidIntersectionVerified: true,
@@ -5675,8 +5575,8 @@ async function enrichCardsWithBaige(cards, {
         ...externalCard,
         resolutionSource: card.resolutionSource || "external_identity_verification",
         identityVerificationStatus: "verified_external_replacement",
-        identityVerificationSource: verifiedByModelCidIntersection
-          ? "model_expansion_cid_intersection"
+        identityVerificationSource: verifiedByModelCanonicalName
+          ? "model_canonical_exact"
           : card.identityVerificationSource,
         replacedLocalCandidate: summarizeIdentityCandidate(card),
       });
@@ -5686,8 +5586,8 @@ async function enrichCardsWithBaige(cards, {
       identityVerificationStatus: needsSurfaceIdentityVerification
         ? "verified_same_identity"
         : card.identityVerificationStatus,
-      ...(verifiedByModelCidIntersection
-        ? { identityVerificationSource: "model_expansion_cid_intersection" }
+      ...(verifiedByModelCanonicalName
+        ? { identityVerificationSource: "model_canonical_exact" }
         : {}),
     };
   }));
@@ -5852,6 +5752,9 @@ function canonicalLookupStableCidIntersection({
 function cardInputNeedsIdentityVerification(card = {}, canonicalCards = []) {
   const inputKey = normalizeCardKey(card.input);
   if (!inputKey || card.resolutionSource === "card_text_reference") return false;
+  // This source was bound by exact catalog membership after model interpretation.
+  // Requiring the original nickname to match would reverse that decision.
+  if (card.resolutionSource === 'model_canonical_exact' || card.resolutionSource === 'model_candidate_selection') return false;
   // Only a loader-gated, non-serializable replay attestation can settle a
   // completed verification. Plain object fields are never an authorization.
   if (hasTrustedFrozenResolvedCardAttestation(card)) return false;
@@ -6148,7 +6051,7 @@ function isAnchoredCanonicalExpansion(card = {}) {
       && card.externalExpansionPrimaryNameAnchored === true
   ) || (
     card.externalSurfaceResolution === "model_expansion_exact_cid_intersection"
-      && card.modelExpansionCidIntersectionVerified === true
+      && card.modelCanonicalExactVerified === true
   );
   return surfaceAnchorVerified
     && card.identityCanonicalizationConflict !== true
@@ -6314,6 +6217,9 @@ function unresolvedMentionsAfterRetrieval(mentions, cards) {
 }
 
 function retrievedCardMatchesMention(mention, cards) {
+  // The confirmation stage already removed its selected mentions. Remaining
+  // owned records are explicit non-selections, not another local matching task.
+  if (mention?.identitySelectionOwner === 'model_candidate_confirmation') return false;
   const mentionKey = normalizeCardKey(mention?.input);
   if (!mentionKey) return false;
   return (cards || []).some((card) => {
@@ -6509,7 +6415,7 @@ function retrievedExternalIdentityProofIsMechanical(card = {}) {
   }
   return (
     resolutionKind === "model_expansion_exact_cid_intersection"
-      && card.modelExpansionCidIntersectionVerified === true
+      && card.modelCanonicalExactVerified === true
   ) || (
     resolutionKind === "canonical_lookup_exact_cid_intersection"
       && card.canonicalLookupCidIntersectionVerified === true

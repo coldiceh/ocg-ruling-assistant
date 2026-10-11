@@ -14,6 +14,7 @@ const aliasKeysByLengthCache = new WeakMap();
 const cardAliasesCache = new WeakMap();
 const supplementalCardIndexesCache = new WeakMap();
 const cardSeriesKeysCache = new WeakMap();
+const canonicalNameIndexCache = new WeakMap();
 const DISTINCTIVE_CJK_FRAGMENT_MIN_LENGTH = 4;
 const DISTINCTIVE_FRAGMENT_MAX_LENGTH = 12;
 export const RAG_CARD_ALIAS_RUNTIME_INDEX_SCHEMA_VERSION = 1;
@@ -66,6 +67,7 @@ export function extractRagCards(userQuery, {
 } = {}) {
   const query = String(userQuery || "");
   const typedModelOwnsMentionSet = mentionSetSource === "typed_model";
+  const modelOwnsMentionSet = typedModelOwnsMentionSet || (Array.isArray(modelCardNameCandidates) && modelCardNameCandidates.length > 0);
   // Card count is not an admission limit. The request and final prompt retain
   // their existing byte/character budgets and fail explicitly if the complete
   // fixed card envelope cannot fit.
@@ -73,41 +75,24 @@ export function extractRagCards(userQuery, {
   const aliasIndex = buildAliasIndex(cards);
   const cardNameScanQuery = maskNonCardQuotedExpressions(query, { aliasIndex });
   const normalizedQuery = normalizeCardKey(cardNameScanQuery);
-  // Explicit No./CNo. identifiers are mechanical identity input and remain
-  // available even when the typed model owns ordinary name mentions.
+  // Numbered query aliases belong to the scan path. A supplied model mention
+  // set remains the owner of which individual cards were named.
   const queryNumberedIdentities = extractNumberedCardIdentities(query);
   const queryNumberedIdentityKeys = new Set(queryNumberedIdentities.map(numberedIdentityKey));
   const userProvidedCardTexts = extractUserProvidedCardTextBlocks(query);
-  const nonCardQuotedMentionKeys = typedModelOwnsMentionSet ? new Set() : new Set(
-    collectQuotedMentionEntries(query, { aliasIndex })
-      .filter((item) => item.role !== "card")
-      .map((item) => normalizeCardKey(item.mention))
-      .filter(Boolean),
-  );
   const normalizedModelMentions = normalizeModelCardNameCandidates(modelCardNameCandidates, {
-    preserveTypedMentions: typedModelOwnsMentionSet,
+    preserveTypedMentions: modelOwnsMentionSet,
   });
-  const modelMentions = typedModelOwnsMentionSet ? normalizedModelMentions : normalizedModelMentions
-    .filter((mention) => [mention.originalText, mention.name].some((surface) => (
-      isPlausibleUnresolvedCardMention(surface, "model_card_name_extractor")
-    )))
-    .filter((mention) => (
-      !nonCardQuotedMentionKeys.has(normalizeCardKey(mention.name))
-      && !nonCardQuotedMentionKeys.has(normalizeCardKey(mention.originalText))
-      && [mention.originalText, mention.name].some((surface) => {
-        const key = normalizeCardKey(surface);
-        return key.length >= 2 && normalizedQuery.includes(key);
-      })
-    ));
+  const modelMentions = normalizedModelMentions;
   let exactMentionSeeds = [
-    ...buildModelMentionSeeds(modelMentions, { preserveTypedMentions: typedModelOwnsMentionSet }),
-    ...(typedModelOwnsMentionSet ? [] : extractNumberedCardMentionCandidates(query).map((input) => ({ input, reason: "numbered_card_not_found", source: "numbered_card_identity" }))),
-    ...(typedModelOwnsMentionSet ? [] : extractQuotedMentions(query, { aliasIndex }).map((input) => ({ input, reason: "quoted_mention_not_found", source: "quoted_mention" }))),
+    ...buildModelMentionSeeds(modelMentions, { preserveTypedMentions: modelOwnsMentionSet }),
+    ...(modelOwnsMentionSet ? [] : extractNumberedCardMentionCandidates(query).map((input) => ({ input, reason: "numbered_card_not_found", source: "numbered_card_identity" }))),
+    ...(modelOwnsMentionSet ? [] : extractQuotedMentions(query, { aliasIndex }).map((input) => ({ input, reason: "quoted_mention_not_found", source: "quoted_mention" }))),
     ...userProvidedCardTexts.map((item) => ({ input: item.name, reason: "user_provided_text_name_not_found", source: "user_provided_text" })),
   ];
-  let unquotedMentionSeeds = (typedModelOwnsMentionSet ? [] : extractUnquotedCardMentionCandidates(cardNameScanQuery))
+  let unquotedMentionSeeds = (modelOwnsMentionSet ? [] : extractUnquotedCardMentionCandidates(cardNameScanQuery))
     .map((input) => ({ input, reason: "unquoted_candidate_not_found", source: "unquoted_heuristic" }));
-  const distinctiveMentionSeeds = (typedModelOwnsMentionSet ? [] : extractContextualDistinctiveMentionCandidates(cardNameScanQuery))
+  const distinctiveMentionSeeds = (modelOwnsMentionSet ? [] : extractContextualDistinctiveMentionCandidates(cardNameScanQuery))
     .filter((input) => findUniqueDistinctiveFragmentCandidate(cards, input))
     .map((input) => ({
       input,
@@ -115,7 +100,7 @@ export function extractRagCards(userQuery, {
       source: "contextual_distinctive_fragment",
     }));
   exactMentionSeeds.push(...distinctiveMentionSeeds);
-  const queryAliasEntries = typedModelOwnsMentionSet
+  const queryAliasEntries = modelOwnsMentionSet
     ? []
     : collectQueryAliasEntries(aliasIndex, normalizedQuery, queryNumberedIdentityKeys);
   const exactSpanSelection = buildExactMentionSpanSelection(
@@ -123,7 +108,7 @@ export function extractRagCards(userQuery, {
     queryAliasEntries,
     exactMentionSeeds,
   );
-  if (!typedModelOwnsMentionSet) {
+  if (!modelOwnsMentionSet) {
     exactMentionSeeds = markAndFilterMentionSeeds(exactMentionSeeds, exactSpanSelection);
     unquotedMentionSeeds = markAndFilterMentionSeeds(unquotedMentionSeeds, exactSpanSelection);
   }
@@ -216,6 +201,22 @@ export function extractRagCards(userQuery, {
     const mentionKey = normalizeCardKey(mention);
     if (!mentionKey || seenMentionKeys.has(mentionKey)) continue;
     seenMentionKeys.add(mentionKey);
+    if (seed.source === "model_card_name_extractor") {
+      // The model owns interpretation; this proves only exact catalog
+      // membership and distinct identity count, never surface meaning.
+      const modelCandidates = resolveModelCanonicalCandidates(seed.canonicalNames, cards);
+      if (modelCandidates.length === 1) {
+        addResolved(resolved, seenCards, modelCandidates[0], mention,
+          confidenceForMentionSeed(seed, 1), "model_canonical_exact", {
+            includeInputAlias: false,
+            modelCanonicalNames: seed.canonicalNames,
+          });
+      } else if (modelCandidates.length > 1) {
+        ambiguousMentions.push({...buildAmbiguousMention(mention, modelCandidates),
+          reason:"model_canonical_name_ambiguous", source:"model_card_name_extractor"});
+      } else unresolvedMentions.push(buildUnresolvedMention(seed));
+      continue;
+    }
     const candidates = resolveMentionCandidates(cards, aliasIndex, mention);
     const allowUnresolvedHypothesis = typedModelOwnsMentionSet
       || isPlausibleUnresolvedCardMention(mention, seed.source);
@@ -325,7 +326,7 @@ export function extractRagCards(userQuery, {
     if (unresolved.length > 1) ambiguousMentions.push(buildAmbiguousMention(hit.observedAlias, unresolved));
   }
 
-  if (!typedModelOwnsMentionSet) {
+  if (!modelOwnsMentionSet) {
     applyContextualExtraDeckMaterialResolution({
       query,
       cards: Array.isArray(cards) ? cards : EMPTY_CARD_LIST,
@@ -1145,7 +1146,7 @@ function hasColloquialActivationSubjectSignal(value) {
 }
 
 function buildModelMentionSeeds(modelMentions, { preserveTypedMentions = false } = {}) {
-  return modelMentions
+  const seeds = modelMentions
     .map((item) => {
       const name = String(item.name || "").trim();
       const originalText = String(item.originalText || "").trim();
@@ -1157,9 +1158,40 @@ function buildModelMentionSeeds(modelMentions, { preserveTypedMentions = false }
         source: "model_card_name_extractor",
         confidence: item.confidence || "medium",
         searchTexts,
+        canonicalNames: dedupeBy([name, item.enName, item.jaName, item.cnName, originalText,
+          ...(item.canonicalNames || [])].filter(Boolean), normalizeCardKey),
       };
     })
     .filter((item) => preserveTypedMentions ? Boolean(item.input) : looksLikeCardMention(item.input));
+  const byInput = new Map();
+  for (const seed of seeds) {
+    const key = normalizeCardKey(seed.input), previous = byInput.get(key);
+    if (!previous) byInput.set(key, seed);
+    else {
+      previous.canonicalNames = dedupeBy([...previous.canonicalNames, ...seed.canonicalNames], normalizeCardKey);
+      previous.searchTexts = dedupeBy([...previous.searchTexts, ...seed.searchTexts], normalizeCardKey);
+    }
+  }
+  return [...byInput.values()];
+}
+
+function canonicalNameIndex(cards) {
+  let index = canonicalNameIndexCache.get(cards);
+  if (index) return index;
+  index = new Map();
+  for (const card of cards) for (const name of canonicalCardAliases(card)) {
+    const key = normalizeCardKey(name), candidates = index.get(key) || [];
+    candidates.push({card, matchedAlias:name});
+    index.set(key, candidates);
+  }
+  canonicalNameIndexCache.set(cards, index);
+  return index;
+}
+
+function resolveModelCanonicalCandidates(names = [], cards = []) {
+  const index = canonicalNameIndex(cards);
+  const bindings = names.flatMap(name => index.get(normalizeCardKey(name)) || []);
+  return dedupeBy(bindings, binding => String(binding.card.cid || binding.card.id || binding.card.cardId || ''));
 }
 
 function buildNormalizedSpanProjection(value) {
@@ -1213,9 +1245,8 @@ function buildNormalizedSpanProjection(value) {
 function choosePrimaryModelMention(name, originalText) {
   if (!name) return originalText;
   if (!originalText) return name;
-  // The model only proposes search expansions; it does not establish identity.
-  // Keep the user's actual surface as the primary mention so a guessed expansion
-  // cannot silently resolve a different locally indexed card.
+  // Preserve the user's wording for display; canonical names are looked up
+  // separately and the model remains responsible for its interpretation.
   return originalText;
 }
 
@@ -1226,6 +1257,7 @@ function buildUnresolvedMention(seed) {
     source: seed.source || "card_name_candidate",
     confidence: seed.confidence || undefined,
     searchTexts: dedupeBy(seed.searchTexts || [], normalizeCardKey),
+    ...(Array.isArray(seed.canonicalNames) ? {canonicalNames:seed.canonicalNames} : {}),
   };
 }
 
@@ -2474,6 +2506,10 @@ function normalizeModelCardNameCandidates(items, { preserveTypedMentions = false
   const normalized = (Array.isArray(items) ? items : [])
     .map((item) => ({
       name: String(item?.name || item?.cardName || item || "").trim(),
+      ...(Array.isArray(item?.canonicalNames) ? {canonicalNames:item.canonicalNames
+        .filter(name => typeof name === "string").map(name => name.trim()).filter(Boolean)} : {}),
+      ...Object.fromEntries(['enName','jaName','cnName']
+        .filter(field=>typeof item?.[field]==='string').map(field=>[field,item[field].trim()])),
       originalText: String(item?.originalText || item?.surface || item?.mention || item?.name || item || "").trim(),
       confidence: String(item?.confidence || "medium").toLowerCase(),
       source: "model_card_name_extractor",

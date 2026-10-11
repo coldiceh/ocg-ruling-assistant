@@ -166,7 +166,7 @@ test('empty provider result needs no candidate-selection model',async()=>{
   assert.equal(result.cardResolution.resolvedCards.length,0);
 });
 
-test('production pipeline selects the pending identity before Gemini packs the same confirmed card',async()=>{
+test('production pipeline binds one model-selected canonical identity before Gemini without an extra selection call',async()=>{
   clearBaigeSearchCache();
   const tasks=[];
   let packedCard;
@@ -175,7 +175,7 @@ test('production pipeline selects the pending identity before Gemini packs the s
     cardModelInvoker:async({task})=>{
       tasks.push(task);
       return task==='card_name_extraction'
-        ? JSON.stringify({cardNames:[{name:surface,originalText:surface,confidence:'high'}],groupMentions:[]})
+        ? JSON.stringify({cardNames:[{name:localCards[0].name,originalText:surface,confidence:'high'}],groupMentions:[]})
         : JSON.stringify({selections:[{mentionId:'M1',candidateId:'C1'}]});
     },
     geminiEvidenceProvider:{async retrieve(input){
@@ -191,7 +191,9 @@ test('production pipeline selects the pending identity before Gemini packs the s
     env:{RAG_EVIDENCE_PIPELINE:'cloud_evidence_v1',GEMINI_RULE_QA_ENABLED:'true',RAG_LIVE_OFFICIAL_QA:'false'},
     fetchImpl:async()=>new Response(JSON.stringify({result:[first,second],next:0}),{headers:{'content-type':'application/json'}}),
   });
-  assert.deepEqual(tasks,['card_name_extraction','card_identity_selection']);
+  assert.deepEqual(tasks,['card_name_extraction']);
+  assert.equal(packedCard.input,surface);
+  assert.equal(packedCard.resolutionSource,'model_canonical_exact');
   assert.equal(prepared.status,'evidence_prepared');
   assert.equal(prepared.continuation.cardResolution.resolvedCards[0].id,packedCard.id);
 });

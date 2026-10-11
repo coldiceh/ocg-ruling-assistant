@@ -20,6 +20,11 @@ export function createLocalCardDataProvider(options = {}) {
     searchCardByName(name, limit = 5) {
       return fuzzyFindCards(searchEntries, name, limit);
     },
+    // Ranking supplies real records only. This entry never admits or rejects
+    // a card identity based on similarity, edits or a confidence threshold.
+    searchCardNameCandidates(name, limit = 4) {
+      return fuzzyFindCards(searchEntries, name, limit, { candidatesOnly: true });
+    },
     getCardProfile(cardId) {
       return cardById.get(normalizeCardIdentityId(cardId)) || null;
     },
@@ -59,12 +64,13 @@ export function buildCardImageCandidates(cardId) {
   ];
 }
 
-function fuzzyFindCards(searchEntries, name, limit) {
+function fuzzyFindCards(searchEntries, name, limit, { candidatesOnly = false } = {}) {
   const queryKey = normalizeCardKey(name);
   if (!queryKey) return [];
   const scored = searchEntries
     .map(({ card, aliases }) => {
-      const compatibleAliases = aliases.filter(({ alias }) => !hasNumberedCardIdentityConflict(name, alias));
+      const compatibleAliases = candidatesOnly ? aliases
+        : aliases.filter(({ alias }) => !hasNumberedCardIdentityConflict(name, alias));
       const best = compatibleAliases
         .map(({ alias, key }) => ({ alias, key, score: scoreAlias(key, queryKey) }))
         .sort((left, right) => right.score - left.score || String(left.alias).localeCompare(String(right.alias), "zh-Hans-CN"))[0];
@@ -78,7 +84,7 @@ function fuzzyFindCards(searchEntries, name, limit) {
       };
     });
 
-  if (!scored.some((card) => card.exactMatch)) {
+  if (!candidatesOnly && !scored.some((card) => card.exactMatch)) {
     const singleEditCards = scored.filter((card) => card.singleEditAlias);
     if (singleEditCards.length === 1) {
       singleEditCards[0].confidence = Math.max(singleEditCards[0].confidence, 0.94);
@@ -89,7 +95,7 @@ function fuzzyFindCards(searchEntries, name, limit) {
   }
 
   return scored
-    .filter((card) => card.confidence >= 0.42)
+    .filter((card) => candidatesOnly || card.confidence >= 0.42)
     .sort((left, right) => right.confidence - left.confidence || String(left.name).localeCompare(String(right.name)))
     .slice(0, limit)
     .map(({ exactMatch, singleEditAlias, ...card }) => card);

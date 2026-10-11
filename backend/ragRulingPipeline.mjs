@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { extractRagCards, normalizeCardKey } from "./ragCardExtractor.mjs";
 import { buildCardNicknameReferences, applyCardNicknameResolution } from './ragCardNicknames.mjs';
 import { loadCardNicknameData } from './ragCardNicknameData.mjs';
+import {confirmPendingCardCandidates} from './ragCardCandidateConfirmation.mjs';
 import {
   loadRagData,
   loadPreparedRagCardData,
@@ -113,7 +114,7 @@ export function startCardNameExtraction({
     signal?.throwIfAborted?.();
     const prepared = prepareCardNameExtractionInput(query, data);
     const modelStartedAt = Date.now();
-    const cardNameModel = await callCardNameExtractionModel({
+    let cardNameModel = await callCardNameExtractionModel({
       userQuery: query,
       cardNicknameReferences: prepared.cardNicknameReferences,
       cardNameReferences: prepared.cardNameReferences,
@@ -125,12 +126,20 @@ export function startCardNameExtraction({
       now,
       signal,
     });
+    const extractionMs = elapsedMs(modelStartedAt);
+    const confirmed = await resolveExtractedCardNames({query, data, cardNameModel, ...prepared,
+      dataRevision, env, modelInvoker: cardModelInvoker, fetchImpl, dryRun, now, signal});
+    cardNameModel = mergeCardNameSelectionTelemetry(cardNameModel, confirmed.selectionModel);
     return {
       data, dataRevision, query,
       localCardResolution: prepared.localCardResolution,
       cardNicknameReferences: prepared.cardNicknameReferences,
       cardNameModel,
+      cardResolution: confirmed.cardResolution,
+      candidateConfirmation: confirmed.candidateConfirmation,
       timingsMs: { dataLoad: dataLoadMs, deterministicPreflight: prepared.preflightMs,
+        initialCardNameExtraction: extractionMs,
+        candidateConfirmation: confirmed.candidateConfirmation.timingsMs.total,
         auxiliaryExtractionModels: elapsedMs(modelStartedAt), total: elapsedMs(startedAt) },
       startedAt,
     };
@@ -158,6 +167,31 @@ function prepareCardNameExtractionInput(query, data) {
       jaName: card.jaName || "", enName: card.enName || "", aliases: card.aliases || [] }];
   });
   return { localCardResolution, cardNicknameReferences, cardNameReferences, preflightMs: elapsedMs(preflightStartedAt) };
+}
+
+async function resolveExtractedCardNames({query, data, cardNameModel, localCardResolution,
+  cardNicknameReferences, ...options}) {
+  const base = cardNameModel.typedMentionSetProvided === true || (cardNameModel.candidates || []).length
+    ? extractRagCards(query, {cards: data.cards || [], modelCardNameCandidates: cardNameModel.candidates || [],
+      ...(cardNameModel.typedMentionSetProvided === true ? {mentionSetSource: 'typed_model'} : {})})
+    : localCardResolution;
+  const cardResolution = applyCardNicknameResolution(base, {
+    query, cards: data.cards || [], references: cardNicknameReferences,
+  });
+  return confirmPendingCardCandidates({userQuery: query, cardResolution, cards: data.cards || [], ...options});
+}
+
+function mergeCardNameSelectionTelemetry(cardNameModel, selectionModel) {
+  if (!selectionModel) return cardNameModel;
+  return {...cardNameModel,
+    dryRun: cardNameModel.dryRun === true && selectionModel.dryRun === true,
+    tokenUsage: sumUsageTelemetry([cardNameModel.tokenUsage, selectionModel.tokenUsage]),
+    estimatedCostCny: (cardNameModel.estimatedCostCny || 0) + (selectionModel.estimatedCostCny || 0),
+    estimatedCostUsd: (cardNameModel.estimatedCostUsd || 0) + (selectionModel.estimatedCostUsd || 0),
+    warnings: [...(cardNameModel.warnings || []), ...(selectionModel.warnings || [])],
+    cacheHit: cardNameModel.cacheHit === true && selectionModel.cacheHit === true,
+    singleflightHit: cardNameModel.singleflightHit === true && selectionModel.singleflightHit === true,
+    budgetStatus: selectionModel.budgetStatus || cardNameModel.budgetStatus};
 }
 
 const TRUSTED_FROZEN_IDENTITY_RESOLUTION_SOURCES = new Set([
@@ -395,6 +429,8 @@ async function finalizePreparedRagRulingQuestionCore({
   const evidenceFingerprint = continuation.evidenceFingerprint;
   const finalPromptSha256 = continuation.finalPromptSha256;
   const identityClarifications = pendingCardIdentityLines(effectiveCardResolution, continuation.answerLocale);
+  const interpretedCards = confirmedCardIdentityLine(effectiveCardResolution, continuation.answerLocale);
+  const displayedAnswer = interpretedCards ? `${normalized.shortAnswer}\n\n${interpretedCards}` : normalized.shortAnswer;
 
   return {
     mode: continuation.mode || (cloudEvidence ? "cloud_evidence_v1" : "rag_baseline"),
@@ -404,8 +440,8 @@ async function finalizePreparedRagRulingQuestionCore({
     // unique direct-Q&A route must not be downgraded by the plain-text adapter.
     answerLevel,
     shortAnswer: identityClarifications.length
-      ? `${normalized.shortAnswer}\n\n${continuation.answerLocale === "en" ? "Card identity needs confirmation" : continuation.answerLocale === "ja" ? "カードの特定が必要" : "卡片身份待确认"}：\n${identityClarifications.map(line => `- ${line}`).join("\n")}`
-      : normalized.shortAnswer,
+      ? `${displayedAnswer}\n\n${continuation.answerLocale === "en" ? "Card identity needs confirmation" : continuation.answerLocale === "ja" ? "カードの特定が必要" : "卡片身份待确认"}：\n${identityClarifications.map(line => `- ${line}`).join("\n")}`
+      : displayedAnswer,
     reasoning: normalized.reasoning,
     usedEvidence: displayedEvidence,
     resolvedCards: displayCards,
@@ -543,6 +579,20 @@ async function finalizePreparedRagRulingQuestionCore({
       timingsMs,
     },
   };
+}
+
+function confirmedCardIdentityLine(cardResolution = {}, answerLocale = "zh-CN") {
+  const labels = (cardResolution.resolvedCards || [])
+    .filter(card => card.resolutionSource !== 'card_text_reference')
+    .map(card => {
+      const name = card.cnName || card.name || card.enName || card.jaName || '';
+      const english = card.enName && card.enName !== name ? `（${card.enName}）` : '';
+      const input = String(card.input || '').trim();
+      return `${input && input !== name && input !== card.enName ? `${input} → ` : ''}${name}${english}`;
+    }).filter(Boolean);
+  if (!labels.length) return '';
+  const prefix = answerLocale === 'en' ? 'Cards interpreted in this answer' : answerLocale === 'ja' ? '今回のカード名の解釈' : '本次按以下卡片理解';
+  return `${prefix}：${[...new Set(labels)].join('、')}。`;
 }
 
 function pendingCardIdentityLines(cardResolution, answerLocale = "zh-CN") {
@@ -772,6 +822,8 @@ async function answerRagRulingQuestionInternal({
   let cardResolution;
   let frozenCardResolutionRejections = [];
   let earlyCardNameExtraction = null;
+  let candidateConfirmation = null;
+  let identitySelectionUsed = false;
   try {
     // A preloaded extraction is reused only when it was computed on this exact
     // snapshot object and data revision; anything else runs the ordinary path.
@@ -783,6 +835,11 @@ async function answerRagRulingQuestionInternal({
       && early.data === data
       && String(early.dataRevision || "") === String(dataRevision || "")
       && early.cardNameModel && typeof early.cardNameModel === "object";
+    // Snapshot invalidation cannot reset requests already used by this query.
+    const priorConfirmation = early?.query === query ? early.candidateConfirmation : null;
+    const confirmationAlreadyAttempted = Number(priorConfirmation?.modelCallCount || 0) > 0
+      || Number(priorConfirmation?.searchRequestCount || 0) > 0;
+    identitySelectionUsed = Number(priorConfirmation?.modelCallCount || 0) > 0;
     const prepared = earlyUsable
       ? { localCardResolution: early.localCardResolution, cardNicknameReferences: early.cardNicknameReferences }
       : prepareCardNameExtractionInput(query, data);
@@ -813,21 +870,15 @@ async function answerRagRulingQuestionInternal({
         signal,
       });
     }
-    const baseCardResolution = cardNameModel.typedMentionSetProvided === true
-      ? extractRagCards(query, {
-        cards: data.cards || [],
-        modelCardNameCandidates: cardNameModel.candidates || [],
-        mentionSetSource: "typed_model",
-      })
-      : (cardNameModel.candidates || []).length
-      ? extractRagCards(query, {
-        cards: data.cards || [],
-        modelCardNameCandidates: cardNameModel.candidates,
-      })
-      : localCardResolution;
-    const extractedCardResolution = applyCardNicknameResolution(baseCardResolution, {
-      query, cards: data.cards || [], references: cardNicknameReferences,
-    });
+    const confirmed = earlyUsable && early.cardResolution && early.candidateConfirmation
+      ? {cardResolution: early.cardResolution, candidateConfirmation: early.candidateConfirmation}
+      : await resolveExtractedCardNames({query, data, cardNameModel, localCardResolution, cardNicknameReferences,
+        dataRevision, env, modelInvoker: cardModelInvoker, fetchImpl, dryRun, now, signal, confirmationAlreadyAttempted});
+    cardNameModel = mergeCardNameSelectionTelemetry(cardNameModel, confirmed.selectionModel);
+    candidateConfirmation = confirmed.candidateConfirmation;
+    identitySelectionUsed = identitySelectionUsed || candidateConfirmation.modelCallCount > 0;
+    timingsMs.candidateConfirmation = candidateConfirmation.timingsMs.total;
+    const extractedCardResolution = confirmed.cardResolution;
     const trustedFrozenCardResolution = normalizeFrozenCardResolution(frozenCardResolution, {
       questionSha256: sha256Text(query),
       dataRevision,
@@ -899,21 +950,13 @@ async function answerRagRulingQuestionInternal({
       enableLiveOfficialQa: true,
       subsumptionCandidatePoolComplete: usesCompleteDefaultSnapshot && data?.completeEvidenceCorpus !== false,
       cardIdentitySelectionProvider: async ({ candidateSets }) => {
+        if (identitySelectionUsed) return [];
+        identitySelectionUsed = true;
         const selectionModel = await callCardIdentitySelectionModel({
           userQuery: query, candidateSets, dataRevision, env,
           modelInvoker: cardModelInvoker, fetchImpl, dryRun, now, signal,
         });
-        cardNameModel = {
-          ...cardNameModel,
-          dryRun: cardNameModel.dryRun === true && selectionModel.dryRun === true,
-          tokenUsage: sumUsageTelemetry([cardNameModel.tokenUsage, selectionModel.tokenUsage]),
-          estimatedCostCny: (cardNameModel.estimatedCostCny || 0) + (selectionModel.estimatedCostCny || 0),
-          estimatedCostUsd: (cardNameModel.estimatedCostUsd || 0) + (selectionModel.estimatedCostUsd || 0),
-          warnings: [...(cardNameModel.warnings || []), ...(selectionModel.warnings || [])],
-          cacheHit: cardNameModel.cacheHit === true && selectionModel.cacheHit === true,
-          singleflightHit: cardNameModel.singleflightHit === true && selectionModel.singleflightHit === true,
-          budgetStatus: selectionModel.budgetStatus || cardNameModel.budgetStatus,
-        };
+        cardNameModel = mergeCardNameSelectionTelemetry(cardNameModel, selectionModel);
         return selectionModel.selections;
       },
       preparedEvidenceProvider: geminiProvider
