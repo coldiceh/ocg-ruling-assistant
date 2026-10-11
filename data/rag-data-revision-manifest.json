@@ -3,39 +3,39 @@
   "kind": "rag-data-revision-manifest",
   "compilerAbi": "rag-data-revision-compiler/v1",
   "canonicalizationAbi": "rag-data-revision-canonical-json-lf/v2",
-  "revision": "1d43f3cb682ecd725cf77a47b732cb762c5b17a3df8bb562a2ec3551364e8e67",
-  "canonicalCorpusDigest": "1d43f3cb682ecd725cf77a47b732cb762c5b17a3df8bb562a2ec3551364e8e67",
-  "sourceSetDigest": "bcf9043091b1c9a01d922e63f65b73ae65dd7afe1849eaa553a0e2b9d49a7497",
+  "revision": "300f08fe6e08bc353661e8234af373779b389aff9e3f882c990c1c5725446977",
+  "canonicalCorpusDigest": "300f08fe6e08bc353661e8234af373779b389aff9e3f882c990c1c5725446977",
+  "sourceSetDigest": "0af08e461902ca17106b8652611c6b3f471623a94fe3ed64384d62034a34c75e",
   "counts": {
     "cards": 14424,
-    "records": 116007,
+    "records": 116033,
     "qaRecords": 37228
   },
   "sources": [
     {
       "path": "cards.json",
       "bytes": 24072297,
-      "sha256": "bdfb1c2b5b9ce7bb24e4a987994b7422d6025dc297f51eab2cca6cfc8bb48636"
+      "sha256": "92f0318e1da9aa5a2f31871eebe0f88f8fa09654aaf8a4daaf68258064260d49"
     },
     {
       "path": "rulings.json",
-      "bytes": 47420332,
-      "sha256": "88896df0d43dc4a67779377c6aefcac6c794332f0d0b1e6b16d56db52fd9f939"
+      "bytes": 47500103,
+      "sha256": "69a0248ba3f8fbf63cd465c181598483cd1fad8aa4b6bf2425720226e3f812e7"
     },
     {
       "path": "qa-index.json",
-      "bytes": 64835490,
-      "sha256": "3bada719c862690a4011bcab077fbef37ab1276609942886776d8a6d10d9f25c"
+      "bytes": 64936397,
+      "sha256": "e84fcf8dc4cbba18f4ca410c85a2752f5c0e734adae60e10010a6c584a388e5b"
     },
     {
       "path": "evidence-index.json",
-      "bytes": 169354393,
-      "sha256": "81b5fc28db7560bea939bcfff809276aa9c594fdbeec30927615150a23118b8d"
+      "bytes": 169476409,
+      "sha256": "8dea6e23cb6e54ffbc1e2f4e8e11dd56091a62dd09e56400e2c179ae452a7e07"
     },
     {
       "path": "ocg-rule-corpus.json",
       "bytes": 9626358,
-      "sha256": "756e74c9d1118fa4bf1ab043991af43fbbccbd514b4dc63937573c8c56832f88"
+      "sha256": "e549ef1f22d987a630b24405aaa525e826f50b5069b10bab8a0ea73bad07a33f"
     },
     {
       "path": "official-responses.json",
