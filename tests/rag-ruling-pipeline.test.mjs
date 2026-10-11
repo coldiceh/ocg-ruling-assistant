@@ -237,6 +237,10 @@ test("temporal follow-up phrases are not treated as unquoted card names", () => 
   );
 });
 
+// 2026-10-11 规则变更: the model owns its mention set, so local code no longer deletes a
+// model-supplied mention by interpreting quoted roles. The scanner still finds no
+// card in these clauses, and the model's series word cannot bind a card: it stays
+// pending as an ambiguous catalog name instead of being silently dropped or bound.
 test("quoted effect and restriction clauses are not treated as card names", () => {
   const query = [
     "『本回合自己已经发动过魔法卡的效果』",
@@ -257,8 +261,10 @@ test("quoted effect and restriction clauses are not treated as card names", () =
   assert.deepEqual(extractQuotedMentions(query), []);
   assert.deepEqual(resolution.resolvedCards, []);
   assert.deepEqual(resolution.unresolvedMentions, []);
-  assert.deepEqual(resolution.ambiguousMentions, []);
-  assert.deepEqual(resolution.modelCardNameCandidates, []);
+  assert.deepEqual(resolution.ambiguousMentions.map((mention) => ({
+    input: mention.input, reason: mention.reason,
+    candidates: (mention.candidateCards || []).map((card) => card.id),
+  })), [{ input: "星群", reason: "model_canonical_name_ambiguous", candidates: ["series-a", "series-b"] }]);
 });
 
 test("Japanese and English resolution propositions are not treated as card names", () => {

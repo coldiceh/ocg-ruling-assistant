@@ -1179,13 +1179,25 @@ function canonicalNameIndex(cards) {
   let index = canonicalNameIndexCache.get(cards);
   if (index) return index;
   index = new Map();
-  for (const card of cards) for (const name of canonicalCardAliases(card)) {
+  for (const card of cards) for (const name of catalogIdentityNames(card)) {
     const key = normalizeCardKey(name), candidates = index.get(key) || [];
     candidates.push({card, matchedAlias:name});
     index.set(key, candidates);
   }
   canonicalNameIndexCache.set(cards, index);
   return index;
+}
+
+// Names stored on the catalog record itself: the formal names plus the record's
+// own `aliases` (synchronized names and CID-bound community Chinese names such
+// as Baige translations). Derived series aliases and nickname references are
+// not part of the record and are excluded. Matching stays exact; a name shared
+// by several records yields several identities and therefore stays ambiguous.
+function catalogIdentityNames(card = {}) {
+  return dedupeBy([
+    ...canonicalCardAliases(card),
+    ...(Array.isArray(card.aliases) ? card.aliases.filter(name => typeof name === "string") : []),
+  ].filter(Boolean), normalizeCardKey);
 }
 
 function resolveModelCanonicalCandidates(names = [], cards = []) {

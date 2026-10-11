@@ -581,7 +581,10 @@ test("resolved cards preserve normalized structured fields for downstream state 
   assert.deepEqual(resolved.monsterProperties, ["Dragon", "Effect"]);
 });
 
-test("quoted card roles exclude dynamic names, archetype labels, and quoted effect clauses", async () => {
+// 2026-10-11 规则变更: the model owns its mention set, so local code no longer deletes a
+// model-supplied mention by interpreting its quoted role. Such a mention may stay pending
+// for model confirmation, but it must never bind a card by itself.
+test("quoted card roles never bind dynamic names, archetype labels, or quoted effect clauses", async () => {
   const data = await loadRagData();
   const cases = [
     {
@@ -610,11 +613,9 @@ test("quoted card roles exclude dynamic names, archetype labels, and quoted effe
       modelCardNameCandidates: item.modelCandidates || [],
     });
     assert.ok(resolution.resolvedCards.some((card) => String(card.id) === item.expectedId));
-    const unresolvedInputs = resolution.unresolvedMentions.map((mention) => mention.input);
-    const ambiguousInputs = resolution.ambiguousMentions.map((mention) => mention.input);
+    const resolvedInputs = resolution.resolvedCards.map((card) => card.input);
     for (const excludedMention of item.excludedMentions) {
-      assert.ok(!unresolvedInputs.includes(excludedMention));
-      assert.ok(!ambiguousInputs.includes(excludedMention));
+      assert.ok(!resolvedInputs.includes(excludedMention));
     }
   }
 });

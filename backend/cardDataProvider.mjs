@@ -96,7 +96,7 @@ function fuzzyFindCards(searchEntries, name, limit, { candidatesOnly = false } =
 
   return scored
     .filter((card) => candidatesOnly || card.confidence >= 0.42)
-    .sort((left, right) => right.confidence - left.confidence || String(left.name).localeCompare(String(right.name)))
+    .sort((left, right) => right.confidence - left.confidence || String(left.name).localeCompare(String(right.name), "zh-Hans-CN"))
     .slice(0, limit)
     .map(({ exactMatch, singleEditAlias, ...card }) => card);
 }

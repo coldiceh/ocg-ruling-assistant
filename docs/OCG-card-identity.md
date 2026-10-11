@@ -1,6 +1,6 @@
 # OCG card identity confirmation
 
-The extraction model owns the individual-card mention set. Each mention retains the player's original wording and formal names in `name`, `enName`, optional `jaName` / `cnName`, and optional `canonicalNames`. All these fields, including `originalText`, are matched exactly against the catalog's formal-name fields. One distinct identity binds; multiple identities remain ambiguous; no match remains unresolved. Query scanning is not unioned into a supplied model mention set.
+The extraction model owns the individual-card mention set. Each mention retains the player's original wording and formal names in `name`, `enName`, optional `jaName` / `cnName`, and optional `canonicalNames`. All these fields, including `originalText`, are matched exactly against the names stored on the catalog record: the formal-name fields plus the record's own `aliases` (synchronized names and CID-bound community Chinese names such as Baige translations). Derived series aliases and nickname references are not record names and are not used here. One distinct identity binds; multiple identities remain ambiguous; no match remains unresolved. Query scanning is not unioned into a supplied model mention set.
 
 Only remaining pending mentions enter candidate confirmation. Existing local name-index ranking and Baige search supply actual card records. Ranking cannot bind identity. The existing Luna selector receives the original question and candidate handles once; a null, absent or invalid selection keeps the mention pending. The preload result is reused by the ruling pipeline, and downstream approximate matching cannot replace an explicit non-selection.
 
@@ -13,7 +13,7 @@ Hard limits per question:
 
 The per-question allowance also survives an invalidated preload. The invariant is one confirmation attempt with bounded search requests; the observed signals are the same original query and the preload's recorded request/call counts. The check depends only on these mechanical facts, independently of whether the old identity snapshot is still usable. A false positive skips optional confirmation and leaves identity pending. Snapshot compatibility alone cannot enforce the allowance, because discarding a snapshot does not undo its completed requests. This boundary was reproduced by a failing regression and fixed without another paid run.
 
-The final OCG prompt and evidence selection are unchanged. The displayed answer includes the confirmed card-name interpretation. TCG sources, text projection and ruleset integration remain outside this branch.
+The final OCG prompt and evidence selection are unchanged. The displayed answer restates a confirmed card only when the player's wording is not one of that card's formal names (a nickname, abbreviation, community name or candidate selection), so a wrong interpretation is visible; a card typed by its formal name is not restated. TCG sources, text projection and ruleset integration remain outside this branch.
 
 The six superseded contracts in `tests/card-alias-consistency.test.mjs` are marked `2026-10-11 规则变更`. Candidate tests check actual extraction/preload/retrieval routing, request counts, handle binding, CID deduplication, canonical-text preservation and pending-state retention. Fixture selections verify routing only; they do not establish real-model identity accuracy.
 

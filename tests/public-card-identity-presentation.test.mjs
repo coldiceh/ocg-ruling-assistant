@@ -39,7 +39,7 @@ test('final answer exposes every pending identity in ordinary API text without c
     '「简称」尚未确认。现有候选（未确认）：候选甲、候选乙、候选丙。请补充完整卡名、卡号或卡片原文。',
     '「单候选简称」尚未确认。现有候选（未确认）：唯一搜索候选。请补充完整卡名、卡号或卡片原文。',
   ];
-  assert.equal(result.shortAnswer, `原有模型回答。\n\n本次按以下卡片理解：已确认测试卡。\n\n卡片身份待确认：\n${lines.map(line => `- ${line}`).join('\n')}`);
+  assert.equal(result.shortAnswer, `原有模型回答。\n\n卡片身份待确认：\n${lines.map(line => `- ${line}`).join('\n')}`);
   for (const line of lines) assert.ok(result.missingInfo.includes(line));
   assert.deepEqual(result.resolvedCards.map(card => card.id), ['confirmed']);
   const { debug, ...ordinaryAnswer } = result;
@@ -56,4 +56,15 @@ test('final answer shows model interpretation and both catalog names without ano
   const result=await finalize({resolvedCards:[{id:'22588',input:'密告',name:'神之密告',cnName:'神之密告',
     enName:'Solemn Accusation',resolutionSource:'model_canonical_exact'}],unresolvedMentions:[],ambiguousMentions:[]});
   assert.equal(result.shortAnswer,'原有模型回答。\n\n本次按以下卡片理解：密告 → 神之密告（Solemn Accusation）。');
+});
+
+test('a card typed by one of its formal names is not restated, while an interpreted card in the same answer is', async () => {
+  const result=await finalize({resolvedCards:[
+    {id:'4842',input:'Monster Reborn',name:'死者苏生',cnName:'死者苏生',enName:'Monster Reborn',resolutionSource:'model_canonical_exact'},
+    {id:'22588',input:'密告',name:'神之密告',cnName:'神之密告',enName:'Solemn Accusation',resolutionSource:'model_canonical_exact'},
+  ],unresolvedMentions:[],ambiguousMentions:[]});
+  assert.equal(result.shortAnswer,'原有模型回答。\n\n本次按以下卡片理解：密告 → 神之密告（Solemn Accusation）。');
+  const exactOnly=await finalize({resolvedCards:[{id:'4842',input:'死者苏生',name:'死者苏生',cnName:'死者苏生',
+    enName:'Monster Reborn',resolutionSource:'model_canonical_exact'}],unresolvedMentions:[],ambiguousMentions:[]});
+  assert.equal(exactOnly.shortAnswer,'原有模型回答。');
 });

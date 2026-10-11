@@ -582,8 +582,16 @@ async function finalizePreparedRagRulingQuestionCore({
 }
 
 function confirmedCardIdentityLine(cardResolution = {}, answerLocale = "zh-CN") {
+  // Display only: list cards whose player wording is not one of the card's own
+  // formal names, i.e. where a nickname, abbreviation or model selection was
+  // interpreted. A card typed by its formal name needs no restatement.
   const labels = (cardResolution.resolvedCards || [])
     .filter(card => card.resolutionSource !== 'card_text_reference')
+    .filter(card => {
+      const inputKey = normalizeCardKey(card.input || '');
+      return Boolean(inputKey) && ![card.name, card.cnName, card.jaName, card.enName]
+        .some(formal => formal && normalizeCardKey(formal) === inputKey);
+    })
     .map(card => {
       const name = card.cnName || card.name || card.enName || card.jaName || '';
       const english = card.enName && card.enName !== name ? `（${card.enName}）` : '';
