@@ -9,6 +9,7 @@ import {
   parseAndValidateModelRulingResult,
 } from "./modelRulingSchema.mjs";
 import { DEFAULT_PUBLIC_RELAY_BASE_URL } from "./publicRulingModelConfig.mjs";
+import { responsesOutputText } from "./responsesOutputText.mjs";
 
 const DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1";
 const DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com";
@@ -965,16 +966,7 @@ export function extractOpenAIResponseOutputText(response) {
   if (typeof response?.output_text === "string" && response.output_text.trim()) {
     return response.output_text;
   }
-  const parts = [];
-  for (const item of Array.isArray(response?.output) ? response.output : []) {
-    if (item?.type !== "message") continue;
-    for (const content of Array.isArray(item.content) ? item.content : []) {
-      if (content?.type === "output_text" && typeof content.text === "string") {
-        parts.push(content.text);
-      }
-    }
-  }
-  return parts.join("").trim();
+  return responsesOutputText(response).trim();
 }
 
 export function getRulingModelCapabilityTable() {

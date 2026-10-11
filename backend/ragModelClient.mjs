@@ -21,6 +21,7 @@ import {
   privateEvaluationFailureChain,
 } from "./privateEvaluationDiagnostics.mjs";
 import { normalizeRuleSearchQueryText } from "./ruleSearchQueryText.mjs";
+import { responsesOutputText } from "./responsesOutputText.mjs";
 import {
   runCloudDeepSeekRequest,
   manageCloudFinalBudget,
@@ -3041,11 +3042,7 @@ async function callBaiCard({ prompt, env, modelName, maxTokens, fetchImpl, signa
   if (payload?.status !== "completed") {
     throw new Error(`bai_card_response_${payload?.status || "missing_status"}:${payload?.incomplete_details?.reason || "unknown"}`);
   }
-  const rawText = (Array.isArray(payload?.output) ? payload.output : [])
-    .filter((item) => item?.type === "message")
-    .flatMap((item) => Array.isArray(item.content) ? item.content : [])
-    .filter((part) => part?.type === "output_text")
-    .map((part) => String(part.text || "")).join("");
+  const rawText = responsesOutputText(payload);
   const finishReason = "stop";
   const warnings = ["bai_transport_channel:bai", `bai_endpoint_host:${new URL(endpoint).hostname}`];
   if (!rawText) warnings.push(`bai_empty_content:${finishReason}`);

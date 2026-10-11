@@ -1,6 +1,7 @@
 import { createCloudRequestBudget } from "./cloudRequestBudget.mjs";
 import { DEFAULT_BAI_GENERATION_BASE_URL } from "./evidenceGenerationTransport.mjs";
 import { preparationError, isPublicPreparationId } from "./publicAnswerPreparationStore.mjs";
+import { responsesOutputText } from "./responsesOutputText.mjs";
 
 export const SOURCE_TRANSLATION_VERSION = "gpt-6-luna-low-fields-v1";
 const LOCALES = ["zh-CN", "en", "ja"];
@@ -78,11 +79,7 @@ export async function translatePublicSource({ payload, store, env = process.env,
     return response.json();
   } });
   if (raw?.status !== "completed") throw preparationError("翻译未完成", "source_translation_incomplete", 503);
-  const content = (Array.isArray(raw.output) ? raw.output : [])
-    .filter((item) => item?.type === "message")
-    .flatMap((item) => Array.isArray(item.content) ? item.content : [])
-    .filter((part) => part?.type === "output_text")
-    .map((part) => String(part.text || "")).join("");
+  const content = responsesOutputText(raw);
   let translated;
   try { translated = JSON.parse(content); } catch {
     throw preparationError("译文格式不可用", "source_translation_invalid_output", 503);

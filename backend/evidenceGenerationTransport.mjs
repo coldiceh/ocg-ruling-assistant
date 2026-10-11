@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { responsesOutputText } from "./responsesOutputText.mjs";
 
 export const DEFAULT_BAI_GENERATION_BASE_URL = "https://api.b.ai/v1";
 
@@ -176,12 +177,7 @@ function extractGeminiText(raw) {
 }
 
 function extractBaiResponsesText(raw) {
-  return (Array.isArray(raw?.output) ? raw.output : [])
-    .filter((item) => item?.type === "message")
-    .flatMap((item) => Array.isArray(item.content) ? item.content : [])
-    .filter((part) => part?.type === "output_text")
-    .map((part) => String(part.text || ""))
-    .join("");
+  return responsesOutputText(raw);
 }
 
 function textFromParts(parts) {
