@@ -137,6 +137,13 @@ export async function executeSelectionFlow(flow,{ask,onState=()=>{}}) {
   for(const {alias} of order){
     const proposal=flow.cleanup(state.selectedIds,alias);
     if(proposal.noBodyLoss){state.selectedIds=proposal.after;state.events.push({stage:'clean',alias,answer:'NO_BODY_LOSS'});}
+    // Cleanup removes sources whose contribution the rest of the package
+    // already covers. With no other selected source left there is nothing to
+    // compare against, and the acquisition step already judged this source
+    // necessary, so the last source is not offered for removal. Observed
+    // 2026-10-12: a lone necessary Q&A was nominated, then dropped, leaving
+    // the final model with no evidence.
+    else if(!proposal.after.length){state.events.push({stage:'clean',alias,answer:'LAST_SOURCE_KEPT'});}
     else{
       const action=(await ask(`clean-${alias}`,proposal.request)).action;
       assert(['KEEP','DROP','UNKNOWN'].includes(action),'unknown_cleanup_choice');

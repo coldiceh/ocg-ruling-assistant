@@ -105,6 +105,37 @@ test('eighth addition runs serial cleanup and then status on the retained packag
   assert.equal(result.status, 'unverified');
 });
 
+test('the last selected source is not offered for cleanup and stays in the package', async () => {
+  const { flow } = fixture();
+  const stages = [];
+  const result = await executeSelectionFlow(flow, { ask: async (stage) => {
+    stages.push(stage);
+    if (stage === 'select-1') return { next_source: 'A1' };
+    if (stage === 'select-2') return { next_source: 'UNKNOWN' };
+    if (stage.startsWith('clean-')) return { action: 'DROP' };
+    return { current_status: 'NEEDS_EVIDENCE' };
+  } });
+  assert.deepEqual(stages, ['select-1', 'select-2', 'final-status']);
+  assert.deepEqual(result.selectedIds, ['A1']);
+  assert.deepEqual(result.events.at(-1), { stage: 'clean', alias: 'A1', answer: 'LAST_SOURCE_KEPT' });
+});
+
+test('cleanup still removes sources while another selected source remains', async () => {
+  const { flow } = fixture();
+  const stages = [];
+  const result = await executeSelectionFlow(flow, { ask: async (stage) => {
+    stages.push(stage);
+    if (stage === 'select-1') return { next_source: 'A1' };
+    if (stage === 'select-2') return { next_source: 'A2' };
+    if (stage === 'select-3') return { next_source: 'NONE' };
+    if (stage.startsWith('clean-')) return { action: 'DROP' };
+    return { current_status: 'UNKNOWN' };
+  } });
+  assert.equal(stages.filter(stage => stage.startsWith('clean-')).length, 1);
+  assert.equal(result.selectedIds.length, 1);
+  assert.equal(result.events.at(-1).answer, 'LAST_SOURCE_KEPT');
+});
+
 test('capacity replacement is one complete feasible package; failure keeps old package', async () => {
   const { flow, options } = fixture();
   const maxPromptChars = Math.max(flow.pack(['A1', 'A2']).length, flow.pack(['A8']).length);

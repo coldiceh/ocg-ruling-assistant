@@ -220,7 +220,9 @@ test('Decisions runs through production retrieval, delivers actual pack and acco
   assert.equal(result.telemetry.evidenceSelector,'decisions');
   assert.equal(result.telemetry.stageTelemetry.selection.provider,'openai');
   assert.equal(result.telemetry.stageTelemetry.selection.model,'gpt-6-luna');
-  assert.equal(requests.filter(body => body.questions).length,4);
+  // 2026-10-12 规则变更: a lone selected source is not offered for cleanup, so the
+  // flow is select, NONE, final status (three Decisions requests).
+  assert.equal(requests.filter(body => body.questions).length,3);
   assert.equal(requests.filter(body => body.contents || Array.isArray(body.input)).length,1);
   assert.equal(result.telemetry.bounded.decisions.modelReportedStatus,'NEEDS_EVIDENCE');
   assert.ok(result.packing.promptChars <= 15000);
