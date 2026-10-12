@@ -1,5 +1,4 @@
-import {readFile} from 'node:fs/promises';
-import {join} from 'node:path';
+import {loadPreparedRagCardRuntimeBundle} from './ragRuntimeBundle.mjs';
 import {ruleSystemDataDir} from './rulingRuleSystem.mjs';
 import {loadCardNicknameData} from './ragCardNicknameData.mjs';
 
@@ -14,10 +13,10 @@ export async function searchTcgCards(query, {env = {}, limit = 8, signal} = {}) 
   let pending = snapshots.get(dir);
   const cacheHit = Boolean(pending);
   if (!pending) {
-    pending = readFile(join(dir, 'cards.json'), 'utf8').then(bytes => {
-      const data = JSON.parse(bytes);
-      if (data.ruleSystem !== 'TCG' || !Array.isArray(data.records)) throw new Error('tcg_card_snapshot_invalid');
-      return data.records;
+    pending = loadPreparedRagCardRuntimeBundle({dataDir:dir}).then(bundle => {
+      if (!bundle.ok) throw new Error(`tcg_card_runtime_unavailable:${bundle.reason}`);
+      if (bundle.data.cards.some(card => card.ruleSystem !== 'TCG')) throw new Error('tcg_card_snapshot_invalid');
+      return bundle.data.cards;
     });
     snapshots.set(dir, pending);
     pending.catch(() => { if (snapshots.get(dir) === pending) snapshots.delete(dir); });

@@ -93,6 +93,9 @@ function makeExcerpt(parent, parentHandle, qaRevision, source, bodySha256, start
     id: `${parent.id}-${start}-${end}`,
     recordType: "card-faq",
     title: parent.title,
+    ...(Object.hasOwn(parent, "cards") ? { cards: clone(parent.cards) } : {}),
+    ...(Object.hasOwn(parent, "cardIds") ? { cardIds: clone(parent.cardIds) } : {}),
+    ...(Object.hasOwn(parent, "status") ? { status: clone(parent.status) } : {}),
     conclusion: source.slice(start, end),
     sourceExcerpt: {
       parentRecordId: parent.id,
@@ -106,7 +109,7 @@ function makeExcerpt(parent, parentHandle, qaRevision, source, bodySha256, start
     },
   };
   copyDefined(parent, excerpt, [
-    "cards", "cardIds", "status", "sourceAuthority", "sourceTier", "official", "updatedAt", "sources", "sourceName", "sourceUrl",
+    "sourceAuthority", "sourceTier", "official", "updatedAt", "sources", "sourceName", "sourceUrl",
     "ruleSystem", "region", "sourceLanguage", "sourceVersion", "sourceDate", "effectiveAt",
   ]);
   return Object.freeze(excerpt);

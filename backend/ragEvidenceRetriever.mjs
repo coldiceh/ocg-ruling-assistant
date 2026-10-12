@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { tcgCardPropertyFields } from "./tcgCardMetadata.mjs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { searchCards } from "./baigeCardProvider.mjs";
@@ -2092,6 +2093,7 @@ function recordIdentityIndex(records, { includeDiscovery = false } = {}) {
 function normalizeCard(card = {}) {
   return {
     ...card,
+    ...tcgCardPropertyFields(card),
     id: String(card.id || card.cardId || ""),
     cardId: String(card.cardId || card.id || ""),
     name: card.name || card.cnName || card.jaName || card.enName || "",

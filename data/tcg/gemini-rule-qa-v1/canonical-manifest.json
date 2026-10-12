@@ -1,11 +1,11 @@
 {
   "schemaVersion": 3,
   "kind": "gemini-rule-qa-canonical-stage",
-  "dataRevision": "c1d16b5ca07e65616376bb6d7261c21ddb510c5f33dd1195c34827cce79984d5",
+  "dataRevision": "9c989f7af262021f9bf263d1ce71815f239163504fe401215a3630f2de7fbff5",
   "qaRevision": "0540085e94d26fddfaeb24ebd52f72a9b316fcbb448230f957240fd6f78c8110",
   "qaContentRevision": "0540085e94d26fddfaeb24ebd52f72a9b316fcbb448230f957240fd6f78c8110",
   "ruleContentRevision": "c159d21645a86fc74409ed406c65cd02f33434c43f0f77b4c64de63255433967",
-  "structureMappingRevision": "a2c0bbd0da5cf903f5018965251d7034dc4a76395509a20e62b5f06889629e43",
+  "structureMappingRevision": "5aa9a589c85a8bee83eb5efe108a35fc620702477c3d5f5f1f398407a4388eef",
   "sources": {
     "rulings": {
       "file": "rulings.json",
@@ -25,8 +25,8 @@
     "ragDataRevision": {
       "file": "rag-data-revision-manifest.json",
       "bytes": 1452,
-      "sha256": "3938b9987d3d43a56546b9178c308604d562d962a5765959d4ca803e1d31fe31",
-      "revision": "c1d16b5ca07e65616376bb6d7261c21ddb510c5f33dd1195c34827cce79984d5"
+      "sha256": "70e6f2edd202e4410f8397755d020bbce97bc0a4971fa7d28a267456ff1e360c",
+      "revision": "9c989f7af262021f9bf263d1ce71815f239163504fe401215a3630f2de7fbff5"
     },
     "cards": {
       "file": "cards.json",
@@ -71,18 +71,18 @@
     "structureMapping": {
       "file": "structure-mapping.json.gz",
       "encoding": "gzip",
-      "bytes": 225348,
-      "sha256": "b7c4350be7ba585db49dcf04c4770506cbc3f74f63ed3dbceac60723705e136a",
+      "bytes": 225353,
+      "sha256": "fba8a65c14301b8bae95c3b18061cfd95f89646ffd226e136e46440ef5c52bee",
       "canonicalBytes": 1218162,
-      "canonicalSha256": "0b73a895748a163d5bbe3c55a1c42f4519953d757af5fc641fd77b3ce8a3c44e"
+      "canonicalSha256": "9e80eb73a2247cd29f5b666038940b3ea5de2434a9dd4790af88ca0d805d17a3"
     },
     "navigationInputs": {
       "file": "navigation-inputs.json.gz",
       "encoding": "gzip",
-      "bytes": 66579,
-      "sha256": "8e2c39f1dc392dbc89c0416ac6501b051d6c564343b99deee504a1db330eb20e",
+      "bytes": 66570,
+      "sha256": "31d3e02c3d50f17954b857372a4b1e6d6d34951968fa8d9b3232bfb6263146ce",
       "canonicalBytes": 362627,
-      "canonicalSha256": "c8c3b89f6c789ad060b62c7d48469b42a017663752d9e6affcd28edeea37647d"
+      "canonicalSha256": "ed501537d82f02a02d71ece1afc880358d8cc6be8a274897f01bce75fb1a0602"
     },
     "denseInputs": {
       "file": "dense-inputs.json.gz",
@@ -93,5 +93,5 @@
       "canonicalSha256": "b7138da4c6e4cd510c92a8d34fd17a042b4c43fcc5d53da016dc5e49cfaf78f1"
     }
   },
-  "canonicalRevision": "f3b990889bef970312596a67f33f6e8302251af2a115d7d7dcf372f30b63c374"
+  "canonicalRevision": "effc05c9fd024aa7651d769e00f956919278b32f15a084f9fe477e1af91a1187"
 }

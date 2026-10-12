@@ -1,0 +1,34 @@
+{
+  "base": "7c5b75e47f372b9eddae83adad16b43470727c69",
+  "item": {
+    "handle": "ocg-faq-compatibility",
+    "record": {
+      "id": "card-faq-21385-1",
+      "recordType": "card-faq",
+      "title": "“K9刑侦案件” FAQ 1",
+      "status": "confirmed",
+      "cards": [
+        "“K9刑侦案件”"
+      ],
+      "cardIds": [
+        "21385"
+      ],
+      "question": "",
+      "keywords": [],
+      "conclusion": "【1の効果について】\nこのカードの発動時の効果です。\nこのカードを発動したチェーンブロックの処理時に、この効果を適用するかどうかを決定します。",
+      "steps": [
+        "按同步 FAQ 的说明处理。",
+        "若对局条件与 FAQ 不同，继续查对应官方 Q&A。"
+      ],
+      "questions": [],
+      "sources": [
+        {
+          "label": "YGOResources Card FAQ",
+          "detail": "https://db.ygoresources.com/data/card/21385"
+        }
+      ],
+      "updatedAt": "2025-03-22"
+    }
+  },
+  "rendered": "[\n{\nhandle: 8fc1667edf27aae9cb02b4ccfc70fc2329b67750c85013a3add5961574a55078\nrecord: {\nid: card-faq-21385-1-0-71\nrecordType: card-faq\ntitle: “K9刑侦案件” FAQ 1\ncards: [\n“K9刑侦案件”\n]\ncardIds: [\n21385\n]\nstatus: confirmed\nconclusion: 【1の効果について】\nこのカードの発動時の効果です。\nこのカードを発動したチェーンブロックの処理時に、この効果を適用するかどうかを決定します。\nsourceExcerpt: {\nparentRecordId: card-faq-21385-1\nparentHandle: ocg-faq-compatibility\nqaRevision: ocg-compatibility\nbodyField: conclusion\nstart: 0\nend: 71\nbodySha256: 0f468fb851fab7f99f05f7819c4c34ac6e0b94df91eaf10215a4c50169b9fc7f\n}\nupdatedAt: 2025-03-22\nsources: [\n{\nlabel: YGOResources Card FAQ\ndetail: https://db.ygoresources.com/data/card/21385\n}\n]\n}\n}\n]"
+}

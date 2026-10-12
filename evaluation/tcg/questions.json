@@ -8,8 +8,7 @@
       "question": "一个怪兽的诱发效果在墓地满足发动条件，但在当前连锁处理完毕、它可以发动该效果之前，该怪兽已从墓地被表侧除外。没有其他例外效果。连锁处理完毕后，它能否发动那个在墓地满足条件的诱发效果？",
       "ruleSystem": "TCG",
       "answerLocale": "zh-CN",
-      "questionSha256": "46967e48d1c11ac1ad610c8fdca62c737d6e06e0e040784256ed4d2c68cd388f",
-      "priorReceiptDirectory": "D:\\Documents\\游戏王项目产物\\tcg-main-trial-20261010\\private\\full-card-cases\\trigger-zone"
+      "questionSha256": "46967e48d1c11ac1ad610c8fdca62c737d6e06e0e040784256ed4d2c68cd388f"
     },
     {
       "id": "rivalry-reborn",
@@ -17,8 +16,7 @@
       "question": "「群雄割据」正在适用，我方只控制表侧表示的魔法师族怪兽，双方墓地都只有不死族怪兽，且没有任何其他召唤限制或例外。我方能否发动「死者苏生」？",
       "ruleSystem": "TCG",
       "answerLocale": "zh-CN",
-      "questionSha256": "aa23f1a92df1052143b71a8968cf6d6530786cc8cfa1fc9832e288ec6e1d7c20",
-      "priorReceiptDirectory": "D:\\Documents\\游戏王项目产物\\tcg-main-trial-20261010\\private\\full-card-cases\\rivalry-reborn"
+      "questionSha256": "aa23f1a92df1052143b71a8968cf6d6530786cc8cfa1fc9832e288ec6e1d7c20"
     },
     {
       "id": "diff-goblindbergh",
@@ -26,8 +24,7 @@
       "question": "在我方回合，我方通常召唤等级4的「格布林德伯格」，我方希望发动其召唤成功时的效果，并发动手牌中「影蜥蜴」的效果。对方也希望立即发动已盖放且可以发动的「激流葬」。我方已将「格布林德伯格」的效果作为C1发动；其他发动条件均满足，双方没有其他效果。C2和C3分别应该是哪张卡的效果？请只说明连锁建立顺序。",
       "ruleSystem": "TCG",
       "answerLocale": "zh-CN",
-      "questionSha256": "07b321eb9bca66d73a8dad79981b8a471e2383f5f6e6a47e555f2e800a99fe9c",
-      "priorReceiptDirectory": "D:\\Documents\\游戏王项目产物\\tcg-main-trial-20261010\\private\\full-card-cases\\diff-goblindbergh"
+      "questionSha256": "07b321eb9bca66d73a8dad79981b8a471e2383f5f6e6a47e555f2e800a99fe9c"
     },
     {
       "id": "diff-tour-guide",
@@ -35,8 +32,7 @@
       "question": "在我方回合，我方通常召唤等级3的「魔界发现世行死亡向导」，并将其召唤成功时从牌组特殊召唤怪兽的效果作为C1发动。我方还希望发动一直在手牌中的「影无茶骑士」的效果；对方希望以手牌中的「灰流丽」连锁无效C1，双方其他发动条件均满足且没有其他效果。我方能否先把「影无茶骑士」放在C2，使对方不能用「灰流丽」直接连锁C1？请说明连锁建立顺序。",
       "ruleSystem": "TCG",
       "answerLocale": "zh-CN",
-      "questionSha256": "b9f16eb08b086846242aae219f341bc567afac8b6a12bc8c4633182f3bf8cfeb",
-      "priorReceiptDirectory": "D:\\Documents\\游戏王项目产物\\tcg-main-trial-20261010\\private\\full-card-cases\\diff-tour-guide"
+      "questionSha256": "b9f16eb08b086846242aae219f341bc567afac8b6a12bc8c4633182f3bf8cfeb"
     },
     {
       "id": "extra-deck-fusion",

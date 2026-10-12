@@ -1,120 +1,27 @@
-# TCG 接入说明
+# TCG rulings
 
-当前分支 feat/tcg-ruleset 基于 main 1c23585d8e。草稿 [PR #12](https://github.com/coldiceh/ocg-ruling-assistant/pull/12) 已推送，尚未合并。修复版独立预发布：[打开 TCG 试验版](https://ocg-ruling-assistant-cc9d32hf2-coldicehs-projects.vercel.app)，源码 commit 65060fd5d2b60fc7ddebc67229daf9ad86c98bc7。唯一活动状态在根目录 PROJECT_STATE.md。
+Select **TCG** in the question form to use Yu-Gi-Oh! TCG sources. The answer language is a separate setting. API clients can send `ruleSystem: "TCG"`; omitting it selects OCG. The prepared evidence fixes both the ruleset and answer language through finalization.
 
-## 第二轮修复与预发布检查（2026-10-12—13）
+## Sources and versions
 
-复用最新 main 的提议制、描述性提及、Luna low 和关闭清理。原始名字／别名精确命中 OCG 名称索引后，通过稳定 CID 取同 CID 的 TCG 记录；其余提议由已有二次确认读取 TCG 卡文选择。目标库没有记录则保持未确认并提示 TCG 未收录。OCG 效果正文和日文 Q&A 不进入 TCG 证据。
+The independent TCG snapshot contains the [official Rulebook Version 10](https://www.yugioh-card.com/en/downloads/rulebook/SD_RuleBook_EN_10.pdf), [2021 Rules Update](https://www.yugioh-card.com/en/play/2021_rules_update/), [Fast Effect Timing](https://www.yugioh-card.com/en/play/fast-effect-timing/) and its diagram, official PSCT articles, Damage Step guidance, and the Rivalry of Warlords / Gozen Match FAQ. Each record retains its source URL, ruleset, region, language and available version/date metadata. Unknown publication or effective dates remain unknown; capture dates do not replace them. The current source catalog records captures from October 2026.
 
-原五题本地与真实线上都确认 8/8 身份并交付 8 张目标 TCG 卡文；实际线上结果如下。参考始终只用于仓库外离线审核。
+Card effects come from the [KONAMI TCG card database](https://www.db.yugioh-card.com/yugiohdb/card_search.action?request_locale=en). Shared card names do not make OCG card text or OCG Japanese Q&A TCG evidence. Card text proves the printed effect; it does not by itself establish a general timing rule or an official ruling for the question.
 
-| 题目 | 卡片确认 | 最终卡文 | 实际证据 | 结论 | 请求耗时 | 完整费用估算 |
-| --- | --- | --- | --- | --- | ---: | ---: |
-| 诱发满足后、发动前移区 | 无卡名 | 不适用 | 充分；2021 Rules Update | 正确：不能发动 | 31.75 秒 | $0.03705830 |
-| 群雄割据／死者苏生 | 2/2 | 2 张 TCG 卡文 | 充分；FAQ 禁止引导语、种族限制及死苏例子共同交付 | 正确：不能发动 | 35.99 秒 | $0.08047735 |
-| 格布林德伯格连锁 | 3/3 | 3 张 TCG 卡文 | 规则书印刷 p50；缺陷阱响应和连锁通则 | C2 正确；C3 依据不足，未完成 | 35.51 秒 | $0.05364755 |
-| 死亡向导连锁 | 3/3 | 3 张 TCG 卡文 | 规则书印刷 p50；缺快速效果及直接响应规则 | C2 正确；灰流丽部分依据不足，未完成 | 53.64 秒 | $0.07387000 |
-| 英文快速效果机会 | 无卡名 | 不适用 | 充分；Fast Effect Timing 正文和时点图转录 | 正确：回合玩家先，尚非开放状态 | 33.63 秒 | $0.05957030 |
+## Card names
 
-线上五题总估算 $0.30462351，连同原本地 $0.25535430，本轮累计 $0.55997781 < $5，预留 0。包括从真实 bounded.calls 补齐的 Decisions 费用 $0.07060340；本地缺 usage 嵌入分配 $0.01638400 保留。不是供应商账单。英文耗时为两段请求相加，不含协议错误后的人工排查等待；不能用作网页等待时间或 P95。
+English official names and supported nicknames locate catalog candidates. Exact Chinese or Japanese formal names and aliases may use the stable KONAMI CID to find the corresponding TCG entry; only the target TCG effect text is delivered. Other proposed identities use the existing model confirmation step with target card texts. Search rank offers candidates and does not choose an identity. Missing or unselected identities remain unconfirmed.
 
-英文题的浏览器 prepare 成功返回 JSON，因 ruleSystem 未被请求渠道识别而没有返回前端要求的 SSE。保存原响应，复用 preparationId，仅补做一次真实流式 finalize；没有再次 prepare。渠道识别现已修复，两项回归修复前失败、修复后通过，相关 52 项免费检查全部通过。修复部署已 READY，release commit 和 GET 能力接口已核对；**修复后的完整浏览器付费流程没有重跑**。这与原五题实际答案审核分开报告。
+Descriptions that name an archetype and card kind use the catalog's declared metadata to offer a small candidate list. Official Spell/Trap subtypes map to the shared matcher properties. A generic word such as “field” does not identify a particular card. CID identifies the database entry and is not an image passcode; TCG card images are not currently supplied automatically.
 
-主地址 ocg-ruling-assistant.vercel.app 仍在原 main；自动改绑的项目默认别名已还原到同一原部署。没有修改项目 Production 环境变量。两道连锁题的同时发动规则已交付，但快速效果／陷阱响应通则未交付，C2 分析正确，后续部分未完成。这不证明资料库缺失该规则。服务 cloudCosts 尚未包含 Decisions，报告按独立真实调用记录补齐。
+## API and data maintenance
 
-默认 OCG 请求形状及中英日三个固定最终提示与 main 字节一致。原全套 main/TCG 都不是绿色且有共享卡住项；修复 10 个新增失败后，定向 132/135 通过，余下 3 项 main 也失败。默认构建及 TCG 三项资产绑定检查通过。已有向量、导航和模型响应未重复生成。
+`POST /api/answer` accepts `{"question":"…","ruleSystem":"TCG","answerLocale":"en"}`. Valid answer locales are `zh-CN`, `en`, and `ja`. The web interface uses streamed `prepare` followed by `finalize`; see [backend deployment](backend-deployment.md) for the request protocol.
 
-官方手动同步完成：159 个 HTTP 请求、18 次 304，14,019 张卡、73 条规则、1 个 FAQ 父记录逐记录不变。独立每日工作流准备快照。20 题题单与参考复用，全流程预估 $1.20–2.80，未执行。详细五题回答、费用与验证边界在仓库外 TCG-第二轮-预发布五题结果.md。
+`data/tcg` holds its own snapshots, revision manifest, compressed runtime, retrieval assets and nickname vocabulary. The runtime supplies both preparation and card lookup; raw snapshots are omitted from deployed answer/card functions. `TCG_DATA_DIR` can select another complete, consistently versioned TCG asset set. `TCG_DATA_REVISION` can declare its revision. TCG cache keys and source assets are independent of OCG. The daily TCG synchronization workflow stages snapshots; model-generated retrieval assets must be prepared before publishing an updated version.
 
-下方是保留的历史结果与实现说明，历史阶段的发布状态不代表当前状态。
+## Limitations
 
-## 历史找卡付费小测（2026-10-11）
+The source set covers ordinary TCG card and effect handling. It is not a complete official per-card Q&A archive, and a relevant rule may be absent from the final evidence package even when stored locally. The assistant should state the missing basis when the delivered evidence cannot support every part of a question. Source authority and a model's selected status do not certify correctness.
 
-卡名抽取 8 次，实际确认 5/12 张明确提及卡片，3/8 个问题全部确认。“场地”保留为泛指，未绑定具体卡片，额外检查通过。完整流程只跑 OCG 密告与两道 TCG 连锁题；其余三道历史答案复用。费用按已知 usage 与配置价格估算 $0.10449505，查询嵌入未知费用保留 $0.01474560 分配，合计 $0.11924065 < $1；不是供应商账单。
-
-密告题 0/1，无密告卡文；按第二张同名的理解，回答“通常可以”漏掉 1500 分支的同名禁发动限制。格布林德伯格题实际 0/3，重复响应消息被相连为无效 JSON，最终无卡文、无规则而拒答；免费复读保存的 final_answer 可恢复 3/3，这是接口问题，没有重跑或改判实际结果。死亡向导题实际 2/3，影无茶骑士／灰流丽卡文已进入最终输入，但死亡向导返回名有乱码且无规则正文，仍拒答。两道 TCG 选证都返回 UNKNOWN／NEEDS_EVIDENCE，不能据此声称资料库没有规则。
-
-父代理直接读取了三份实际最终输入与回答。没有追加生产修复、模型重试、提交、推送或部署，停止等待用户下一条指令。详细报告是仓库外 `找卡修复-付费小测结果.md` 和 `找卡修复-付费小测逐题回答.md`；路径、费用账本、冻结记录及历史边界见 `PROJECT_STATE.md`。下面的离线修复和旧五题结果继续保留为历史记录，不计作本轮成功。
-
-## 共用代码、独立资料
-
-网页增加 OCG/TCG 选择。公开请求的 `ruleSystem` 只接受 `OCG`、`TCG`，省略时使用 OCG；回答语言仍由 `answerLocale` 控制。准备证据和最终回答之间保存服务端规则体系绑定，卡片详情请求也带体系。默认 OCG 提示在中文、英文、日文三个固定输入上与 base main 字节一致；这不代表所有 OCG 行为均已验证。
-
-`backend/rulingRuleSystem.mjs` 为 TCG 设置独立的 `data/tcg`、Gemini/向量与旧 cloud 资产目录、数据版本和缓存输入，并禁用 OCG live Q&A。TCG 卡片查询由 `backend/tcgCardProvider.mjs` 使用官方快照；卡名及缩写只用于定位卡片，不能证明裁定。KONAMI CID 使用 `konami-cid` 身份，不作为卡图密码；目前 TCG 卡片不自动提供卡图。
-
-TCG 可选环境项：
-
-| 环境项 | 用途 |
-| --- | --- |
-| `TCG_DATA_DIR` | 替换默认独立资料目录；必须是同一版本的完整 TCG 资产集 |
-| `TCG_DATA_REVISION` | 显式 TCG 数据版本；省略时沿用独立资料集的版本计算 |
-
-生产模型配置继续共用。第二轮独立 staged 部署及真实五题已记录于本文开头，项目 Production 环境配置未修改。
-
-## 官方快照
-
-来源入口由 `config/tcg-sources.json` 声明，PSCT 和 Card FAQ 的链接从官方索引发现。当前快照包括：
-
-- 官方数据库当前英文卡文 14,019 张，初次抓取 141 页。类别、属性、等级、种族等来自页面字段，不从效果文本推断。完整效果与灵摆效果分别保留。
-- 规则书 v10、2021 Rules Update、PSCT 1–7、Fast Effect Timing 正文和人工转录的官方时点图、Damage Step。
-- 当前发现的一个 Card FAQ 父记录：Rivalry of Warlords / Gozen Match。它按原页面结构拆成来源单元；父记录数量不等于问答单元数量，也不代表存在完整的 TCG 个别卡片 Q&A 库。
-- 当前官方禁限表全文，来源为 `/en/limited/list_2026-09-21/`；保留正文中个别卡片的不同生效日期，不把 URL 日期统一当作生效日期。
-
-每条来源保留体系、地区、语言、版本、日期、URL 和来源属性；无法确定的日期写为 `unknown`。资料范围不能由英文语言推断。规则书按 PDF 左右半页读取，避免跨双页串行混合。时点图的人工转录位于 `config/tcg-fast-timing-chart.json`；官方图片变更后仍需重新核对转录。
-
-主资产位于 `data/tcg`。其中 `ocg-rule-corpus.json` 是现有加载器的文件名合同；目录和记录显式声明 TCG，不能因该文件名改判为 OCG。OCG 与 TCG 不共享卡库、Q&A、索引、资产版本或昵称缓存。
-
-## 来源结构与提示改动
-
-FAQ 适配器用官方 DOM 的标题、段落和列表关系声明共同交付范围，不根据关键词判断相关性。声明绑定选定的 `conclusion` 原文、UTF-16 范围及哈希；依赖随阅读装包和 Decisions 选择闭包交付。普通文本切段仍使用既有路径。
-
-TCG 清理提示要求对照被删除的规则正文与剩余正文，指出卡文不能代替通用连锁、时点和区域规则。TCG 最终提示要求缺少必要规则时明确“依据不足”。本轮 Rivalry 题实际交付了 FAQ 否定引导语和列表例子；两道连锁题实际交付了规则书印刷第 50 页，并因缺卡文保守拒答。这只说明这些样本未重现历史问题，不能证明全库修复。没有增加语义阈值、置信度门禁、历史证据 ID 门禁或题目特判。
-
-缩写独立保存在 `data/tcg/card-nicknames.v1.json`，现有 MST、ROTA、DAD。各项标注词汇来源；社区词汇来源不进入裁定证据。这只是有限的首批词汇。
-
-## 卡名身份解析（沿用最新 main）
-
-模型保留原词与多语言正式名。直接身份绑定要求用户原话本身与卡库正式名或已有别名精确匹配；否则模型正式名只作 proposedCardIds。二次确认读原题、候选类型和 TCG 原始卡文后选卡或返回 null；不选择就保持未确认。检索排序只提供候选。沿用 main 的每题最多 4 个待确认提及和一次额外选卡调用，不增加卡名特判或相似度门禁。
-
-TCG 名称桥接借用 OCG 名称/别名和稳定 CID，不借用 OCG 效果正文或日文 Q&A。候选和最终已确认卡片的正文均来自 TCG 记录的 canonical `text`；OCG 使用 `effectText`，灵摆效果独立保留。目标库缺 CID 时保持未确认并标明 TCG 未收录，不用目标库收录情况给有歧义的 OCG 身份消歧。
-
-OCG 当前 `cnName` 缺失或为空 168/14,424 条；9455 的“增殖的Z”仍待核对，9965 已有“影无茶骑士”的中文字段。没有手写改名或做全库翻译审核。具体报告和清单定位见 `PROJECT_STATE.md`。
-
-## 同步和构建
-
-`scripts/sync-tcg-sources.py` 使用独立 HTTP 缓存、条件请求和限速，最小请求间隔 0.5 秒，默认 1 秒。解析依赖在 `scripts/tcg-source-requirements.txt`。下面是以后继续准备资料时的命令，不是本轮测试记录：
-
-```powershell
-python scripts/sync-tcg-sources.py --cache-dir '<isolated-cache-directory>'
-# 只重新序列化已有抓取，不发起网络请求：
-python scripts/sync-tcg-sources.py --cache-dir '<isolated-cache-directory>' --offline
-node scripts/build-tcg-assets.mjs
-```
-
-构建命令只生成数据版本、卡片 runtime 和 canonical 输入，不生成模型导航、向量或最终答案。当前产物数量由 `data/tcg/gemini-rule-qa-v1/canonical-manifest.json` 记录：378 个来源原子、102 个阅读单元、125 个导航输入、385 个规则向量输入，QA 向量输入为 0。
-
-`.github/workflows/sync-tcg-data.yml` 每日独立同步并上传准备快照，保留 7 天；目前不生成付费资产、不提交或发布资料。更新资料后仍需生成对应检索资产并组装 release，不能用旧 OCG release 代替 TCG release。本轮已生成 385 个 dense 单元对应的 383 个唯一规则向量输入、空 QA 向量库及独立 TCG release，bundleRevision 为 `65acf8e91365836579c939585ea5a966a8cf6852ddfd48ac1712730f660243cd`。模型导航描述没有生成，使用生产默认导航记录 `not_generated_in_scope`；原文、标题和向量检索仍启用。
-
-## 修复前五题评测与限制
-
-`evaluation/tcg/questions.json` 有 20 题，包含上一轮四题。参考答案与官方正文、当前卡文在仓库外的私有评测目录，具体定位见 `PROJECT_STATE.md`。参考答案不得进入检索、选证、装包或最终回答提示。旧试验结果只在完整请求哈希一致时复用，不能继承旧“证据充分”判断。
-
-四个 TCG 机械回归文件的 **7 项检查全部通过**，覆盖体系隔离、卡片来源投影、空 QA 向量库和 FAQ 来源范围/依赖；它们不判断证据充分性或答案正确性。默认 OCG 提示的三个固定输入比较也通过。
-
-五题使用本地实际生产模块、真实模型和检索资产，未冻结卡名、未注入参考卡文或参考答案；这不是 HTTP、网页或 Preview 验收。每题实际 `PROMPT_VISIBLE` 已直接审核。最终结果以仓库外 `private/tcg-five-v1/results-bai-enabled.json` 为准，旧 `results.json` 仅是测试配置诊断，不是最终效果结果。
-
-| 题目 | 结果 | 本轮墙钟时间 |
-| --- | --- | ---: |
-| 诱发满足后、发动前移区 | 正确：不能发动 | 3.679 秒 |
-| 群雄割据与死者苏生 | 结论正确：不能发动；但两张卡未确认，附带多余补卡名请求 | 19.014 秒 |
-| 格布林德伯格、影蜥蜴与激流葬 | 缺少三张卡的卡文，未给出确定连锁顺序 | 24.296 秒 |
-| 死亡向导、影无茶骑士与灰流丽 | 缺卡文及完整响应规则，未给出确定连锁顺序 | 24.907 秒 |
-| 通常召唤后的快速效果机会（英文） | 正确：回合玩家先在 B 获得机会，尚非开放 A | 2.684 秒 |
-
-完全相同的请求按完整正文哈希复用了已保存响应；两个无卡名控制题的最终回答也被复用。因此短延迟包含缓存复用，不能作为冷启动或线上 P95。三题结论正确不等于三题流程完整；两题保守拒答不应计为错误裁定，也未完成用户所问。
-
-五题试测时，三道有卡名题共 8 张卡均未确认。Luna 在 Rivalry 题已给出正确英文候选，但当时下游仍要求中文原称呼先绑定稳定 CID 才接纳英文扩展；另两题抽取结果仍是中文卡名。测试入口配置在试测时已纠正；2026-10-11 的离线修复已修改正式名和 CID 接入，后续真实 Luna 小测见上节，历史结果未改判为新成功。
-
-新增调用的已知 usage 按配置价格估算为 **$0.45345585**；另保留 **$0.04096** 查询嵌入未知费用分配，合计估算/分配 **$0.49441585**，含资产准备、配置诊断和复测，低于 $5。这不是供应商实际账单，缺失 usage 不记作零。
-
-五题报告为仓库外 `TCG-ruleset-五题结果.md`、`TCG-ruleset-五题逐题回答.md`；最新修复报告为 `找卡修复-离线结果.md`、`OCG-卡名数据待核对.md`。路径及冻结版本见 `PROJECT_STATE.md`。没有运行 20 题全量评测，没有提交、推送、PR、预览地址或部署；卡名适配已完成离线修复，尚不足以证明真实模型和线上流程可直接使用。
+Event policy, penalties, deck legality, regional exceptions, Speed Duel and other formats need their own current applicable sources. Answer quality across a broad question set has not yet been established. Always inspect the cited original sources for disputed rulings.

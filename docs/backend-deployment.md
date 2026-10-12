@@ -74,6 +74,18 @@ ALLOWED_ORIGIN=https://coldiceh.github.io
 
 再把 `config.json` 上传到 GitHub Pages 仓库。
 
+## 裁定体系与请求参数
+
+`POST /api/answer` 可传 `ruleSystem`：`OCG` 或 `TCG`，省略时为 `OCG`。`answerLocale` 可独立选择 `zh-CN`、`en` 或 `ja`，不改变裁定体系。
+
+外部 API 的最小请求示例：
+
+```json
+{"question":"Who may activate a fast effect after a Normal Summon?","ruleSystem":"TCG","answerLocale":"en"}
+```
+
+网页使用 `/api/answer?progress=1` 与 `Accept: text/event-stream`。准备请求在现有网页字段上加 `action: "prepare"`，可带 `ruleSystem`、`answerLocale`；完成后发送 `{"action":"finalize","preparationId":"…"}`，使用准备阶段绑定的体系与语言。
+
 ## 回答模式
 
 - `confirmed`：命中 Q&A 或 FAQ 等可直接引用资料。

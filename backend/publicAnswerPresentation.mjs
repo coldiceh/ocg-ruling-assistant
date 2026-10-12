@@ -30,7 +30,9 @@ export function classifyPublicRequestChannel(rawBody) {
   }
 
   const keys = Object.keys(body).sort();
-  if (keys.length === 1 && keys[0] === "question") {
+  if (keys.every(key => ["question", "ruleSystem", "answerLocale"].includes(key))
+    && (!Object.hasOwn(body, "ruleSystem") || ["OCG", "TCG"].includes(body.ruleSystem))
+    && (!Object.hasOwn(body, "answerLocale") || ["zh-CN", "en", "ja"].includes(body.answerLocale))) {
     return PUBLIC_REQUEST_CHANNELS.EXTERNAL_API;
   }
   const webKeys = keys.filter((key) => key !== "evidenceSelector" && key !== "ruleSystem");
