@@ -1,0 +1,51 @@
+name: Prepare official TCG snapshots
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "30 19 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tcg-source-sync
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install source parsers
+        run: python -m pip install -r scripts/tcg-source-requirements.txt
+      - name: Restore isolated HTTP capture cache
+        uses: actions/cache@v5
+        with:
+          path: ${{ runner.temp }}/tcg-http-cache
+          key: tcg-http-v1-${{ github.run_id }}
+          restore-keys: tcg-http-v1-
+      - name: Stage independent TCG sources
+        run: |
+          mkdir -p "$RUNNER_TEMP/tcg-data"
+          cp -R data/tcg/. "$RUNNER_TEMP/tcg-data/"
+          python scripts/sync-tcg-sources.py --data-dir "$RUNNER_TEMP/tcg-data" --cache-dir "$RUNNER_TEMP/tcg-http-cache"
+      - name: Build canonical inputs and card runtime without model calls
+        run: |
+          node scripts/build-rag-data-revision-manifest.mjs --data-dir "$RUNNER_TEMP/tcg-data"
+          node scripts/build-rag-runtime-bundle.mjs --data-dir "$RUNNER_TEMP/tcg-data"
+          node scripts/build-gemini-rule-qa-assets.mjs --stage canonical --data-dir "$RUNNER_TEMP/tcg-data" --output-dir "$RUNNER_TEMP/tcg-data/gemini-rule-qa-v1"
+      - name: Preserve staged snapshot for bounded asset refresh and review
+        uses: actions/upload-artifact@v4
+        with:
+          name: tcg-sources-${{ github.run_id }}
+          path: ${{ runner.temp }}/tcg-data/
+          retention-days: 7
+          if-no-files-found: error

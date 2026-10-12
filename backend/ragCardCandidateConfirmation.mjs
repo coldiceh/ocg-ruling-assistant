@@ -10,7 +10,7 @@ export const CARD_CANDIDATE_CONFIRMATION_LIMITS = Object.freeze({
 });
 
 export async function confirmPendingCardCandidates({userQuery, cardResolution, cards = [],
-  dataRevision, env = {}, modelInvoker, fetchImpl = globalThis.fetch, dryRun, now, signal,
+  dataRevision, env = {}, identityCards = [], modelInvoker, fetchImpl = globalThis.fetch, dryRun, now, signal,
   confirmationAlreadyAttempted = false} = {}) {
   const startedAt = Date.now();
   const pending = new Map();
@@ -35,7 +35,14 @@ export async function confirmPendingCardCandidates({userQuery, cardResolution, c
   }
   if (!pending.size || dryRun === true || /^(1|true|yes|on)$/iu.test(String(env.RAG_DRY_RUN || ''))) return finish(null);
 
-  const localProvider = createLocalCardDataProvider({cards});
+  const tcg = env.RAG_RULE_SYSTEM === 'TCG';
+  // The identity bridge contributes names and CID only. Every candidate body
+  // and selected record must come from this question's target TCG catalog.
+  const nameCards = tcg ? [...cards, ...identityCards.map(card => ({
+    id: card.id, cid: card.cid, name: card.name, cnName: card.cnName, jaName: card.jaName, enName: card.enName,
+    aliases: card.aliases,
+  }))] : cards;
+  const localProvider = createLocalCardDataProvider({cards: nameCards});
   const catalogByCid = new Map(cards.map(card => [cidOf(card), card]));
   const groups = [];
   const searchStartedAt = Date.now();
@@ -57,12 +64,19 @@ export async function confirmPendingCardCandidates({userQuery, cardResolution, c
     // the selector to read, never a binding. Surface results keep their order;
     // a proposal the surface search did not return is appended, replacing the
     // last surface candidate when the per-mention cap is already reached.
-    const proposed = (mention.proposedCardIds || []).map(id => catalogByCid.get(String(id))).filter(Boolean);
+    const proposed = (mention.proposedCardIds || []).map(id => catalogByCid.get(String(id))).filter(Boolean)
+      .map(card => tcg ? {...card, effectText: card.text || ''} : card);
     const unique = new Map();
     for (const source of [...local, ...(external.results || [])]) {
       const cid = cidOf(source, local.includes(source));
       if (!cid || unique.has(cid)) continue;
-      const record = catalogByCid.get(cid) || {...source, id: cid, cardId: cid,
+      const target = catalogByCid.get(cid);
+      const record = tcg ? {
+        ...(target || {id: cid, cid}),
+        name: target?.name || source.name, cnName: source.cnName || target?.cnName,
+        jaName: source.jaName || source.jpName || target?.jaName, enName: target?.enName || source.enName,
+        effectText: target?.text || '',
+      } : target || {...source, id: cid, cardId: cid,
         jaName: source.jaName || source.jpName || '', effectText: source.effectText || source.text || ''};
       if (!record.name && !record.cnName && !record.jaName && !record.enName) continue;
       unique.set(cid, record);
@@ -107,6 +121,7 @@ export async function confirmPendingCardCandidates({userQuery, cardResolution, c
     // The existing selector parser validates handles. Copy the addressed record;
     // neither rank nor a name similarity score decides its identity.
     const source = group.cards[index];
+    if (tcg && !catalogByCid.has(cidOf(source))) continue;
     // Build the record from the addressed card's own formal name, then keep
     // the player's wording as its input; the selector already decided identity.
     const formalName = source.name || source.cnName || source.jaName || source.enName;

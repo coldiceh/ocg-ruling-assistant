@@ -3,6 +3,17 @@ import { evidenceBucketsToList } from "./ragEvidenceRetriever.mjs";
 
 export const OCG_RULE_SOURCE_POLICY = "OCG Rule（ocg-rule）是本站认可的权威规则整理，可与官方规则资料同等作为规则分析依据，不因 community_reference 标签降为仅供辅助。核对原文的适用条件、例外及更新时间；具体卡片 Q&A 与一般规则表面冲突时，先区分适用范围。保留 OCG Rule 的真实出处，不称其为 KONAMI 发布或本题官方直接 Q&A。";
 
+export const TCG_RULE_SOURCE_POLICY = "本题采用 Yu-Gi-Oh! TCG。规则书、官方规则更新、PSCT、FAQ与卡文按其标明的体系、地区、版本和适用日期阅读；不因英文或卡名相同就将OCG资料视为TCG依据。更新与旧规则书存在差异时按更新说明的适用范围处理。官方通则与卡文可以支持规则分析，不冒称本题有官方直接Q&A；社区资料仅供辅助。";
+
+function ruleSystemInstructions(instructions, ruleSystem) {
+  if (ruleSystem !== "TCG") return instructions;
+  return [...instructions.map(line => line === OCG_RULE_SOURCE_POLICY
+    ? TCG_RULE_SOURCE_POLICY
+    : line.replace("游戏王 OCG 规则分析助手", "游戏王 TCG 规则分析助手")
+      .replace("除下述 OCG Rule 政策外，其他社区资料", "社区资料")),
+    'TCG 证据边界：每一条用于结论的游戏规则必须来自实际交付的原文。卡文只证明其写明的效果，不单独证明通用连锁顺序、发动时点或特例。不得凭记忆、queryPlan、其他候选或选证状态补规则。缺少任何必要规则时，明确写“依据不足”，指出缺少的规则或条件，只回答资料能支持的部分，不给未经支持的确定结论。'];
+}
+
 export const RAG_ANSWER_LEVELS = Object.freeze([
   "official_confirmed",
   "rule_analysis",
@@ -174,6 +185,7 @@ export function buildRagRulingPromptBundle({
   const ruleQueryPlanDiagnostics = buildRuleQueryPlanDiagnostics(promptSafeEvidence.ruleSearchQueries);
   const payload = {
     userQuery: String(userQuery || ""),
+    ...(cardResolution.ruleSystem === "TCG" ? { ruleSystem: "TCG" } : {}),
     resolvedCards: summarizeCards(cardResolution.resolvedCards || []),
     unresolvedMentions: cardResolution.unresolvedMentions || [],
     ambiguousMentions: cardResolution.ambiguousMentions || [],
@@ -322,7 +334,7 @@ export function buildRagRulingPromptBundle({
 export function compactRagPromptInstructions(prompt, selectedPayload = parseSerializedPromptPayload(prompt), answerLocale = "zh-CN") {
   if (!selectedPayload || !Object.hasOwn(selectedPayload, "evidence")) return prompt;
   const leanPrompt = [
-    ...localizedAnswerInstructions(GENERAL_INSTRUCTIONS, answerLocale),
+    ...localizedAnswerInstructions(ruleSystemInstructions(GENERAL_INSTRUCTIONS, selectedPayload?.ruleSystem), answerLocale),
     "本次用户问题、卡片原文与检索资料如下：",
     renderReadableData(selectedPayload),
   ].join("\n");
@@ -616,7 +628,7 @@ export function selectAuthoritativeOfficialDirectCandidate({
 function renderGeneralPrompt(payload, answerLocale = "zh-CN") {
   const promptPayload = modelVisiblePromptPayload(payload);
   return { promptPayload, prompt: [
-    ...localizedAnswerInstructions(ALLOCATION_INSTRUCTIONS, answerLocale),
+    ...localizedAnswerInstructions(ruleSystemInstructions(ALLOCATION_INSTRUCTIONS, payload?.ruleSystem), answerLocale),
     "本次用户问题、卡片原文与检索资料如下：",
     renderReadableData(promptPayload),
   ].join("\n") };
@@ -1628,6 +1640,9 @@ export function summarizeCards(cards) {
     monsterProperties: card.monsterProperties || [],
     source: card.source || "",
     effectText: card.effectText || card.text || "",
+    ...Object.fromEntries(['ruleSystem', 'region', 'sourceLanguage', 'sourceVersion', 'sourceDate', 'effectiveAt']
+      .filter(key => Object.hasOwn(card, key)).map(key => [key, card[key]])),
+    ...(card.ruleSystem === 'TCG' && card.sourceUrl ? { sourceUrl: card.sourceUrl } : {}),
     ...(card.pendulumEffectText ? { pendulumEffectText: card.pendulumEffectText } : {}),
     ...(card.pendulumScale != null ? { pendulumScale: card.pendulumScale } : {}),
   }));

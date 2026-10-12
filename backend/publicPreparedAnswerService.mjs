@@ -2,6 +2,7 @@ import { answerPublicRulingQuestion, shouldClassifyPublicQuestion } from "./publ
 import { createPublicAnswerModelEnv } from "./ragModelClient.mjs";
 import { assertPublicRulingModelProfileAvailable, resolvePublicRulingModelProfile } from "./publicRulingModelConfig.mjs";
 import { finalizePreparedRagRulingQuestionForVersion } from "./rulingVersionRegistry.mjs";
+import {normalizeRuleSystem, ruleSystemEnv} from './rulingRuleSystem.mjs';
 import { preparationError } from "./publicAnswerPreparationStore.mjs";
 import { PUBLIC_EXHAUSTED_FALLBACK_PROFILE, selectAvailablePublicProfile, withPublicGenerationInfo } from './publicGenerationInfo.mjs';
 import { updateQueryAudit, safeQueryAuditRetrievalTimings } from './queryAuditStore.mjs';
@@ -23,6 +24,7 @@ export async function preparePublicAnswer({
   signal?.throwIfAborted();
   const measuredProgress = progress.complete();
   const preparationId = await store.create({
+    ruleSystem: normalizeRuleSystem(payload.ruleSystem),
     continuation: result.answer.continuation,
     rulingVersion: result.answer.rulingVersion,
     profileId: result.latency.profileId,
@@ -37,8 +39,8 @@ export async function preparePublicAnswer({
     status: "prepared", profileId: result.latency.profileId, latencyMs: measuredProgress.totalMs,
     ...safeQueryAuditRetrievalTimings(result.answer.continuation.ruleQueryModel?.timingsMs),
   }, env, updateAudit);
-  return { preparationId, progress: measuredProgress,
-    evidencePackage: { text: result.answer.continuation.promptBundle.prompt, filename: 'ocg-evidence.txt',
+  return { preparationId, ruleSystem:normalizeRuleSystem(payload.ruleSystem), progress: measuredProgress,
+    evidencePackage: { text: result.answer.continuation.promptBundle.prompt, filename: `${normalizeRuleSystem(payload.ruleSystem).toLowerCase()}-evidence.txt`,
       diagnostics: {
         request: result.answer.debug?.requestDiagnostics || null,
         cloudCosts: result.answer.debug?.cloudCosts || null,
@@ -77,6 +79,12 @@ export async function finalizePublicAnswer({
   if (shouldClassifyPublicQuestion(env) && preparation?.requestDiagnostics?.scope?.scope !== 'in_scope') {
     throw preparationError("资料未通过当前用途检查，请重新提交问题", "answer_preparation_scope_unverified", 409);
   }
+  const ruleSystem = normalizeRuleSystem(preparation?.ruleSystem);
+  // Compare explicit server-owned enum fields only, never source meaning.
+  if (ruleSystem !== normalizeRuleSystem(preparation?.continuation?.cardResolution?.ruleSystem)) {
+    throw preparationError('规则体系绑定已改变，请重新提交问题', 'answer_preparation_rule_system_changed', 409);
+  }
+  env = ruleSystemEnv(env, ruleSystem);
   const finalizeStartedAt = now();
   const selection = await selectProfile(preparation.profileId, env);
   let profile = selection.profile;

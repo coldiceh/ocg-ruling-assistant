@@ -31,6 +31,17 @@ export function buildQaDenseContext({ qaRevision, items, denseRevision } = {}) {
 export async function loadQaDenseSearch({ qaRevision, items, dataDir, denseRevision } = {}) {
   const selected = qaItems(items);
   const rules = buildQaDenseContext({ qaRevision, items: selected, denseRevision });
+  // Observable invariant: this adapter has exactly zero QA source records.
+  // An empty source set has no vector rows to load or rank. FAQ sources keep
+  // their existing separate lexical/navigation lanes; no meaning is inferred.
+  if (selected.length === 0) return Object.freeze({
+    denseRevision: denseRevision || qaRevision,
+    search: () => Object.freeze([]),
+    searchAsync: async (_queryVector, { signal } = {}) => {
+      signal?.throwIfAborted();
+      return Object.freeze([]);
+    },
+  });
   const byHandle = new Map(selected.map(item => [item.handle, item]));
   const dense = await loadRuleDenseSearch({ rules, dataDir, denseRevision: denseRevision || qaRevision });
 

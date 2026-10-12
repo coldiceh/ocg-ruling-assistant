@@ -87,7 +87,8 @@ export async function classifyPublicQueryScope({
   const timeout = createAbortTimeout({ signal, timeoutMs });
   try {
     const payload = await resolvedInvoke({
-      prompt: buildPublicQueryScopePrompt(normalizedQuestion),
+      prompt: buildPublicQueryScopePrompt(normalizedQuestion)
+        + (env.RAG_RULE_SYSTEM === 'TCG' ? '\n本次规则体系是 Yu-Gi-Oh! TCG；英文与中文裁定问题均属于同一检查范围。' : ''),
       modelName: status.model,
       maxTokens: boundedInteger(
         env.PUBLIC_QUERY_SCOPE_MAX_OUTPUT_TOKENS,

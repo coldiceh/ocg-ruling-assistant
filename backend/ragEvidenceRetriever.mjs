@@ -2227,7 +2227,10 @@ function cardTextEvidence(card, maxTextChars, warnings) {
     atk: card.atk ?? null,
     def: card.def ?? null,
     level: card.level ?? card.rank ?? card.link ?? null,
-    official: false,
+    official: card.ruleSystem === 'TCG' ? card.official === true : false,
+    ...(card.ruleSystem === 'TCG' ? Object.fromEntries(
+      ['ruleSystem','region','sourceLanguage','sourceVersion','sourceDate','effectiveAt','sourceAuthority']
+        .filter(key => Object.hasOwn(card, key)).map(key => [key, card[key]])) : {}),
     isDirect: false,
   };
 }
@@ -6148,12 +6151,15 @@ export function toRagCard(card, input, confidence) {
     ...(card.pendulumEffectText ? { pendulumEffectText: card.pendulumEffectText } : {}),
     ...(card.pendulumScale != null ? { pendulumScale: card.pendulumScale } : {}),
     text: card.text || card.effectText || "",
-    source: "baige",
-    sourceLabel: "百鸽",
+    ...(card.ruleSystem === 'TCG' ? Object.fromEntries(
+      ['ruleSystem','region','sourceLanguage','sourceVersion','sourceDate','effectiveAt','sourceAuthority','idNamespace','dataRevision']
+        .filter(key => Object.hasOwn(card, key)).map(key => [key, card[key]])) : {}),
+    source: card.ruleSystem === 'TCG' ? card.source : 'baige',
+    sourceLabel: card.ruleSystem === 'TCG' ? card.sourceLabel : '百鸽',
     sourceUrl: card.sourceUrl || "",
     imageUrl: card.imageUrl || "",
     imageCandidates: card.imageCandidates || [],
-    official: false,
+    official: card.ruleSystem === 'TCG' ? card.official === true : false,
     aliases: card.aliases || [card.name, card.cnName, card.jpName, card.enName].filter(Boolean),
     raw: card.raw || card,
     confidence,

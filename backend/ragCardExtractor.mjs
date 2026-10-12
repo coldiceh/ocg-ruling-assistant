@@ -61,6 +61,7 @@ const NON_CARD_HEADING_NAMES = new Set(["效果", "问题", "问", "q", "场景"
 
 export function extractRagCards(userQuery, {
   cards = [],
+  identityCards = [],
   maxCards: _legacyMaxCards,
   modelCardNameCandidates = [],
   mentionSetSource = "query_scan",
@@ -209,14 +210,19 @@ export function extractRagCards(userQuery, {
       // other wording (an abbreviation, a nickname, a typo) is its proposal:
       // it stays pending and the confirmation step, which reads the full
       // card texts, decides between it and the surface's other candidates.
-      const modelCandidates = resolveModelCanonicalCandidates(seed.canonicalNames, cards);
+      const modelCandidates = resolveModelCanonicalCandidates(seed.canonicalNames, cards, identityCards);
       const proposedCardIds = modelCandidates.map(({ card }) => catalogIdentityKey(card)).filter(Boolean);
-      if (modelCandidates.length === 1 && catalogIdentityNames(modelCandidates[0].card)
+      if (modelCandidates.length === 1 && modelCandidates[0].tcgNotCollected) {
+        unresolvedMentions.push({...buildUnresolvedMention(seed), reason: 'tcg_card_not_collected',
+          proposedCardIds, tcgAvailability: 'not_collected'});
+      } else if (modelCandidates.length === 1 && (modelCandidates[0].identityNames || catalogIdentityNames(modelCandidates[0].card))
         .some((name) => normalizeCardKey(name) === mentionKey)) {
         addResolved(resolved, seenCards, modelCandidates[0], mention,
           confidenceForMentionSeed(seed, 1), "model_canonical_exact", {
             includeInputAlias: false,
             modelCanonicalNames: seed.canonicalNames,
+            ...(modelCandidates[0].identityBridgeCid
+              ? {identityBridgeCid:modelCandidates[0].identityBridgeCid} : {}),
           });
       } else if (modelCandidates.length > 1) {
         ambiguousMentions.push({...buildAmbiguousMention(mention, modelCandidates),
@@ -1214,10 +1220,24 @@ function catalogIdentityKey(card = {}) {
   return String(card.cid || card.id || card.cardId || '');
 }
 
-function resolveModelCanonicalCandidates(names = [], cards = []) {
-  const index = canonicalNameIndex(cards);
-  const bindings = names.flatMap(name => index.get(normalizeCardKey(name)) || []);
-  return dedupeBy(bindings, binding => catalogIdentityKey(binding.card));
+function resolveModelCanonicalCandidates(names = [], cards = [], identityCards = []) {
+  const index = canonicalNameIndex(cards), identities = canonicalNameIndex(identityCards);
+  const bindings = names.flatMap(name => [
+    ...(index.get(normalizeCardKey(name)) || []), ...(identities.get(normalizeCardKey(name)) || []),
+  ]);
+  const distinct = dedupeBy(bindings, binding => catalogIdentityKey(binding.card));
+  if (!identityCards.length) return distinct;
+  return distinct.map(binding => {
+    const cid = catalogIdentityKey(binding.card);
+    const target = cards.find(card => catalogIdentityKey(card) === cid);
+    const identityNames = dedupeBy(bindings.filter(item => catalogIdentityKey(item.card) === cid)
+      .flatMap(item => catalogIdentityNames(item.card)), normalizeCardKey);
+    // OCG contributes stored names and CID only. Never project its card body.
+    return {matchedAlias: binding.matchedAlias, identityNames, identityBridgeCid: cid,
+      ...(target ? {card: target} : {tcgNotCollected: true, card: {id: cid,
+        name: binding.card.name, cnName: binding.card.cnName,
+        jaName: binding.card.jaName, enName: binding.card.enName}})};
+  });
 }
 
 function buildNormalizedSpanProjection(value) {
@@ -2071,10 +2091,14 @@ function addResolved(
     ...(Array.isArray(card.properties) ? { properties: [...card.properties] } : {}),
     ...(Array.isArray(card.monsterPropertyIds) ? { monsterPropertyIds: [...card.monsterPropertyIds] } : {}),
     ...(Array.isArray(card.monsterProperties) ? { monsterProperties: [...card.monsterProperties] } : {}),
-    effectText: card.effectText || "",
+    // The official TCG snapshot schema owns `text`; OCG owns `effectText`.
+    effectText: (card.ruleSystem === 'TCG' ? card.text : card.effectText) || "",
     ...(card.pendulumEffectText ? { pendulumEffectText: card.pendulumEffectText } : {}),
     ...(card.pendulumScale != null ? { pendulumScale: card.pendulumScale } : {}),
     sourceUrl: card.sourceUrl || "",
+    ...(card.ruleSystem === 'TCG' ? Object.fromEntries(
+      ['ruleSystem','region','sourceLanguage','sourceVersion','sourceDate','effectiveAt','sourceAuthority',
+        'official','cid','idNamespace','dataRevision','source','sourceLabel'].map(key => [key,card[key]])) : {}),
     ...(card.formalDefinitionId ? { formalDefinitionId: String(card.formalDefinitionId) } : {}),
     ...(card.formalDefinitionSnapshotId
       ? { formalDefinitionSnapshotId: String(card.formalDefinitionSnapshotId) }

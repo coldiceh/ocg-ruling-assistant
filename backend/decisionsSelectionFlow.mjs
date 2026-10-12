@@ -58,8 +58,10 @@ export function createSelectionFlow({base,input,dependencies,maxPromptChars=1500
   }
   function cleanup(ids,alias){
     const proposal=removalProposal(ids,alias,pack);
+    const tcg = input.ruleSystem === 'TCG' || selectionFacts(proposal.remaining).ruleSystem === 'TCG';
+    const criteria = tcg ? CLEANUP_CRITERIA + '\nTCG 删除检查：将 removed 明示的每一项游戏规则与 remainingPackage 中仍交付的规则正文分别对照。卡片效果文本不能替代一般的发动顺序、连锁建立、时点或区域规则。资料只支撑推导的一部分仍可能必要；无法从剩余原文证明删除没有损失时选 KEEP 或 UNKNOWN。不得用题目的常识答案证明 DROP。' : CLEANUP_CRITERIA;
     return {...proposal,request:dataRequest({remainingPackage:selectionFacts(proposal.remaining),removed:proposal.removed},
-      choice('action',CLEANUP_CRITERIA,['KEEP','DROP','UNKNOWN']))};
+      choice('action',criteria,['KEEP','DROP','UNKNOWN']))};
   }
   function statusRequest(ids){
     const current=pack(ids);

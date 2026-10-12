@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "kind": "evidence-vector-index",
+  "encoding": "raw-little-endian-float32",
+  "dataRevision": "4f67acfb24d1f0d470f3830779ea9d3790679a75d440759a838e407b86977106",
+  "model": {
+    "id": "gemini-embedding-2",
+    "revision": "gemini-embedding-2"
+  },
+  "dimension": 768,
+  "inputContract": {
+    "dimension": 768,
+    "documentTemplate": "title: ${unit.sourceSection.titlePath.join(' / ') || unit.title || 'none'} | text: ${unit.text}",
+    "model": "gemini-embedding-2",
+    "queryTemplate": "task: question answering | query: ${query}"
+  },
+  "inputContractSha256": "e67cc476af0560dc8076223c6e1db17bb7faefdadd3dbdfc4ca4aa8901e84fab",
+  "orderedContentHashes": [],
+  "orderedContentHashesSha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+  "uniqueContentCount": 0,
+  "entries": [],
+  "shards": [
+    {
+      "index": 0,
+      "file": "evidence-vectors-000.f32",
+      "rowCount": 0,
+      "byteLength": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "vectorByteLength": 0,
+  "shardSetSha256": "f01fab107ffb70f97bc1939adb82a7dabf9b1fe90f0afff14608919fc43740c7"
+}

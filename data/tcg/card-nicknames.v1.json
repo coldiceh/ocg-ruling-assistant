@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "sources": [
+    {
+      "id": "community-mst",
+      "url": "https://kurosygo.blogspot.com/2013/09/mystical-space-typhoon.html",
+      "authority": "community_vocabulary",
+      "label": "Kurotaro, Mystical Space Typhoon (2013)"
+    },
+    {
+      "id": "community-rota-dad",
+      "url": "https://ygoprodeck.com/article/the-repeat-offenders-of-yu-gi-oh-s-forbidden-amp-limited-list-part-1-302866",
+      "authority": "community_vocabulary",
+      "label": "Crunch$G, The Repeat Offenders Part 1"
+    }
+  ],
+  "entries": [
+    {
+      "alias": "MST",
+      "cardId": "4909",
+      "sourceId": "community-mst"
+    },
+    {
+      "alias": "ROTA",
+      "cardId": "5328",
+      "sourceId": "community-rota-dad"
+    },
+    {
+      "alias": "DAD",
+      "cardId": "7421",
+      "sourceId": "community-rota-dad"
+    }
+  ],
+  "ruleSystem": "TCG",
+  "revision": "sha256:798abafcb5ba0ee3b5bdd90b49fbb01c837bb1ba32c3688b3242555d00bd20b6"
+}

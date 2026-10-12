@@ -1,0 +1,11 @@
+{
+  "ruleSystem": "TCG",
+  "modelCalls": 0,
+  "rules": 73,
+  "faq": 1,
+  "http": {
+    "requests": 0,
+    "notModified": 0,
+    "cached": 18
+  }
+}

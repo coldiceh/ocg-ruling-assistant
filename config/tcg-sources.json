@@ -1,0 +1,13 @@
+{
+  "ruleSystem": "TCG",
+  "psctIndex": "https://www.yugioh-card.com/en/play/psct/",
+  "advancedRulesIndex": "https://www.yugioh-card.com/en/play/advanced-rules/",
+  "sources": [
+    {"id":"tcg-rulebook-v10","title":"Official TCG Rulebook Version 10","format":"pdf","version":"10","url":"https://www.yugioh-card.com/en/downloads/rulebook/SD_RuleBook_EN_10.pdf"},
+    {"id":"tcg-update-2021","title":"2021 Rules Update","format":"html","version":"2021 update","url":"https://www.yugioh-card.com/en/play/2021_rules_update/"},
+    {"id":"tcg-fast-timing","title":"Fast Effect Timing","format":"html","url":"https://www.yugioh-card.com/en/play/fast-effect-timing/","diagramUrls":["https://www.yugioh-card.com/en/wp-content/uploads/2021/05/T-Flowchart_EN-US.jpg"]},
+    {"id":"tcg-rivalry-gozen","title":"Card FAQ: Rivalry of Warlords and Gozen Match","format":"faq","url":"https://www.yugioh-card.com/en/play/card-faq-1/"},
+    {"id":"tcg-damage-step","title":"Damage Step Rules","format":"html","region":"Europe","url":"https://www.yugioh-card.com/eu/play/damage-step-rules/"},
+    {"id":"tcg-forbidden-limited","title":"Official Forbidden and Limited List","format":"list-index","url":"https://www.yugioh-card.com/en/limited/"}
+  ]
+}

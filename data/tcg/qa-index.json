@@ -1,0 +1,381 @@
+{
+  "schemaVersion": 1,
+  "ruleSystem": "TCG",
+  "records": [
+    {
+      "ruleSystem": "TCG",
+      "region": "North America",
+      "sourceLanguage": "en",
+      "sourceVersion": "unknown",
+      "sourceDate": "unknown",
+      "effectiveAt": "unknown",
+      "sourceUrl": "https://www.yugioh-card.com/en/play/card-faq-1/",
+      "official": true,
+      "sourceAuthority": "official_reference",
+      "sourceTier": "official",
+      "sourceName": "KONAMI Yu-Gi-Oh! TCG",
+      "id": "tcg-rivalry-gozen",
+      "recordType": "card-faq",
+      "title": "Card FAQ: “Rivalry of Warlords” & “Gozen Match”",
+      "conclusion": "What do these cards do when they resolve?\n\n“Rivalry of Warlords” and “Gozen Match” are Continuous Trap Cards that make it so you can only control face-up monsters of 1 Type (for Rivalry) or 1 Attribute (for Gozen).\n\nWhen this Trap Card’s activation resolves, look at the face-up monsters you control. If they all have the same Type/Attribute, you don’t have to do anything else. If there are different Types/Attributes, you choose 1 Type/Attribute to keep, and send your face-up monsters that aren’t that Type/Attribute to the Graveyard.\n\nWhat monsters can I Summon while these cards are active?\n\nWhile Rivalry/Gozen is active and you have a face-up monster, you cannot Summon monsters that are a different Type/Attribute from the monster(s) you already control.\n\nSo you can’t do any of the following to put a monster with the wrong Type/Attribute on your side of the field:\n\nNormal Summon\n\nTribute Summon\n\nFlip Summon\n\nXyz Summon\n\nSynchro Summon\n\nFusion Summon\n\nSpecial Summon with a monster’s own effect.\n\nActivate a card or effect that can only Special Summon monsters of the wrong Type/Attribute (including effects that could theoretically Summon anything, but currently cannot, such as “Monster Reborn” when you control Spellcasters but the only monsters in the Graveyard are Zombies).\n\nWhile Rivalry/Gozen is active, you can still Set monsters of any Type/Attribute, and you can Special Summon monsters of the wrong Type/Attribute face-down. But you can’t Flip Summon them afterwards, and they’re sent to the Graveyard after damage calculation if your opponent attacks them. (Also, in that case, you won’t get the effects of cards that need to be destroyed by battle and sent to the Graveyard, because they’re sent to the Graveyard by the Trap Card’s effect instead. But Flip Effects will still activate.)\n\nAre there any Special Summoning cards and effects I can activate?\n\nYou can activate cards and effects that would Summon the same Type/Attribute monster as you have on the field.\n\nYou can also activate cards that would Summon more than one Type/Attribute of monster. The results depend on what you have on the field:If you DON’T control any monsters: You can activate cards that would Summon monsters with more than one Type/Attribute. All of them are Summoned, but you must immediately pick one Type/Attribute and send all others to the Graveyard.If you already DO control a monster: First of all, if the Summoning effect targets, you can only target monsters with the right Type/Attribute. However, you can also activate cards that would Summon lots of monsters without targeting (like “Return from the Different Dimension”), as long as at least 1 of them is the right Type/Attribute. In this case, only the right monsters are Summoned to the field.\n\nThe same rule applies to the “Gladiator Beast” monsters. You can return a Gladiator Beast to your Deck and activate its effect as long as there is another Gladiator Beast in your Deck that you COULD Summon that is the same Type/Attribute as the one you returned. However, if you have no face-up monsters when the effect resolves, you can Summon any Type/Attribute of monster.\n\nCan I take control of my opponent’s monster with the wrong Type/Attribute?\n\nYou can take control of an opponent’s monster that’s the wrong Type/Attribute with a card like “Mind Control.” If you do, it’s sent to the Graveyard immediately after you gain control of it.\n\nAnything else I should know?\n\nIf you control no face-up monsters, you can Summon a monster of any Type/Attribute. Also, if Rivalry/Gozen is being negated, you can Summon monsters of any Type/Attribute. If it stops being negated, you have to send monsters to the Graveyard until you control only 1 Type/Attribute again, just like if Rivalry/Gozen had just resolved.\n\n",
+      "sourceStructure": {
+        "schemaVersion": 1,
+        "bodyField": "conclusion",
+        "bodySha256": "f95144428760928491d8620915af4e335eec3f6fab40aceabad29e90ee56c00b",
+        "segments": [
+          {
+            "start": 0,
+            "end": 43,
+            "textSha256": "ef803d61f2a6ce63d05a9f7428329faf66aa45ff34070c50b4d3f05208bea92a",
+            "domPath": "/html/body/div/main/section/section/article/div/h4[1]",
+            "requiredContextRanges": []
+          },
+          {
+            "start": 43,
+            "end": 216,
+            "textSha256": "fc74b7d0c8231059b508d00bd50f2c70f0185903f1bab3beb5f94bb43098b4ac",
+            "domPath": "/html/body/div/main/section/section/article/div/p[1]",
+            "requiredContextRanges": [
+              [
+                0,
+                43
+              ]
+            ]
+          },
+          {
+            "start": 216,
+            "end": 539,
+            "textSha256": "a601bc2f158151531bcf7eb4960398dee8110e4abd2a19a548a75cf72eb66490",
+            "domPath": "/html/body/div/main/section/section/article/div/p[2]",
+            "requiredContextRanges": [
+              [
+                0,
+                43
+              ],
+              [
+                43,
+                216
+              ]
+            ]
+          },
+          {
+            "start": 539,
+            "end": 597,
+            "textSha256": "58c3cea22b0011747d59622f3406b1db6bdf91c96e26f6288d646d231cb0809a",
+            "domPath": "/html/body/div/main/section/section/article/div/h4[2]",
+            "requiredContextRanges": []
+          },
+          {
+            "start": 597,
+            "end": 764,
+            "textSha256": "b97ea22c08569bd700ef383530ea68b3df733f1ef2b02c10ebbadfc11bb5d81d",
+            "domPath": "/html/body/div/main/section/section/article/div/p[3]",
+            "requiredContextRanges": [
+              [
+                539,
+                597
+              ]
+            ]
+          },
+          {
+            "start": 764,
+            "end": 876,
+            "textSha256": "c1f3299f86de800fa785bbc700f6dc5899f0527002620d2ffacee2c71caf01a9",
+            "domPath": "/html/body/div/main/section/section/article/div/p[4]",
+            "requiredContextRanges": [
+              [
+                539,
+                597
+              ],
+              [
+                597,
+                764
+              ]
+            ]
+          },
+          {
+            "start": 876,
+            "end": 891,
+            "textSha256": "b46c0f99189f5d2fdba1976d9646f72372043fba18871584d4da66ffcca5ba19",
+            "domPath": "/html/body/div/main/section/section/article/div/ul/li[1]",
+            "requiredContextRanges": [
+              [
+                539,
+                597
+              ],
+              [
+                597,
+                764
+              ],
+              [
+                764,
+                876
+              ]
+            ]
+          },
+          {
+            "start": 891,
+            "end": 907,
+            "textSha256": "5586f7e6fe47ca7b8b4cb233a3947d44d5f06af6c7e383f1f2f09a3535fbb98b",
+            "domPath": "/html/body/div/main/section/section/article/div/ul/li[2]",
+            "requiredContextRanges": [
+              [
+                539,
+                597
+              ],
+              [
+                597,
+                764
+              ],
+              [
+                764,
+                876
+              ]
+            ]
+          },
+          {
+            "start": 907,
+            "end": 920,
+            "textSha256": "23f10e47dd68c4d453cc616c4e6ba277e06f93341807813bd782a33f8b2f44d9",
+            "domPath": "/html/body/div/main/section/section/article/div/ul/li[3]",
+            "requiredContextRanges": [
+              [
+                539,
+                597
+              ],
+              [
+                597,
+                764
+              ],
+              [
+                764,
+                876
+              ]
+            ]
+          },
+          {
+            "start": 920,
+            "end": 932,
+            "textSha256": "7bee388952e0e5f82c91b7111efcbcf3f1650f3669e514400dfc7bf26d5e9d30",
+            "domPath": "/html/body/div/main/section/section/article/div/ul/li[4]",
+            "requiredContextRanges": [
+              [
+                539,
+                597
+              ],
+              [
+                597,
+                764
+              ],
+              [
+                764,
+                876
+              ]
+            ]
+          },
+          {
+            "start": 932,
+            "end": 948,
+            "textSha256": "f59546b650074ba368ebd1fe44fbeebfa90211a4f0c1ef41314eead37b5d2497",
+            "domPath": "/html/body/div/main/section/section/article/div/ul/li[5]",
+            "requiredContextRanges": [
+              [
+                539,
+                597
+              ],
+              [
+                597,
+                764
+              ],
+              [
+                764,
+                876
+              ]
+            ]
+          },
+          {
+            "start": 948,
+            "end": 963,
+            "textSha256": "6f6ab7321ef9d802a4959c69b894a716c0f240dc68be6e25a61fe7961fc4cfbc",
+            "domPath": "/html/body/div/main/section/section/article/div/ul/li[6]",
+            "requiredContextRanges": [
+              [
+                539,
+                597
+              ],
+              [
+                597,
+                764
+              ],
+              [
+                764,
+                876
+              ]
+            ]
+          },
+          {
+            "start": 963,
+            "end": 1008,
+            "textSha256": "f20660b158d9614eda91ed8803bab49c34344b76568f5a3f5d2b6d0938022551",
+            "domPath": "/html/body/div/main/section/section/article/div/ul/li[7]",
+            "requiredContextRanges": [
+              [
+                539,
+                597
+              ],
+              [
+                597,
+                764
+              ],
+              [
+                764,
+                876
+              ]
+            ]
+          },
+          {
+            "start": 1008,
+            "end": 1292,
+            "textSha256": "6d91d69bddbe3067d224f6199a668a9da62b83e6b75f510e5f576cd16111662f",
+            "domPath": "/html/body/div/main/section/section/article/div/ul/li[8]",
+            "requiredContextRanges": [
+              [
+                539,
+                597
+              ],
+              [
+                597,
+                764
+              ],
+              [
+                764,
+                876
+              ]
+            ]
+          },
+          {
+            "start": 1292,
+            "end": 1813,
+            "textSha256": "3f0f4c7cd56f5d1f1e55c115fe32fcdf5ce56539848a309fe66fa7d789b19010",
+            "domPath": "/html/body/div/main/section/section/article/div/p[5]",
+            "requiredContextRanges": [
+              [
+                539,
+                597
+              ],
+              [
+                597,
+                764
+              ],
+              [
+                764,
+                876
+              ]
+            ]
+          },
+          {
+            "start": 1813,
+            "end": 1880,
+            "textSha256": "a6d4e71e792d4c448e62b912e289d7607214894cf1263510e58e5ff436996afc",
+            "domPath": "/html/body/div/main/section/section/article/div/h4[3]",
+            "requiredContextRanges": []
+          },
+          {
+            "start": 1880,
+            "end": 1992,
+            "textSha256": "cbb08335ed44070be9879a975d823822a412e7cbd5147bf2accb46c404bee89a",
+            "domPath": "/html/body/div/main/section/section/article/div/p[6]",
+            "requiredContextRanges": [
+              [
+                1813,
+                1880
+              ]
+            ]
+          },
+          {
+            "start": 1992,
+            "end": 2765,
+            "textSha256": "fd79b329bbaf03f8ec414cc7922273cf4369c3ddfdd9f270b52422f7ac2d71a5",
+            "domPath": "/html/body/div/main/section/section/article/div/p[7]",
+            "requiredContextRanges": [
+              [
+                1813,
+                1880
+              ],
+              [
+                1880,
+                1992
+              ]
+            ]
+          },
+          {
+            "start": 2765,
+            "end": 3142,
+            "textSha256": "45dc3081d885eea3eabdbbc91a704ca1671295e63b8f61da53e830545261b202",
+            "domPath": "/html/body/div/main/section/section/article/div/p[8]",
+            "requiredContextRanges": [
+              [
+                1813,
+                1880
+              ],
+              [
+                1880,
+                1992
+              ],
+              [
+                1992,
+                2765
+              ]
+            ]
+          },
+          {
+            "start": 3142,
+            "end": 3218,
+            "textSha256": "e2f570c250d2f2cce46ccc052c7a7ab03d8d84b2d52fd3d500bf0eb3298adca3",
+            "domPath": "/html/body/div/main/section/section/article/div/h4[4]",
+            "requiredContextRanges": []
+          },
+          {
+            "start": 3218,
+            "end": 3410,
+            "textSha256": "9457fb7fe14cd0aa21fc153659776b2ea7b6584b322230e353afd2d3246fa8bc",
+            "domPath": "/html/body/div/main/section/section/article/div/p[9]",
+            "requiredContextRanges": [
+              [
+                3142,
+                3218
+              ]
+            ]
+          },
+          {
+            "start": 3410,
+            "end": 3440,
+            "textSha256": "757ae838e958020e6757f94317ad14baf0fbe68da126defc847534e58f3382dc",
+            "domPath": "/html/body/div/main/section/section/article/div/h4[5]",
+            "requiredContextRanges": []
+          },
+          {
+            "start": 3440,
+            "end": 3776,
+            "textSha256": "28af7cafa87a4f6a4104203d4106d6fdd306b9cfde01f8008dfd55c4a2cf7aa2",
+            "domPath": "/html/body/div/main/section/section/article/div/p[10]",
+            "requiredContextRanges": [
+              [
+                3410,
+                3440
+              ]
+            ]
+          }
+        ]
+      },
+      "cardIds": [
+        "5622",
+        "7934"
+      ],
+      "cards": [
+        "Rivalry of Warlords",
+        "Gozen Match"
+      ]
+    }
+  ]
+}

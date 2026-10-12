@@ -311,7 +311,7 @@ export function makeQaSourceUnits(records) {
       canonicalBodySha256: sourceSha256(canonicalBody),
       text: canonicalBody,
       titlePath: [String(record.title || record.question || record.id)],
-      contextRefs: [],
+      contextRefs: (record.requiredContextRecordIds || []).map(id => `qa:${record.recordType}:${id}`),
       explicitRefs: [],
       ...(handle ? { handle, parentHandle } : {}),
     });

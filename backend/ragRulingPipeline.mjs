@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import {normalizeRuleSystem, ruleSystemDataDir, ruleSystemEnv} from './rulingRuleSystem.mjs';
 import { extractRagCards, normalizeCardKey } from "./ragCardExtractor.mjs";
 import { buildCardNicknameReferences, applyCardNicknameResolution } from './ragCardNicknames.mjs';
 import { loadCardNicknameData } from './ragCardNicknameData.mjs';
@@ -61,6 +62,7 @@ export function preloadRagRequestAssets({
   prepareGeminiIndexes = prepareBoundedEvidenceIndexes,
   officialQaExactAlreadyChecked = false,
 } = {}) {
+  dataDir ||= ruleSystemDataDir(env.RAG_RULE_SYSTEM || 'OCG', env);
   if (env.RAG_EVIDENCE_PIPELINE !== 'cloud_evidence_v1'
       || !/^(?:1|true|yes|on)$/iu.test(String(env.GEMINI_RULE_QA_ENABLED || '').trim())) return undefined;
   const observe = (promise) => {
@@ -77,7 +79,7 @@ export function preloadRagRequestAssets({
     // Yield once after card data becomes ready. This is early local work, not
     // a worker thread: synchronous index construction still uses the main loop.
     await new Promise(resolve => setImmediate(resolve));
-    const indexes = await prepareGeminiIndexes(assets);
+    const indexes = await prepareGeminiIndexes(assets, {dataDir: env.GEMINI_RULE_QA_DATA_DIR});
     requestAssetsResident = true;
     return indexes;
   }));
@@ -104,6 +106,7 @@ export function startCardNameExtraction({
   signal,
   loadPreparedData = loadPreparedRagCardData,
 } = {}) {
+  dataDir ||= ruleSystemDataDir(env.RAG_RULE_SYSTEM || 'OCG', env);
   const startedAt = Date.now();
   const query = String(question || "").trim();
   const work = (async () => {
@@ -113,7 +116,7 @@ export function startCardNameExtraction({
     const dataRevision = buildRagDataRevision(data, env, { cacheByIdentity: !cards });
     const dataLoadMs = elapsedMs(startedAt);
     signal?.throwIfAborted?.();
-    const prepared = prepareCardNameExtractionInput(query, data);
+    const prepared = prepareCardNameExtractionInput(query, data, env.RAG_RULE_SYSTEM, env);
     const modelStartedAt = Date.now();
     let cardNameModel = await callCardNameExtractionModel({
       userQuery: query,
@@ -151,10 +154,10 @@ export function startCardNameExtraction({
   return work;
 }
 
-function prepareCardNameExtractionInput(query, data) {
+function prepareCardNameExtractionInput(query, data, ruleSystem = 'OCG', env = {}) {
   const preflightStartedAt = Date.now();
   const localCardResolution = extractRagCards(query, { cards: data.cards || [] });
-  const cardNicknameReferences = buildCardNicknameReferences(query, data.cards || [], loadCardNicknameData());
+  const cardNicknameReferences = buildCardNicknameReferences(query, data.cards || [], loadCardNicknameData(ruleSystem, env));
   const cardNameReferences = localCardResolution.resolvedCards.flatMap((match) => {
     // This explicit provenance tag identifies a card-text expansion, not
     // a query match. Omitting its name hint does not remove any evidence
@@ -172,14 +175,16 @@ function prepareCardNameExtractionInput(query, data) {
 
 async function resolveExtractedCardNames({query, data, cardNameModel, localCardResolution,
   cardNicknameReferences, ...options}) {
+  const identityCards = options.env?.RAG_RULE_SYSTEM === 'TCG' && (cardNameModel.candidates || []).length
+    ? (await loadPreparedRagCardData()).cards : [];
   const base = cardNameModel.typedMentionSetProvided === true || (cardNameModel.candidates || []).length
-    ? extractRagCards(query, {cards: data.cards || [], modelCardNameCandidates: cardNameModel.candidates || [],
+    ? extractRagCards(query, {cards: data.cards || [], identityCards, modelCardNameCandidates: cardNameModel.candidates || [],
       ...(cardNameModel.typedMentionSetProvided === true ? {mentionSetSource: 'typed_model'} : {})})
     : localCardResolution;
   const cardResolution = addDescribedCardProposals(applyCardNicknameResolution(base, {
     query, cards: data.cards || [], references: cardNicknameReferences,
   }), cardNameModel.describedCards, data.cards || []);
-  return confirmPendingCardCandidates({userQuery: query, cardResolution, cards: data.cards || [], ...options});
+  return confirmPendingCardCandidates({userQuery: query, cardResolution, cards: data.cards || [], identityCards, ...options});
 }
 
 // A "series + card kind" description names no card. Catalog records whose
@@ -276,6 +281,8 @@ const DISABLED_AUXILIARY_STAGE = Object.freeze({
 });
 
 export async function answerRagRulingQuestion(options = {}) {
+  options = {...options, env: ruleSystemEnv(options.env || globalThis.process?.env || {},
+    normalizeRuleSystem(options.ruleSystem || options.env?.RAG_RULE_SYSTEM || 'OCG'))};
   const activeEnv=options.env || globalThis.process?.env || {};
   if(activeEnv.RAG_EVIDENCE_PIPELINE==='cloud_evidence_v1') {
     if(options.dryRun===true || /^(1|true|yes|on)$/iu.test(String(activeEnv.RAG_DRY_RUN||''))) {
@@ -293,6 +300,8 @@ export async function answerRagRulingQuestion(options = {}) {
  * final model call and shapes the existing public answer.
  */
 export async function finalizePreparedRagRulingQuestion(options = {}) {
+  options = {...options, env: ruleSystemEnv(options.env || globalThis.process?.env || {},
+    normalizeRuleSystem(options.continuation?.cardResolution?.ruleSystem || 'OCG'))};
   const activeEnv = options.env || globalThis.process?.env || {};
   const cloudEvidence = activeEnv.RAG_EVIDENCE_PIPELINE === "cloud_evidence_v1";
   if (cloudEvidence && (options.dryRun === true
@@ -462,6 +471,7 @@ async function finalizePreparedRagRulingQuestionCore({
 
   return {
     mode: continuation.mode || (cloudEvidence ? "cloud_evidence_v1" : "rag_baseline"),
+    ruleSystem: continuation.cardResolution?.ruleSystem || 'OCG',
     answerLocale: continuation.answerLocale || "zh-CN",
     // Authority is server-owned. A model cannot promote ordinary evidence to
     // an official ruling, while a completed answer from the already-certified
@@ -635,12 +645,14 @@ function pendingCardIdentityLines(cardResolution, answerLocale = "zh-CN") {
   // Render the final identity owner's pending records. Exact duplicates are
   // combined for display only; candidates never become confirmed identities.
   const pending = new Map();
+  const tcgNotCollected = new Set();
   for (const mention of [
     ...(cardResolution.unresolvedMentions || []),
     ...(cardResolution.ambiguousMentions || []),
   ]) {
     const input = String(mention?.input || mention?.originalText || "").trim();
     if (!input) continue;
+    if (mention.tcgAvailability === 'not_collected') tcgNotCollected.add(input);
     const candidates = pending.get(input) || new Set();
     for (const candidate of mention.candidateCards || []) {
       const name = String(candidate?.name || "").trim();
@@ -649,6 +661,11 @@ function pendingCardIdentityLines(cardResolution, answerLocale = "zh-CN") {
     pending.set(input, candidates);
   }
   return [...pending].map(([input, candidates]) => {
+    if (tcgNotCollected.has(input)) {
+      if (answerLocale === 'en') return `“${input}” is not present in the current TCG catalog. No OCG card text was substituted.`;
+      if (answerLocale === 'ja') return `「${input}」は現在のTCGカードデータに未収録です。`;
+      return `「${input}」TCG 未收录（当前卡库快照）。`;
+    }
     if (answerLocale === "en") return `“${input}” is not confirmed. ${candidates.size
       ? `Possible cards (unconfirmed): ${[...candidates].join(", ")}. ` : ""}Please provide the full card name, card number, or original card text.`;
     if (answerLocale === "ja") return `「${input}」は未確定です。${candidates.size
@@ -787,6 +804,8 @@ async function answerRagRulingQuestionInternal({
   nonCardElapsedBeforePipelineMs = 0,
   progress,
 } = {}) {
+  const ruleSystem = normalizeRuleSystem(env.RAG_RULE_SYSTEM || 'OCG');
+  dataDir ||= ruleSystemDataDir(ruleSystem, env);
   const pipelineStartedAt = Date.now();
   const timingsMs = {};
   const query = String(question || userQuery || "").trim();
@@ -828,7 +847,7 @@ async function answerRagRulingQuestionInternal({
   }
   timingsMs.dataLoad = elapsedMs(dataStartedAt);
 
-  if (!officialQaExactAlreadyChecked) {
+  if (!officialQaExactAlreadyChecked && ruleSystem !== 'TCG') {
     const exactStartedAt = Date.now();
     const exactMatch = await retrieveExactOfficialQaDirect({
       question: query,
@@ -878,7 +897,7 @@ async function answerRagRulingQuestionInternal({
     identitySelectionUsed = Number(priorConfirmation?.modelCallCount || 0) > 0;
     const prepared = earlyUsable
       ? { localCardResolution: early.localCardResolution, cardNicknameReferences: early.cardNicknameReferences }
-      : prepareCardNameExtractionInput(query, data);
+      : prepareCardNameExtractionInput(query, data, ruleSystem, env);
     const localCardResolution = prepared.localCardResolution;
     const cardNicknameReferences = prepared.cardNicknameReferences;
     timingsMs.deterministicPreflight = elapsedMs(preflightStartedAt);
@@ -952,9 +971,13 @@ async function answerRagRulingQuestionInternal({
   // Gemini builds the final prompt inside the retrieval provider, so pending
   // typed-interface gaps must already be part of the card-resolution envelope
   // it receives. Other retrieval paths retain their existing ordering.
-  const retrievalCardResolution = geminiRuleQaEnabled
+  let retrievalCardResolution = geminiRuleQaEnabled
     ? appendTypedCardInterfaceGaps(cardResolution, cardNameModel.invalidTypedMentions)
     : cardResolution;
+  if (ruleSystem === 'TCG') retrievalCardResolution = {...retrievalCardResolution, ruleSystem,
+    resolvedCards: retrievalCardResolution.resolvedCards.map(card => ({...card,
+      ...Object.fromEntries(['ruleSystem','region','sourceLanguage','sourceVersion','sourceDate','effectiveAt','sourceUrl']
+        .map(key => [key, data.cards.find(source => String(source.id) === String(card.id))?.[key] ?? card[key] ?? null]))}))};
   try {
     const geminiProvider = geminiRuleQaEnabled
       ? geminiEvidenceProvider || createGeminiRuleQaEvidenceProvider({
@@ -983,7 +1006,7 @@ async function answerRagRulingQuestionInternal({
       cards: data.cards,
       records: data.records,
       qaRecords: data.qaRecords,
-      enableLiveOfficialQa: true,
+      enableLiveOfficialQa: ruleSystem !== 'TCG',
       subsumptionCandidatePoolComplete: usesCompleteDefaultSnapshot && data?.completeEvidenceCorpus !== false,
       cardIdentitySelectionProvider: async ({ candidateSets }) => {
         if (identitySelectionUsed) return [];
@@ -997,6 +1020,7 @@ async function answerRagRulingQuestionInternal({
       },
       preparedEvidenceProvider: geminiProvider
         ? async (preparedEvidence) => {
+          if (ruleSystem === 'TCG') preparedEvidence.cardResolution = {...preparedEvidence.cardResolution, ruleSystem};
           const cardStages = preparedEvidence.debug?.timingsMs || {};
           timingsMs.cardPreparation = timingsMs.dataAndQueryExtraction
             + (cardStages.cardResolution || 0) + (cardStages.cardTextPreparation || 0);
@@ -1082,6 +1106,15 @@ async function answerRagRulingQuestionInternal({
       reconcileCardResolution(cardResolution, retrievedEvidence),
       cardNameModel.invalidTypedMentions,
     );
+
+  if (ruleSystem === 'TCG') {
+    effectiveCardResolution.ruleSystem = ruleSystem;
+    const catalog = new Map(data.cards.map(card => [String(card.id), card]));
+    effectiveCardResolution.resolvedCards = effectiveCardResolution.resolvedCards.map(card => ({
+      ...card, ...catalog.get(String(card.id)), input:card.input, matchedQuery:card.matchedQuery,
+      resolutionSource:card.resolutionSource, ruleSystem,
+    }));
+  }
 
   // Without an explicitly injected provider, the public pure-LLM path ends
   // evidence preparation here and passes the retriever result through exactly.

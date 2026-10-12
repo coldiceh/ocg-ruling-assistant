@@ -93,9 +93,6 @@ function makeExcerpt(parent, parentHandle, qaRevision, source, bodySha256, start
     id: `${parent.id}-${start}-${end}`,
     recordType: "card-faq",
     title: parent.title,
-    cards: clone(parent.cards),
-    cardIds: clone(parent.cardIds),
-    status: parent.status,
     conclusion: source.slice(start, end),
     sourceExcerpt: {
       parentRecordId: parent.id,
@@ -109,7 +106,8 @@ function makeExcerpt(parent, parentHandle, qaRevision, source, bodySha256, start
     },
   };
   copyDefined(parent, excerpt, [
-    "sourceAuthority", "sourceTier", "official", "updatedAt", "sources", "sourceName", "sourceUrl",
+    "cards", "cardIds", "status", "sourceAuthority", "sourceTier", "official", "updatedAt", "sources", "sourceName", "sourceUrl",
+    "ruleSystem", "region", "sourceLanguage", "sourceVersion", "sourceDate", "effectiveAt",
   ]);
   return Object.freeze(excerpt);
 }
@@ -118,7 +116,25 @@ function expandFaq(item, qaRevision) {
   const parent = item.record;
   const source = parent.conclusion;
   const bodySha256 = sha256(source);
-  const starts = segmentStarts(source);
+  const declared = parent.sourceStructure;
+  // Only an adapter-declared canonical body is checked. Offsets, exact hashes
+  // and a gap-free partition are mechanical; false rejection stops packing.
+  // Existing paragraph splitting cannot observe the DOM relation it lost.
+  if (declared) {
+    if (declared.schemaVersion !== 1 || declared.bodyField !== 'conclusion'
+        || declared.bodySha256 !== bodySha256 || !Array.isArray(declared.segments))
+      throw new Error('faq_source_structure_binding_invalid');
+    let cursor = 0;
+    for (const segment of declared.segments) {
+      if (segment.start !== cursor || !Number.isSafeInteger(segment.end)
+          || segment.end <= cursor || segment.end > source.length
+          || sha256(source.slice(segment.start, segment.end)) !== segment.textSha256)
+        throw new Error('faq_source_segment_binding_invalid');
+      cursor = segment.end;
+    }
+    if (cursor !== source.length) throw new Error('faq_source_partition_invalid');
+  }
+  const starts = declared ? declared.segments.map(row => row.start) : segmentStarts(source);
   const segments = [];
   let heading = null;
   for (let index = 0; index < starts.length; index += 1) {
@@ -127,8 +143,20 @@ function expandFaq(item, qaRevision) {
     if (end <= start) continue;
     const ownHeading = headingForSegment(source, start);
     if (ownHeading) heading = ownHeading;
-    const record = makeExcerpt(parent, item.handle, qaRevision, source, bodySha256,
+    let record = makeExcerpt(parent, item.handle, qaRevision, source, bodySha256,
       start, end, ownHeading ? null : heading);
+    if (declared) {
+      const segment = declared.segments[index];
+      const required = segment.requiredContextRanges || [];
+      for (const range of required) {
+        if (!Array.isArray(range) || range.length !== 2
+            || !declared.segments.some(row => row.start === range[0] && row.end === range[1]))
+          throw new Error('faq_declared_context_absent');
+      }
+      record = Object.freeze({...record,
+        requiredContextRecordIds: required.map(([left, right]) => `${parent.id}-${left}-${right}`),
+        sourceDomPath: segment.domPath});
+    }
     const handle = sha256(canonicalJson({ parentHandle: item.handle, qaRevision, start, end }));
     segments.push({ handle, record });
   }

@@ -1,5 +1,7 @@
 import { searchCards } from "../backend/baigeCardProvider.mjs";
 
+import {normalizeRuleSystem, ruleSystemEnv} from '../backend/rulingRuleSystem.mjs';
+
 const allowedOrigin = process.env.ALLOWED_ORIGIN || "*";
 
 export default async function handler(request, response) {
@@ -16,6 +18,10 @@ export default async function handler(request, response) {
   }
 
   const query = getQuery(request);
+  let ruleSystem;
+  try { ruleSystem = normalizeRuleSystem(firstString(query.ruleSystem) || 'OCG'); }
+  catch (error) { response.status(400).json({error:error.message, code:error.code}); return; }
+  const env = ruleSystemEnv(process.env, ruleSystem);
   const id = normalizeId(firstString(query.id));
   const name = firstString(query.name);
   const jaName = firstString(query.jaName);
@@ -29,7 +35,7 @@ export default async function handler(request, response) {
 
   const warnings = [];
   for (const attempt of attempts) {
-    const result = await searchCards(attempt, { env: process.env, limit: 5 });
+    const result = await searchCards(attempt, { env, ruleSystem, limit: 5 });
     warnings.push(...(result.warnings || []));
     const best = pickBestApiCard(result.results || [], { id, query: attempt });
     if (!best) continue;
@@ -83,7 +89,9 @@ function toCardApiResponse(card, warnings) {
       .filter(Boolean)
       .join(" / "),
     effectText: card.text || card.effectText || "",
-    sourceLabel: "百鸽",
+    ruleSystem: card.ruleSystem || 'OCG',
+    sourceLabel: card.sourceLabel || '百鸽',
+    pendulumEffectText: card.pendulumEffectText || '',
     sourceUrl: card.sourceUrl || "",
     imageUrl: card.imageUrl || "",
     imageCandidates: card.imageCandidates || [],
@@ -92,7 +100,7 @@ function toCardApiResponse(card, warnings) {
 }
 
 function attachImageProxy(request, card) {
-  if (!card?.id) return;
+  if (!card?.id || card.ruleSystem === 'TCG') return;
   const proxyUrl = buildImageProxyUrl(request, card.id);
   if (!proxyUrl) return;
   card.imageUrl = proxyUrl;
