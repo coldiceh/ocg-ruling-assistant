@@ -28,6 +28,14 @@ test("the current browser request contract is classified as web", () => {
   assert.equal(classifyPublicRequestChannel({ ...webBody, answerLocale: "ja", action: "prepare" }), PUBLIC_REQUEST_CHANNELS.WEB);
 });
 
+test("valid explicit rulesets keep the web request channel", () => {
+  for (const ruleSystem of ["OCG", "TCG"]) {
+    assert.equal(classifyPublicRequestChannel({ ...webBody, ruleSystem }), PUBLIC_REQUEST_CHANNELS.WEB);
+    assert.equal(classifyPublicRequestChannel({ ...webBody, ruleSystem, answerLocale: "en", evidenceSelector: "decisions", action: "prepare" }), PUBLIC_REQUEST_CHANNELS.WEB);
+  }
+  assert.equal(classifyPublicRequestChannel({ ...webBody, ruleSystem: "unsupported" }), PUBLIC_REQUEST_CHANNELS.UNKNOWN);
+});
+
 test("web presentation removes only the recorded generation footer", () => {
   const footer = "\n\n实际最终模型：test；请求推理强度：low";
   const answer = { shortAnswer: `正文${footer}`, generation: { embeddedInAnswerText: true, answerTextFooter: footer },

@@ -309,7 +309,14 @@ test("Vercel verifies the source, runtime, and enabled Gemini asset bindings bef
       expectedBoundedAssets,
       `${route} must package exactly the seven Gemini runtime files and two files per dense index`,
     );
-    assert.match(excluded, /data\/\{cards,rulings,qa-index,evidence-index,ocg-rule-corpus,official-responses\}\.json/u);
+    for (const directory of ["data", "data/tcg"]) {
+      for (const file of ["cards", "rulings", "qa-index", "evidence-index", "ocg-rule-corpus", "official-responses"]) {
+        assert.ok(!expandBraces(included).some(pattern => globMatches(`${directory}/${file}.json`, pattern)),
+          `${route} must not force-include ${directory}/${file}.json`);
+        assert.ok(expandBraces(excluded).some(pattern => globMatches(`${directory}/${file}.json`, pattern)),
+          `${route} must exclude ${directory}/${file}.json`);
+      }
+    }
     assert.match(excluded, /data\/evidence-index\.json\.gz/u);
     assert.match(excluded, /canonical-manifest\.json/u);
     assert.match(excluded, /navigation-inputs\.json\.gz/u);

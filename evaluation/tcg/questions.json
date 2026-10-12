@@ -1,0 +1,166 @@
+{
+  "schemaVersion": 1,
+  "ruleSystem": "TCG",
+  "cases": [
+    {
+      "id": "trigger-zone",
+      "group": "shared-rule-control",
+      "question": "一个怪兽的诱发效果在墓地满足发动条件，但在当前连锁处理完毕、它可以发动该效果之前，该怪兽已从墓地被表侧除外。没有其他例外效果。连锁处理完毕后，它能否发动那个在墓地满足条件的诱发效果？",
+      "ruleSystem": "TCG",
+      "answerLocale": "zh-CN",
+      "questionSha256": "46967e48d1c11ac1ad610c8fdca62c737d6e06e0e040784256ed4d2c68cd388f"
+    },
+    {
+      "id": "rivalry-reborn",
+      "group": "shared-rule-control",
+      "question": "「群雄割据」正在适用，我方只控制表侧表示的魔法师族怪兽，双方墓地都只有不死族怪兽，且没有任何其他召唤限制或例外。我方能否发动「死者苏生」？",
+      "ruleSystem": "TCG",
+      "answerLocale": "zh-CN",
+      "questionSha256": "aa23f1a92df1052143b71a8968cf6d6530786cc8cfa1fc9832e288ec6e1d7c20"
+    },
+    {
+      "id": "diff-goblindbergh",
+      "group": "difference-candidate",
+      "question": "在我方回合，我方通常召唤等级4的「格布林德伯格」，我方希望发动其召唤成功时的效果，并发动手牌中「影蜥蜴」的效果。对方也希望立即发动已盖放且可以发动的「激流葬」。我方已将「格布林德伯格」的效果作为C1发动；其他发动条件均满足，双方没有其他效果。C2和C3分别应该是哪张卡的效果？请只说明连锁建立顺序。",
+      "ruleSystem": "TCG",
+      "answerLocale": "zh-CN",
+      "questionSha256": "07b321eb9bca66d73a8dad79981b8a471e2383f5f6e6a47e555f2e800a99fe9c"
+    },
+    {
+      "id": "diff-tour-guide",
+      "group": "difference-candidate",
+      "question": "在我方回合，我方通常召唤等级3的「魔界发现世行死亡向导」，并将其召唤成功时从牌组特殊召唤怪兽的效果作为C1发动。我方还希望发动一直在手牌中的「影无茶骑士」的效果；对方希望以手牌中的「灰流丽」连锁无效C1，双方其他发动条件均满足且没有其他效果。我方能否先把「影无茶骑士」放在C2，使对方不能用「灰流丽」直接连锁C1？请说明连锁建立顺序。",
+      "ruleSystem": "TCG",
+      "answerLocale": "zh-CN",
+      "questionSha256": "b9f16eb08b086846242aae219f341bc567afac8b6a12bc8c4633182f3bf8cfeb"
+    },
+    {
+      "id": "extra-deck-fusion",
+      "group": "2021-update",
+      "question": "Can a Fusion Monster be Fusion Summoned from the Extra Deck to an ordinary Main Monster Zone with no Link arrow pointing to it, if all other requirements are met?",
+      "ruleSystem": "TCG",
+      "answerLocale": "en",
+      "questionSha256": "0bc79bf45ba186b56d1a8614e475d31229e9b70e802f53098b78fa369707c55f"
+    },
+    {
+      "id": "pendulum-extra-deck",
+      "group": "2021-update",
+      "question": "Does the same unrestricted Main Monster Zone placement apply to Pendulum Monsters being Pendulum Summoned from the face-up Extra Deck?",
+      "ruleSystem": "TCG",
+      "answerLocale": "en",
+      "questionSha256": "c5edabea05f53645ae2ad7cd799a4ae82b09ff835292d809888bfc475768bb09"
+    },
+    {
+      "id": "negated-summon-limit",
+      "group": "2021-update",
+      "question": "My Normal Summon was negated. Does that attempt by itself count as a Summon for a restriction that says you cannot Normal or Special Summon the turn you activate this card? Assume no other Summons or restrictions.",
+      "ruleSystem": "TCG",
+      "answerLocale": "en",
+      "questionSha256": "cea5635b4de98be5a93361b79694af8da2282049cd4ec709dafea91601230d52"
+    },
+    {
+      "id": "leaves-field-extra-deck",
+      "group": "2021-update",
+      "question": "A face-up Fusion Monster has an effect that activates when it leaves the field. It is returned to the Extra Deck. Does that leaves-the-field effect activate? Assume no special exception.",
+      "ruleSystem": "TCG",
+      "answerLocale": "en",
+      "questionSha256": "07a349644a99cadbb1cd46408a98d8cf0112cae42b5dd0b01141af638db0a618"
+    },
+    {
+      "id": "trap-monster-zones",
+      "group": "2021-update",
+      "question": "A Trap Monster says This card is also still a Trap. While it is in a Monster Zone, does it also occupy a Spell & Trap Zone?",
+      "ruleSystem": "TCG",
+      "answerLocale": "en",
+      "questionSha256": "7ab21ed904c39d989f65aab9eb49adca4cad89e52f3002f47d67d7411d9ee041"
+    },
+    {
+      "id": "normal-summon-fast-window",
+      "group": "fast-timing",
+      "question": "The turn player Normal Summons a monster and no Trigger Effect can activate. Who gets the first chance to activate a fast effect? Is this already an open game state?",
+      "ruleSystem": "TCG",
+      "answerLocale": "en",
+      "questionSha256": "b0362c8455b28689528bd57d0f422dab33b256d4bc328c27496f7a5ca9220fd0"
+    },
+    {
+      "id": "phase-change-opportunity",
+      "group": "fast-timing",
+      "question": "In an open game state, the turn player wants to leave the Main Phase. Must the opponent receive a fast-effect opportunity before the phase changes?",
+      "ruleSystem": "TCG",
+      "answerLocale": "en",
+      "questionSha256": "de0b5b7a6927a786c9c3362d6619bc7a0a8ec3f7813aa960e83e5b65e078cd57"
+    },
+    {
+      "id": "after-chain-fast-window",
+      "group": "fast-timing",
+      "question": "A Chain has finished resolving, and no Trigger Effects can activate. Who may activate the first fast effect, even if the opponent activated the last Chain Link?",
+      "ruleSystem": "TCG",
+      "answerLocale": "en",
+      "questionSha256": "d765088c683ea8a1fe6ae17ecc52d1dfb9951bfb3bb283979040a503b84abb87"
+    },
+    {
+      "id": "flip-damage-step",
+      "group": "damage-step",
+      "question": "A face-down monster is attacked and flipped face-up before damage calculation. When does its Flip Effect activate, assuming no exception?",
+      "ruleSystem": "TCG",
+      "answerLocale": "en",
+      "questionSha256": "539d77ffecd56018882eee5d26e8ce7604dee5c602b6fe691a81d2819d217072"
+    },
+    {
+      "id": "battle-destroyed-send",
+      "group": "damage-step",
+      "question": "Damage calculation determines that a monster will be destroyed by battle. Is it sent to the GY immediately during damage calculation, or later?",
+      "ruleSystem": "TCG",
+      "answerLocale": "en",
+      "questionSha256": "bfb416414b8bcaef0a99773c20f224cf35b1260aeb4c7281ed66fc3dd6975728"
+    },
+    {
+      "id": "rivalry-set-wrong-type",
+      "group": "faq",
+      "question": "Rivalry of Warlords is active and I control a face-up Spellcaster. May I Set a Zombie monster face-down? May I later Flip Summon that Zombie while the same restriction applies?",
+      "ruleSystem": "TCG",
+      "answerLocale": "en",
+      "questionSha256": "58edfb73709eaa3c1f44f32f50d49d1a107ec7221128683c21c75449d0dc93e0"
+    },
+    {
+      "id": "rivalry-gain-control",
+      "group": "faq",
+      "question": "Rivalry of Warlords is active and I control only a face-up Spellcaster. May I take control of an opponent's face-up Zombie with Mind Control? What happens to the Zombie?",
+      "ruleSystem": "TCG",
+      "answerLocale": "en",
+      "questionSha256": "9ff37aa8c4fa4caa3723fafbd6de59c56d9b8d2624c641e092769b659365898d"
+    },
+    {
+      "id": "psct-then-a-fails",
+      "group": "psct",
+      "question": "At resolution an effect says Do A, then do B. A cannot be performed. Can B still be performed? Assume no special exception.",
+      "ruleSystem": "TCG",
+      "answerLocale": "en",
+      "questionSha256": "5af095756d0147d7b9deeea6f3c8e7cc47d555d2bf453e364a9fe1cd5ff3bf8b"
+    },
+    {
+      "id": "psct-then-b-fails",
+      "group": "psct",
+      "question": "At resolution an effect says Do A, then do B. A is possible but B is impossible. Is A still performed? Assume no special exception.",
+      "ruleSystem": "TCG",
+      "answerLocale": "en",
+      "questionSha256": "2f301f8a2d30f2cb3993751803e497785730da75f1e977d7c0dc2f3732506806"
+    },
+    {
+      "id": "psct-also-a-fails",
+      "group": "psct",
+      "question": "At resolution an effect says Do A, also do B. A is impossible but B is possible. Is B still performed? Assume no special exception.",
+      "ruleSystem": "TCG",
+      "answerLocale": "en",
+      "questionSha256": "c22aff62d5380e151d6bc0c48c6b2fa0b7c01d9523919b1bfab921ef8818181f"
+    },
+    {
+      "id": "psct-and-if-you-do",
+      "group": "psct",
+      "question": "For Do A, and if you do, do B, are A and B simultaneous for timing, and which operation is required for the other?",
+      "ruleSystem": "TCG",
+      "answerLocale": "en",
+      "questionSha256": "55c1c0f6eeaa30ed2f8b66ee1cffcb5107f01b1eeb866dc72cc04db2cb0933c4"
+    }
+  ]
+}

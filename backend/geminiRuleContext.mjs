@@ -44,6 +44,8 @@ export function buildRuleContext(records, { ruleContentRevision, structureMappin
     documentHashes.set(doc, canonicalHash);
     canonicalChars += doc.text.length;
     const source = { sourceUrl: doc.sourceUrl, source: doc.sourceName,
+      ...Object.fromEntries(['ruleSystem', 'region', 'sourceLanguage', 'sourceVersion', 'sourceDate', 'effectiveAt']
+        .filter(key => Object.hasOwn(doc, key)).map(key => [key, doc[key]])),
       ...(Object.hasOwn(doc, 'sourceAuthority') ? { sourceAuthority: doc.sourceAuthority } : {}),
       ...(Object.hasOwn(doc, 'official') ? { official: doc.official } : {}) };
     const sourceSections = doc.structure?.sections || [];
@@ -123,6 +125,8 @@ export function buildRuleContext(records, { ruleContentRevision, structureMappin
       throw new Error('gemini_rule_structure_mapping_source_binding_invalid');
     }
     const atomSource = { sourceUrl: doc.sourceUrl, source: doc.sourceName,
+      ...Object.fromEntries(['ruleSystem', 'region', 'sourceLanguage', 'sourceVersion', 'sourceDate', 'effectiveAt']
+        .filter(key => Object.hasOwn(doc, key)).map(key => [key, doc[key]])),
       ...(Object.hasOwn(doc, 'sourceAuthority') ? { sourceAuthority: doc.sourceAuthority } : {}),
       ...(Object.hasOwn(doc, 'official') ? { official: doc.official } : {}) };
     for (const [atomIndex, atom] of (sourceMapping.atoms || []).entries()) {

@@ -150,8 +150,10 @@ function applyUiLocale(locale) {
     const node = document.querySelector(selector); if (node) node.textContent = tr(original);
   }
   if (ui.questionInput) ui.questionInput.placeholder = selectedUiLocale === "en"
-    ? "Enter an OCG ruling question…" : selectedUiLocale === "ja"
-      ? "OCGの裁定に関する質問を入力…" : "输入需要分析的 OCG 裁定问题...";
+    ? `Enter a ${ui.ruleSystemSelect?.value || 'OCG'} ruling question…` : selectedUiLocale === "ja"
+      ? `${ui.ruleSystemSelect?.value || 'OCG'}の裁定に関する質問を入力…` : `输入需要分析的 ${ui.ruleSystemSelect?.value || 'OCG'} 裁定问题...`;
+  const systemLabel = document.querySelector('#ruleSystemLabel');
+  if (systemLabel) systemLabel.textContent = lt('规则体系', 'Rule system', 'ルール体系');
   if (ui.themeToggle) applyTheme(document.body.classList.contains("theme-night") ? "night" : "day");
   if (ui.clearButton) {
     ui.clearButton.title = tr("清空");
@@ -196,6 +198,7 @@ const FALLBACK_RULING_MODEL_PROFILE = Object.freeze({
 const ui = {
   deploymentLabel: document.querySelector("#deploymentLabel"),
   questionInput: document.querySelector("#questionInput"),
+  ruleSystemSelect: document.querySelector('#ruleSystemSelect'),
   analyzeButton: document.querySelector("#analyzeButton"),
   analyzeButtonText: document.querySelector("#analyzeButtonText"),
   prepareEvidenceButton: document.querySelector("#prepareEvidenceButton"),
@@ -829,6 +832,7 @@ function formatDateTime(value) {
 }
 
 function getDetectedCards(text) {
+  if (ui.ruleSystemSelect?.value === 'TCG') return [];
   const normalized = normalizeText(text).toLowerCase();
   return allCards()
     .map((card) => {
@@ -863,6 +867,7 @@ async function analyzeQuestion({ prepareOnly = false } = {}) {
     renderPending();
     try {
       const answer = await requestBackendAnswer(text, requestedRulingVersion, {
+        ruleSystem: ui.ruleSystemSelect?.value || 'OCG',
         answerLocale,
         evidenceSelector: ui.evidenceSelector?.value || "decisions",
         signal: abortController.signal,
@@ -896,6 +901,7 @@ async function analyzeQuestion({ prepareOnly = false } = {}) {
 
 async function requestBackendAnswer(text, requestedRulingVersion, {
   answerLocale = "zh-CN",
+  ruleSystem = "OCG",
   evidenceSelector = "decisions",
   signal,
   requestId = null,
@@ -913,6 +919,7 @@ async function requestBackendAnswer(text, requestedRulingVersion, {
       evidenceSelector,
       rulingVersion: requestedRulingVersion,
       answerLocale,
+      ...(ruleSystem === 'TCG' ? {ruleSystem} : {}),
       action: "prepare",
     },
     signal,
@@ -1539,7 +1546,7 @@ function renderBackendAnswer(answer) {
   lastRenderedBackendAnswer = answer || null;
   if (ui.answerLocaleStatus) {
     const locale = supportedLocales.includes(answer?.answerLocale) ? answer.answerLocale : "zh-CN";
-    ui.answerLocaleStatus.textContent = `${tr("回答语言")}: ${localeNames[locale]}`;
+    ui.answerLocaleStatus.textContent = `${answer?.ruleSystem || 'OCG'} · ${tr("回答语言")}: ${localeNames[locale]}`;
     ui.answerLocaleStatus.hidden = !answer;
   }
   renderAnswerVersion(answer);
@@ -2408,6 +2415,8 @@ function normalizeVisibleCards(cards) {
   const normalizedCards = (cards || []).map((card) => ({
     id: String(card.id || card.cardId || "").trim(),
     passcode: String(card.passcode || "").trim(),
+    ruleSystem: card.ruleSystem || 'OCG',
+    pendulumEffectText: String(card.pendulumEffectText || '').trim(),
     name: String(card.name || card.cnName || card.jaName || card.enName || "").trim(),
     cnName: String(card.cnName || "").trim(),
     jaName: String(card.jaName || card.jpName || "").trim(),
@@ -2552,7 +2561,7 @@ function selectCard(index) {
 }
 
 async function loadCardDetail(card) {
-  const key = card.passcode || card.id || card.name;
+  const key = `${card.ruleSystem || 'OCG'}:${card.passcode || card.id || card.name}`;
   if (cardDetailsCache.has(key)) return cardDetailsCache.get(key);
   if (card.source === "user_provided_text") {
     cardDetailsCache.set(key, null);
@@ -2566,7 +2575,8 @@ async function loadCardDetail(card) {
   }
 
   const url = new URL(endpoint);
-  const numericId = card.passcode;
+  if (card.ruleSystem === 'TCG') url.searchParams.set('ruleSystem', 'TCG');
+  const numericId = card.ruleSystem === 'TCG' ? card.id : card.passcode;
   if (numericId) url.searchParams.set("id", numericId);
   url.searchParams.set("name", card.cnName || card.name);
   if (card.jaName) url.searchParams.set("jaName", card.jaName);
@@ -5364,7 +5374,8 @@ function renderCardDetail(card, detail, status) {
 
   ui.cardName.textContent = name;
   ui.cardMeta.textContent = [detail?.meta || card.cardType, aliases.length ? aliases.join(" / ") : ""].filter(Boolean).join(" · ");
-  ui.cardEffect.textContent = effect;
+  const pendulum = detail?.pendulumEffectText || card.pendulumEffectText;
+  ui.cardEffect.textContent = pendulum ? `Pendulum Effect\n${cleanDisplayText(pendulum)}\n\nMonster Effect\n${effect}` : effect;
   ui.cardSourceLink.textContent = tr(sourceLabel);
   if (sourceUrl) {
     ui.cardSourceLink.href = sourceUrl;
@@ -6860,6 +6871,7 @@ async function init() {
       // Theme persistence is optional.
     }
   });
+  ui.ruleSystemSelect?.addEventListener('change', () => applyUiLocale(selectedUiLocale));
   ui.localeSelect?.addEventListener("change", () => {
     applyUiLocale(ui.localeSelect.value);
     try { localStorage.setItem(localeStorageKey, selectedUiLocale); } catch { /* Optional preference. */ }

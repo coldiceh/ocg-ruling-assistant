@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import {normalizeRuleSystem, ruleSystemEnv, RULE_SYSTEMS} from './rulingRuleSystem.mjs';
 import { getPublicReleaseInfo } from './publicReleaseInfo.mjs';
 import {
   createPublicAnswerModelEnv,
@@ -120,7 +121,7 @@ export function parsePublicAnswerPayload(body, {
   if (payload.action !== undefined && payload.action !== "prepare") {
     throw publicAnswerRequestError("Unsupported answer action", "invalid_answer_action");
   }
-  const allowedFields = ["action", "question", "mode", "rulingModelProfile", "rulingVersion", "answerLocale", "evidenceSelector"];
+  const allowedFields = ["action", "question", "mode", "rulingModelProfile", "rulingVersion", "answerLocale", "evidenceSelector", "ruleSystem"];
   if (Object.keys(payload).some(key => !allowedFields.includes(key))) {
     throw publicAnswerRequestError("Unsupported public request field", "unsupported_request_field");
   }
@@ -154,6 +155,7 @@ export function parsePublicAnswerPayload(body, {
     ...payload,
     question,
     answerLocale,
+    ruleSystem: normalizeRuleSystem(payload.ruleSystem),
   };
 }
 
@@ -217,6 +219,8 @@ export async function getPublicAnswerModelInfo({ env = process.env } = {}) {
     legacyModes: [],
     answerExecution: "prepared_v1",
     defaultEvidenceSelector: DEFAULT_PUBLIC_EVIDENCE_SELECTOR,
+    defaultRuleSystem: 'OCG',
+    ruleSystems: RULE_SYSTEMS,
     evidenceSelectors: PUBLIC_EVIDENCE_SELECTORS.map((id) => ({
       id,
       label: id === "decisions" ? "Decisions" : "Luna",
@@ -247,6 +251,7 @@ export async function answerPublicRulingQuestion({
   const requestDiagnostics = { requestId: randomUUID(), startedAt: new Date(publicRequestStartedAt).toISOString() };
   progress?.start?.();
   const normalizedPayload = parsePublicAnswerPayload(payload);
+  env = ruleSystemEnv(env, normalizedPayload.ruleSystem || 'OCG');
   if (normalizedPayload.action === "finalize" || normalizedPayload.action === "status") {
     throw publicAnswerRequestError(`${normalizedPayload.action} must use a saved preparation`, "invalid_answer_action");
   }
@@ -420,7 +425,7 @@ export async function answerPublicRulingQuestion({
     });
     requestDiagnostics.completedAt = new Date().toISOString();
     requestDiagnostics.durationMs = Math.max(0, Date.now() - publicRequestStartedAt);
-    answer = { ...answer, answerLocale: normalizedPayload.answerLocale,
+    answer = { ...answer, ruleSystem: normalizedPayload.ruleSystem, answerLocale: normalizedPayload.answerLocale,
       debug: { ...answer.debug, requestDiagnostics } };
     if (!prepareForContinuation) answer = await withPublicGenerationInfo(answer, profile, env, {fallbackFrom:selection.fallbackFrom});
     const audit = await auditPromise;

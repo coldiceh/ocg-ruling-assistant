@@ -30,7 +30,7 @@ question no longer activates a global lock. Existing administrative locks remain
 effective for answering, finalization and source translation.
 
 Request fields are limited to `question`, `action`, `mode`, `rulingModelProfile`,
-`rulingVersion`, `answerLocale` and `evidenceSelector`. Continuation and translation
+`rulingVersion`, `answerLocale`, `ruleSystem` and `evidenceSelector`. Continuation and translation
 actions retain their narrower field contracts. Provider credentials, prompts and
 budgets cannot be supplied in a public request.
 
@@ -38,3 +38,5 @@ These controls reduce abuse and bound per-client request volume. They do not
 authenticate users, guarantee model classification accuracy, or prevent distributed
 clients from sharing many addresses. Existing daily provider budgets remain the
 global spending controls.
+
+External API bodies may contain `question` and optional `ruleSystem` (`OCG` or `TCG`, default `OCG`) and `answerLocale` (`zh-CN`, `en`, or `ja`). These valid optional fields retain the external API channel and its presentation notice. Preparation binds the chosen ruleset and answer locale through finalization.

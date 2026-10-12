@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "kind": "rag-data-revision-manifest",
+  "compilerAbi": "rag-data-revision-compiler/v1",
+  "canonicalizationAbi": "rag-data-revision-canonical-json-lf/v2",
+  "revision": "9c989f7af262021f9bf263d1ce71815f239163504fe401215a3630f2de7fbff5",
+  "canonicalCorpusDigest": "9c989f7af262021f9bf263d1ce71815f239163504fe401215a3630f2de7fbff5",
+  "sourceSetDigest": "afa6d7cc7a970e048fd4a72498bec6ddca738e430dafceda5bcb242b2e03c894",
+  "counts": {
+    "cards": 14019,
+    "records": 73,
+    "qaRecords": 1
+  },
+  "sources": [
+    {
+      "path": "cards.json",
+      "bytes": 28062306,
+      "sha256": "1f9bc81d0a606056fecae518874ff4855cdfd6c01fe92e78c8ddf850b4655ab9"
+    },
+    {
+      "path": "rulings.json",
+      "bytes": 65,
+      "sha256": "a0cc734f66b8f815d04fa9649971666eaa96a8ec9dcfdfa7d9dc6070f39529b0"
+    },
+    {
+      "path": "qa-index.json",
+      "bytes": 14818,
+      "sha256": "f2ec09c9a8493abfc4e5b896eb6165211b0a91e7f12f8cbdf811b9d36e923cbe"
+    },
+    {
+      "path": "evidence-index.json",
+      "bytes": 65,
+      "sha256": "a0cc734f66b8f815d04fa9649971666eaa96a8ec9dcfdfa7d9dc6070f39529b0"
+    },
+    {
+      "path": "ocg-rule-corpus.json",
+      "bytes": 272402,
+      "sha256": "8f1e70388c35d387466faa9cd648d444dacb3af359a12b5648b0b01663e04b73"
+    },
+    {
+      "path": "official-responses.json",
+      "bytes": 65,
+      "sha256": "a0cc734f66b8f815d04fa9649971666eaa96a8ec9dcfdfa7d9dc6070f39529b0"
+    }
+  ]
+}

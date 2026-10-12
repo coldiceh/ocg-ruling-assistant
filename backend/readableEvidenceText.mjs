@@ -27,7 +27,8 @@ export function readableQaItem(item) {
 // fields; hashes, offsets and server lookup keys stay on the original object.
 export function readableRuleUnit(unit) {
   const fields = ['id', 'text', 'recordType', 'title', 'sourceUrl', 'source',
-    'sourceAuthority', 'sourceTier', 'official', 'updatedAt', 'checkedAt', 'tableLayout'];
+    'sourceAuthority', 'sourceTier', 'official', 'updatedAt', 'checkedAt', 'tableLayout',
+    'ruleSystem', 'region', 'sourceLanguage', 'sourceVersion', 'sourceDate', 'effectiveAt'];
   const result = Object.fromEntries(fields.filter(key => Object.hasOwn(unit, key)).map(key => [key, unit[key]]));
   if (unit.sourceSection) result.sourceSection = Object.fromEntries(
     ['title', 'titlePath'].filter(key => Object.hasOwn(unit.sourceSection, key))

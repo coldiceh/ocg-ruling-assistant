@@ -126,6 +126,20 @@ async function prepare(f) {
   return { res, output, id: output.find(x => x.type === "prepared")?.data.preparationId };
 }
 
+test("TCG web preparation returns the requested progress stream", async () => {
+  const f = fixture();
+  const res = response();
+  await f.handler(request({ ...body, ruleSystem: "TCG", answerLocale: "en" }), res);
+  assert.equal(res.headers["content-type"], "text/event-stream; charset=utf-8");
+  const output = events(res);
+  const prepared = output.find(item => item.type === "prepared")?.data;
+  assert.match(prepared?.preparationId || "", /^[0-9a-f]{64}$/u);
+  assert.equal(prepared.evidencePackage.filename, "tcg-evidence.txt");
+  assert.equal(output.at(-1)?.type, "end");
+  assert.equal(JSON.parse(JSON.parse([...f.values.values()][0]).preparation).ruleSystem, "TCG");
+  assert.deepEqual(f.counts, { prepare: 1, final: 0 });
+});
+
 test("an active global lock blocks finalize before claiming the preparation or calling the final model", async () => {
   const f = fixture({
     readRiskControl: async () => ({

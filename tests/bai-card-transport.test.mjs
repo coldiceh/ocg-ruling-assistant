@@ -130,6 +130,23 @@ test("card extraction and selection can be returned to Luna none by configuratio
   assert.deepEqual(requests.map((body) => [body.reasoning.effort, body.max_output_tokens]), [["none", 800], ["none", 800]]);
 });
 
+test("explicit card extraction none/low requests use separate cache entries and actual wire settings", async () => {
+  const requests=[];
+  for (const effort of ['none','low']) {
+    const result=await budgeted(callCardNameExtractionModel,{
+      userQuery:'第二轮推理设置对照',dataRevision:'round2-reasoning-contract',
+      env:{...baseEnv,RAG_CARD_BAI_EXTRACTION_REASONING_EFFORT:effort},
+      fetchImpl:async (_url,options)=>{
+        requests.push(JSON.parse(options.body));
+        return responseFor({cardNames:[],groupMentions:[]});
+      },
+    });
+    assert.equal(result.providerUsed,'bai');
+    assert.equal(requests.at(-1).reasoning.effort,effort);
+  }
+  assert.equal(requests.length,2);
+});
+
 test("public isolation keeps card-only b.ai settings while rule extraction stays on the configured auxiliary provider", () => {
   const env = createPublicAnswerModelEnv({
     BAI_CARD_ENABLED: "true",

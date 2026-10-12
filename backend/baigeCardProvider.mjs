@@ -1,5 +1,8 @@
 import { canonicalizeNumberedCardPrefixes, extractNumberedCardIdentities, hasNumberedCardIdentityConflict } from "./numberedCardIdentity.mjs";
 
+import {searchTcgCards} from './tcgCardProvider.mjs';
+import {normalizeRuleSystem} from './rulingRuleSystem.mjs';
+
 const BAIGE_API_BASE = "https://ygocdb.com/api/v0/";
 const DEFAULT_CACHE_TTL_MS = 86_400_000;
 const DEFAULT_TIMEOUT_MS = 6_000;
@@ -17,7 +20,8 @@ const RACE_NAMES = new Map([
 ]);
 
 export async function searchCards(query, options = {}) {
-  return searchBaigeCards(query, options);
+  const system = normalizeRuleSystem(options.ruleSystem || options.env?.RAG_RULE_SYSTEM || 'OCG');
+  return system === 'TCG' ? searchTcgCards(query, options) : searchBaigeCards(query, options);
 }
 
 export async function searchBaigeCards(query, {

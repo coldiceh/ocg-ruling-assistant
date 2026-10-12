@@ -1,0 +1,132 @@
+{
+  "schemaVersion": 3,
+  "kind": "gemini-rule-qa-assets",
+  "dataRevision": "9c989f7af262021f9bf263d1ce71815f239163504fe401215a3630f2de7fbff5",
+  "qaRevision": "0540085e94d26fddfaeb24ebd52f72a9b316fcbb448230f957240fd6f78c8110",
+  "ruleRevision": "c159d21645a86fc74409ed406c65cd02f33434c43f0f77b4c64de63255433967",
+  "qaContentRevision": "0540085e94d26fddfaeb24ebd52f72a9b316fcbb448230f957240fd6f78c8110",
+  "ruleContentRevision": "c159d21645a86fc74409ed406c65cd02f33434c43f0f77b4c64de63255433967",
+  "structureMappingRevision": "90b7ba20c838f5974462dff5079e0551d867cbd1add5a47e7c509c0441bd58fc",
+  "navigationRevision": "2ac3472c7d4c5972e8ed5859f03d4c0a276cb9b4b0c246329f3d69d76004ca4c",
+  "qaDenseRevision": "4f67acfb24d1f0d470f3830779ea9d3790679a75d440759a838e407b86977106",
+  "ruleDenseRevision": "7e7b64d09b1dab7d381bd92b8e1de64971b9b6a6cff5637e588833107752108c",
+  "contracts": {
+    "sourceAdapter": "source-structure-v1",
+    "canonicalBody": "canonical-body-v1",
+    "navigationPrompt": "navigation-v1",
+    "lexicalIndex": "context-navigation-v1"
+  },
+  "revisions": {
+    "qaContent": "0540085e94d26fddfaeb24ebd52f72a9b316fcbb448230f957240fd6f78c8110",
+    "ruleContent": "c159d21645a86fc74409ed406c65cd02f33434c43f0f77b4c64de63255433967",
+    "structureMapping": "90b7ba20c838f5974462dff5079e0551d867cbd1add5a47e7c509c0441bd58fc",
+    "navigation": "2ac3472c7d4c5972e8ed5859f03d4c0a276cb9b4b0c246329f3d69d76004ca4c",
+    "qaDense": "4f67acfb24d1f0d470f3830779ea9d3790679a75d440759a838e407b86977106",
+    "ruleDense": "7e7b64d09b1dab7d381bd92b8e1de64971b9b6a6cff5637e588833107752108c"
+  },
+  "sources": {
+    "rulings": {
+      "file": "rulings.json",
+      "bytes": 65,
+      "sha256": "a0cc734f66b8f815d04fa9649971666eaa96a8ec9dcfdfa7d9dc6070f39529b0"
+    },
+    "qaIndex": {
+      "file": "qa-index.json",
+      "bytes": 14818,
+      "sha256": "f2ec09c9a8493abfc4e5b896eb6165211b0a91e7f12f8cbdf811b9d36e923cbe"
+    },
+    "rules": {
+      "file": "ocg-rule-corpus.json",
+      "bytes": 272402,
+      "sha256": "8f1e70388c35d387466faa9cd648d444dacb3af359a12b5648b0b01663e04b73"
+    },
+    "ragDataRevision": {
+      "file": "rag-data-revision-manifest.json",
+      "bytes": 1452,
+      "sha256": "70e6f2edd202e4410f8397755d020bbce97bc0a4971fa7d28a267456ff1e360c",
+      "revision": "9c989f7af262021f9bf263d1ce71815f239163504fe401215a3630f2de7fbff5"
+    },
+    "cards": {
+      "file": "cards.json",
+      "bytes": 28062306,
+      "sha256": "1f9bc81d0a606056fecae518874ff4855cdfd6c01fe92e78c8ddf850b4655ab9"
+    }
+  },
+  "counts": {
+    "qaRecords": 1,
+    "ruleRecords": 73,
+    "sourceAtoms": 378,
+    "readingUnits": 102,
+    "navigationInputs": 125,
+    "ruleDenseInputs": 385,
+    "qaDenseInputs": 0,
+    "navigationRecords": 125
+  },
+  "assets": {
+    "qaRecords": {
+      "file": "qa-records.json.gz",
+      "encoding": "gzip",
+      "bytes": 3215,
+      "sha256": "815d7a6904c877c2949c08e6f3d9f388e7be33929ba96c8d62d8257330c11e5f",
+      "canonicalBytes": 9518,
+      "canonicalSha256": "c1101faf721df5c633a15b50ffc6ac5806789956cd7bd4cf5ae79dc661a7ed1b"
+    },
+    "ruleRecords": {
+      "file": "rule-records.json.gz",
+      "encoding": "gzip",
+      "bytes": 53209,
+      "sha256": "0d958d16ab73e0b25888c575b5e88047c1e75e2546c56df3f8a18373f458b12a",
+      "canonicalBytes": 228519,
+      "canonicalSha256": "1d118f069df00e7ccb2f8a2f970f74a446d83cfebfb4a287006e715fda4738cc"
+    },
+    "qaLexicalIndex": {
+      "file": "qa-lexical-index.bm25.gz",
+      "encoding": "gzip",
+      "bytes": 12542,
+      "sha256": "02101cb9ca01932b7311da504c79a1f8f80e8eede1d45bda665419d0e4b1d674",
+      "canonicalBytes": 68296,
+      "canonicalSha256": "7549e8bd36442784d286f5adcba5bce95d3cadd70c9ab06fb3470283ec4485d3"
+    },
+    "structureMapping": {
+      "file": "structure-mapping.release.json.gz",
+      "encoding": "gzip",
+      "bytes": 226871,
+      "sha256": "792c55b3603bfd2403df2cde004a576af472b39b425095987fbd556ce8f7495f",
+      "canonicalBytes": 1228447,
+      "canonicalSha256": "9781c84e0fc1c709816adbff839f26e0057bad7000d435d9fa6092d0420797a4"
+    },
+    "navigationInputs": {
+      "file": "navigation-inputs.json.gz",
+      "encoding": "gzip",
+      "bytes": 66570,
+      "sha256": "31d3e02c3d50f17954b857372a4b1e6d6d34951968fa8d9b3232bfb6263146ce",
+      "canonicalBytes": 362627,
+      "canonicalSha256": "ed501537d82f02a02d71ece1afc880358d8cc6be8a274897f01bce75fb1a0602"
+    },
+    "denseInputs": {
+      "file": "dense-inputs.json.gz",
+      "encoding": "gzip",
+      "bytes": 75574,
+      "sha256": "498ca0f28d2c0b8861f78c0158acf3f081108873df30790d39ed82d172ad3107",
+      "canonicalBytes": 332407,
+      "canonicalSha256": "b7138da4c6e4cd510c92a8d34fd17a042b4c43fcc5d53da016dc5e49cfaf78f1"
+    },
+    "navigationRecords": {
+      "file": "navigation-records.json.gz",
+      "encoding": "gzip",
+      "bytes": 10646,
+      "sha256": "fa711f4bc03df74cbb8c7c603ea22857ede6ff6dc77e19bbb8814349d6523c0e",
+      "canonicalBytes": 65594,
+      "canonicalSha256": "19cc9a017eb1d74ddee6f4e19f7e88a6a2debbf4d2575b87155b05b4303302db"
+    },
+    "navigationLexicalIndex": {
+      "file": "navigation-lexical-index.bm25.gz",
+      "encoding": "gzip",
+      "bytes": 4389,
+      "sha256": "300b38af7cd1471309768e74b07dbe661849f7b7516702d93264e2dbb102a780",
+      "canonicalBytes": 69056,
+      "canonicalSha256": "7f3368e38a379b2d2bca57fd03c24f609a2750a0473ea9a4cdd902cf088e13c6"
+    }
+  },
+  "bundleRevision": "5319618cb54e4d02716eba2cede14b3c0c75f8b48e5d20d5aac4fd65a7618eb9"
+}

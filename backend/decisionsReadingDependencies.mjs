@@ -90,8 +90,26 @@ export function createDecisionsReadingDependencies({ entries, records, sourceAto
   const aliases = new Map([...entries].map(([alias, entry]) => [entry.id, alias]));
   assert.equal(aliases.size, entries.size, 'ambiguous_canonical_identity');
   const dependencies = new Map();
+  const qaByRecordId = new Map([...entries.values()].filter(entry => entry.kind === 'qa')
+    .map(entry => [entry.body.record.id, entry]));
+  const qaClosure = entry => {
+    const ids = [entry.id], seen = new Set(ids);
+    for (let cursor = 0; cursor < ids.length; cursor++) {
+      const member = [...entries.values()].find(row => row.id === ids[cursor]);
+      for (const recordId of member.body.record.requiredContextRecordIds || []) {
+        const target = qaByRecordId.get(recordId);
+        assert(target, 'required_dependency_body_absent');
+        assert.equal(target.body.record.sourceExcerpt.parentHandle,
+          member.body.record.sourceExcerpt.parentHandle, 'faq_dependency_parent_changed');
+        assert.equal(target.body.record.sourceExcerpt.bodySha256,
+          member.body.record.sourceExcerpt.bodySha256, 'faq_dependency_hash_changed');
+        if (!seen.has(target.id)) { seen.add(target.id); ids.push(target.id); }
+      }
+    }
+    return ids;
+  };
   for (const [alias, entry] of entries) {
-    const ids = entry.kind === 'rule' ? resolve([entry.id]) : [entry.id];
+    const ids = entry.kind === 'rule' ? resolve([entry.id]) : qaClosure(entry);
     dependencies.set(alias, ids.map(id => {
       assert(aliases.has(id), 'required_dependency_body_absent');
       return aliases.get(id);

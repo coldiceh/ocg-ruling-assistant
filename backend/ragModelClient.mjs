@@ -1055,6 +1055,7 @@ export async function callCardNameExtractionModel({
     provider === "bai" && reasoningEffort !== "none" ? 1200 : 800);
   const prompt = buildCardNameExtractionPrompt(userQuery, {
     typed: provider === "deepseek" || provider === "bai", cardNameReferences, cardNicknameReferences,
+    ruleSystem: env.RAG_RULE_SYSTEM || 'OCG',
   });
   const budgetProvider = provider;
 
@@ -5612,11 +5613,12 @@ function budgetBucketConfig(env, bucket) {
 }
 
 export function buildCardNameExtractionPrompt(userQuery, {
-  typed = false, cardNameReferences = [], cardNicknameReferences = [],
+  typed = false, cardNameReferences = [], cardNicknameReferences = [], ruleSystem = 'OCG',
 } = {}) {
   const identityInstructions = [
-    "当前规则体系：OCG。你负责判断题面中的单卡称呼指向哪张卡；本地只检查所给正式名是否精确对应唯一一张卡，不会根据原词相似程度判断。",
+    `当前规则体系：${ruleSystem}。你负责判断题面中的单卡称呼指向哪张卡；本地只检查所给正式名是否精确对应唯一一张卡，不会根据原词相似程度判断。`,
     'name 填写你判断的完整正式卡名，originalText 保留题面原词。每项必须包含 enName，填写同一卡的官方英文完整卡名；jaName、cnName 选填，分别填写同一卡的日文、中文正式名。可选 canonicalNames 数组也只能包含同一卡的其他正式名。不能把不同候选卡混作同一卡的多语言名称。无法判断时 name 保留原称呼，enName 填空字符串，不编造正式名。',
+    ...(ruleSystem === 'TCG' ? ['TCG 英文问题使用官方英文正式名；中文或日文称呼可以给官方英文名，也可以给 OCG 中文或日文正式名用于同一 CID 的身份桥接。桥接只识别身份，最终卡文来自 TCG 卡库，不输出或改写卡文。'] : []),
   ];
   if (typed) {
     return [
@@ -5645,7 +5647,7 @@ export function buildCardNameExtractionPrompt(userQuery, {
     ],
   };
   return [
-    "你只负责从玩家的游戏王 OCG 裁定问题中提取所有可能的卡名候选，不要回答裁定。",
+    `你只负责从玩家的游戏王 ${ruleSystem} 裁定问题中提取所有可能的卡名候选，不要回答裁定。`,
     "把问题中出现的每一张卡都列出，包括没有括号的卡名、简称、俗称、错别字、漏字、缺少间隔点、系列内短称和后文简称。",
     ...identityInstructions,
     "如果玩家先写完整卡名、后文用简称指代同一张卡，name 尽量输出可检索的完整卡名，originalText 保留后文实际片段。",
