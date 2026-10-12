@@ -59,8 +59,10 @@ test('model null keeps pending through the production retriever without another 
   assert.equal(tasks.length,2);
 });
 
+// 2026-10-12 规则变更: only a formal name the player typed is confirmed at once.
 test('confirmed canonical identity and generic groups skip all candidate work',async()=>{
-  const {result,tasks,requests}=await run({mentions:[{...pending(),name:cards[0].name}]});
+  const {result,tasks,requests}=await run({query:`${cards[0].name}的效果怎么处理？`,
+    mentions:[{name:cards[0].name,enName:'',originalText:cards[0].name}]});
   assert.equal(tasks.length,1);
   assert.equal(requests.length,0);
   assert.equal(result.cardResolution.resolvedCards[0].id,'980001');
@@ -68,15 +70,46 @@ test('confirmed canonical identity and generic groups skip all candidate work',a
   assert.deepEqual(result.cardNameModel.groupMentions,['场地']);
 });
 
-test('two pending groups share one selection; unhandled third mention stays pending',async()=>{
+// 2026-10-12 规则变更: four mentions share the one selection call; Baige still
+// receives at most two requests, so later mentions use local candidates only.
+test('four pending groups share one selection; unhandled fifth mention stays pending',async()=>{
   const catalog=Array.from({length:12},(_,i)=>({id:String(980100+i),cid:980100+i,name:`匿名测试卡${i}`}));
-  const {result,tasks,requests}=await run({catalog,mentions:[pending('简称甲'),pending('简称乙'),pending('简称丙')],select:null});
+  const {result,tasks,requests}=await run({catalog,select:null,
+    mentions:['简称甲','简称乙','简称丙','简称丁','简称戊'].map(input=>pending(input))});
   assert.equal(requests.length,2);
   assert.equal(tasks.length,2);
-  assert.equal(result.candidateConfirmation.candidateSets.length,2);
+  assert.equal(result.candidateConfirmation.candidateSets.length,4);
   assert.ok(result.candidateConfirmation.candidateSets.every(set=>set.candidates.length<=6));
-  assert.ok(result.candidateConfirmation.candidateSets.flatMap(set=>set.candidates).length<=12);
-  assert.equal(result.cardResolution.unresolvedMentions.length,3);
+  assert.ok(result.candidateConfirmation.candidateSets.flatMap(set=>set.candidates).length<=24);
+  assert.equal(result.cardResolution.unresolvedMentions.length,5);
+});
+
+test('a formal name proposed for an abbreviation joins the candidates instead of binding',async()=>{
+  // Reported 2026-10-12: the extractor named the wrong catalog card for a short name.
+  const {result,tasks}=await run({mentions:[{...pending(),name:cards[1].name,enName:cards[1].enName}],select:'C1'});
+  assert.deepEqual(tasks.map(item=>item.task),['card_name_extraction','card_identity_selection']);
+  const offered=result.candidateConfirmation.candidateSets[0].candidates.map(card=>card.cid);
+  assert.ok(offered.includes('980002'),'the proposal must be offered to the selector');
+  assert.equal(result.cardResolution.resolvedCards[0].id,offered[0]);
+  assert.equal(result.cardResolution.resolvedCards[0].input,'匿名简称');
+  assert.equal(result.cardResolution.resolvedCards[0].resolutionSource,'model_candidate_selection');
+});
+
+test('a proposal outside the surface search results is still offered within the per-mention cap',async()=>{
+  const catalog=[...Array.from({length:8},(_,i)=>({id:String(980200+i),cid:980200+i,name:`匿名简称${i}`,effectText:`卡文${i}`})),
+    {id:'980299',cid:980299,name:'毫不相干的正式名',effectText:'被提议的卡文'}];
+  const {result}=await run({catalog,select:null,mentions:[{...pending(),name:'毫不相干的正式名'}],
+    results:Array.from({length:4},(_,i)=>({cid:980210+i,cn_name:`百鸽候选${i}`,text:{desc:`百鸽卡文${i}`}}))});
+  const offered=result.candidateConfirmation.candidateSets[0].candidates.map(card=>card.cid);
+  assert.equal(offered.length,6);
+  assert.ok(offered.includes('980299'));
+  assert.equal(result.cardResolution.resolvedCards.length,0);
+});
+
+test('selector candidates show the catalog card kind',async()=>{
+  const catalog=[{id:'980301',cid:980301,name:'匿名场地',cardType:'spell',property:'field',properties:['field'],effectText:'场地卡文'}];
+  const {result}=await run({catalog,select:null,mentions:[{...pending(),name:'匿名场地'}]});
+  assert.equal(result.candidateConfirmation.candidateSets[0].candidates[0].typeLine,'spell/field');
 });
 
 test('numbered Baige fallback cannot exceed the actual two-request question limit',async()=>{
