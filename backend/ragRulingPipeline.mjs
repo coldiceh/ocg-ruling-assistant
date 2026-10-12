@@ -3,6 +3,7 @@ import { extractRagCards, normalizeCardKey } from "./ragCardExtractor.mjs";
 import { buildCardNicknameReferences, applyCardNicknameResolution } from './ragCardNicknames.mjs';
 import { loadCardNicknameData } from './ragCardNicknameData.mjs';
 import {confirmPendingCardCandidates} from './ragCardCandidateConfirmation.mjs';
+import {findDescribedCardCandidates} from './ragDescribedCardCandidates.mjs';
 import {
   loadRagData,
   loadPreparedRagCardData,
@@ -175,10 +176,37 @@ async function resolveExtractedCardNames({query, data, cardNameModel, localCardR
     ? extractRagCards(query, {cards: data.cards || [], modelCardNameCandidates: cardNameModel.candidates || [],
       ...(cardNameModel.typedMentionSetProvided === true ? {mentionSetSource: 'typed_model'} : {})})
     : localCardResolution;
-  const cardResolution = applyCardNicknameResolution(base, {
+  const cardResolution = addDescribedCardProposals(applyCardNicknameResolution(base, {
     query, cards: data.cards || [], references: cardNicknameReferences,
-  });
+  }), cardNameModel.describedCards, data.cards || []);
   return confirmPendingCardCandidates({userQuery: query, cardResolution, cards: data.cards || [], ...options});
+}
+
+// A "series + card kind" description names no card. Catalog records whose
+// English name contains the model-reported series name and whose stored kind
+// matches become proposals for confirmation; they never bind by themselves.
+function addDescribedCardProposals(cardResolution, describedCards = [], cards = []) {
+  if (!Array.isArray(describedCards) || !describedCards.length) return cardResolution;
+  const resolvedKeys = new Set((cardResolution.resolvedCards || []).map(card => normalizeCardKey(card.input)));
+  const unresolvedMentions = [...(cardResolution.unresolvedMentions || [])];
+  const ambiguousMentions = [...(cardResolution.ambiguousMentions || [])];
+  for (const item of describedCards) {
+    const key = normalizeCardKey(item.originalText);
+    if (!key || resolvedKeys.has(key)) continue;
+    const ids = findDescribedCardCandidates(cards, item);
+    if (!ids.length) continue;
+    const describedCard = {archetypeEnName: item.archetypeEnName, cardKind: item.cardKind};
+    const pendingIndex = unresolvedMentions.findIndex(mention => normalizeCardKey(mention.input) === key);
+    const ambiguousIndex = ambiguousMentions.findIndex(mention => normalizeCardKey(mention.input) === key);
+    const merge = mention => ({...mention, describedCard,
+      proposedCardIds: [...new Set([...(mention.proposedCardIds || []), ...ids])]});
+    if (pendingIndex >= 0) unresolvedMentions[pendingIndex] = merge(unresolvedMentions[pendingIndex]);
+    else if (ambiguousIndex >= 0) ambiguousMentions[ambiguousIndex] = merge(ambiguousMentions[ambiguousIndex]);
+    else unresolvedMentions.push({input: item.originalText, reason: 'model_described_card',
+      source: 'model_card_name_extractor', confidence: 'low', searchTexts: [], canonicalNames: [],
+      describedCard, proposedCardIds: ids});
+  }
+  return {...cardResolution, unresolvedMentions, ambiguousMentions};
 }
 
 function mergeCardNameSelectionTelemetry(cardNameModel, selectionModel) {

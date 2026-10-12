@@ -1,3 +1,4 @@
+import { DESCRIBED_CARD_KINDS, normalizeDescribedCards } from "./ragDescribedCardCandidates.mjs";
 import { createHash } from "node:crypto";
 import { RAG_ANSWER_LEVELS } from "./ragRulingPrompt.mjs";
 import {
@@ -1104,6 +1105,7 @@ export async function callCardNameExtractionModel({
       return {
         candidates: parsedExtraction.candidates,
         groupMentions: parsedExtraction.groupMentions,
+        describedCards: parsedExtraction.describedCards || [],
         typedMentionSetProvided: parsedExtraction.typedMentionSetProvided,
         invalidTypedMentions: parsedExtraction.invalidTypedMentions,
         formatWarnings: parsedExtraction.formatWarnings,
@@ -1197,6 +1199,7 @@ export async function callCardNameExtractionModel({
     const result = {
       candidates: parsedExtraction.items,
       groupMentions: parsedExtraction.groupMentions,
+      describedCards: parsedExtraction.describedCards || [],
       typedMentionSetProvided: parsedExtraction.typedMentionSetProvided === true,
       invalidTypedMentions: parsedExtraction.invalidTypedMentions || [],
       formatWarnings: parsedExtraction.formatWarnings || [],
@@ -5621,8 +5624,9 @@ export function buildCardNameExtractionPrompt(userQuery, {
       "cardNames：明确命名的单张卡，或有上下文依据的单卡简称、俗称、可能写错的名字。包括双方及句中其他被点名的卡，无括号也要提取。保留完整名称，不拆出其中系列部分；不知道正式名也可保留该单卡原称呼。",
       "groupMentions：系列、种族、属性、卡片种类等集合名称，以及只由这些特征描述而未给出个体名称的卡。指向场上某一只实际怪兽，并不等于给出了该怪兽的卡名；“我方”“一只”“作为对象”等限定不能把集合名变成单卡简称。引号也不决定属于哪类。只有上下文给出某个具体卡名与简称的对应，或该称呼本身就是单卡名称，才归cardNames。",
       "每项只放入其实际类别。不能猜测未命名对象是该系列的哪张卡。动作、效果、区域、连锁编号不放入任一数组。重复提及合并。",
+      `describedCards：玩家没有给出卡名，而是用“系列+卡片种类”指代某一张具体的卡时（如某系列的那张场地魔法），该原文照常放入groupMentions，同时在此填写originalText（题面原文）、archetypeEnName（该系列的官方英文系列名）、cardKind（取以下之一：${Object.keys(DESCRIBED_CARD_KINDS).join("、")}）。这里不填具体卡名；不确定系列英文名或种类时不要填写。`,
       ...identityInstructions,
-      "只输出JSON：{\"cardNames\":[{\"name\":\"你判断的正式卡名或未知原称呼\",\"enName\":\"官方英文完整卡名，未知时为空字符串\",\"jaName\":\"日文正式名（选填）\",\"cnName\":\"中文正式名（选填）\",\"originalText\":\"对应原文\",\"confidence\":\"high或medium或low\"}],\"groupMentions\":[\"系列或类别原文\"]}。没有内容的数组为空。",
+      "只输出JSON：{\"cardNames\":[{\"name\":\"你判断的正式卡名或未知原称呼\",\"enName\":\"官方英文完整卡名，未知时为空字符串\",\"jaName\":\"日文正式名（选填）\",\"cnName\":\"中文正式名（选填）\",\"originalText\":\"对应原文\",\"confidence\":\"high或medium或low\"}],\"groupMentions\":[\"系列或类别原文\"],\"describedCards\":[{\"originalText\":\"对应原文\",\"archetypeEnName\":\"官方英文系列名\",\"cardKind\":\"种类代码\"}]}。没有内容的数组为空。",
       ...(cardNameReferences.length ? [
         "以下是本地匹配得到的卡库名称参考；input只是匹配到的题面片段，其余字段来自卡库。参考不代表题面一定提及该卡，不能据此添加未命名的卡。结合完整原题判断：完整单卡名称即使含有系列词也属于cardNames；只提到系列、类别或局部片段时，不得因为参考中有相似卡名就改判为单卡。",
         JSON.stringify(cardNameReferences),
@@ -5914,6 +5918,7 @@ function validateExtractionResponse(response = {}, kind) {
     items,
     ...(kind === "card" ? {
       groupMentions: parsedCardExtraction.groupMentions,
+      describedCards: parsedCardExtraction.describedCards,
       typedMentionSetProvided: parsedCardExtraction.typedMentionSetProvided,
       invalidTypedMentions,
       formatWarnings: parsedCardExtraction.formatWarnings,
@@ -5993,6 +5998,7 @@ export function parseCardNameExtractionOutput(rawText) {
     return {
       candidates: [],
       groupMentions: [],
+      describedCards: [],
       typedMentionSetProvided: false,
       invalidTypedMentions: [],
       formatWarnings: [],
@@ -6013,6 +6019,7 @@ export function parseCardNameExtractionOutput(rawText) {
   return {
     candidates: normalizeCardNameCandidates(parsed, { preserveTypedMentions: typedMentionSetProvided }),
     groupMentions,
+    describedCards: normalizeDescribedCards(parsed?.describedCards),
     typedMentionSetProvided,
     invalidTypedMentions,
     formatWarnings: invalidTypedMentions.map((item) => (
