@@ -33,6 +33,15 @@ const DEADLINE_MS = 30000;
 const MAX_PROMPT_CHARS = 15000;
 const hash = text => createHash('sha256').update(text).digest('hex');
 const uniq = values => [...new Set(values)];
+// The Decisions cleanup pass is off by default. On 2026-10-12 it repeatedly
+// removed the one Q&A that answered the question (22903) while keeping less
+// relevant sources, so the final model answered without it. Acquisition still
+// nominates sources one by one within the same prompt-length limit.
+// DECISIONS_CLEANUP_ENABLED=true restores the pass.
+function decisionsCleanupEnabled(env = {}) {
+  return /^(1|true|yes|on)$/iu.test(String(env.DECISIONS_CLEANUP_ENABLED || '').trim());
+}
+
 export const BOUNDED_SELECTION_RESULT_INSTRUCTION = '所需依据尚缺或题面条件不足时，也应交付本轮已有的相关原文，并在boundary或note说明缺口；由最终裁定者判断能否回答或是否需要补充信息，不在选材阶段作最终可回答性判定。若没有可选原文，返回selectedIds:[]。不得编造依据、编号或缺失条件。只输出JSON：{"checks":[{"issue":"子问短语","evidenceIds":["已实际提供的选择编号"],"boundary":"适用范围或缺口"}],"selectedIds":["已实际提供的选择编号"],"note":"可为空"}。';
 
 async function emitIdentityDiagnostic(onEvent, event) {
@@ -960,7 +969,7 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
           sourceAtoms: rules.sourceAtoms, records: assets.rulesRecords });
         const flow = createDecisionsSelectionFlow({ entries: visibleEntries, input: selectionInput, dependencies,
           userQuery, answerLocale, cardResolution, retrievedEvidence, maxPromptChars });
-        decisionsState = await transports.selection.runSequence(() => executeSelectionFlow(flow, { ask: async (step, request) => {
+        decisionsState = await transports.selection.runSequence(() => executeSelectionFlow(flow, { cleanup: decisionsCleanupEnabled(env), ask: async (step, request) => {
           signal.throwIfAborted();
           const measured = transports.selection.measure(request), reserve = measured.estimatedCostUsd;
           if (spentUsd + reserve > perQuestionMaxUsd) throw new Error('evidence_request_budget_exceeded');

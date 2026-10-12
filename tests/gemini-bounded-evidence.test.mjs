@@ -234,6 +234,32 @@ test('Decisions runs through production retrieval, delivers actual pack and acco
   assert.equal(events.find(event => event.type === 'packed').packing.prompt,result.packing.prompt);
 });
 
+// 2026-10-12 规则变更: the cleanup pass removed the deciding Q&A, so it is off unless enabled.
+test('Decisions cleanup is off by default and DECISIONS_CLEANUP_ENABLED restores it', async () => {
+  for (const enabled of [false, true]) {
+    let nominations = 0;
+    const asked = [];
+    const { provider } = fixture({ decisions: body => {
+      const q = body.questions[0];
+      asked.push(q.name);
+      if (q.name === 'next_source') return nominations++ < 2 ? q.choices[0].value : 'NONE';
+      if (q.name === 'action') return 'DROP';
+      return 'NEEDS_EVIDENCE';
+    } });
+    const result = await provider.retrieve({ ...input, env: { ...unrestrictedEvidenceEnv,
+      EVIDENCE_SELECTOR:'decisions', OPENAI_DECISIONS_API_KEY:'fixture',
+      ...(enabled ? { DECISIONS_CLEANUP_ENABLED:'true' } : {}) } });
+    const events = result.telemetry.bounded.decisions.events;
+    assert.equal(events.filter(event => event.stage === 'select' && /^[AQ]\d+$/u.test(event.answer)).length, 2);
+    if (enabled) assert.ok(events.some(event => event.stage === 'clean'));
+    else {
+      assert.equal(asked.includes('action'), false);
+      assert.equal(events.some(event => event.stage === 'clean'), false);
+      assert.equal(result.telemetry.bounded.selectedIds.length, 2);
+    }
+  }
+});
+
 test('missing Decisions credential stops before upstream dispatch and Luna remains separately usable', async () => {
   const {provider,requests} = fixture();
   await assert.rejects(provider.retrieve({...input,env:{...unrestrictedEvidenceEnv,EVIDENCE_SELECTOR:'decisions'}}),/decisions_api_key_required/);

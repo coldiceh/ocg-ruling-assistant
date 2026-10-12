@@ -100,7 +100,7 @@ export function createSelectionFlow({base,input,dependencies,maxPromptChars=1500
 
 // ask is the existing metered Decisions transport in live use and a scripted
 // callback in mechanical tests. There is no semantic evaluator in this code.
-export async function executeSelectionFlow(flow,{ask,onState=()=>{}}) {
+export async function executeSelectionFlow(flow,{ask,onState=()=>{},cleanup=true}) {
   const state={selectedIds:[],status:'in_progress',acquisitionStop:null,events:[],finalStatus:null};
   const persist=async()=>{const current=flow.pack(state.selectedIds);assert(current.length<=flow.maxPromptChars);
     await onState(structuredClone(state),current);};
@@ -132,7 +132,7 @@ export async function executeSelectionFlow(flow,{ask,onState=()=>{}}) {
   // The current package may be incomplete; cleanup only preserves whatever
   // necessary support it already has. It never certifies completion.
   const initial=flow.pack(state.selectedIds);
-  const order=state.selectedIds.map(alias=>({alias,removedChars:initial.length-flow.cleanup(state.selectedIds,alias).remaining.length}))
+  const order=!cleanup?[]:state.selectedIds.map(alias=>({alias,removedChars:initial.length-flow.cleanup(state.selectedIds,alias).remaining.length}))
     .sort((a,b)=>b.removedChars-a.removedChars);
   for(const {alias} of order){
     const proposal=flow.cleanup(state.selectedIds,alias);
