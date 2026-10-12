@@ -3,11 +3,16 @@ import { readFile } from "node:fs/promises";
 const SOURCE_NAME = "baige";
 const SOURCE_URL = "https://ygocdb.com/api/v0/cards.zip";
 
+// Display preference for cards whose upstream record has no Chinese name.
+// cn_name is the name ygocdb shows as the card title and the one most players
+// use; the other fields stay as sourced aliases for exact identity lookup.
+// (Before 2026-10-12 sc_name came first, e.g. 魔女工艺・瓦尔普吉斯夜行 instead of
+// 魔女的圣夜行 for card 23168.)
 const NAME_FIELDS = [
-  ["sc_name", ["sc_name"]],
-  ["text.sc_name", ["text", "sc_name"]],
   ["cn_name", ["cn_name"]],
   ["text.cn_name", ["text", "cn_name"]],
+  ["sc_name", ["sc_name"]],
+  ["text.sc_name", ["text", "sc_name"]],
   ["text.name", ["text", "name"]],
   ["md_name", ["md_name"]],
   ["text.md_name", ["text", "md_name"]],
@@ -117,6 +122,16 @@ export function mergeMissingChineseNamesFromBaige(cards = [], sourceRecords = []
   };
 }
 
+// The Baige name preferred by NAME_FIELDS among a card's stored sources.
+export function preferredBaigeChineseName(nameSources = []) {
+  for (const [sourceField] of NAME_FIELDS) {
+    const entry = (nameSources || []).find(item => item?.source === SOURCE_NAME && item?.sourceField === sourceField);
+    const name = nonEmptyString(entry?.name);
+    if (name) return name;
+  }
+  return "";
+}
+
 export function preserveBackfilledChineseNames(cards = [], previousCards = []) {
   const previousById = new Map(previousCards.map(card => [stableId(card?.id), card]));
   return cards.map(card => {
@@ -124,7 +139,16 @@ export function preserveBackfilledChineseNames(cards = [], previousCards = []) {
     const previous = previousById.get(stableId(card.id));
     if (!nonEmptyString(previous?.cnName) || !Array.isArray(previous.chineseNameSources)
         || !previous.chineseNameSources.length) return card;
-    return { ...card, cnName: nonEmptyString(card.cnName) || previous.cnName,
+    // An upstream Chinese name always wins. Otherwise the stored Baige sources
+    // are re-read in the current preference order, so a changed preference
+    // reaches previously backfilled cards on the next sync.
+    const sourceNames = new Set(previous.chineseNameSources.map(entry => nonEmptyString(entry?.name)).filter(Boolean));
+    const ownName = nonEmptyString(card.cnName);
+    const ownNameIsBackfill = ownName && sourceNames.has(ownName) && nonEmptyString(card.name) !== ownName;
+    const cnName = ownName && !ownNameIsBackfill
+      ? ownName
+      : preferredBaigeChineseName(previous.chineseNameSources) || ownName || previous.cnName;
+    return { ...card, cnName,
       aliases: unique([...(Array.isArray(card.aliases) ? card.aliases : []), previous.cnName,
         ...previous.chineseNameSources.map(entry => nonEmptyString(entry?.name)).filter(Boolean)]),
       chineseNameSources: previous.chineseNameSources,

@@ -57,13 +57,14 @@ test("projects only explicit Baige Chinese name fields with their provenance", (
   });
 
   assert.equal(projected.cid, "12001");
-  assert.deepEqual(projected.names, ["官方简中名", "YGOPro 译名", "嵌套中文名", "MD 名称", "社区名称"]);
+  // 2026-10-12 规则变更: cn_name (the ygocdb title most players use) is preferred.
+  assert.deepEqual(projected.names, ["YGOPro 译名", "官方简中名", "嵌套中文名", "MD 名称", "社区名称"]);
   assert.deepEqual(
     projected.nameSources.map(({ source, sourceField }) => ({ source, sourceField })),
     [
+      { source: "baige", sourceField: "cn_name" },
       { source: "baige", sourceField: "sc_name" },
       { source: "baige", sourceField: "text.sc_name" },
-      { source: "baige", sourceField: "cn_name" },
       { source: "baige", sourceField: "text.name" },
       { source: "baige", sourceField: "md_name" },
       { source: "baige", sourceField: "nwbbs_n" },
@@ -96,11 +97,12 @@ test("backfills only an empty cnName and merges aliases with the exact same stab
   );
 
   const backfilled = result.records[0];
-  assert.equal(backfilled.cnName, "补全名称");
-  assert.deepEqual(backfilled.aliases, ["既有日文名", "Existing English Name", "补全名称", "补充别名"]);
+  // 2026-10-12 规则变更: cn_name is preferred over sc_name for the display name.
+  assert.equal(backfilled.cnName, "补充别名");
+  assert.deepEqual(backfilled.aliases, ["既有日文名", "Existing English Name", "补充别名", "补全名称"]);
   assert.deepEqual(
     backfilled.chineseNameSources.map(({ sourceField }) => sourceField),
-    ["sc_name", "cn_name"],
+    ["cn_name", "sc_name"],
   );
 
   const preserved = { ...backfilled };
@@ -187,4 +189,37 @@ test("a later upstream sync preserves bound name enrichment without a new source
   assert.equal(output[2].cnName, fresh[2].cnName);
   assert.deepEqual(output[2].aliases, ["已补中文名"]);
   assert.deepEqual(output[2].chineseNameSources, sources);
+});
+
+test("a card without an upstream Chinese name takes Baige cn_name before sc_name", () => {
+  const cards = [{ id: "23168", name: "魔女の聖夜行", cnName: "", jaName: "魔女の聖夜行", enName: "Witchcrafter Walpurgis", aliases: [] }];
+  const source = [{ cid: 23168, sc_name: "魔女工艺・瓦尔普吉斯夜行", cn_name: "魔女的圣夜行", md_name: "魔女工艺・瓦尔普吉斯夜行",
+    nwbbs_n: "魔女的圣夜行", cnocg_n: "魔女工坊圣夜行" }];
+  const [merged] = mergeMissingChineseNamesFromBaige(cards, source).records;
+  assert.equal(merged.cnName, "魔女的圣夜行");
+  for (const name of ["魔女工艺・瓦尔普吉斯夜行", "魔女的圣夜行", "魔女工坊圣夜行"]) assert.ok(merged.aliases.includes(name));
+});
+
+test("a later sync re-reads stored Baige sources in the current order for previously backfilled names", () => {
+  const sources = [
+    { name: "魔女工艺・瓦尔普吉斯夜行", source: "baige", sourceField: "sc_name", sourceRecordId: "23168" },
+    { name: "魔女的圣夜行", source: "baige", sourceField: "cn_name", sourceRecordId: "23168" },
+    { name: "魔女工坊圣夜行", source: "baige", sourceField: "cnocg_n", sourceRecordId: "23168" },
+  ];
+  const previous = [{ id: "23168", name: "魔女の聖夜行", cnName: "魔女工艺・瓦尔普吉斯夜行", chineseNameSources: sources }];
+  const fresh = [{ id: "23168", name: "魔女の聖夜行", jaName: "魔女の聖夜行", aliases: ["魔女の聖夜行"] }];
+  const [result] = preserveBackfilledChineseNames(fresh, previous);
+  assert.equal(result.cnName, "魔女的圣夜行");
+  assert.ok(result.aliases.includes("魔女工艺・瓦尔普吉斯夜行"));
+  assert.deepEqual(result.chineseNameSources, sources);
+  // A partial run that carries the old backfilled name forward is corrected the same way.
+  const [carried] = preserveBackfilledChineseNames([{ ...fresh[0], cnName: "魔女工艺・瓦尔普吉斯夜行" }], previous);
+  assert.equal(carried.cnName, "魔女的圣夜行");
+});
+
+test("an upstream Chinese name is never replaced by a Baige preference", () => {
+  const sources = [{ name: "社区名", source: "baige", sourceField: "cn_name", sourceRecordId: "13001" }];
+  const previous = [{ id: "13001", name: "官方名", cnName: "官方名", chineseNameSources: sources }];
+  const fresh = [{ id: "13001", name: "官方名", cnName: "官方名", aliases: ["官方名"] }];
+  assert.equal(preserveBackfilledChineseNames(fresh, previous)[0].cnName, "官方名");
 });
