@@ -42,15 +42,20 @@ export function createSelectionFlow({base,input,dependencies,maxPromptChars=1500
   const expand=ids=>expandDependencies(dependencies,ids);
   const pack=ids=>base.pack(expand(ids));
   const facts=ids=>selectionFacts(pack(ids));
-  function nextRequest(ids){
+  function nextRequest(ids,{independentStatus}={}){
     const current=pack(ids),delivered=new Set(expand(ids));
     const remaining=[...base.entries.keys()].filter(id=>!delivered.has(id));
     assert(remaining.length+2<=255,'choice_capacity_exceeded');
     const candidates=remaining.map(id=>({id,kind:base.entries.get(id).kind,body:base.entries.get(id).body,
       requiredContextIds:dependencies.get(id),packageCharsIfAdded:pack([...ids,id]).length}));
     const contextIds=[...new Set(candidates.flatMap(c=>c.requiredContextIds))].filter(id=>!remaining.includes(id));
-    const instructions=ADD_CRITERIA+'\nrequiredContextIds 包含该候选及共同交付的阅读上下文，均计入真实包长。packageCharsIfAdded 是加入后最终提示的UTF-16字符数，包含固定指令与卡文。若必要候选需要替换已有资料才放得下，仍可提名；本题不授权删除旧资料，也不宣告整包充分。';
+    // Only the selector's own status choice is relayed; it names no source and
+    // does not assert that the candidates contain the missing support.
+    const statusNote=independentStatus===undefined?'':
+      '\nindependentPackageCheck 是另一次只读取当前实际包的检查结果。NEEDS_EVIDENCE 表示该检查确认当前实际包仍缺至少一项必要支持；它不指明缺什么，也不说明候选中一定有可补资料。据原题重新核对候选；确认所有候选都不能补入时仍选 NONE。';
+    const instructions=ADD_CRITERIA+statusNote+'\nrequiredContextIds 包含该候选及共同交付的阅读上下文，均计入真实包长。packageCharsIfAdded 是加入后最终提示的UTF-16字符数，包含固定指令与卡文。若必要候选需要替换已有资料才放得下，仍可提名；本题不授权删除旧资料，也不宣告整包充分。';
     const request=dataRequest({actualPackage:selectionFacts(current),actualPackageChars:current.length,maxPromptChars,
+      ...(independentStatus===undefined?{}:{independentPackageCheck:independentStatus}),
       queryPlan:input.queryPlan,selectedIds:ids,candidates,
       contextSources:contextIds.map(id=>({id,body:base.entries.get(id).body}))},
     choice('next_source',instructions,[...remaining,'NONE','UNKNOWN']));
@@ -105,28 +110,55 @@ export async function executeSelectionFlow(flow,{ask,onState=()=>{},cleanup=true
   const persist=async()=>{const current=flow.pack(state.selectedIds);assert(current.length<=flow.maxPromptChars);
     await onState(structuredClone(state),current);};
   await persist();
-  for(let step=1;step<=MAX_ADDITIONS;step++){
-    const request=flow.nextRequest(state.selectedIds);
-    const answer=(await ask(`select-${step}`,request)).next_source;
-    assert(request.questions[0].choices.some(c=>c.value===answer),'unknown_next_source');
-    state.events.push({stage:'select',step,answer});
-    if(answer==='NONE'||answer==='UNKNOWN'){
-      state.acquisitionStop=answer==='NONE'?'model_reports_no_addition':'uncertain_nomination';break;
+  const askStatus=async label=>{
+    const answer=(await ask(label,flow.statusRequest(state.selectedIds))).current_status;
+    assert(['COMPLETE','NEEDS_EVIDENCE','UNKNOWN'].includes(answer),'unknown_final_status');
+    return answer;
+  };
+  // Selection steps share one limit across the initial and resumed acquisition.
+  let step=0;
+  async function acquire(independentStatus){
+    while(step<MAX_ADDITIONS){
+      step+=1;
+      const request=flow.nextRequest(state.selectedIds,independentStatus===undefined?{}:{independentStatus});
+      const answer=(await ask(`select-${step}`,request)).next_source;
+      assert(request.questions[0].choices.some(c=>c.value===answer),'unknown_next_source');
+      state.events.push({stage:'select',step,answer});
+      if(answer==='NONE'||answer==='UNKNOWN'){
+        state.acquisitionStop=answer==='NONE'?'model_reports_no_addition':'uncertain_nomination';return;
+      }
+      const proposal=flow.pack([...state.selectedIds,answer]);
+      if(proposal.length<=flow.maxPromptChars)state.selectedIds.push(answer);
+      else{
+        const plan=flow.replacement(state.selectedIds,answer);
+        if(!plan.request){state.acquisitionStop='nominated_source_cannot_fit';return;}
+        state.acquisitionStop='replacement_pending';await persist();
+        const picked=(await ask(`replace-${step}`,plan.request)).replacement;
+        assert(plan.request.questions[0].choices.some(c=>c.value===picked),'unknown_replacement');
+        state.events.push({stage:'replace',step,answer:picked});
+        const alternative=plan.alternatives.find(a=>a.value===picked);
+        if(!alternative){state.acquisitionStop=picked==='UNKNOWN'?'uncertain_replacement':'nominated_source_has_no_safe_replacement';return;}
+        state.selectedIds=[...alternative.selectedIds];
+      }
+      state.acquisitionStop='acquisition_limit_reached';await persist();
     }
-    const proposal=flow.pack([...state.selectedIds,answer]);
-    if(proposal.length<=flow.maxPromptChars)state.selectedIds.push(answer);
-    else{
-      const plan=flow.replacement(state.selectedIds,answer);
-      if(!plan.request){state.acquisitionStop='nominated_source_cannot_fit';break;}
-      state.acquisitionStop='replacement_pending';await persist();
-      const picked=(await ask(`replace-${step}`,plan.request)).replacement;
-      assert(plan.request.questions[0].choices.some(c=>c.value===picked),'unknown_replacement');
-      state.events.push({stage:'replace',step,answer:picked});
-      const alternative=plan.alternatives.find(a=>a.value===picked);
-      if(!alternative){state.acquisitionStop=picked==='UNKNOWN'?'uncertain_replacement':'nominated_source_has_no_safe_replacement';break;}
-      state.selectedIds=[...alternative.selectedIds];
+  }
+  await acquire();
+  // An UNKNOWN nomination stops acquisition without the selector having found
+  // that no candidate helps. Observed 2026-10-12: across the saved OCG and TCG
+  // runs most acquisitions ended this way after 0-2 sources while the final
+  // check reported NEEDS_EVIDENCE. The same status check is therefore asked
+  // once here; only when it reports NEEDS_EVIDENCE does acquisition resume,
+  // with that report attached and within the same step limit.
+  let interim=null;
+  if(state.acquisitionStop==='uncertain_nomination'&&step<MAX_ADDITIONS){
+    interim={selectedIds:[...state.selectedIds],answer:await askStatus('interim-status')};
+    state.events.push({stage:'status',label:'interim',answer:interim.answer});
+    await persist();
+    if(interim.answer==='NEEDS_EVIDENCE'){
+      state.events.push({stage:'resume',reason:'interim_status_needs_evidence'});
+      await acquire('NEEDS_EVIDENCE');
     }
-    state.acquisitionStop='acquisition_limit_reached';await persist();
   }
   await persist();
   // The current package may be incomplete; cleanup only preserves whatever
@@ -155,8 +187,11 @@ export async function executeSelectionFlow(flow,{ask,onState=()=>{},cleanup=true
   // Always runs AFTER the last addition/replacement/removal, including when
   // the acquisition limit was reached. Only actual retained evidence is shown.
   await persist();
-  const answer=(await ask('final-status',flow.statusRequest(state.selectedIds))).current_status;
-  assert(['COMPLETE','NEEDS_EVIDENCE','UNKNOWN'].includes(answer),'unknown_final_status');
+  // An unchanged package yields a byte-identical status request; its answer is
+  // reused instead of asking the same request twice.
+  const unchanged=interim&&interim.selectedIds.length===state.selectedIds.length
+    &&interim.selectedIds.every((id,index)=>id===state.selectedIds[index]);
+  const answer=unchanged?interim.answer:await askStatus('final-status');
   state.finalStatus=answer;
   state.status=answer==='COMPLETE'?'model_reports_complete_pending_independent_review':answer==='NEEDS_EVIDENCE'?'model_reports_incomplete':'unverified';
   await persist();return state;
