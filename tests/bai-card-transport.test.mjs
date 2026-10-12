@@ -39,7 +39,9 @@ function responseFor(body, overrides = {}) {
   };
 }
 
-test("b.ai card transport uses the dedicated Luna Responses model without reasoning", async () => {
+// 2026-10-12 规则变更: card extraction and candidate selection default to Luna low;
+// the RAG_CARD_BAI_*_REASONING_EFFORT variables can restore none.
+test("b.ai card transport uses the dedicated Luna Responses model with low reasoning by default", async () => {
   const requests = [];
   const fetchImpl = async (url, options) => {
     requests.push({ url: String(url), body: JSON.parse(options.body), authorization: options.headers.authorization });
@@ -66,8 +68,9 @@ test("b.ai card transport uses the dedicated Luna Responses model without reason
   assert.equal(requests[0].url, "https://card.example.test/v1/responses");
   assert.equal(requests[0].authorization, "Bearer card-only-secret");
   assert.equal(requests[0].body.model, "gpt-6-luna");
-  assert.equal(requests[0].body.reasoning.effort, "none");
+  assert.equal(requests[0].body.reasoning.effort, "low");
   assert.equal(requests[0].body.text.format.type, "json_object");
+  // An explicit RAG_CARD_MODEL_MAX_OUTPUT_TOKENS still wins over the 1200 low default.
   assert.equal(requests[0].body.max_output_tokens, 800);
   assert.equal(requests[0].body.thinking, undefined);
   assert.equal(requests[0].body.max_tokens, undefined);
@@ -77,7 +80,7 @@ test("b.ai card transport uses the dedicated Luna Responses model without reason
   assert.ok(result.warnings.includes("bai_endpoint_host:card.example.test"));
 });
 
-test("the same b.ai transport serves ambiguity identity selection without changing its contract", async () => {
+test("the same b.ai transport serves ambiguity identity selection with low reasoning by default", async () => {
   const requests = [];
   const fetchImpl = async (url, options) => {
     requests.push({ url: String(url), body: JSON.parse(options.body) });
@@ -105,8 +108,26 @@ test("the same b.ai transport serves ambiguity identity selection without changi
   assert.deepEqual(result.selections, [{ mentionId: "m1", candidateId: "c1" }]);
   assert.equal(requests.length, 1);
   assert.equal(requests[0].body.model, "gpt-6-luna");
-  assert.equal(requests[0].body.reasoning.effort, "none");
+  assert.equal(requests[0].body.reasoning.effort, "low");
+  assert.equal(requests[0].body.max_output_tokens, 1600);
+  assert.match(requests[0].body.input, /必须返回 null/u);
   assert.ok(result.warnings.includes("bai_transport_channel:bai"));
+});
+
+test("card extraction and selection can be returned to Luna none by configuration", async () => {
+  const requests = [];
+  const fetchImpl = async (url, options) => {
+    const body = JSON.parse(options.body);
+    requests.push(body);
+    return responseFor(String(body.input).includes("候选集") ? { selections: [] }
+      : { cardNames: [{ name: "黑魔术师", originalText: "黑魔术师", confidence: "high" }] });
+  };
+  const env = { ...baseEnv, RAG_CARD_BAI_EXTRACTION_REASONING_EFFORT: "none", RAG_CARD_BAI_SELECTION_REASONING_EFFORT: "none" };
+  await budgeted(callCardNameExtractionModel, { userQuery: "黑魔术师的效果？", dataRevision: "bai-card-none", env, fetchImpl });
+  await budgeted(callCardIdentitySelectionModel, { userQuery: "那个黑魔术师", dataRevision: "bai-card-none",
+    candidateSets: [{ mentionId: "m1", mentionText: "黑魔术师", candidates: [{ candidateId: "c1", name: "黑魔术师" }] }],
+    env, fetchImpl });
+  assert.deepEqual(requests.map((body) => [body.reasoning.effort, body.max_output_tokens]), [["none", 800], ["none", 800]]);
 });
 
 test("public isolation keeps card-only b.ai settings while rule extraction stays on the configured auxiliary provider", () => {

@@ -30,7 +30,7 @@ test('unconfirmed model mention reaches one Luna selection after bounded candida
   assert.deepEqual(tasks.map(item=>item.task),['card_name_extraction','card_identity_selection']);
   assert.equal(tasks[1].provider,'bai');
   assert.equal(tasks[1].modelName,'gpt-6-luna');
-  assert.equal(tasks[1].reasoningEffort,'none');
+  assert.equal(tasks[1].reasoningEffort,'low');
   assert.match(tasks[1].prompt,/匿名简称的效果怎么处理/u);
   assert.equal(requests.length,1);
   assert.equal(result.cardResolution.resolvedCards[0].id,'980001');

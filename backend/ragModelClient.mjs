@@ -52,6 +52,16 @@ const PUBLIC_BAI_MAX_COMPLETION_TOKENS = 4096;
 const DEFAULT_JSON_TASK_MAX_OUTPUT_TOKENS = 4000;
 const DEFAULT_RAG_RECOVERY_MAX_OUTPUT_TOKENS = 4096;
 const DEFAULT_LIGHTWEIGHT_EXTRACTION_TIMEOUT_MS = 12000;
+// Luna card extraction and candidate selection default to low reasoning: with
+// none the extractor sometimes skipped a named card or supplied a confident
+// wrong formal name, and the selector picked a candidate that contradicted the
+// question instead of returning null (2026-10-12). Setting the matching
+// RAG_CARD_BAI_*_REASONING_EFFORT variable to "none" restores the old setting.
+const BAI_CARD_REASONING_EFFORTS = new Set(["none", "low", "medium"]);
+function baiCardReasoningEffort(value, fallback = "low") {
+  const effort = String(value || "").trim().toLowerCase();
+  return BAI_CARD_REASONING_EFFORTS.has(effort) ? effort : fallback;
+}
 const DEFAULT_RULE_QUERY_EXTRACTION_TIMEOUT_MS = 120000;
 const DEFAULT_RULE_QUERY_EXTRACTION_MAX_OUTPUT_TOKENS = 32000;
 const FORMAL_RELAY_RULE_QUERY_MAX_OUTPUT_TOKENS = 8192;
@@ -1033,12 +1043,15 @@ export async function callCardNameExtractionModel({
       ? createBaiCardEnv(env)
       : env;
   const relayGeneration = resolveCardExtractionRelayGenerationConfig(provider, env);
-  const reasoningEffort = provider === "bai" ? "none" : relayGeneration.reasoningEffort;
+  const reasoningEffort = provider === "bai"
+    ? baiCardReasoningEffort(env.RAG_CARD_BAI_EXTRACTION_REASONING_EFFORT)
+    : relayGeneration.reasoningEffort;
   const providerWarnings = [
     ...providerResolution.warnings,
     ...relayGeneration.warnings,
   ];
-  const maxTokens = readNumber(env.RAG_CARD_MODEL_MAX_OUTPUT_TOKENS, 800);
+  const maxTokens = readNumber(env.RAG_CARD_MODEL_MAX_OUTPUT_TOKENS,
+    provider === "bai" && reasoningEffort !== "none" ? 1200 : 800);
   const prompt = buildCardNameExtractionPrompt(userQuery, {
     typed: provider === "deepseek" || provider === "bai", cardNameReferences, cardNicknameReferences,
   });
@@ -1251,12 +1264,15 @@ export async function callCardIdentitySelectionModel({
       ? createBaiCardEnv(env)
       : env;
   const relayGeneration = resolveCardExtractionRelayGenerationConfig(provider, env);
-  const reasoningEffort = provider === "bai" ? "none" : relayGeneration.reasoningEffort;
+  const reasoningEffort = provider === "bai"
+    ? baiCardReasoningEffort(env.RAG_CARD_BAI_SELECTION_REASONING_EFFORT)
+    : relayGeneration.reasoningEffort;
   const providerWarnings = [
     ...providerResolution.warnings,
     ...relayGeneration.warnings,
   ];
-  const maxTokens = readNumber(env.RAG_CARD_MODEL_MAX_OUTPUT_TOKENS, 800);
+  const maxTokens = readNumber(env.RAG_CARD_SELECTION_MAX_OUTPUT_TOKENS,
+    provider === "bai" && reasoningEffort !== "none" ? 1600 : readNumber(env.RAG_CARD_MODEL_MAX_OUTPUT_TOKENS, 800));
   const prompt = buildCardIdentitySelectionPrompt(userQuery, normalizedCandidateSets);
   const budgetProvider = provider;
 
@@ -3009,13 +3025,14 @@ async function callDeepSeek({
   };
 }
 
-async function callBaiCard({ prompt, env, modelName, maxTokens, fetchImpl, signal, allowUnledgeredDispatch = false }) {
+async function callBaiCard({ prompt, env, modelName, maxTokens, fetchImpl, reasoningEffort = "none", signal, allowUnledgeredDispatch = false }) {
   const endpoint = baiChatCompletionsUrl(env.BAI_CARD_BASE_URL || env.BAI_BASE_URL)
     .replace(/\/chat\/completions$/u, "/responses");
+  const effort = BAI_CARD_REASONING_EFFORTS.has(reasoningEffort) ? reasoningEffort : "none";
   const body = {
     model: modelName,
     input: prompt,
-    reasoning: { effort: "none" },
+    reasoning: { effort },
     text: { format: { type: "json_object" } },
     max_output_tokens: maxTokens,
     stream: false,
@@ -3052,7 +3069,7 @@ async function callBaiCard({ prompt, env, modelName, maxTokens, fetchImpl, signa
     requestModel: body.model, responseModel: String(payload?.model || ""),
     requestId: String(payload?.id || ""),
     reasoningContentPresent: reasoningItems.length > 0,
-    reasoningEffort: "none", thinkingMode: "not_applicable",
+    reasoningEffort: effort, thinkingMode: "not_applicable",
     maxOutputTokens: maxTokens, responseFormat: "json_object",
     usage: payload?.usage || {}, warnings,
   };
@@ -6084,6 +6101,7 @@ function buildCardIdentitySelectionPrompt(userQuery, candidateSets) {
     "你只负责在给定候选中选择玩家提及所指的单张卡，不回答裁定。",
     "每个 mentionId 只能返回该组提供的 candidateId，或返回 null 表示无法确定。不得创造候选、不得使用别组候选、不得依据编号以外的信息改写候选身份。",
     "候选中给出了稳定身份、完整名称、别名、类型行和完整卡文；请依据玩家问题与这些候选选择。",
+    "只有当候选的类型行和卡文与玩家对这张卡的描述相符时才选择它；名称相近不足以选择。若题面描述的卡片种类、效果、数值或处理与每个候选都不符，或无法在候选间区分，该 mentionId 必须返回 null。",
     "只输出 JSON，例如：{\"selections\":[{\"mentionId\":\"M1\",\"candidateId\":\"C1\"},{\"mentionId\":\"M2\",\"candidateId\":null}]}。无法确定时 candidateId 必须是 JSON null，不是字符串。",
     "玩家问题：",
     String(userQuery || ""),
