@@ -44,7 +44,8 @@ function decisionsCleanupEnabled(env = {}) {
 
 // Experimental need-directed acquisition; off unless DECISIONS_NEED_DIRECTED is set.
 function decisionsNeedDirectedEnabled(env = {}) {
-  return /^(1|true|yes|on)$/iu.test(String(env.DECISIONS_NEED_DIRECTED || '').trim());
+  // TRIAL BRANCH ONLY: on unless explicitly disabled.
+  return !/^(0|false|no|off)$/iu.test(String(env.DECISIONS_NEED_DIRECTED || '').trim());
 }
 
 export const BOUNDED_SELECTION_RESULT_INSTRUCTION = '所需依据尚缺或题面条件不足时，也应交付本轮已有的相关原文，并在boundary或note说明缺口；由最终裁定者判断能否回答或是否需要补充信息，不在选材阶段作最终可回答性判定。若没有可选原文，返回selectedIds:[]。不得编造依据、编号或缺失条件。只输出JSON：{"checks":[{"issue":"子问短语","evidenceIds":["已实际提供的选择编号"],"boundary":"适用范围或缺口"}],"selectedIds":["已实际提供的选择编号"],"note":"可为空"}。';
