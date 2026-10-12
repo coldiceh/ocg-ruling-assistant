@@ -277,3 +277,86 @@ test('resumed selection shares the step limit and a final-step UNKNOWN does not 
     assert.equal(stages.at(-1), 'final-status');
   }
 });
+
+function needFixture(needs) {
+  const { options } = fixture();
+  const input = { ...options.input, queryPlan: { needs } };
+  return createDecisionsSelectionFlow({ ...options, input });
+}
+const twoNeeds = [{ id: 'n1', question: 'First relation?', ruleQuery: 'r1', qaQuery: 'q1' },
+  { id: 'n2', question: 'Second relation?', ruleQuery: 'r2', qaQuery: 'q2' }];
+
+test('need-directed acquisition nominates for the first need reported missing', async () => {
+  const flow = needFixture(twoNeeds);
+  const stages = [], requests = new Map();
+  const coverage = [{ need_1: 'MISSING', need_2: 'MISSING' }, { need_1: 'COVERED', need_2: 'MISSING' }, { need_1: 'COVERED', need_2: 'COVERED' }];
+  const result = await executeSelectionFlow(flow, { cleanup: false, needDirected: true, ask: async (stage, request) => {
+    stages.push(stage); requests.set(stage, request);
+    if (stage.startsWith('coverage-')) return coverage[Number(stage.slice(9)) - 1];
+    if (stage === 'select-1') return { next_source: 'A1' };
+    if (stage === 'select-2') return { next_source: 'A2' };
+    return { current_status: 'COMPLETE' };
+  } });
+  assert.deepEqual(stages, ['coverage-1', 'select-1', 'coverage-2', 'select-2', 'coverage-3', 'final-status']);
+  assert.deepEqual(result.selectedIds, ['A1', 'A2']);
+  assert.equal(result.acquisitionStop, 'plan_needs_covered');
+  const firstCoverage = requests.get('coverage-1');
+  assert.deepEqual(firstCoverage.questions.map(question => question.name), ['need_1', 'need_2']);
+  assert.deepEqual(Object.keys(payload(firstCoverage)), ['actualPackage', 'actualPackageChars', 'needs']);
+  assert.deepEqual(payload(firstCoverage).needs, [{ id: 'n1', question: 'First relation?' }, { id: 'n2', question: 'Second relation?' }]);
+  assert.deepEqual(payload(requests.get('select-1')).focusNeed, { id: 'n1', question: 'First relation?' });
+  assert.deepEqual(payload(requests.get('select-2')).focusNeed, { id: 'n2', question: 'Second relation?' });
+  assert.match(requests.get('select-2').questions[0].instructions, /focusNeed/u);
+  assert.deepEqual(result.events.filter(event => event.stage === 'select').map(event => event.need), ['n1', 'n2']);
+});
+
+test('a need whose nomination returns NONE or UNKNOWN is not asked about again', async () => {
+  for (const refusal of ['NONE', 'UNKNOWN']) {
+    const flow = needFixture(twoNeeds);
+    const stages = [], requests = new Map();
+    const result = await executeSelectionFlow(flow, { cleanup: false, needDirected: true, ask: async (stage, request) => {
+      stages.push(stage); requests.set(stage, request);
+      if (stage === 'coverage-1') return { need_1: 'MISSING', need_2: 'UNKNOWN' };
+      if (stage === 'coverage-2') return { need_1: 'MISSING' };
+      if (stage === 'coverage-3') return { need_1: 'COVERED' };
+      if (stage === 'select-1') return { next_source: refusal };
+      if (stage === 'select-2') return { next_source: 'A3' };
+      return { current_status: 'NEEDS_EVIDENCE' };
+    } });
+    assert.deepEqual(stages, ['coverage-1', 'select-1', 'coverage-2', 'select-2', 'coverage-3', 'final-status']);
+    assert.deepEqual(payload(requests.get('select-1')).focusNeed.id, 'n1');
+    assert.deepEqual(payload(requests.get('coverage-2')).needs.map(need => need.id), ['n2']);
+    assert.deepEqual(payload(requests.get('select-2')).focusNeed.id, 'n2');
+    assert.deepEqual(result.selectedIds, ['A3']);
+    assert.equal(result.finalStatus, 'NEEDS_EVIDENCE');
+  }
+});
+
+test('need-directed mode without plan needs, or switched off, uses the ordinary acquisition', async () => {
+  for (const [needs, needDirected] of [[[], true], [twoNeeds, false]]) {
+    const flow = needFixture(needs);
+    const stages = [];
+    await executeSelectionFlow(flow, { cleanup: false, needDirected, ask: async (stage) => {
+      stages.push(stage);
+      if (stage === 'select-1') return { next_source: 'A1' };
+      if (stage === 'select-2') return { next_source: 'NONE' };
+      return { current_status: 'COMPLETE' };
+    } });
+    assert.deepEqual(stages, ['select-1', 'select-2', 'final-status']);
+  }
+});
+
+test('need-directed acquisition shares the eight-step limit', async () => {
+  const stages = [];
+  const { options } = fixture({ count: 12 });
+  const wide = createDecisionsSelectionFlow({ ...options, input: { ...options.input, queryPlan: { needs: twoNeeds } } });
+  await executeSelectionFlow(wide, { cleanup: false, needDirected: true, ask: async (stage) => {
+    stages.push(stage);
+    if (stage.startsWith('coverage-')) return { need_1: 'MISSING', need_2: 'MISSING' };
+    if (stage.startsWith('select-')) return { next_source: `A${stage.slice(7)}` };
+    return { current_status: 'NEEDS_EVIDENCE' };
+  } });
+  assert.equal(stages.filter(stage => stage.startsWith('select-')).length, 8);
+  assert.equal(stages.filter(stage => stage.startsWith('coverage-')).length, 8);
+  assert.equal(stages.at(-1), 'final-status');
+});

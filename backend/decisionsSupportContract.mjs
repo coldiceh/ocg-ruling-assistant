@@ -31,6 +31,19 @@ export const STATUS_CRITERIA = [
   'UNKNOWN：无法可靠确定当前实际包是否覆盖全部必要支持。COMPLETE 只是模型的包内判断，不代表外部验收通过。',
 ].join('\n');
 
+// Need-directed acquisition (experimental, off by default). The needs come
+// from the retrieval plan; they only direct which relation the next nomination
+// serves. Every judgement remains the selector's choice against the original.
+export const NEED_COVERAGE_CRITERIA = [
+  SUPPORT_CRITERIA,
+  'needs 来自检索计划，是待查关系的线索，可能改写不准；判断以原题、确认卡文和当前实际包原文为准。每个问题只评价其指定的一项关系，不评价整包是否充分。',
+  'COVERED：当前实际包已按统一支持标准支持该关系；或可以确认回答原题并不需要该关系。',
+  'MISSING：可以确认该关系是回答原题的必要支持，而当前实际包尚未支持它。',
+  'UNKNOWN：无法可靠判断。',
+].join('\n');
+
+export const FOCUS_NEED_INSTRUCTION = '\nfocusNeed 是本步要补的一项待查关系（来自检索计划，只是线索）。本步只考虑能为该关系补入必要支持的候选，按候选ID条件选一条；可以确认所有候选都不能为该关系补入必要支持时选 NONE；不能可靠判断时选 UNKNOWN。';
+
 /**
  * Keep every payload field, source identity and body. The final answer's system
  * prompt is outside this payload; capacity must still use the original pack's
