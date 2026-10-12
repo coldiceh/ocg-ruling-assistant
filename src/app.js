@@ -867,6 +867,7 @@ async function analyzeQuestion({ prepareOnly = false } = {}) {
     renderPending();
     try {
       const answer = await requestBackendAnswer(text, requestedRulingVersion, {
+        ruleSystem: ui.ruleSystemSelect?.value || 'OCG',
         answerLocale,
         evidenceSelector: ui.evidenceSelector?.value || "decisions",
         signal: abortController.signal,
@@ -900,6 +901,7 @@ async function analyzeQuestion({ prepareOnly = false } = {}) {
 
 async function requestBackendAnswer(text, requestedRulingVersion, {
   answerLocale = "zh-CN",
+  ruleSystem = "OCG",
   evidenceSelector = "decisions",
   signal,
   requestId = null,
@@ -917,7 +919,7 @@ async function requestBackendAnswer(text, requestedRulingVersion, {
       evidenceSelector,
       rulingVersion: requestedRulingVersion,
       answerLocale,
-      ruleSystem: ui.ruleSystemSelect?.value || 'OCG',
+      ...(ruleSystem === 'TCG' ? {ruleSystem} : {}),
       action: "prepare",
     },
     signal,
@@ -2573,7 +2575,7 @@ async function loadCardDetail(card) {
   }
 
   const url = new URL(endpoint);
-  url.searchParams.set('ruleSystem', card.ruleSystem || ui.ruleSystemSelect?.value || 'OCG');
+  if (card.ruleSystem === 'TCG') url.searchParams.set('ruleSystem', 'TCG');
   const numericId = card.ruleSystem === 'TCG' ? card.id : card.passcode;
   if (numericId) url.searchParams.set("id", numericId);
   url.searchParams.set("name", card.cnName || card.name);

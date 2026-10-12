@@ -11,3 +11,7 @@
 /data/rag-runtime-v1/manifest.json text eol=lf
 /.github/private-evaluation-recipient.pem text eol=lf
 /scripts/publish-synced-snapshot.sh text eol=lf
+
+# Keep the independent TCG snapshots under the same LF source contract.
+/data/tcg/*.json text eol=lf
+/data/tcg/*/manifest.json text eol=lf

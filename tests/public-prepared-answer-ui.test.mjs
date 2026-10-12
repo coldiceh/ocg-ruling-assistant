@@ -135,6 +135,27 @@ test("prepare/finalize sends the exact two body shapes in serial order", async (
   assert.equal(clientInstance.readStoredPreparationId(), "");
 });
 
+test("TCG preparation sends its explicit ruleset and finalizes the bound preparation", async () => {
+  const requests = [];
+  const clientInstance = createClient(async (_url, options) => {
+    requests.push(JSON.parse(options.body));
+    return requests.length === 1
+      ? sse(preparedEvent(), endEvent())
+      : sse(answerEvent(), endEvent());
+  });
+  const result = await clientInstance.request("Synthetic TCG question", "latest", {
+    ruleSystem: "TCG", answerLocale: "en",
+  });
+  assert.equal(result.verdict, "synthetic");
+  assert.equal(requests.length, 2);
+  assert.deepEqual(requests[0], {
+    question: "Synthetic TCG question", mode: "rag",
+    rulingModelProfile: "official-astra-low", evidenceSelector: "decisions",
+    rulingVersion: "latest", answerLocale: "en", ruleSystem: "TCG", action: "prepare",
+  });
+  assert.deepEqual(requests[1], { action: "finalize", preparationId: "a".repeat(64) });
+});
+
 test("a completed stored preparation is recovered through a read-only status request", async () => {
   const preparationId = "9".repeat(64);
   const stored = new Map([["ocg-public-answer-preparation-id", preparationId]]);

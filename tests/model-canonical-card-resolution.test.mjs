@@ -156,6 +156,8 @@ test('an OCG catalog identity absent from TCG remains unresolved without leaking
   assert.deepEqual(result.resolvedCards,[]);
   assert.deepEqual(result.ambiguousMentions,[]);
   assert.equal(result.unresolvedMentions[0].input,'原词');
+  assert.equal(result.unresolvedMentions[0].tcgAvailability,'not_collected');
+  assert.equal(result.unresolvedMentions[0].reason,'tcg_card_not_collected');
 });
 
 test('source-bound 神宣 nickname keeps its existing resolution path',()=>{
