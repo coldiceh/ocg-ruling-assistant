@@ -202,10 +202,17 @@ export function extractRagCards(userQuery, {
     if (!mentionKey || seenMentionKeys.has(mentionKey)) continue;
     seenMentionKeys.add(mentionKey);
     if (seed.source === "model_card_name_extractor") {
-      // The model owns interpretation; this proves only exact catalog
+      // The model owns interpretation; this checks only exact catalog
       // membership and distinct identity count, never surface meaning.
+      // A formal name binds at once only when the player's own wording is a
+      // catalog name of that same card. A formal name the model supplied for
+      // other wording (an abbreviation, a nickname, a typo) is its proposal:
+      // it stays pending and the confirmation step, which reads the full
+      // card texts, decides between it and the surface's other candidates.
       const modelCandidates = resolveModelCanonicalCandidates(seed.canonicalNames, cards);
-      if (modelCandidates.length === 1) {
+      const proposedCardIds = modelCandidates.map(({ card }) => catalogIdentityKey(card)).filter(Boolean);
+      if (modelCandidates.length === 1 && catalogIdentityNames(modelCandidates[0].card)
+        .some((name) => normalizeCardKey(name) === mentionKey)) {
         addResolved(resolved, seenCards, modelCandidates[0], mention,
           confidenceForMentionSeed(seed, 1), "model_canonical_exact", {
             includeInputAlias: false,
@@ -213,7 +220,10 @@ export function extractRagCards(userQuery, {
           });
       } else if (modelCandidates.length > 1) {
         ambiguousMentions.push({...buildAmbiguousMention(mention, modelCandidates),
-          reason:"model_canonical_name_ambiguous", source:"model_card_name_extractor"});
+          reason:"model_canonical_name_ambiguous", source:"model_card_name_extractor", proposedCardIds});
+      } else if (modelCandidates.length === 1) {
+        unresolvedMentions.push({...buildUnresolvedMention(seed),
+          reason: "model_canonical_name_unconfirmed", proposedCardIds});
       } else unresolvedMentions.push(buildUnresolvedMention(seed));
       continue;
     }
@@ -1200,10 +1210,14 @@ function catalogIdentityNames(card = {}) {
   ].filter(Boolean), normalizeCardKey);
 }
 
+function catalogIdentityKey(card = {}) {
+  return String(card.cid || card.id || card.cardId || '');
+}
+
 function resolveModelCanonicalCandidates(names = [], cards = []) {
   const index = canonicalNameIndex(cards);
   const bindings = names.flatMap(name => index.get(normalizeCardKey(name)) || []);
-  return dedupeBy(bindings, binding => String(binding.card.cid || binding.card.id || binding.card.cardId || ''));
+  return dedupeBy(bindings, binding => catalogIdentityKey(binding.card));
 }
 
 function buildNormalizedSpanProjection(value) {

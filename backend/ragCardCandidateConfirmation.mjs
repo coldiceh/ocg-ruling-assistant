@@ -4,8 +4,8 @@ import {extractRagCards, normalizeCardKey} from './ragCardExtractor.mjs';
 import {callCardIdentitySelectionModel} from './ragModelClient.mjs';
 
 export const CARD_CANDIDATE_CONFIRMATION_LIMITS = Object.freeze({
-  mentions: 2, searchRequests: 2, localPerMention: 4,
-  baigePerMention: 4, candidatesPerMention: 6, candidatesPerQuestion: 12,
+  mentions: 4, searchRequests: 2, localPerMention: 4,
+  baigePerMention: 4, candidatesPerMention: 6, candidatesPerQuestion: 24,
   modelCalls: 1,
 });
 
@@ -42,16 +42,22 @@ export async function confirmPendingCardCandidates({userQuery, cardResolution, c
   for (const mention of [...pending.values()].slice(0, CARD_CANDIDATE_CONFIRMATION_LIMITS.mentions)) {
     signal?.throwIfAborted?.();
     const local = localProvider.searchCardNameCandidates(mention.input, CARD_CANDIDATE_CONFIRMATION_LIMITS.localPerMention);
-    const external = await searchBaigeCards(mention.input, {env, signal,
+    const searchBudgetLeft = confirmation.searchRequestCount < CARD_CANDIDATE_CONFIRMATION_LIMITS.searchRequests;
+    const external = searchBudgetLeft ? await searchBaigeCards(mention.input, {env, signal,
       candidatesOnly: true, maxRequests: 1, limit: CARD_CANDIDATE_CONFIRMATION_LIMITS.baigePerMention,
       fetchImpl: typeof fetchImpl === 'function' ? async (...args) => {
         // This is a directly counted HTTP limit, including provider fallbacks.
         if (confirmation.searchRequestCount >= CARD_CANDIDATE_CONFIRMATION_LIMITS.searchRequests) throw Error('card_candidate_search_limit');
         confirmation.searchRequestCount++;
         return fetchImpl(...args);
-      } : fetchImpl});
+      } : fetchImpl}) : {results: [], warnings: ['card_candidate_search_budget_used'], cacheHit: false};
     confirmation.warnings.push(...external.warnings);
     confirmation.searchCacheHitCount += external.cacheHit ? 1 : 0;
+    // The extractor's own formal-name proposal is one more catalog record for
+    // the selector to read, never a binding. Surface results keep their order;
+    // a proposal the surface search did not return is appended, replacing the
+    // last surface candidate when the per-mention cap is already reached.
+    const proposed = (mention.proposedCardIds || []).map(id => catalogByCid.get(String(id))).filter(Boolean);
     const unique = new Map();
     for (const source of [...local, ...(external.results || [])]) {
       const cid = cidOf(source, local.includes(source));
@@ -61,6 +67,17 @@ export async function confirmPendingCardCandidates({userQuery, cardResolution, c
       if (!record.name && !record.cnName && !record.jaName && !record.enName) continue;
       unique.set(cid, record);
       if (unique.size >= CARD_CANDIDATE_CONFIRMATION_LIMITS.candidatesPerMention) break;
+    }
+    const proposedCids = new Set(proposed.map(card => cidOf(card)));
+    for (const card of proposed) {
+      const cid = cidOf(card);
+      if (unique.has(cid)) continue;
+      if (unique.size >= CARD_CANDIDATE_CONFIRMATION_LIMITS.candidatesPerMention) {
+        const removable = [...unique.keys()].reverse().find(key => !proposedCids.has(key));
+        if (!removable) continue;
+        unique.delete(removable);
+      }
+      unique.set(cid, card);
     }
     if (unique.size) groups.push({input: mention.input, cards: [...unique.values()]});
   }
