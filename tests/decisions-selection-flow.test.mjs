@@ -111,10 +111,12 @@ test('the last selected source is not offered for cleanup and stays in the packa
   const result = await executeSelectionFlow(flow, { ask: async (stage) => {
     stages.push(stage);
     if (stage === 'select-1') return { next_source: 'A1' };
-    if (stage === 'select-2') return { next_source: 'UNKNOWN' };
+    if (stage === 'select-2') return { next_source: 'NONE' };
     if (stage.startsWith('clean-')) return { action: 'DROP' };
     return { current_status: 'NEEDS_EVIDENCE' };
   } });
+  // 2026-10-12 规则变更: an UNKNOWN nomination now triggers the interim status
+  // check, so this cleanup case stops acquisition with NONE instead.
   assert.deepEqual(stages, ['select-1', 'select-2', 'final-status']);
   assert.deepEqual(result.selectedIds, ['A1']);
   assert.deepEqual(result.events.at(-1), { stage: 'clean', alias: 'A1', answer: 'LAST_SOURCE_KEPT' });
@@ -194,4 +196,84 @@ test('declared source dependencies compose, bind exact text, and retain context 
   const stale = createDecisionsSourceResolver({ ...options, records: [{ ...record, text: record.text + 'changed' }] });
   assert.throws(() => stale([atoms[0].id]), /dependency_source_changed/);
   assert.throws(() => createDecisionsReadingDependencies({ ...options, entries: new Map([...entries].slice(0, 3)) }), /required_dependency_body_absent/);
+});
+
+test('an UNKNOWN stop resumes acquisition once when the interim status reports NEEDS_EVIDENCE', async () => {
+  const { flow } = fixture();
+  const stages = [], requests = new Map();
+  const result = await executeSelectionFlow(flow, { cleanup: false, ask: async (stage, request) => {
+    stages.push(stage); requests.set(stage, request);
+    if (stage === 'select-1') return { next_source: 'A1' };
+    if (stage === 'select-2') return { next_source: 'UNKNOWN' };
+    if (stage === 'select-3') return { next_source: 'A2' };
+    if (stage === 'select-4') return { next_source: 'NONE' };
+    return { current_status: stage === 'interim-status' ? 'NEEDS_EVIDENCE' : 'COMPLETE' };
+  } });
+  assert.deepEqual(stages, ['select-1', 'select-2', 'interim-status', 'select-3', 'select-4', 'final-status']);
+  assert.deepEqual(result.selectedIds, ['A1', 'A2']);
+  assert.equal(result.finalStatus, 'COMPLETE');
+  assert.equal(result.acquisitionStop, 'model_reports_no_addition');
+  // The first acquisition is unchanged; only resumed requests carry the status.
+  for (const stage of ['select-1', 'select-2']) {
+    assert(!Object.hasOwn(payload(requests.get(stage)), 'independentPackageCheck'));
+    assert.doesNotMatch(requests.get(stage).questions[0].instructions, /independentPackageCheck/u);
+  }
+  for (const stage of ['select-3', 'select-4']) {
+    assert.equal(payload(requests.get(stage)).independentPackageCheck, 'NEEDS_EVIDENCE');
+    assert.match(requests.get(stage).questions[0].instructions, /independentPackageCheck/u);
+    assert(requests.get(stage).questions[0].choices.some(choice => choice.value === 'NONE'));
+  }
+  assert.deepEqual(Object.keys(payload(requests.get('interim-status'))), ['actualPackage', 'actualPackageChars', 'maxPromptChars']);
+  assert.deepEqual(result.events.filter(event => event.stage === 'status' || event.stage === 'resume'),
+    [{ stage: 'status', label: 'interim', answer: 'NEEDS_EVIDENCE' }, { stage: 'resume', reason: 'interim_status_needs_evidence' }]);
+});
+
+test('without NEEDS_EVIDENCE the interim status is the final status and no request repeats', async () => {
+  for (const status of ['COMPLETE', 'UNKNOWN']) {
+    const { flow } = fixture();
+    const stages = [];
+    const result = await executeSelectionFlow(flow, { cleanup: false, ask: async (stage) => {
+      stages.push(stage);
+      if (stage === 'select-1') return { next_source: 'A1' };
+      if (stage === 'select-2') return { next_source: 'UNKNOWN' };
+      return { current_status: status };
+    } });
+    assert.deepEqual(stages, ['select-1', 'select-2', 'interim-status']);
+    assert.equal(result.finalStatus, status);
+    assert.equal(result.acquisitionStop, 'uncertain_nomination');
+  }
+});
+
+test('a resumed acquisition that adds nothing reuses the identical status answer', async () => {
+  const { flow } = fixture();
+  const stages = [];
+  const result = await executeSelectionFlow(flow, { cleanup: false, ask: async (stage) => {
+    stages.push(stage);
+    if (stage === 'select-1') return { next_source: 'A1' };
+    if (stage.startsWith('select-')) return { next_source: 'UNKNOWN' };
+    return { current_status: 'NEEDS_EVIDENCE' };
+  } });
+  assert.deepEqual(stages, ['select-1', 'select-2', 'interim-status', 'select-3']);
+  assert.equal(result.finalStatus, 'NEEDS_EVIDENCE');
+  assert.equal(result.status, 'model_reports_incomplete');
+});
+
+test('resumed selection shares the step limit and a final-step UNKNOWN does not resume', async () => {
+  for (const unknownAt of [3, 8]) {
+    const { flow } = fixture({ count: 12 });
+    const stages = [];
+    await executeSelectionFlow(flow, { cleanup: false, ask: async (stage) => {
+      stages.push(stage);
+      if (stage.startsWith('select-')) {
+        const index = Number(stage.slice(7));
+        return { next_source: index === unknownAt ? 'UNKNOWN' : `A${index}` };
+      }
+      return { current_status: 'NEEDS_EVIDENCE' };
+    } });
+    const selects = stages.filter(stage => stage.startsWith('select-'));
+    assert.equal(selects.length, 8);
+    assert.equal(selects.at(-1), 'select-8');
+    assert.equal(stages.includes('interim-status'), unknownAt < 8);
+    assert.equal(stages.at(-1), 'final-status');
+  }
 });
