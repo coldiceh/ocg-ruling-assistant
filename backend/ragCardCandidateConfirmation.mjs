@@ -86,7 +86,7 @@ export async function confirmPendingCardCandidates({userQuery, cardResolution, c
     candidates: group.cards.map((card, j) => ({candidateId: `C${j + 1}`, cid: cidOf(card),
       name: card.cnName || card.name || card.jaName || card.enName,
       aliases: [...new Set([card.name, card.cnName, card.jaName, card.enName].filter(Boolean))],
-      typeLine: card.typeLine, effectText: card.effectText, pendulumEffectText: card.pendulumEffectText}))}));
+      typeLine: card.typeLine || catalogTypeLine(card), effectText: card.effectText, pendulumEffectText: card.pendulumEffectText}))}));
   if (!groups.length) return finish(null);
   signal?.throwIfAborted?.();
   const modelStartedAt = Date.now();
@@ -107,10 +107,13 @@ export async function confirmPendingCardCandidates({userQuery, cardResolution, c
     // The existing selector parser validates handles. Copy the addressed record;
     // neither rank nor a name similarity score decides its identity.
     const source = group.cards[index];
-    const selected = extractRagCards(group.input, {cards: [source], mentionSetSource: 'typed_model',
-      modelCardNameCandidates: [{name: source.name || source.cnName || source.jaName || source.enName, originalText: group.input}]}).resolvedCards[0];
+    // Build the record from the addressed card's own formal name, then keep
+    // the player's wording as its input; the selector already decided identity.
+    const formalName = source.name || source.cnName || source.jaName || source.enName;
+    const selected = extractRagCards(formalName, {cards: [source], mentionSetSource: 'typed_model',
+      modelCardNameCandidates: [{name: formalName, originalText: formalName}]}).resolvedCards[0];
     if (!selected) continue;
-    resolved.push({...selected, cid: source.cid || source.id,
+    resolved.push({...selected, input: group.input, cid: source.cid || source.id,
       resolutionSource: 'model_candidate_selection', identityVerificationStatus: 'verified_external_resolution',
       identityVerificationSource: 'model_candidate_selection'});
     selectedKeys.add(normalizeCardKey(group.input));
@@ -119,6 +122,16 @@ export async function confirmPendingCardCandidates({userQuery, cardResolution, c
   resolution.unresolvedMentions = resolution.unresolvedMentions.filter(mention => !selectedKeys.has(normalizeCardKey(mention.input)));
   resolution.ambiguousMentions = resolution.ambiguousMentions.filter(mention => !selectedKeys.has(normalizeCardKey(mention.input)));
   return finish(selectionModel);
+}
+
+// Catalog records carry their kind as structured fields rather than a printed
+// type line. Join those stored values verbatim so the selector can see, for
+// example, that a candidate is a continuous rather than a field spell.
+function catalogTypeLine(card = {}) {
+  const kind = String(card.cardType || card.type || '').trim();
+  const details = [card.property, ...(Array.isArray(card.properties) ? card.properties : [])]
+    .map(value => String(value || '').trim()).filter(Boolean);
+  return [...new Set([kind, ...details].filter(Boolean))].join('/');
 }
 
 function cidOf(card, local = true) {

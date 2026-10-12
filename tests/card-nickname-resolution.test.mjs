@@ -56,8 +56,10 @@ for (const [id, input] of [['16524', '毁灭凤凰人'], ['23548', '龟G']]) {
     const { question, raw, result } = resolve(input, output === 'surface' ? input : canonical.cnName || canonical.name);
     if (output === 'surface') assert.equal(raw.resolvedCards.length, 0, 'surface-only nickname still needs its sourced reference');
     else {
-      assert.deepEqual(raw.resolvedCards.map(card=>card.id),[id]);
-      assert.equal(raw.resolvedCards[0].resolutionSource,'model_canonical_exact');
+      // 2026-10-12 规则变更: the model's formal name for a nickname is only a proposal;
+      // the sourced nickname reference is what binds it below.
+      assert.equal(raw.resolvedCards.length, 0);
+      assert.deepEqual(raw.unresolvedMentions.find(item => item.input === input)?.proposedCardIds, [id]);
     }
     assert.deepEqual(result.resolvedCards.map(card => card.id), [id]);
     const resolved = result.resolvedCards[0];

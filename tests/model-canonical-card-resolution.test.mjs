@@ -12,6 +12,15 @@ const mention = (originalText, name, canonicalNames) => ({originalText, name, co
 const extract = (input, candidate, options = {}) => extractRagCards(`${input}的效果如何处理？`, {
   cards:ocg, mentionSetSource:'typed_model', modelCardNameCandidates:[candidate], ...options,
 });
+// 2026-10-12 规则变更: a formal name the model supplies for other wording is a
+// proposal for the confirmation step, not a binding. It binds at once only when
+// the player's own wording is a catalog name of that card.
+const assertProposal = (result, input, ids) => {
+  assert.deepEqual(result.resolvedCards, []);
+  const pending = [...result.unresolvedMentions, ...result.ambiguousMentions].find(item => item.input === input);
+  assert.ok(pending, `${input} must stay pending`);
+  assert.deepEqual([...pending.proposedCardIds].sort(), [...ids].sort());
+};
 
 for (const [input, name, id] of [
   ['密告', '神之密告', '22588'],
@@ -19,12 +28,18 @@ for (const [input, name, id] of [
   ['增G', 'Maxx "C"', '9455'],
   ['死亡向导', '魔界发现世行死亡向导', '9702'],
 ]) {
-  for (const mentionSetSource of ['typed_model','query_scan']) test(`${input}: unique model canonical name binds real OCG card (${mentionSetSource})`, () => {
+  for (const mentionSetSource of ['typed_model','query_scan']) test(`${input}: a unique model canonical name is proposed, not bound (${mentionSetSource})`, () => {
     const result=extract(input, mention(input,name), {mentionSetSource});
-    assert.deepEqual(result.resolvedCards.map(card=>card.id), [id]);
-    assert.equal(result.resolvedCards[0].input,input);
+    assertProposal(result, input, [id]);
+    assert.equal(result.unresolvedMentions[0].reason,'model_canonical_name_unconfirmed');
+  });
+  test(`${input}: the formal name typed by the player binds the same card directly`, () => {
+    const card=ocg.find(item=>item.id===id);
+    const typed=card.cnName || card.name;
+    const result=extract(typed, mention(typed,name));
+    assert.deepEqual(result.resolvedCards.map(item=>item.id), [id]);
     assert.equal(result.resolvedCards[0].resolutionSource,'model_canonical_exact');
-    assert.equal(result.resolvedCards[0].effectText,ocg.find(card=>card.id===id).effectText);
+    assert.equal(result.resolvedCards[0].effectText,card.effectText);
     assert.deepEqual(result.unresolvedMentions,[]);
     assert.deepEqual(result.ambiguousMentions,[]);
   });
@@ -34,7 +49,7 @@ test('multilingual names survive model parsing and resolve one catalog identity'
   const parsed=parseCardNameExtractionOutput({cardNames:[mention('增G','增殖的G',['Maxx "C"','増殖するG'])],groupMentions:[]});
   assert.deepEqual(parsed.candidates[0].canonicalNames,['Maxx "C"','増殖するG']);
   const result=extract('增G',parsed.candidates[0]);
-  assert.deepEqual(result.resolvedCards.map(card=>card.id),['9455']);
+  assertProposal(result,'增G',['9455']);
 });
 
 // 2026-10-11 规则变更: originalText participates in the same mention's exact-name binding.
@@ -51,7 +66,7 @@ for (const field of ['enName','jaName','cnName']) test(`the ${field} field survi
   }],groupMentions:[]});
   assert.equal(parsed.candidates[0][field],card[field]);
   const result=extract('死亡向导',parsed.candidates[0]);
-  assert.deepEqual(result.resolvedCards.map(item=>item.id),['9702']);
+  assertProposal(result,'死亡向导',['9702']);
 });
 
 test('same-identity fields deduplicate while different-identity fields stay ambiguous',()=>{
@@ -59,12 +74,13 @@ test('same-identity fields deduplicate while different-identity fields stay ambi
   const same=extract('死亡向导',{
     ...mention('死亡向导',card.name),enName:card.enName,jaName:card.jaName,cnName:card.cnName,
   });
-  assert.deepEqual(same.resolvedCards.map(item=>item.id),['9702']);
+  assertProposal(same,'死亡向导',['9702']);
   const different=extract('灰流丽',{
     ...mention('灰流丽','损坏的名字'),enName:card.enName,
   });
   assert.deepEqual(different.resolvedCards,[]);
   assert.deepEqual(different.ambiguousMentions[0].candidateCards.map(item=>item.id).sort(),['12950','9702']);
+  assert.deepEqual([...different.ambiguousMentions[0].proposedCardIds].sort(),['12950','9702']);
 });
 
 test('unknown fields keep a mention unresolved without guessing a card',()=>{
@@ -110,5 +126,14 @@ test('source-bound 神宣 nickname keeps its existing resolution path',()=>{
 for (const mentionSetSource of ['typed_model','query_scan']) test(`model mentions do not union extra scan names (${mentionSetSource})`,()=>{
   const result=extractRagCards('密告与灰流丽的效果如何处理？',{cards:ocg,mentionSetSource,
     modelCardNameCandidates:[mention('密告','神之密告')]});
-  assert.deepEqual(result.resolvedCards.map(card=>card.id),['22588']);
+  assertProposal(result,'密告',['22588']);
+  assert.ok(![...result.unresolvedMentions,...result.ambiguousMentions].some(item=>item.input==='灰流丽'));
+});
+
+test('a wrong formal name for an abbreviation stays a proposal instead of binding the wrong card',()=>{
+  // Reported 2026-10-12: the extractor once named another catalog card for 密告.
+  const wrong=ocg.find(card=>card.id==='5772');
+  const result=extractRagCards('密告支1500炸了张场地 手里有第二张可以继续贴吗？',{cards:ocg,mentionSetSource:'typed_model',
+    modelCardNameCandidates:[{...mention('密告支',wrong.cnName),enName:wrong.enName}]});
+  assertProposal(result,'密告支',['5772']);
 });

@@ -166,17 +166,20 @@ test('empty provider result needs no candidate-selection model',async()=>{
   assert.equal(result.cardResolution.resolvedCards.length,0);
 });
 
-test('production pipeline binds one model-selected canonical identity before Gemini without an extra selection call',async()=>{
+// 2026-10-12 规则变更: the extractor's formal name for a short surface is a proposal;
+// one selection call over the actual candidates binds it before Gemini packs it.
+test('production pipeline confirms a proposed canonical identity with one selection before Gemini',async()=>{
   clearBaigeSearchCache();
   const tasks=[];
   let packedCard;
   const prepared=await answerRagRulingQuestion({
     question:`${surface}的处理如何？`,cards:localCards,records:[],qaRecords:[],prepareForContinuation:true,
-    cardModelInvoker:async({task})=>{
+    cardModelInvoker:async({task,prompt})=>{
       tasks.push(task);
-      return task==='card_name_extraction'
-        ? JSON.stringify({cardNames:[{name:localCards[0].name,originalText:surface,confidence:'high'}],groupMentions:[]})
-        : JSON.stringify({selections:[{mentionId:'M1',candidateId:'C1'}]});
+      if (task==='card_name_extraction') return JSON.stringify({cardNames:[{name:localCards[0].name,originalText:surface,confidence:'high'}],groupMentions:[]});
+      const sets=JSON.parse(prompt.slice(prompt.lastIndexOf('候选集：')+'候选集：'.length));
+      const chosen=sets[0].candidates.find(candidate=>String(candidate.cid)==='99001');
+      return JSON.stringify({selections:[{mentionId:sets[0].mentionId,candidateId:chosen.candidateId}]});
     },
     geminiEvidenceProvider:{async retrieve(input){
       packedCard=input.cardResolution.resolvedCards[0];
@@ -191,9 +194,9 @@ test('production pipeline binds one model-selected canonical identity before Gem
     env:{RAG_EVIDENCE_PIPELINE:'cloud_evidence_v1',GEMINI_RULE_QA_ENABLED:'true',RAG_LIVE_OFFICIAL_QA:'false'},
     fetchImpl:async()=>new Response(JSON.stringify({result:[first,second],next:0}),{headers:{'content-type':'application/json'}}),
   });
-  assert.deepEqual(tasks,['card_name_extraction']);
+  assert.deepEqual(tasks,['card_name_extraction','card_identity_selection']);
   assert.equal(packedCard.input,surface);
-  assert.equal(packedCard.resolutionSource,'model_canonical_exact');
+  assert.equal(packedCard.resolutionSource,'model_candidate_selection');
   assert.equal(prepared.status,'evidence_prepared');
   assert.equal(prepared.continuation.cardResolution.resolvedCards[0].id,packedCard.id);
 });
