@@ -38,3 +38,20 @@ test("the QA index keeps a structured official answer separate from positive que
 
   assert.equal(indexed.answer, "No, it cannot be performed.");
 });
+
+test("a card's formal name maps to that card even when another card lists it as an alias", () => {
+  const [indexed] = buildQaIndex([{
+    id: "card-faq-200-1",
+    recordType: "card-faq",
+    title: "Formal Card FAQ",
+    question: "Question about Formal Card?",
+    cards: ["Formal Card"],
+    cardIds: ["200"],
+  }], [
+    { id: "200", name: "Formal Card", cnName: "Formal Card" },
+    // A community name source reuses the first card's formal name for a different card.
+    { id: "300", name: "Other Card", aliases: ["Other Card", "Formal Card"] },
+  ]);
+
+  assert.deepEqual(indexed.cardIds, ["200"]);
+});

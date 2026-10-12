@@ -16,10 +16,19 @@ export function buildCardAliasIndex(cards) {
 }
 
 export function buildQaIndex(rulings, cards) {
+  // A card's own formal names win over another card's aliases: community
+  // names (e.g. Baige) sometimes reuse a different card's official name.
   const aliasToId = new Map();
-  for (const card of Array.isArray(cards) ? cards : []) {
-    for (const alias of [card.name, card.cnName, card.jaName, card.enName, ...(card.aliases || [])].filter(Boolean)) {
+  const cardList = Array.isArray(cards) ? cards : [];
+  const formalNames = (card) => [card.name, card.cnName, card.jaName, card.enName].filter(Boolean);
+  for (const card of cardList) {
+    for (const alias of [...formalNames(card), ...(card.aliases || [])].filter(Boolean)) {
       aliasToId.set(normalizeIndexKey(alias), String(card.id || card.cardId || ""));
+    }
+  }
+  for (const card of cardList) {
+    for (const name of formalNames(card)) {
+      aliasToId.set(normalizeIndexKey(name), String(card.id || card.cardId || ""));
     }
   }
   return (Array.isArray(rulings) ? rulings : [])

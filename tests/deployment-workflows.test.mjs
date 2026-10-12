@@ -175,6 +175,23 @@ test("data sync runs the bounded synchronization checks and keeps the complete s
   assert.doesNotMatch(previewWorkflow, /--test-isolation=none/u);
 });
 
+test("data sync hands the Baige Chinese-name download to the card sync and tolerates its failure", async () => {
+  const workflow = await readWorkflow("sync-data.yml");
+  const downloadStep = workflow.match(
+    /- name: Download Baige Chinese card names[\s\S]*?(?=\n\s+- name:)/u,
+  )?.[0] || "";
+  const syncStep = workflow.match(
+    /- name: Sync YGOResources snapshot[\s\S]*?(?=\n\s+- name:)/u,
+  )?.[0] || "";
+
+  assert.ok(downloadStep && syncStep);
+  assert.ok(workflow.indexOf(downloadStep) < workflow.indexOf(syncStep));
+  assert.match(downloadStep, /continue-on-error: true/u);
+  assert.match(downloadStep, /https:\/\/ygocdb\.com\/api\/v0\/cards\.zip/u);
+  assert.match(downloadStep, /echo "path=[^"]*cards\.json" >> "\$GITHUB_OUTPUT"/u);
+  assert.match(syncStep, /BAIGE_CHINESE_NAME_SOURCE_PATH: \$\{\{ steps\.baige\.outputs\.path \|\| '' \}\}/u);
+});
+
 test("concurrent publication rechecks the combined snapshot and retains the original tree on failure", async () => {
   const workflow = await readWorkflow("sync-data.yml");
   const publication = await readPublication();

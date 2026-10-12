@@ -74,9 +74,27 @@ jobs:
       - name: Test navigation output recovery (no provider calls)
         run: node --test tests/evidence-navigation-output-recovery.test.mjs tests/evidence-generation-transport.test.mjs tests/evidence-preprocess-navigation.test.mjs tests/evidence-preprocess-cloud.test.mjs tests/sync-bounded-evidence-assets.test.mjs tests/bai-evidence-generation-profile.test.mjs tests/evidence-preprocess-run-cost.test.mjs tests/evidence-sync-budget-speed.test.mjs tests/sync-official-reference.test.mjs tests/sync-cpu-continuation.test.mjs tests/sync-cpu-selection.test.mjs
 
+      # Baige (ygocdb) supplies community Chinese names: display names for cards
+      # the upstream snapshot has no Chinese name for, and exact-match aliases
+      # for the rest. A failed download leaves the path empty; the sync then
+      # keeps the Baige names stored by earlier runs.
+      - name: Download Baige Chinese card names
+        id: baige
+        if: steps.restore.outputs.resumed != 'true'
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          dir="$RUNNER_TEMP/baige"
+          mkdir -p "$dir"
+          curl -fsSL --retry 3 --max-time 120 -o "$dir/cards.zip" https://ygocdb.com/api/v0/cards.zip
+          unzip -o -q "$dir/cards.zip" cards.json -d "$dir"
+          test -s "$dir/cards.json"
+          echo "path=$dir/cards.json" >> "$GITHUB_OUTPUT"
+
       - name: Sync YGOResources snapshot
         if: steps.restore.outputs.resumed != 'true'
         env:
+          BAIGE_CHINESE_NAME_SOURCE_PATH: ${{ steps.baige.outputs.path || '' }}
           SYNC_ALL_RELEASED_CARDS: "true"
           SYNC_ONLY_RELEASED_CARDS: "true"
           CARD_INDEX_LANGUAGES: "en,ja"
