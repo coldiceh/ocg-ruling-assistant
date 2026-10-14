@@ -232,7 +232,9 @@ test("the evidence selector defaults to Decisions and is labeled in all supporte
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
   assert.match(html, /<label[^>]+for="evidenceSelector"/u);
   assert.match(html, /value="decisions" selected>Decisions（默认）/u);
-  assert.match(html, /<option value="luna">Luna<\/option>/u);
+  // 2026-10-14: Luna selection runs only on b.ai, so the option is hidden
+  // while every public step uses the official API (the backend still accepts it).
+  assert.doesNotMatch(html, /<option value="luna">/u);
   assert.match(app, /evidenceSelector: ui\.evidenceSelector\?\.value \|\| "decisions"/u);
   assert.match(app, /"准备证据": "Evidence preparation"/u);
   assert.match(app, /"准备证据": "根拠資料の準備"/u);

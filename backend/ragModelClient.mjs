@@ -28,6 +28,7 @@ import {
   manageCloudFinalBudget,
   runCloudBaiRequest,
   runCloudBaiCardRequest,
+  runOfficialLunaCardRequest,
   createCloudRequestBudget,
   runCloudRelayRequest,
   runOfficialOpenAIRequest,
@@ -1043,6 +1044,7 @@ export async function callCardNameExtractionModel({
     : provider === "bai"
       ? createBaiCardEnv(env)
       : env;
+  const providerLabel = lunaCardProviderLabel(provider, providerEnv);
   const relayGeneration = resolveCardExtractionRelayGenerationConfig(provider, env);
   const reasoningEffort = provider === "bai"
     ? baiCardReasoningEffort(env.RAG_CARD_BAI_EXTRACTION_REASONING_EFFORT)
@@ -1059,7 +1061,7 @@ export async function callCardNameExtractionModel({
   const budgetProvider = provider;
 
   if (dryRun === true || isEnabled(env.RAG_DRY_RUN)) {
-    return emptyCardNameExtractionResult(provider, modelName, true, [
+    return emptyCardNameExtractionResult(providerLabel, modelName, true, [
       ...providerWarnings,
       "card_name_model_dry_run_skipped",
     ]);
@@ -1092,7 +1094,7 @@ export async function callCardNameExtractionModel({
       });
       if (execution.blocked) {
         return {
-          ...emptyCardNameExtractionResult(provider, modelName, true, [
+          ...emptyCardNameExtractionResult(providerLabel, modelName, true, [
             ...providerWarnings,
             ...execution.warnings,
             "api_daily_budget_exceeded_card_name_model_skipped",
@@ -1110,7 +1112,7 @@ export async function callCardNameExtractionModel({
         invalidTypedMentions: parsedExtraction.invalidTypedMentions,
         formatWarnings: parsedExtraction.formatWarnings,
         rawText: String(raw || ""),
-        providerUsed: provider,
+        providerUsed: providerLabel,
         modelUsed: modelName,
         dryRun: false,
         warnings: [
@@ -1124,7 +1126,7 @@ export async function callCardNameExtractionModel({
       };
     } catch (error) {
       return {
-        ...emptyCardNameExtractionResult(provider, modelName, false, [
+        ...emptyCardNameExtractionResult(providerLabel, modelName, false, [
           ...providerWarnings,
           ...(error.budgetWarnings || []),
           `card_name_model_failed:${safeErrorMessage(error)}`,
@@ -1186,7 +1188,7 @@ export async function callCardNameExtractionModel({
     });
     if (execution.blocked) {
       return {
-        ...emptyCardNameExtractionResult(provider, modelName, true, [
+        ...emptyCardNameExtractionResult(providerLabel, modelName, true, [
           ...providerWarnings,
           ...execution.warnings,
           "api_daily_budget_exceeded_card_name_model_skipped",
@@ -1204,7 +1206,7 @@ export async function callCardNameExtractionModel({
       invalidTypedMentions: parsedExtraction.invalidTypedMentions || [],
       formatWarnings: parsedExtraction.formatWarnings || [],
       rawText: response.rawText,
-      providerUsed: provider,
+      providerUsed: providerLabel,
       modelUsed: modelName,
       dryRun: false,
       warnings: [
@@ -1222,7 +1224,7 @@ export async function callCardNameExtractionModel({
         return result;
       } catch (error) {
         return {
-          ...emptyCardNameExtractionResult(provider, modelName, false, [
+          ...emptyCardNameExtractionResult(providerLabel, modelName, false, [
             ...providerWarnings,
             ...(error.budgetWarnings || []),
             `card_name_model_failed:${safeErrorMessage(error)}`,
@@ -1266,6 +1268,7 @@ export async function callCardIdentitySelectionModel({
     : provider === "bai"
       ? createBaiCardEnv(env)
       : env;
+  const providerLabel = lunaCardProviderLabel(provider, providerEnv);
   const relayGeneration = resolveCardExtractionRelayGenerationConfig(provider, env);
   const reasoningEffort = provider === "bai"
     ? baiCardReasoningEffort(env.RAG_CARD_BAI_SELECTION_REASONING_EFFORT)
@@ -1280,13 +1283,13 @@ export async function callCardIdentitySelectionModel({
   const budgetProvider = provider;
 
   if (!normalizedCandidateSets.length) {
-    return emptyCardIdentitySelectionResult(provider, modelName, true, [
+    return emptyCardIdentitySelectionResult(providerLabel, modelName, true, [
       ...providerWarnings,
       "card_identity_selection_no_candidates",
     ]);
   }
   if (dryRun === true || isEnabled(env.RAG_DRY_RUN)) {
-    return emptyCardIdentitySelectionResult(provider, modelName, true, [
+    return emptyCardIdentitySelectionResult(providerLabel, modelName, true, [
       ...providerWarnings,
       "card_identity_selection_dry_run_skipped",
     ]);
@@ -1323,7 +1326,7 @@ export async function callCardIdentitySelectionModel({
       });
       if (execution.blocked) {
         return {
-          ...emptyCardIdentitySelectionResult(provider, modelName, true, [
+          ...emptyCardIdentitySelectionResult(providerLabel, modelName, true, [
             ...providerWarnings,
             ...execution.warnings,
             "api_daily_budget_exceeded_card_identity_selection_skipped",
@@ -1336,13 +1339,14 @@ export async function callCardIdentitySelectionModel({
         parsed,
         rawText: execution.value.rawText,
         provider,
+        providerLabel,
         modelName,
         providerWarnings: [...providerWarnings, ...execution.warnings],
         execution,
       });
     } catch (error) {
       return {
-        ...emptyCardIdentitySelectionResult(provider, modelName, false, [
+        ...emptyCardIdentitySelectionResult(providerLabel, modelName, false, [
           ...providerWarnings,
           ...(error.budgetWarnings || []),
           `card_identity_selection_model_failed:${safeErrorMessage(error)}`,
@@ -1404,7 +1408,7 @@ export async function callCardIdentitySelectionModel({
         });
         if (execution.blocked) {
           return {
-            ...emptyCardIdentitySelectionResult(provider, modelName, true, [
+            ...emptyCardIdentitySelectionResult(providerLabel, modelName, true, [
               ...providerWarnings,
               ...execution.warnings,
               "api_daily_budget_exceeded_card_identity_selection_skipped",
@@ -1418,6 +1422,7 @@ export async function callCardIdentitySelectionModel({
           parsed,
           rawText: response.rawText,
           provider,
+          providerLabel,
           modelName,
           providerWarnings: [
             ...providerWarnings,
@@ -1430,7 +1435,7 @@ export async function callCardIdentitySelectionModel({
         return result;
       } catch (error) {
         return {
-          ...emptyCardIdentitySelectionResult(provider, modelName, false, [
+          ...emptyCardIdentitySelectionResult(providerLabel, modelName, false, [
             ...providerWarnings,
             ...(error.budgetWarnings || []),
             `card_identity_selection_model_failed:${safeErrorMessage(error)}`,
@@ -2163,7 +2168,45 @@ function createCardExtractionRelayEnv(env = {}) {
   };
 }
 
+const OFFICIAL_OPENAI_BASE_URL = "https://api.openai.com/v1";
+const OFFICIAL_OPENAI_RESPONSES_URL = `${OFFICIAL_OPENAI_BASE_URL}/responses`;
+
+// The GPT-6 Luna card transport (card-name extraction, card identity
+// selection and the optional Luna scope task) can be served by b.ai or by the
+// official OpenAI API. RAG_CARD_LUNA_CHANNEL=official changes only the
+// endpoint, the credential and the ledger; the Responses request is the same.
+export function lunaCardChannel(env = {}) {
+  return String(env.RAG_CARD_LUNA_CHANNEL || "").trim().toLowerCase() === "official" ? "official" : "bai";
+}
+
+// RAG_CARD_OPENAI_API_KEY is the card-only copy that survives public provider
+// isolation; OCG_CARD_OPENAI_API_KEY is a dedicated key, and the evidence
+// preparation key used by Decisions is the fallback.
+function officialLunaCardApiKey(env = {}) {
+  return String(env.RAG_CARD_OPENAI_API_KEY || env.OCG_CARD_OPENAI_API_KEY || env.OPENAI_DECISIONS_API_KEY || "").trim();
+}
+
+export function lunaCardProviderLabel(provider, env = {}) {
+  return provider === "bai" && lunaCardChannel(env) === "official" ? "openai" : provider;
+}
+
 function createBaiCardEnv(env = {}) {
+  if (lunaCardChannel(env) === "official") {
+    // Inside this derived card-transport environment the BAI_* fields carry
+    // the transport credential that the existing key checks read. callBaiCard
+    // sends it only to the fixed official endpoint, never to a b.ai base URL.
+    const officialKey = officialLunaCardApiKey(env);
+    return {
+      ...env,
+      RAG_CARD_LUNA_CHANNEL: "official",
+      BAI_API_KEY: officialKey,
+      BAI_BASE_URL: OFFICIAL_OPENAI_BASE_URL,
+      BAI_CARD_API_KEY: officialKey,
+      BAI_CARD_BASE_URL: OFFICIAL_OPENAI_BASE_URL,
+      BAI_CARD_MODEL: modelNameForCardExtractionProvider("bai", env),
+      BAI_CARD_REASONING_EFFORT: "none",
+    };
+  }
   const apiKey = String(env.BAI_CARD_API_KEY || env.BAI_API_KEY || "").trim();
   const baseUrl = String(env.BAI_CARD_BASE_URL || DEFAULT_PUBLIC_BAI_BASE_URL).trim();
   return {
@@ -2485,12 +2528,21 @@ export function createPublicAnswerModelEnv(env = {}, profileValue) {
   // The card-only b.ai experiment is deliberately copied after the provider
   // isolation pass. It must remain available to card-name and identity calls
   // while never becoming credentials for the final ruling provider.
+  // An official key for the Luna card channel is likewise copied only into
+  // its card-only name; the final provider never receives OPENAI_* values.
+  const cardOfficialApiKey = officialLunaCardApiKey(source);
+  delete result.RAG_CARD_OPENAI_API_KEY;
+  delete result.OCG_CARD_OPENAI_API_KEY;
   if (baiCardEnabled) {
     result.BAI_CARD_ENABLED = "true";
     if (baiCardApiKey) result.BAI_CARD_API_KEY = baiCardApiKey;
     result.BAI_CARD_BASE_URL = baiCardBaseUrl;
     result.BAI_CARD_MODEL = baiCardModel;
     result.BAI_CARD_REASONING_EFFORT = "none";
+    if (lunaCardChannel(source) === "official") {
+      result.RAG_CARD_LUNA_CHANNEL = "official";
+      if (cardOfficialApiKey) result.RAG_CARD_OPENAI_API_KEY = cardOfficialApiKey;
+    }
   }
   const mockRequested = [
     source.RAG_MODEL_PROVIDER,
@@ -2576,8 +2628,15 @@ export function resolveCardExtractionProvider(env = {}) {
   if (requested === "mock") return { provider: "mock", requested, warnings };
   const baiCardRequested = isEnabled(env.BAI_CARD_ENABLED) || requestedCardProvider === "bai";
   if (baiCardRequested) {
-    const configured = Boolean(String(env.BAI_CARD_API_KEY || env.BAI_API_KEY || "").trim());
-    if (!configured) warnings.push("bai_card_api_key_missing_card_name_model_disabled");
+    const official = lunaCardChannel(env) === "official";
+    const configured = official
+      ? Boolean(officialLunaCardApiKey(env))
+      : Boolean(String(env.BAI_CARD_API_KEY || env.BAI_API_KEY || "").trim());
+    if (!configured) {
+      warnings.push(official
+        ? "official_luna_card_api_key_missing_card_name_model_disabled"
+        : "bai_card_api_key_missing_card_name_model_disabled");
+    }
     if (String(env.BAI_CARD_MODEL || DEFAULT_BAI_CARD_MODEL).trim() !== DEFAULT_BAI_CARD_MODEL) {
       warnings.push("bai_card_model_defaulted_gpt_6_luna");
     }
@@ -3029,8 +3088,16 @@ async function callDeepSeek({
 }
 
 async function callBaiCard({ prompt, env, modelName, maxTokens, fetchImpl, reasoningEffort = "none", signal, allowUnledgeredDispatch = false }) {
-  const endpoint = baiChatCompletionsUrl(env.BAI_CARD_BASE_URL || env.BAI_BASE_URL)
-    .replace(/\/chat\/completions$/u, "/responses");
+  const official = lunaCardChannel(env) === "official";
+  // The official channel uses a fixed endpoint so its credential can only
+  // reach api.openai.com, and refuses redirects like the official final path.
+  const endpoint = official
+    ? OFFICIAL_OPENAI_RESPONSES_URL
+    : baiChatCompletionsUrl(env.BAI_CARD_BASE_URL || env.BAI_BASE_URL)
+      .replace(/\/chat\/completions$/u, "/responses");
+  const transportFetch = official
+    ? (input, init = {}) => fetchImpl(input, { ...init, redirect: "error" })
+    : fetchImpl;
   const effort = BAI_CARD_REASONING_EFFORTS.has(reasoningEffort) ? reasoningEffort : "none";
   const body = {
     model: modelName,
@@ -3041,31 +3108,37 @@ async function callBaiCard({ prompt, env, modelName, maxTokens, fetchImpl, reaso
     stream: false,
   };
   const invoke = async () => {
-    const response = await postJson(fetchImpl, endpoint, {
+    const response = await postJson(transportFetch, endpoint, {
       authorization: `Bearer ${env.BAI_CARD_API_KEY || env.BAI_API_KEY}`,
       "content-type": "application/json",
     }, body, { signal });
-    assertProviderHttpResponse(response, "bai");
+    assertProviderHttpResponse(response, official ? "openai" : "bai");
     return readProviderJson(response, { signal });
   };
   const request = { body, invoke, signal };
-  // Inside a question's budget scope the request joins that ledger. A caller
+  // Official calls are always charged to the official daily ledger. On b.ai,
+  // a request inside a question's budget scope joins that ledger; a caller
   // that explicitly allows it may dispatch without a cloud ledger when no cloud
   // budget namespace is configured at all (local or non-cloud deployments).
-  const payload = cloudRequestBudgetActive()
-    ? await runCloudBaiCardRequest(request)
-    : allowUnledgeredDispatch && !String(env.CLOUD_BUDGET_RUN_ID || "").trim()
-      ? await invoke()
-      : await createCloudRequestBudget({ env, fetchImpl }).baiCard(request);
+  const payload = official
+    ? await runOfficialLunaCardRequest({ env, body, invoke, signal, fetchImpl })
+    : cloudRequestBudgetActive()
+      ? await runCloudBaiCardRequest(request)
+      : allowUnledgeredDispatch && !String(env.CLOUD_BUDGET_RUN_ID || "").trim()
+        ? await invoke()
+        : await createCloudRequestBudget({ env, fetchImpl }).baiCard(request);
   // A Responses completion status is an explicit protocol fact. Do not cache
   // partial JSON from a failed or interrupted request; its usage is already recorded.
   if (payload?.status !== "completed") {
-    throw new Error(`bai_card_response_${payload?.status || "missing_status"}:${payload?.incomplete_details?.reason || "unknown"}`);
+    throw new Error(`${official ? "openai_luna_card" : "bai_card"}_response_${payload?.status || "missing_status"}:${payload?.incomplete_details?.reason || "unknown"}`);
   }
   const rawText = responsesOutputText(payload);
   const finishReason = "stop";
-  const warnings = ["bai_transport_channel:bai", `bai_endpoint_host:${new URL(endpoint).hostname}`];
-  if (!rawText) warnings.push(`bai_empty_content:${finishReason}`);
+  const warnings = official
+    ? ["luna_card_channel:official", `luna_card_endpoint_host:${new URL(endpoint).hostname}`,
+      ...(payload?.model && String(payload.model) !== body.model ? [`luna_card_returned_model:${String(payload.model).slice(0, 64)}`] : [])]
+    : ["bai_transport_channel:bai", `bai_endpoint_host:${new URL(endpoint).hostname}`];
+  if (!rawText) warnings.push(`${official ? "openai_luna_card" : "bai"}_empty_content:${finishReason}`);
   const reasoningItems = (payload?.output || []).filter((item) => item?.type === "reasoning");
   return {
     rawText, finishReason, contentChars: rawText.length,
@@ -6207,11 +6280,11 @@ function cardIdentitySelectionSource(parsed) {
   return nested.length === 1 ? nested[0] : null;
 }
 
-function cardIdentitySelectionResult({ parsed, rawText, provider, modelName, providerWarnings, execution }) {
+function cardIdentitySelectionResult({ parsed, rawText, provider, providerLabel, modelName, providerWarnings, execution }) {
   return {
     selections: parsed.selections,
     rawText,
-    providerUsed: provider,
+    providerUsed: providerLabel || provider,
     modelUsed: modelName,
     dryRun: false,
     warnings: [

@@ -75,9 +75,13 @@ export function publicRulingModelProfileAvailable(profileOrId, env = {}) {
 
 export function getPublicRulingModelCapabilities(env = {}) {
   const defaultProfile = resolvePublicRulingModelProfile(env.PUBLIC_RULING_MODEL_PROFILE);
+  // The official and the b.ai GPT-6 Astra profiles are the same model through
+  // different channels. The public list offers the channel the server defaults
+  // to: an official default replaces the b.ai entry, otherwise official stays hidden.
+  const hiddenProvider = defaultProfile.provider === "openai" ? "bai" : "openai";
   return {
     defaultRulingModelProfile: defaultProfile.id,
-    rulingModelProfiles: Object.values(PUBLIC_RULING_MODEL_PROFILES).filter((item) => item.provider !== "openai").map((item) => {
+    rulingModelProfiles: Object.values(PUBLIC_RULING_MODEL_PROFILES).filter((item) => item.provider !== hiddenProvider).map((item) => {
       const selected = configuredPublicRulingModelProfile(item, env);
       return { ...selected, available: publicRulingModelProfileAvailable(selected, env) };
     }),

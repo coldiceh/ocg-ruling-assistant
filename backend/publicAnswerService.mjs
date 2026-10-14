@@ -6,6 +6,7 @@ import {
   isServerOwnedPrivateEvaluationEnv,
   modelNameForCardExtractionProvider,
   resolveCardExtractionProvider,
+  lunaCardProviderLabel,
   resolveRagProvider,
 } from "./ragModelClient.mjs";
 import {
@@ -207,7 +208,7 @@ export async function getPublicAnswerModelInfo({ env = process.env } = {}) {
     provider: defaultRulingModelProfile?.provider || "none",
     requestedProvider: ragProvider.requested,
     models: rulingModelProfiles.map((profile) => profile.model),
-    cardNameProvider: cardProvider.provider,
+    cardNameProvider: lunaCardProviderLabel(cardProvider.provider, publicEnv),
     cardNameModels: [modelNameForCardExtractionProvider(cardProvider.provider, publicEnv)],
     modelTiers: [],
     budget,

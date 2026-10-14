@@ -126,3 +126,14 @@ test("missing provider credentials remain unavailable", () => {
   const capabilities = getPublicRulingModelCapabilities({});
   for (const profile of capabilities.rulingModelProfiles) assert.equal(profile.available, false);
 });
+
+test("the public list offers the Astra channel the server defaults to", () => {
+  const listed = (env) => getPublicRulingModelCapabilities(env).rulingModelProfiles.map((profile) => profile.id);
+  const official = getPublicRulingModelCapabilities({ PUBLIC_RULING_MODEL_PROFILE: "official-astra-low" });
+  assert.equal(official.defaultRulingModelProfile, "official-astra-low");
+  assert.ok(listed({ PUBLIC_RULING_MODEL_PROFILE: "official-astra-low" }).includes("official-astra-low"));
+  assert.ok(!listed({ PUBLIC_RULING_MODEL_PROFILE: "official-astra-low" }).includes("bai-astra-low"));
+  assert.ok(listed({}).includes("bai-astra-low"));
+  assert.ok(!listed({}).includes("official-astra-low"));
+  assert.ok(listed({ PUBLIC_RULING_MODEL_PROFILE: "official-astra-low" }).includes("deepseek-v4.1-flash-none"));
+});

@@ -218,6 +218,23 @@ function redisConfig(env) {
   ]) if (env[url] && env[token]) return {url:env[url],token:env[token]};
   throw new Error('cloud_budget_persistent_store_required');
 }
+// GPT-6 Luna Responses usage at the official list prices per 1M tokens:
+// input $0.10, cached input $0.01, cache write $0.125, output $0.50; above
+// 272,000 input tokens every input tier doubles and output costs 1.5x. b.ai
+// publishes the same theoretical rates. Returns null when usage is missing.
+function gpt6LunaUsageCostUsd(usage) {
+  const input = usage?.input_tokens;
+  const output = usage?.output_tokens;
+  if (!(Number.isSafeInteger(input) && input >= 0 && Number.isSafeInteger(output) && output >= 0)) return null;
+  const cached = Math.min(input, Math.max(0, Number(usage?.input_tokens_details?.cached_tokens) || 0));
+  const rawWritten = usage.input_tokens_details?.cache_write_tokens
+    ?? usage.input_tokens_details?.cache_write_input_tokens
+    ?? usage.cache_write_tokens ?? usage.cache_write_input_tokens;
+  const written = Math.min(input - cached, Math.max(0, Number(rawWritten) || 0));
+  const longContext = input > 272000;
+  return (((input - cached - written) * 0.10 + cached * 0.01 + written * 0.125) * (longContext ? 2 : 1)
+    + output * 0.50 * (longContext ? 1.5 : 1)) / 1_000_000;
+}
 function usagePresent(usage) {
   const input = usage?.prompt_tokens ?? usage?.input_tokens;
   const output = usage?.completion_tokens ?? usage?.output_tokens;
@@ -746,39 +763,62 @@ export function createCloudRequestBudget({env, fetchImpl = globalThis.fetch, com
       ticket.uncertainty='provider_model_binding_mismatch_reservation_retained';
       throw new Error('cloud_budget_bai_card_returned_model_mismatch');
     }
-    const input = result?.usage?.input_tokens;
-    const output = result?.usage?.output_tokens;
-    if (Number.isSafeInteger(input) && input >= 0 && Number.isSafeInteger(output) && output >= 0) {
-      const cached = Math.min(input, Math.max(0, Number(result?.usage?.input_tokens_details?.cached_tokens) || 0));
-      const rawWritten = result.usage.input_tokens_details?.cache_write_tokens
-        ?? result.usage.input_tokens_details?.cache_write_input_tokens
-        ?? result.usage.cache_write_tokens ?? result.usage.cache_write_input_tokens;
-      const written = Math.min(input - cached, Math.max(0, Number(rawWritten) || 0));
-      const longContext = input > 272000;
-      const usd = (((input - cached - written) * 0.10 + cached * 0.01 + written * 0.125) * (longContext ? 2 : 1)
-        + output * 0.50 * (longContext ? 1.5 : 1)) / 1_000_000;
+    const usd = gpt6LunaUsageCostUsd(result?.usage);
+    if (usd !== null) {
       try { await settle(ticket,{usage:result.usage,returnedModel:result.model,actualCny:0,actualUpperCny:0,theoreticalUsd:usd}); }
       catch { ticket.uncertainty='provider_response_received_settlement_uncertain_reservation_retained'; }
     } else ticket.uncertainty='provider_usage_missing_reservation_retained';
     return result;
   }
-  async function sourceTranslation({body, invoke, signal}) {
+  // The same GPT-6 Luna card request served by the official OpenAI API. It is
+  // accounted in the official daily ledger (shared with Decisions) at the
+  // official list prices, which are the prices baiCard already uses. OpenAI
+  // may report a dated snapshot of the requested model; the transport records
+  // the returned model, so this ledger does not reject it.
+  async function officialLunaCard({body, invoke, signal}) {
+    if (body?.model !== 'gpt-6-luna') throw new Error('cloud_budget_model_price_missing');
+    if (!Number.isSafeInteger(body.max_output_tokens) || body.max_output_tokens < 1) {
+      throw new Error('cloud_budget_explicit_output_limit_required');
+    }
+    const inputBytes = Buffer.byteLength(JSON.stringify(body), 'utf8');
+    const longInputReservation = inputBytes > 272000;
+    const theoreticalUsd = (inputBytes * 0.125 * (longInputReservation ? 2 : 1)
+      + body.max_output_tokens * 0.50 * (longInputReservation ? 1.5 : 1)) / 1_000_000;
+    const ticket = await reserve({provider:'openai',model:body.model,operation:'responses',stage:'evidence_preparation',
+      actualCny:0,theoreticalUsd,pricingBasis:'openai_gpt6_luna_context_tiered_20261014',signal,
+      reservationMetadata:{requestBodyBytes:inputBytes,maxBillableOutputTokens:body.max_output_tokens}});
+    let result;
+    try { result = await invoke(); }
+    catch (error) { ticket.uncertainty='request_or_settlement_failed_reservation_retained'; throw error; }
+    const usd = gpt6LunaUsageCostUsd(result?.usage);
+    if (usd !== null) {
+      try { await settle(ticket,{usage:result.usage,returnedModel:result?.model || body.model,actualCny:0,actualUpperCny:0,theoreticalUsd:usd}); }
+      catch { ticket.uncertainty='provider_response_received_settlement_uncertain_reservation_retained'; }
+    } else ticket.uncertainty='provider_usage_missing_reservation_retained';
+    return result;
+  }
+  async function sourceTranslation({body, invoke, signal, provider='bai'}) {
     if (body?.model !== 'gpt-6-luna' || body?.reasoning?.effort !== 'low'
         || !Number.isSafeInteger(body.max_output_tokens) || body.max_output_tokens < 1
         || body.max_output_tokens > 16384) {
       throw new Error('source_translation_request_contract_invalid');
     }
+    if (!['bai','openai'].includes(provider)) throw new Error('source_translation_provider_invalid');
     // Reserve a fixed $0.05 per bounded call, exceeding the byte-based
     // estimate for the accepted payload. This remains theoretical accounting.
     const inputBytes = Buffer.byteLength(JSON.stringify(body), 'utf8');
     const upperUsd = Math.max(0.05, (inputBytes * 0.10 + body.max_output_tokens * 0.50) / 1_000_000);
-    const ticket = await reserve({provider:'bai',model:body.model,operation:'responses',stage:'source_translation',
-      actualCny:0,theoreticalUsd:upperUsd,pricingBasis:'bai_gpt6_luna_standard_byte_upper_20260922',signal,
+    const ticket = await reserve({provider,model:body.model,operation:'responses',stage:'source_translation',
+      actualCny:0,theoreticalUsd:upperUsd,signal,pricingBasis:provider === 'openai'
+        ? 'openai_gpt6_luna_standard_byte_upper_20261014' : 'bai_gpt6_luna_standard_byte_upper_20260922',
       reservationMetadata:{requestBodyBytes:inputBytes,maxBillableOutputTokens:body.max_output_tokens}});
     let result;
     try { result = await invoke(); }
     catch (error) { ticket.uncertainty='request_or_settlement_failed_reservation_retained'; throw error; }
-    if (result?.model !== body.model) {
+    // OpenAI may answer with a dated snapshot of the requested official model.
+    const officialSnapshot = provider === 'openai' && typeof result?.model === 'string'
+      && result.model.startsWith(`${body.model}-`);
+    if (result?.model !== body.model && !officialSnapshot) {
       ticket.uncertainty='provider_model_binding_mismatch_reservation_retained';
       throw new Error('source_translation_model_mismatch');
     }
@@ -1021,7 +1061,7 @@ export function createCloudRequestBudget({env, fetchImpl = globalThis.fetch, com
         accountedActualUpperCny:['bai','gemini'].includes(r.provider)?null:r.actualNano/UNIT,
         theoreticalUsd:r.theoreticalNano/UNIT}))};
   }
-  return {relay,deepseek,openai,decisions,baiCard,sourceTranslation,bai:request=>request?.generationContract?.providerId === 'bai'
+  return {relay,deepseek,openai,decisions,baiCard,officialLunaCard,sourceTranslation,bai:request=>request?.generationContract?.providerId === 'bai'
     ? baiGeneration(request) : openai({...request,provider:'bai'}),gemini,
     beforeSend,onResponse,remainingPreparationUsd,snapshot,flushDecisionsSettlements};
 }
@@ -1106,6 +1146,9 @@ async function runOfficialBudgetRequest({env,body,invoke,measurement,signal,fetc
 export function runCloudBaiRequest(request) {
   const controller=scope.getStore();
   return controller?controller.bai(request):request.invoke();
+}
+export function runOfficialLunaCardRequest(request) {
+  return runOfficialBudgetRequest(request, 'officialLunaCard');
 }
 export function runCloudBaiCardRequest(request) {
   const controller=scope.getStore();

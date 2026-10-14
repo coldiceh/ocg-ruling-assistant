@@ -157,3 +157,28 @@ test("parent cancellation still interrupts a translation with its own timeout", 
   }), error => error === reason);
   assert.equal(f.cache.size, 0);
 });
+
+test("the official translation channel sends the same request to OpenAI and labels its ledger entry", async () => {
+  const f = fixture();
+  const requests = [];
+  let ledgerProvider = null;
+  const createBudget = (args) => {
+    const inner = f.createBudget(args);
+    return { sourceTranslation: async (request) => { ledgerProvider = request.provider; return inner.sourceTranslation(request); } };
+  };
+  const fetchImpl = async (url, options) => {
+    requests.push({ url: String(url), authorization: options.headers.authorization, redirect: options.redirect });
+    return f.fetchImpl(url, options);
+  };
+  const env = { SOURCE_TRANSLATION_DAILY_BUDGET_USD: "1", RAG_SOURCE_TRANSLATION_CHANNEL: "official",
+    OPENAI_DECISIONS_API_KEY: "official-evidence-secret", BAI_API_KEY: "bai-secret" };
+  const result = await translatePublicSource({ payload, store: f.store, createBudget, fetchImpl, env });
+  assert.equal(result.status, "translated");
+  assert.deepEqual(requests, [{ url: "https://api.openai.com/v1/responses",
+    authorization: "Bearer official-evidence-secret", redirect: "error" }]);
+  assert.equal(ledgerProvider, "openai");
+
+  await assert.rejects(translatePublicSource({ payload: { ...payload, targetLocale: "ja" }, store: f.store, createBudget,
+    fetchImpl, env: { SOURCE_TRANSLATION_DAILY_BUDGET_USD: "1", RAG_SOURCE_TRANSLATION_CHANNEL: "official", BAI_API_KEY: "bai-secret" } }),
+  { code: "source_translation_configuration_invalid" }, "the b.ai key is never sent to the official endpoint");
+});

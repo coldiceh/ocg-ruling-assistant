@@ -4,6 +4,7 @@ import { preparationError, isPublicPreparationId } from "./publicAnswerPreparati
 import { responsesOutputText } from "./responsesOutputText.mjs";
 
 export const SOURCE_TRANSLATION_VERSION = "gpt-6-luna-low-fields-v1";
+const OFFICIAL_OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
 const LOCALES = ["zh-CN", "en", "ja"];
 const BODY_KEYS = ["question", "rawQuestion", "rawDetailedQuestion", "detailedScene", "answer", "officialAnswer", "conclusion",
   "officialText", "fullText", "cardText", "ruleText", "body", "content", "paragraph", "description", "text", "explanation"];
@@ -60,21 +61,29 @@ export async function translatePublicSource({ payload, store, env = process.env,
     instructions: `Translate each JSON string value completely into ${targetLocale}. Preserve conditions, negations, card names, numbers, citations and line breaks. Return only a JSON object with exactly the same keys. Do not summarize.`,
     input: JSON.stringify(fields),
   };
-  const base = new URL(String(env.RAG_EVIDENCE_BAI_BASE_URL || env.BAI_BASE_URL || DEFAULT_BAI_GENERATION_BASE_URL));
-  if (base.protocol !== "https:" || base.username || base.password || base.search || base.hash) {
-    throw preparationError("翻译服务配置错误", "source_translation_configuration_invalid", 503);
+  // RAG_SOURCE_TRANSLATION_CHANNEL=official sends the same Responses request
+  // to the fixed official OpenAI endpoint with an official key; otherwise b.ai.
+  const official = String(env.RAG_SOURCE_TRANSLATION_CHANNEL || "").trim().toLowerCase() === "official";
+  let endpoint = OFFICIAL_OPENAI_RESPONSES_URL;
+  if (!official) {
+    const base = new URL(String(env.RAG_EVIDENCE_BAI_BASE_URL || env.BAI_BASE_URL || DEFAULT_BAI_GENERATION_BASE_URL));
+    if (base.protocol !== "https:" || base.username || base.password || base.search || base.hash) {
+      throw preparationError("翻译服务配置错误", "source_translation_configuration_invalid", 503);
+    }
+    endpoint = `${base.href.replace(/\/+$/u, "").replace(/\/v1$/u, "")}/v1/responses`;
   }
-  const endpoint = `${base.href.replace(/\/+$/u, "").replace(/\/v1$/u, "")}/v1/responses`;
-  const apiKey = String(env.RAG_EVIDENCE_BAI_API_KEY || env.BAI_API_KEY || "").trim();
+  const apiKey = official
+    ? String(env.OCG_SOURCE_TRANSLATION_OPENAI_API_KEY || env.OPENAI_DECISIONS_API_KEY || "").trim()
+    : String(env.RAG_EVIDENCE_BAI_API_KEY || env.BAI_API_KEY || "").trim();
   if (!apiKey) throw preparationError("翻译服务尚未配置", "source_translation_configuration_invalid", 503);
   const budget = createBudget({ env: budgetEnv, fetchImpl });
-  const raw = await budget.sourceTranslation({ body, signal, invoke: async () => {
+  const raw = await budget.sourceTranslation({ body, signal, provider: official ? "openai" : "bai", invoke: async () => {
     signal?.throwIfAborted();
     const timeoutSignal = AbortSignal.timeout(90000);
     const providerSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
     const response = await fetchImpl(endpoint, { method: "POST",
       headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
-      body: JSON.stringify(body), signal: providerSignal });
+      body: JSON.stringify(body), signal: providerSignal, ...(official ? { redirect: "error" } : {}) });
     if (!response.ok) throw preparationError("翻译服务暂不可用", `source_translation_provider_http_${response.status}`, 503);
     return response.json();
   } });
