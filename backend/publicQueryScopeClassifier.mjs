@@ -2,19 +2,22 @@ import {
   callBaiLunaJsonTask,
   callDeepSeekJsonTask,
   isServerOwnedPrivateEvaluationEnv,
+  lunaCardTransportConfigured,
   modelNameForCardExtractionProvider,
 } from "./ragModelClient.mjs";
 import { DEFAULT_PUBLIC_DEEPSEEK_MODEL } from "./publicRulingModelConfig.mjs";
 
-// Scope classification runs on the same GPT-6 Luna (reasoning "none") route
-// and credential as card-name extraction. DeepSeek remains available as an
-// explicit or fallback provider when no b.ai credential is configured.
+// Scope classification can run on the same GPT-6 Luna (reasoning "none") route
+// and credential as card-name extraction (b.ai or official, per
+// RAG_CARD_LUNA_CHANNEL). DeepSeek remains available as an explicit provider.
 const SCOPE_PROVIDERS = Object.freeze({
   bai: {
     thinkingMode: "not_applicable",
     reasoningEffort: "none",
     model: (env) => modelNameForCardExtractionProvider("bai", env),
-    configured: (env) => Boolean(String(env.BAI_CARD_API_KEY || env.BAI_API_KEY || "").trim()),
+    // Follows RAG_CARD_LUNA_CHANNEL: official Luna needs the official key,
+    // not a b.ai key.
+    configured: (env) => lunaCardTransportConfigured(env),
     missingReason: "bai_not_configured",
   },
   deepseek: {

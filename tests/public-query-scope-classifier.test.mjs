@@ -258,6 +258,38 @@ test("the Luna route dispatches one Responses request on the card-extraction cre
   assert.equal(requests[0].init.headers.authorization, "Bearer test-bai-card-key");
 });
 
+test("with the official Luna channel the scope task needs no b.ai key and calls the official endpoint", async () => {
+  const officialEnv = {
+    ...CONFIGURED_ENV,
+    PUBLIC_QUERY_SCOPE_PROVIDER: "bai",
+    RAG_CARD_LUNA_CHANNEL: "official",
+    OPENAI_DECISIONS_API_KEY: "test-official-key",
+    PUBLIC_OPENAI_BUDGET_RUN_ID: "official-scope-test",
+    UPSTASH_REDIS_REST_URL: "https://redis.example.test",
+    UPSTASH_REDIS_REST_TOKEN: "redis-secret",
+  };
+  assert.equal(publicQueryScopeClassifierStatus(officialEnv).enabled, true);
+  assert.equal(publicQueryScopeClassifierStatus({ ...officialEnv, OPENAI_DECISIONS_API_KEY: "" }).reason, "bai_not_configured");
+  const requests = [];
+  const fetchImpl = async (url, init) => {
+    if (String(url).startsWith("https://redis.example.test")) {
+      return new Response(JSON.stringify({ result: ["reserved"] }), { status: 200 });
+    }
+    requests.push({ url: String(url), init });
+    return new Response(JSON.stringify({
+      id: "resp_scope", status: "completed", model: "gpt-6-luna",
+      output: [{ type: "message", content: [{ type: "output_text",
+        text: JSON.stringify({ scope: "in_scope", confidence: "high", reasonCode: "ruling_question" }) }] }],
+      usage: { input_tokens: 300, output_tokens: 20 },
+    }), { status: 200, headers: { "content-type": "application/json" } });
+  };
+  const result = await classifyPublicQueryScope({ question: "连锁处理时对象不在场了，效果还处理吗？", env: officialEnv, fetchImpl });
+  assert.equal(result.scope, "in_scope");
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].url, "https://api.openai.com/v1/responses");
+  assert.equal(requests[0].init.headers.authorization, "Bearer test-official-key");
+});
+
 test("a caller abort remains an abort instead of becoming a fail-open decision", async () => {
   const controller = new AbortController();
   const pending = classifyPublicQueryScope({

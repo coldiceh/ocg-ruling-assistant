@@ -2186,6 +2186,11 @@ function officialLunaCardApiKey(env = {}) {
   return String(env.RAG_CARD_OPENAI_API_KEY || env.OCG_CARD_OPENAI_API_KEY || env.OPENAI_DECISIONS_API_KEY || "").trim();
 }
 
+// True when the configured Luna card transport (b.ai or official) has a key.
+export function lunaCardTransportConfigured(env = {}) {
+  return Boolean(String(createBaiCardEnv(env).BAI_API_KEY || "").trim());
+}
+
 export function lunaCardProviderLabel(provider, env = {}) {
   return provider === "bai" && lunaCardChannel(env) === "official" ? "openai" : provider;
 }
