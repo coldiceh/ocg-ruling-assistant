@@ -1220,6 +1220,26 @@ function resolveModelCanonicalCandidates(names = [], cards = []) {
   return dedupeBy(bindings, binding => catalogIdentityKey(binding.card));
 }
 
+// Mechanical identity candidates for a surface: the catalog records that have a
+// stored name (the same record names matched above) beginning with it. This
+// lists records only; it never binds, rejects or ranks an identity. More than
+// `limit` owners, or none, yields no candidates.
+export function findCatalogNamePrefixCandidates(cards = [], surface = "", { limit = 6 } = {}) {
+  const key = normalizeCardKey(surface);
+  if (!key || !Array.isArray(cards)) return [];
+  const ids = [];
+  for (const [nameKey, bindings] of canonicalNameIndex(cards)) {
+    if (!nameKey.startsWith(key)) continue;
+    for (const { card } of bindings) {
+      const id = catalogIdentityKey(card);
+      if (!id || ids.includes(id)) continue;
+      ids.push(id);
+      if (ids.length > limit) return [];
+    }
+  }
+  return ids;
+}
+
 function buildNormalizedSpanProjection(value) {
   const source = String(value || "").normalize("NFKC");
   let normalizedText = "";

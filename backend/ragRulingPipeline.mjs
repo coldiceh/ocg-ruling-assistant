@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
-import { extractRagCards, normalizeCardKey } from "./ragCardExtractor.mjs";
+import { extractRagCards, findCatalogNamePrefixCandidates, normalizeCardKey } from "./ragCardExtractor.mjs";
 import { buildCardNicknameReferences, applyCardNicknameResolution } from './ragCardNicknames.mjs';
 import { loadCardNicknameData } from './ragCardNicknameData.mjs';
-import {confirmPendingCardCandidates} from './ragCardCandidateConfirmation.mjs';
+import {CARD_CANDIDATE_CONFIRMATION_LIMITS, confirmPendingCardCandidates} from './ragCardCandidateConfirmation.mjs';
 import {findDescribedCardCandidates} from './ragDescribedCardCandidates.mjs';
 import {
   loadRagData,
@@ -155,19 +155,23 @@ function prepareCardNameExtractionInput(query, data) {
   const preflightStartedAt = Date.now();
   const localCardResolution = extractRagCards(query, { cards: data.cards || [] });
   const cardNicknameReferences = buildCardNicknameReferences(query, data.cards || [], loadCardNicknameData());
-  const cardNameReferences = localCardResolution.resolvedCards.flatMap((match) => {
+  const cardNameReferences = buildCardNameReferences(localCardResolution, data.cards || []);
+  return { localCardResolution, cardNicknameReferences, cardNameReferences, preflightMs: elapsedMs(preflightStartedAt) };
+}
+
+function buildCardNameReferences(localCardResolution, cards = []) {
+  return (localCardResolution?.resolvedCards || []).flatMap((match) => {
     // This explicit provenance tag identifies a card-text expansion, not
     // a query match. Omitting its name hint does not remove any evidence
     // or override the model; the existing tag is the direct observation.
     if (match.resolutionSource === "card_text_reference") return [];
-    const card = (data.cards || []).find((item) => String(item.id) === String(match.id));
+    const card = cards.find((item) => String(item.id) === String(match.id));
     if (!card) return [];
     // Read names from the canonical record: resolved aliases can include
     // a query fragment inferred by local matching.
     return [{ input: match.input, name: card.name || "", cnName: card.cnName || "",
       jaName: card.jaName || "", enName: card.enName || "", aliases: card.aliases || [] }];
   });
-  return { localCardResolution, cardNicknameReferences, cardNameReferences, preflightMs: elapsedMs(preflightStartedAt) };
 }
 
 async function resolveExtractedCardNames({query, data, cardNameModel, localCardResolution,
@@ -176,10 +180,62 @@ async function resolveExtractedCardNames({query, data, cardNameModel, localCardR
     ? extractRagCards(query, {cards: data.cards || [], modelCardNameCandidates: cardNameModel.candidates || [],
       ...(cardNameModel.typedMentionSetProvided === true ? {mentionSetSource: 'typed_model'} : {})})
     : localCardResolution;
-  const cardResolution = addDescribedCardProposals(applyCardNicknameResolution(base, {
+  const described = addDescribedCardProposals(applyCardNicknameResolution(base, {
     query, cards: data.cards || [], references: cardNicknameReferences,
   }), cardNameModel.describedCards, data.cards || []);
-  return confirmPendingCardCandidates({userQuery: query, cardResolution, cards: data.cards || [], ...options});
+  const cardResolution = addUnreferencedGroupMentionProposals(described, {
+    query, cards: data.cards || [],
+    groupMentions: cardNameModel.typedMentionSetProvided === true ? cardNameModel.groupMentions : [],
+    referencedInputs: [...buildCardNameReferences(localCardResolution, data.cards || []),
+      ...(cardNicknameReferences || [])].map(reference => reference.input),
+  });
+  return withdrawUnselectedGroupMentionProposals(
+    await confirmPendingCardCandidates({userQuery: query, cardResolution, cards: data.cards || [], ...options}));
+}
+
+// The extractor classifies each surface as a card or a group, and only sees the
+// local catalog through the references above. A group surface for which it was
+// shown no reference was classified without that evidence; when the surface
+// begins the stored names of a few catalog records (e.g. a name written without
+// its suffix), those records become proposals for the existing confirmation
+// step, which reads the question and full card texts and may select one or
+// none. This never binds by itself, and a surface the extractor saw a reference
+// for keeps its group classification.
+function addUnreferencedGroupMentionProposals(cardResolution, {query, cards = [], groupMentions = [],
+  referencedInputs = []} = {}) {
+  if (!Array.isArray(groupMentions) || !groupMentions.length) return cardResolution;
+  const text = String(query || '').normalize('NFKC');
+  const referencedKeys = new Set(referencedInputs.map(normalizeCardKey).filter(Boolean));
+  const resolvedCards = cardResolution.resolvedCards || [];
+  const resolvedIds = new Set(resolvedCards.map(card => String(card.cid || card.id || card.cardId || '')));
+  const unresolvedMentions = [...(cardResolution.unresolvedMentions || [])];
+  const mentionKeys = [...resolvedCards, ...unresolvedMentions, ...(cardResolution.ambiguousMentions || [])]
+    .map(mention => normalizeCardKey(mention.input)).filter(Boolean);
+  let added = false;
+  for (const surface of groupMentions) {
+    const input = String(surface || '').trim(), key = normalizeCardKey(input);
+    // Only the player's own wording can become a mention, once, and not as a
+    // part of another mention's wording.
+    if (!key || !text.includes(input.normalize('NFKC')) || referencedKeys.has(key)
+      || mentionKeys.some(other => other.includes(key))) continue;
+    const ids = findCatalogNamePrefixCandidates(cards, input,
+      {limit: CARD_CANDIDATE_CONFIRMATION_LIMITS.candidatesPerMention}).filter(id => !resolvedIds.has(id));
+    if (!ids.length) continue;
+    unresolvedMentions.push({input, reason: 'model_group_mention_name_prefix', source: 'model_card_name_extractor',
+      confidence: 'low', searchTexts: [], canonicalNames: [], proposedCardIds: ids, groupMentionProposal: true});
+    mentionKeys.push(key);
+    added = true;
+  }
+  return added ? {...cardResolution, unresolvedMentions} : cardResolution;
+}
+
+// A group surface the selector did not select (null, failed call, or beyond the
+// per-question mention limit) returns to the extractor's group classification.
+function withdrawUnselectedGroupMentionProposals(confirmed) {
+  const unresolved = confirmed.cardResolution.unresolvedMentions || [];
+  if (!unresolved.some(mention => mention.groupMentionProposal === true)) return confirmed;
+  return {...confirmed, cardResolution: {...confirmed.cardResolution,
+    unresolvedMentions: unresolved.filter(mention => mention.groupMentionProposal !== true)}};
 }
 
 // A "series + card kind" description names no card. Catalog records whose
