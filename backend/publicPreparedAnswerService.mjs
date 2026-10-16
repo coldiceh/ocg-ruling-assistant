@@ -6,17 +6,19 @@ import { preparationError } from "./publicAnswerPreparationStore.mjs";
 import { PUBLIC_EXHAUSTED_FALLBACK_PROFILE, selectAvailablePublicProfile, withPublicGenerationInfo } from './publicGenerationInfo.mjs';
 import { updateQueryAudit, safeQueryAuditRetrievalTimings } from './queryAuditStore.mjs';
 import { queryAuditAnswerPatch, queryAuditFailurePatch, saveQueryAuditUpdate } from './publicQueryAudit.mjs';
+import { appendEngineReproSection, readEngineReproAtMainCompletion } from './engineRepro/session.mjs';
 
 export async function preparePublicAnswer({
   payload, env, signal, progress, store,
   answerPublic = answerPublicRulingQuestion, now = Date.now,
-  requestContext, updateAudit = updateQueryAudit,
+  requestContext, updateAudit = updateQueryAudit, engineReproAdmin = false,
 } = {}) {
   let result;
   try {
   signal?.throwIfAborted();
   const startedAt = now();
-  result = await answerPublic({ payload, env, signal, progress, requestContext, prepareForContinuation: true });
+  result = await answerPublic({ payload, env, signal, progress, requestContext, prepareForContinuation: true,
+    engineReproAdmin });
   // Existing early answers (for example empty/non-ruling requests) do not
   // require another model call, and keep their original public envelope.
   if (result.answer?.status !== "evidence_prepared") return result;
@@ -32,6 +34,7 @@ export async function preparePublicAnswer({
     requestDiagnostics: result.answer.debug?.requestDiagnostics || null,
     fallbackFrom: result.fallbackFrom || null,
     auditId: result.auditId || null,
+    engineRepro: result.engineRepro || null,
   });
   await saveQueryAuditUpdate(result.auditId, {
     status: "prepared", profileId: result.latency.profileId, latencyMs: measuredProgress.totalMs,
@@ -70,7 +73,7 @@ export async function finalizePublicAnswer({
   preparation, env, signal, progress,
   finalize = finalizePreparedRagRulingQuestionForVersion, now = Date.now,
   selectProfile = selectAvailablePublicProfile, addGeneration = withPublicGenerationInfo,
-  updateAudit = updateQueryAudit,
+  updateAudit = updateQueryAudit, readEngineRepro = readEngineReproAtMainCompletion,
 } = {}) {
   try {
   signal?.throwIfAborted();
@@ -118,6 +121,13 @@ export async function finalizePublicAnswer({
     } };
   }
   answer = await addGeneration(answer, profile, env, {fallbackFrom});
+  // The answer is complete here. A reproduction started by the preparation request is read once
+  // (no waiting); an unfinished one is reported and keeps writing its result to the history record.
+  if (preparation.engineRepro?.enabled === true) {
+    const section = await readEngineRepro({ env, auditId: preparation.auditId,
+      requestStartedAt: preparation.engineRepro.requestStartedAt }).catch(() => null);
+    answer = appendEngineReproSection(answer, section);
+  }
   const completedAt = now();
   answer = { ...answer, debug: { ...answer.debug,
     requestDiagnostics: { ...preparation.requestDiagnostics,

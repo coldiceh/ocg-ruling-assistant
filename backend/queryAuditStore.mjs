@@ -62,6 +62,26 @@ export function safeQueryAuditStreamMetrics(source) {
   return Object.keys(metrics).length ? { streamMetrics: metrics } : {};
 }
 
+// Experimental engine-reproduction summary (admin-only). Short tokens, numbers and the rendered
+// section text only; nothing else from the reproduction record enters the audit.
+export function safeQueryAuditEngineRepro(source) {
+  if (!source || typeof source !== 'object' || Array.isArray(source)) return {};
+  const token = (v) => typeof v === 'string' && /^[\p{L}\p{N}_.:-]{1,40}$/u.test(v) ? v : null;
+  const numbers = (o) => Object.fromEntries(Object.entries(o && typeof o === 'object' ? o : {})
+    .filter(([k, v]) => /^[A-Za-z]{1,40}$/u.test(k) && typeof v === 'number' && Number.isFinite(v) && Math.abs(v) <= 86_400_000)
+    .slice(0, 12));
+  const out = {
+    status: token(source.status),
+    reasonCodes: (Array.isArray(source.reasonCodes) ? source.reasonCodes : []).map(token).filter(Boolean).slice(0, 8),
+    flags: (Array.isArray(source.flags) ? source.flags : []).map(token).filter(Boolean).slice(0, 8),
+    timings: numbers(source.timings),
+    latencyDefect: source.latencyDefect ? numbers(source.latencyDefect) : null,
+    plannerCalls: Number.isSafeInteger(source.plannerCalls) && source.plannerCalls >= 0 && source.plannerCalls <= 4 ? source.plannerCalls : null,
+    rendered: typeof source.rendered === 'string' ? source.rendered.slice(0, 12000) : null,
+  };
+  return { engineRepro: out };
+}
+
 // Numeric retrieval timings only. Nested request bodies and source text never
 // enter the audit through this projection. Stage times may overlap.
 export function safeQueryAuditRetrievalTimings(source) {
@@ -285,6 +305,7 @@ function parseEntry(value) {
     Object.assign(entry, safeQueryAuditDiagnostics(parsed));
     Object.assign(entry, safeQueryAuditStreamMetrics(parsed.streamMetrics));
     Object.assign(entry, safeQueryAuditRetrievalTimings(parsed.retrievalTimingsMs));
+    if (Object.hasOwn(parsed, "engineRepro")) Object.assign(entry, safeQueryAuditEngineRepro(parsed.engineRepro));
     return entry;
   } catch {
     return null;
@@ -310,7 +331,8 @@ function normalizeAuditPatch(patch) {
     normalized.latencyMs = source.latencyMs;
   }
   return { ...normalized, ...safeQueryAuditDiagnostics(source), ...safeQueryAuditStreamMetrics(source.streamMetrics),
-    ...safeQueryAuditRetrievalTimings(source.retrievalTimingsMs) };
+    ...safeQueryAuditRetrievalTimings(source.retrievalTimingsMs),
+    ...(Object.hasOwn(source, "engineRepro") ? safeQueryAuditEngineRepro(source.engineRepro) : {}) };
 }
 
 function optionalString(field, value) {

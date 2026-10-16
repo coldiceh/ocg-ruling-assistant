@@ -842,6 +842,7 @@ async function answerRagRulingQuestionInternal({
   preloadedCardNameExtraction,
   nonCardElapsedBeforePipelineMs = 0,
   progress,
+  onCardTextsReady,
 } = {}) {
   const pipelineStartedAt = Date.now();
   const timingsMs = {};
@@ -1002,6 +1003,18 @@ async function answerRagRulingQuestionInternal({
 
   progress?.transition?.("retrieve_card_texts");
   const retrievalStartedAt = Date.now();
+  // Optional observer (experimental engine reproduction): called once, as soon as the card
+  // resolution and card texts are ready, with the same resolution and data snapshot this answer
+  // uses. It must not block or change anything on the answer path.
+  let cardTextsReadyNotified = false;
+  const notifyCardTextsReady = (readyResolution) => {
+    if (cardTextsReadyNotified || typeof onCardTextsReady !== "function") return;
+    cardTextsReadyNotified = true;
+    try {
+      onCardTextsReady({ question: query, cardResolution: readyResolution,
+        groupMentions: cardNameModel?.groupMentions || [], cards: data.cards || [] });
+    } catch { /* an observer failure never affects the answer */ }
+  };
   const retrievalStage = beginPrivateEvaluationStage(privateEvaluationDiagnostics, "retrieval");
   let retrievedEvidence;
   let preparedPromptBundle = null;
@@ -1053,6 +1066,7 @@ async function answerRagRulingQuestionInternal({
       },
       preparedEvidenceProvider: geminiProvider
         ? async (preparedEvidence) => {
+          notifyCardTextsReady(preparedEvidence.cardResolution);
           const cardStages = preparedEvidence.debug?.timingsMs || {};
           timingsMs.cardPreparation = timingsMs.dataAndQueryExtraction
             + (cardStages.cardResolution || 0) + (cardStages.cardTextPreparation || 0);
@@ -1085,14 +1099,14 @@ async function answerRagRulingQuestionInternal({
             retrievalWarnings: preparedEvidence.retrievalWarnings || [],
             debug: { ...preparedEvidence.debug, ...result.evidence.debug } };
         }
-        : cloudProvider ? async (preparedEvidence) => cloudProvider.retrieve({
+        : cloudProvider ? async (preparedEvidence) => (notifyCardTextsReady(preparedEvidence.cardResolution), cloudProvider.retrieve({
           userQuery:query, dataRevision, cardResolution:preparedEvidence.cardResolution,
           retrievedEvidence:preparedEvidence, env, signal,
           packEvidence:(selectedEvidence)=>buildRagRulingPromptBundle({
             userQuery:query,answerLocale,cardResolution:preparedEvidence.cardResolution,
             evidence:selectedEvidence,env:promptEnv,
           }),
-        }) : undefined,
+        })) : undefined,
       ruleSearchQueryProvider: async ({
         resolvedCards,
         userProvidedCardTexts,
@@ -1131,6 +1145,8 @@ async function answerRagRulingQuestionInternal({
     throw error;
   }
   timingsMs.retrieval = elapsedMs(retrievalStartedAt);
+  // Paths without a prepared-evidence provider learn the card resolution only here.
+  notifyCardTextsReady(reconcileCardResolution(cardResolution, retrievedEvidence));
 
   const effectiveCardResolution = geminiRuleQaEnabled
     ? reconcileCardResolution(cardResolution, retrievedEvidence)

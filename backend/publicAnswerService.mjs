@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { appendEngineReproSection, createEngineReproSession } from "./engineRepro/session.mjs";
 import { getPublicReleaseInfo } from './publicReleaseInfo.mjs';
 import {
   createPublicAnswerModelEnv,
@@ -243,6 +244,8 @@ export async function answerPublicRulingQuestion({
   assetsResident = ragRequestAssetsResident,
   startCardExtraction = startCardNameExtraction,
   prepareForContinuation = false,
+  engineReproAdmin = false,
+  createEngineRepro = createEngineReproSession,
 } = {}) {
   const publicRequestStartedAt = Date.now();
   const requestDiagnostics = { requestId: randomUUID(), startedAt: new Date(publicRequestStartedAt).toISOString() };
@@ -269,6 +272,11 @@ export async function answerPublicRulingQuestion({
     profileId: normalizedPayload.rulingModelProfile || env.PUBLIC_RULING_MODEL_PROFILE,
     requestContext,
   })).catch(() => null);
+  // Experimental engine reproduction (ENGINE_REPRO_ENABLED + admin session only). It observes
+  // the pipeline's card resolution and never delays or changes the answer.
+  const engineRepro = createEngineRepro({ env, isAdmin: engineReproAdmin === true,
+    requestStartedAt: publicRequestStartedAt, auditIdPromise: auditPromise.then((audit) => audit?.entry?.id || null),
+    saveAudit: (auditId, patch) => saveQueryAuditUpdate(auditId, patch, env, updateAudit) });
   const auditResult = async (answer, status, extra = {}) => {
     const audit = await auditPromise;
     await saveQueryAuditUpdate(audit?.entry?.id, queryAuditAnswerPatch(answer, {
@@ -419,12 +427,15 @@ export async function answerPublicRulingQuestion({
         ? saveSelectionDiagnostic({ event, requestId: requestDiagnostics.requestId, env }) : undefined,
       nonCardElapsedBeforePipelineMs: Math.max(0, Date.now() - publicRequestStartedAt),
       ...(prepareForContinuation === true ? { prepareForContinuation: true } : {}),
+      ...(engineRepro.enabled ? { onCardTextsReady: engineRepro.onCardTextsReady } : {}),
     });
     requestDiagnostics.completedAt = new Date().toISOString();
     requestDiagnostics.durationMs = Math.max(0, Date.now() - publicRequestStartedAt);
     answer = { ...answer, answerLocale: normalizedPayload.answerLocale,
       debug: { ...answer.debug, requestDiagnostics } };
     if (!prepareForContinuation) answer = await withPublicGenerationInfo(answer, profile, env, {fallbackFrom:selection.fallbackFrom});
+    // The answer is complete here: attach the reproduction only if it already finished.
+    if (!prepareForContinuation && engineRepro.enabled) answer = appendEngineReproSection(answer, engineRepro.sectionAtMainCompletion());
     const audit = await auditPromise;
     if (answer.status !== "evidence_prepared") {
       await auditResult(answer, "completed", { profileId: profile.id });
@@ -434,6 +445,8 @@ export async function answerPublicRulingQuestion({
       // Internal envelope only; HTTP adapters expose the answer explicitly.
       ...(audit?.entry?.id ? { auditId: audit.entry.id } : {}),
       ...(selection.fallbackFrom ? {fallbackFrom:selection.fallbackFrom} : {}),
+      ...(prepareForContinuation && engineRepro.enabled && engineRepro.state.started
+        ? { engineRepro: { enabled: true, requestStartedAt: publicRequestStartedAt } } : {}),
       latency: {
         profileId: profile.id,
         // durationMs covers the public service from entry through the answer;

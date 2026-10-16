@@ -27,6 +27,20 @@ import {
   buildPublicOfftopicRiskControlAnswer,
   readPublicOfftopicRiskControl,
 } from "../backend/publicOfftopicRiskControl.mjs";
+import { createAdminSessionManager } from "../backend/adminSession.mjs";
+import { engineReproEnabled } from "../backend/engineRepro/session.mjs";
+
+// The experimental engine-reproduction section runs only for administrator sessions while
+// ENGINE_REPRO_ENABLED is on. Any failure here simply means "not an administrator".
+async function isEngineReproAdmin(request, env) {
+  if (!engineReproEnabled(env)) return false;
+  try {
+    const auth = await createAdminSessionManager({ env }).authorize({ request, requireCsrf: false });
+    return auth?.ok === true;
+  } catch {
+    return false;
+  }
+}
 
 const allowedOrigin = process.env.ALLOWED_ORIGIN || "*";
 
@@ -40,6 +54,7 @@ export function createPublicAnswerHandler({
   answer = answerPublicRulingQuestion,
   translate = translatePublicSource,
   now = Date.now,
+  checkEngineReproAdmin = isEngineReproAdmin,
 } = {}) {
 return async function handler(request, response) {
   setCors(response);
@@ -66,6 +81,8 @@ return async function handler(request, response) {
       declaredBytes: declaredRequestBodyBytes(request),
     });
     await rateLimit({ request, env, action: payload.action, signal: requestAbort.signal });
+    const engineReproAdmin = payload.action === "prepare" || !payload.action
+      ? await checkEngineReproAdmin(request, env) : false;
     if (payload.action === "translate_source") {
       const availability = await readPublicAnswerAvailability({ env, readRiskControl });
       if (availability?.active) {
@@ -78,7 +95,7 @@ return async function handler(request, response) {
     }
     if (["prepare", "finalize", "status"].includes(payload.action)) {
       await answerInSeparateRequest({ request, response, requestAbort, requestChannel,
-        payload, env, store: createStore({ env }), prepare, finalize, readRiskControl, now });
+        payload, env, store: createStore({ env }), prepare, finalize, readRiskControl, now, engineReproAdmin });
       return;
     }
     if (wantsPublicAnswerProgress(request, requestChannel)) {
@@ -90,6 +107,7 @@ return async function handler(request, response) {
         payload,
         env,
         answer,
+        engineReproAdmin,
       });
       return;
     }
@@ -98,6 +116,7 @@ return async function handler(request, response) {
       env,
       requestContext: readQueryAuditRequestContext(request, env),
       signal: requestAbort.signal,
+      engineReproAdmin,
     });
     response.status(200).json(presentPublicAnswer(result.answer, {
       channel: requestChannel,
@@ -123,7 +142,7 @@ return async function handler(request, response) {
 export default createPublicAnswerHandler();
 
 async function answerInSeparateRequest({ request, response, requestAbort, requestChannel,
-  payload, env, store, prepare, finalize, readRiskControl, now }) {
+  payload, env, store, prepare, finalize, readRiskControl, now, engineReproAdmin = false }) {
   const streaming = wantsPublicAnswerProgress(request, requestChannel);
   if (payload.action === "status") {
     const status = await store.status(payload.preparationId);
@@ -182,7 +201,7 @@ async function answerInSeparateRequest({ request, response, requestAbort, reques
       timer.unref?.();
       result = payload.action === "prepare"
         ? await prepare({ payload, env, signal: requestAbort.signal, progress, store,
-          requestContext: readQueryAuditRequestContext(request, env) })
+          requestContext: readQueryAuditRequestContext(request, env), engineReproAdmin })
         : await finalize({ preparation: claim.preparation, env, signal: requestAbort.signal, progress });
       measured = result.progress || progress.complete();
       if (claim?.state === "claimed") {
@@ -288,6 +307,7 @@ async function answerWithProgressStream({
   payload,
   env,
   answer,
+  engineReproAdmin = false,
 }) {
   beginPublicAnswerEventStream(response);
   const progress = createPublicAnswerProgress({
@@ -303,6 +323,7 @@ async function answerWithProgressStream({
       requestContext: readQueryAuditRequestContext(request, env),
       signal: requestAbort.signal,
       progress,
+      engineReproAdmin,
     });
     const measuredProgress = progress.complete();
     // Named differently from the injected `answer` function above: a block-scoped

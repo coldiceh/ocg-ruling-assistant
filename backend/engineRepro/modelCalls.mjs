@@ -141,3 +141,52 @@ export function createModelRunner({ outDir, apiKey = null, mock = null, budgetUs
 
   return { call, spentUsd: () => spent };
 }
+
+// Production path: same request body, no file cache; every paid call reserves its worst case
+// in the reproduction's own daily bucket first and settles the measured cost afterwards.
+export function engineReproApiKey(env = {}) {
+  return String(env.ENGINE_REPRO_OPENAI_API_KEY || env.OPENAI_DECISIONS_API_KEY || env.RAG_CARD_OPENAI_API_KEY
+    || env.OCG_CARD_OPENAI_API_KEY || "").trim();
+}
+
+export function createOfficialModelCall({ env, limits, fetchImpl = globalThis.fetch }) {
+  const apiKey = engineReproApiKey(env);
+  return async function modelCall({ model, instructions = null, input, reasoningEffort, maxOutputTokens, maxInputTokens = null }) {
+    if (!apiKey) throw Object.assign(new Error("engine_repro_api_key_missing"), { code: "engine_repro_not_configured" });
+    const body = { model, ...(instructions ? { instructions } : {}), input, reasoning: { effort: reasoningEffort },
+      text: { format: { type: "json_object" } }, max_output_tokens: maxOutputTokens, stream: false };
+    const inputText = `${instructions || ""}\n${input}`;
+    if (maxInputTokens && estimateTokens(inputText) > maxInputTokens) {
+      throw Object.assign(new Error("engine_repro_input_cap_exceeded"), { code: "engine_repro_budget" });
+    }
+    const reservation = await limits.reserve(worstCaseCostUsd(model, inputText, maxOutputTokens));
+    const started = Date.now();
+    let payload;
+    let routing;
+    try {
+      const response = await fetchImpl(OFFICIAL_RESPONSES_URL, {
+        method: "POST", redirect: "error",
+        headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
+        body: JSON.stringify(body), signal: AbortSignal.timeout(120000),
+      });
+      const text = await response.text();
+      if (!response.ok) {
+        let code = "";
+        try { code = JSON.parse(text)?.error?.code || ""; } catch { /* plain-text error */ }
+        throw Object.assign(new Error(`openai_http_${response.status}${code ? `:${code}` : ""}`), { code: "engine_repro_model_error" });
+      }
+      payload = JSON.parse(text);
+      routing = { organization: response.headers.get("openai-organization"), project: response.headers.get("openai-project") };
+    } catch (error) {
+      // Unknown outcome: the reservation stays as charged.
+      throw error;
+    }
+    const usage = payload.usage || null;
+    const costUsd = usageCostUsd(model, usage);
+    await limits.settle(reservation, costUsd).catch(() => null);
+    const outputText = (payload.output || []).flatMap((item) => item?.type === "message" ? (item.content || []) : [])
+      .filter((part) => part?.type === "output_text").map((part) => part.text).join("");
+    return { status: payload.status || null, incomplete: payload.incomplete_details || null, outputText, usage, costUsd,
+      ms: Date.now() - started, routing, cacheHit: false };
+  };
+}
