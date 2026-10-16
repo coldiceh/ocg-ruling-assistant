@@ -122,13 +122,14 @@ export async function finalizePublicAnswer({
   }
   answer = await addGeneration(answer, profile, env, {fallbackFrom});
   // The answer is complete here. The response waits for the reproduction started by the
-  // preparation request, up to this invocation's own duration limit.
+  // preparation request, up to this invocation's own duration limit. Timing stays separate:
+  // the answer's own completion is taken before the wait.
+  const completedAt = now();
   if (preparation.engineRepro?.enabled === true) {
     answer = await attachEngineRepro(answer, { env, auditId: preparation.auditId,
       requestStartedAt: preparation.engineRepro.requestStartedAt,
       waitDeadlineAt: engineReproWaitDeadline(finalizeStartedAt, env) });
   }
-  const completedAt = now();
   answer = { ...answer, debug: { ...answer.debug,
     requestDiagnostics: { ...preparation.requestDiagnostics,
       preparationProgress: preparation.progress,

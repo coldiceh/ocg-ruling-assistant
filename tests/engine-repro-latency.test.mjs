@@ -83,16 +83,40 @@ test("the wait deadline stays inside the answer function's maxDuration in vercel
 test("finalize (second web request) waits with a deadline counted from its own start", async () => {
   const { finalizePublicAnswer } = await import("../backend/publicPreparedAnswerService.mjs");
   const preparation = { profileId: "official-astra-low", pipeline: "rag_baseline", continuation: { promptBundle: { prompt: "x" } }, rulingVersion: "latest",
-    startedAt: 0, auditId: "audit-f", requestDiagnostics: { scope: { scope: "in_scope" } },
+    startedAt: 0, auditId: "audit-f", requestDiagnostics: { scope: { scope: "in_scope" } }, progress: { totalMs: 0 },
     engineRepro: { enabled: true, requestStartedAt: 111 } };
   let seen = null;
   const before = Date.now();
   const result = await finalizePublicAnswer({ preparation, env: { MODEL_PROVIDER: "mock" },
     selectProfile: async () => ({ profile: { id: "official-astra-low", provider: "openai" } }),
     finalize: async () => ({ shortAnswer: "a" }), addGeneration: async (answer) => answer, updateAudit: async () => ({ updated: true }),
-    attachEngineRepro: async (answer, options) => { seen = options; return { ...answer, shortAnswer: `${answer.shortAnswer}\n\nR` }; } });
+    attachEngineRepro: async (answer, options) => { seen = options; await new Promise((r) => setTimeout(r, 80));
+      return { ...answer, shortAnswer: `${answer.shortAnswer}\n\nR` }; } });
   assert.equal(seen.auditId, "audit-f");
   assert.equal(seen.requestStartedAt, 111);
   assert.ok(seen.waitDeadlineAt >= before + DEFAULT_WAIT_BUDGET_MS && seen.waitDeadlineAt <= Date.now() + DEFAULT_WAIT_BUDGET_MS);
   assert.match(result.answer.shortAnswer, /R$/u);
+  // the answer's own latency ends before the wait for the reproduction
+  assert.ok(result.latency.durationMs < 60, `finalize latency ${result.latency.durationMs} ms excludes the 80 ms wait`);
+});
+
+test("single request: the answer's own latency excludes the wait for the reproduction", async () => {
+  const { answerPublicRulingQuestion } = await import("../backend/publicAnswerService.mjs");
+  const audits = [];
+  const result = await answerPublicRulingQuestion({
+    payload: { question: "Synthetic question" },
+    env: { MODEL_PROVIDER: "mock", ENGINE_REPRO_ENABLED: "true" }, engineReproAdmin: true,
+    appendAudit: async () => ({ entry: { id: "a" } }), updateAudit: async ({ patch }) => { audits.push(patch); return { updated: true }; },
+    assetsResident: () => true, preloadAssets: () => ({}),
+    classifyScope: async () => ({ scope: "in_scope", confidence: "high" }),
+    readRiskControl: async () => ({ ok: true, active: false }),
+    createEngineRepro: () => ({ enabled: true, state: { started: true }, onCardTextsReady() {} }),
+    attachEngineRepro: async (answer) => { await new Promise((r) => setTimeout(r, 120));
+      return { ...answer, engineRepro: { status: "done", waitedMs: 120 } }; },
+    answerRuling: async () => ({ shortAnswer: "a" }),
+  });
+  assert.equal(result.answer.engineRepro.waitedMs, 120);
+  assert.ok(result.latency.durationMs < 100, `answer latency ${result.latency.durationMs} ms excludes the 120 ms wait`);
+  const completed = audits.find((p) => p.status === "completed");
+  assert.ok(completed && completed.latencyMs < 100, "audit latency excludes the wait");
 });

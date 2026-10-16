@@ -436,7 +436,9 @@ export async function answerPublicRulingQuestion({
       debug: { ...answer.debug, requestDiagnostics } };
     if (!prepareForContinuation) answer = await withPublicGenerationInfo(answer, profile, env, {fallbackFrom:selection.fallbackFrom});
     // The answer is complete here: the response waits for the reproduction, up to this
-    // invocation's own duration limit.
+    // invocation's own duration limit. Timing stays separate: the answer's own latency ends
+    // here; the reproduction's timings and the wait are reported in their own fields.
+    const mainCompletedAt = Date.now();
     if (!prepareForContinuation && engineRepro.enabled && engineRepro.state.started) {
       answer = await attachEngineRepro(answer, { env,
         auditId: (await auditPromise)?.entry?.id || null, requestStartedAt: publicRequestStartedAt,
@@ -444,7 +446,7 @@ export async function answerPublicRulingQuestion({
     }
     const audit = await auditPromise;
     if (answer.status !== "evidence_prepared") {
-      await auditResult(answer, "completed", { profileId: profile.id });
+      await auditResult(answer, "completed", { profileId: profile.id, latencyMs: mainCompletedAt - publicRequestStartedAt });
     }
     return {
       answer,
@@ -455,9 +457,10 @@ export async function answerPublicRulingQuestion({
         ? { engineRepro: { enabled: true, requestStartedAt: publicRequestStartedAt } } : {}),
       latency: {
         profileId: profile.id,
-        // durationMs covers the public service from entry through the answer;
-        // exactMatchMs remains a compatibility field while the shortcut is disabled.
-        durationMs: Math.max(0, Date.now() - publicRequestStartedAt),
+        // durationMs covers the public service from entry through the answer (not the wait for
+        // an engine reproduction); exactMatchMs remains a compatibility field while the shortcut
+        // is disabled.
+        durationMs: Math.max(0, mainCompletedAt - publicRequestStartedAt),
         exactMatchMs,
       },
     };
