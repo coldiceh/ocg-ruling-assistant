@@ -77,19 +77,15 @@ export function createEngineReproSession({
   const clock = () => now() - requestStartedAt;
   const state = { started: false, done: false, record: null, startedAtMs: null };
   let promise = null;
-  let mainCompletedAtMs = null;
 
   const persist = async (record) => {
     const auditId = await auditIdPromise;
     if (!auditId) return;
     const prefix = keyPrefix(env);
     await command(env, fetchImpl, ["SET", `${prefix}:result:${auditId}`, storedRecord(record), "EX", RESULT_TTL_SECONDS]);
-    // The answer may have completed in another invocation (web "finalize"); its completion time is stored there.
-    let mainAt = mainCompletedAtMs;
-    if (mainAt === null) {
-      const stored = await command(env, fetchImpl, ["GET", `${prefix}:main:${auditId}`]).catch(() => null);
-      if (stored) mainAt = JSON.parse(stored).mainCompletedAtMs;
-    }
+    // When the answer completed first, its completion time is already stored (see attachEngineReproAtMainCompletion).
+    const storedMain = await command(env, fetchImpl, ["GET", `${prefix}:main:${auditId}`]).catch(() => null);
+    const mainAt = storedMain ? JSON.parse(storedMain).mainCompletedAtMs : null;
     if (mainAt !== null && record.timings.finishedAtMs > mainAt) {
       record.latencyDefect = { reproFinishedAtMs: record.timings.finishedAtMs, mainCompletedAtMs: mainAt,
         overshootMs: record.timings.finishedAtMs - mainAt };
@@ -145,21 +141,11 @@ export function createEngineReproSession({
       });
       waitUntil(promise);
     },
-
-    // Single-invocation answers: look once at the moment the answer completes.
-    sectionAtMainCompletion() {
-      if (!enabled) return null;
-      mainCompletedAtMs = clock();
-      if (!state.started) return null;
-      if (state.done) return sectionFromRecord(state.record);
-      return { status: "pending", elapsedMs: mainCompletedAtMs - state.startedAtMs, startedAtMs: state.startedAtMs,
-        mainCompletedAtMs };
-    },
   };
 }
 
-// Two-invocation answers (web prepare -> finalize): the finalize request records when the answer
-// completed, then reads the stored result exactly once.
+// The only delivery mechanism, the same for every channel and request shape: at the moment the
+// answer completes, record that time and read the stored reproduction result exactly once.
 export async function readEngineReproAtMainCompletion({ env, auditId, requestStartedAt, fetchImpl = globalThis.fetch,
   now = Date.now, command = redisCommand }) {
   if (!auditId) return null;
@@ -173,4 +159,9 @@ export async function readEngineReproAtMainCompletion({ env, auditId, requestSta
   if (!started) return null;   // the reproduction never started for this question
   const startedAtMs = JSON.parse(started).startedAtMs;
   return { status: "pending", elapsedMs: mainCompletedAtMs - startedAtMs, startedAtMs, mainCompletedAtMs };
+}
+
+export async function attachEngineReproAtMainCompletion(answer, options) {
+  const section = await readEngineReproAtMainCompletion(options).catch(() => null);
+  return appendEngineReproSection(answer, section);
 }

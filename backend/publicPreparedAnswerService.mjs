@@ -6,7 +6,7 @@ import { preparationError } from "./publicAnswerPreparationStore.mjs";
 import { PUBLIC_EXHAUSTED_FALLBACK_PROFILE, selectAvailablePublicProfile, withPublicGenerationInfo } from './publicGenerationInfo.mjs';
 import { updateQueryAudit, safeQueryAuditRetrievalTimings } from './queryAuditStore.mjs';
 import { queryAuditAnswerPatch, queryAuditFailurePatch, saveQueryAuditUpdate } from './publicQueryAudit.mjs';
-import { appendEngineReproSection, readEngineReproAtMainCompletion } from './engineRepro/session.mjs';
+import { attachEngineReproAtMainCompletion } from './engineRepro/session.mjs';
 
 export async function preparePublicAnswer({
   payload, env, signal, progress, store,
@@ -73,7 +73,7 @@ export async function finalizePublicAnswer({
   preparation, env, signal, progress,
   finalize = finalizePreparedRagRulingQuestionForVersion, now = Date.now,
   selectProfile = selectAvailablePublicProfile, addGeneration = withPublicGenerationInfo,
-  updateAudit = updateQueryAudit, readEngineRepro = readEngineReproAtMainCompletion,
+  updateAudit = updateQueryAudit, attachEngineRepro = attachEngineReproAtMainCompletion,
 } = {}) {
   try {
   signal?.throwIfAborted();
@@ -124,9 +124,8 @@ export async function finalizePublicAnswer({
   // The answer is complete here. A reproduction started by the preparation request is read once
   // (no waiting); an unfinished one is reported and keeps writing its result to the history record.
   if (preparation.engineRepro?.enabled === true) {
-    const section = await readEngineRepro({ env, auditId: preparation.auditId,
-      requestStartedAt: preparation.engineRepro.requestStartedAt }).catch(() => null);
-    answer = appendEngineReproSection(answer, section);
+    answer = await attachEngineRepro(answer, { env, auditId: preparation.auditId,
+      requestStartedAt: preparation.engineRepro.requestStartedAt });
   }
   const completedAt = now();
   answer = { ...answer, debug: { ...answer.debug,

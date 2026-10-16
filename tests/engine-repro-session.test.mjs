@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { appendEngineReproSection, createEngineReproSession, readEngineReproAtMainCompletion } from "../backend/engineRepro/session.mjs";
+import { appendEngineReproSection, attachEngineReproAtMainCompletion, createEngineReproSession, readEngineReproAtMainCompletion } from "../backend/engineRepro/session.mjs";
 import { createEngineReproLimits } from "../backend/engineRepro/limits.mjs";
 
 function fakeRedis() {
@@ -58,10 +58,10 @@ test("finished before the answer: the section is attached after the answer text"
   session.onCardTextsReady({ question: "q", cardResolution, cards });
   await Promise.all(pending);
   clockRef.t = 9000;
-  const section = session.sectionAtMainCompletion();
-  assert.equal(section.status, "done");
-  assert.equal(section.questionStatus, "已复现");
-  const answer = appendEngineReproSection({ shortAnswer: "主回答" }, section);
+  const answer = await attachEngineReproAtMainCompletion({ shortAnswer: "主回答" },
+    { env: {}, auditId: "audit-1", requestStartedAt: 0, now: () => clockRef.t, command: redis.command });
+  assert.equal(answer.engineRepro.status, "done");
+  assert.equal(answer.engineRepro.questionStatus, "已复现");
   assert.match(answer.shortAnswer, /^主回答\n\n【引擎复现/u);
   const audit = JSON.parse(redis.data.get("audit:audit-1"));
   assert.equal(audit.engineRepro.status, "已复现");
@@ -73,9 +73,10 @@ test("not finished when the answer completes: a notice, no waiting, and a latenc
   const clockRef = { t: 1000 };
   const { session, pending } = makeSession({ delayMs: 30, clockRef, redis });
   session.onCardTextsReady({ question: "q", cardResolution, cards });
-  const section = session.sectionAtMainCompletion();      // answer completes immediately
-  assert.equal(section.status, "pending");
-  const answer = appendEngineReproSection({ shortAnswer: "主回答" }, section);
+  await new Promise((r) => setTimeout(r, 0));             // let the start record land
+  const answer = await attachEngineReproAtMainCompletion({ shortAnswer: "主回答" },   // answer completes now
+    { env: {}, auditId: "audit-1", requestStartedAt: 0, now: () => clockRef.t, command: redis.command });
+  assert.equal(answer.engineRepro.status, "pending");
   assert.match(answer.shortAnswer, /引擎复现未在主回答完成前完成（截至主回答完成已耗时 0\.0 秒）/u);
   await Promise.all(pending);
   const audit = JSON.parse(redis.data.get("audit:audit-1"));
@@ -107,7 +108,9 @@ test("not an administrator: nothing runs and nothing is attached", async () => {
   assert.equal(session.enabled, false);
   session.onCardTextsReady({ question: "q", cardResolution, cards });
   assert.equal(pending.length, 0);
-  assert.equal(session.sectionAtMainCompletion(), null);
+  const answer = await attachEngineReproAtMainCompletion({ shortAnswer: "a" },
+    { env: {}, auditId: "audit-1", requestStartedAt: 0, now: () => 0, command: redis.command });
+  assert.equal(answer.shortAnswer, "a");
   assert.equal(appendEngineReproSection({ shortAnswer: "a" }, null).shortAnswer, "a");
 });
 
@@ -144,9 +147,13 @@ test("answer service wiring: the pipeline gets the observer and the finished sec
     readRiskControl: async () => ({ ok: true, active: false }),
     preloadAssets: () => ({}),
     createEngineRepro: (options) => {
-      const made = makeSession({ delayMs: 1, clockRef, redis });
+      const made = makeSession({ delayMs: 1, clockRef, redis, auditId: "audit-w" });
       observed = { options, made };
       return made.session;
+    },
+    attachEngineRepro: (answer, options) => {
+      assert.equal(options.auditId, "audit-w");
+      return attachEngineReproAtMainCompletion(answer, { ...options, now: () => clockRef.t, command: redis.command });
     },
     answerRuling: async (options) => {
       assert.equal(typeof options.onCardTextsReady, "function");

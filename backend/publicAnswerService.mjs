@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { appendEngineReproSection, createEngineReproSession } from "./engineRepro/session.mjs";
+import { attachEngineReproAtMainCompletion, createEngineReproSession } from "./engineRepro/session.mjs";
 import { getPublicReleaseInfo } from './publicReleaseInfo.mjs';
 import {
   createPublicAnswerModelEnv,
@@ -246,6 +246,7 @@ export async function answerPublicRulingQuestion({
   prepareForContinuation = false,
   engineReproAdmin = false,
   createEngineRepro = createEngineReproSession,
+  attachEngineRepro = attachEngineReproAtMainCompletion,
 } = {}) {
   const publicRequestStartedAt = Date.now();
   const requestDiagnostics = { requestId: randomUUID(), startedAt: new Date(publicRequestStartedAt).toISOString() };
@@ -435,7 +436,10 @@ export async function answerPublicRulingQuestion({
       debug: { ...answer.debug, requestDiagnostics } };
     if (!prepareForContinuation) answer = await withPublicGenerationInfo(answer, profile, env, {fallbackFrom:selection.fallbackFrom});
     // The answer is complete here: attach the reproduction only if it already finished.
-    if (!prepareForContinuation && engineRepro.enabled) answer = appendEngineReproSection(answer, engineRepro.sectionAtMainCompletion());
+    if (!prepareForContinuation && engineRepro.enabled && engineRepro.state.started) {
+      answer = await attachEngineRepro(answer, { env,
+        auditId: (await auditPromise)?.entry?.id || null, requestStartedAt: publicRequestStartedAt });
+    }
     const audit = await auditPromise;
     if (answer.status !== "evidence_prepared") {
       await auditResult(answer, "completed", { profileId: profile.id });
