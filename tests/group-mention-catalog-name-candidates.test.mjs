@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {findCatalogNamePrefixCandidates} from '../backend/ragCardExtractor.mjs';
+import {findCatalogNameContainmentCandidates} from '../backend/ragCardExtractor.mjs';
 import {startCardNameExtraction} from '../backend/ragRulingPipeline.mjs';
 import {clearBaigeSearchCache} from '../backend/baigeCardProvider.mjs';
 import {loadPreparedRagCardData} from '../backend/ragEvidenceRetriever.mjs';
@@ -38,14 +38,16 @@ async function run({question, extraction, cards = catalog, choose = () => null})
 const another = {name: '另一张卡', enName: 'Another Card', originalText: '另一张卡', confidence: 'high'};
 const prefixQuestion = '对方场上有匿名前缀，另一张卡能把它作为对象吗？';
 
-test('catalog name-prefix listing reads stored record names and proposes nothing when broad or empty', () => {
-  assert.deepEqual(findCatalogNamePrefixCandidates(catalog, '匿名前缀'), ['970001']);
-  assert.deepEqual(findCatalogNamePrefixCandidates(catalog, '匿名前缀 阿尔法'), ['970001']);
-  assert.deepEqual(findCatalogNamePrefixCandidates(catalog, '前缀'), []);
-  assert.deepEqual(findCatalogNamePrefixCandidates(catalog, ''), []);
-  const broad = Array.from({length: 7}, (_, i) => ({id: `97010${i}`, name: `宽泛系列·${i}号`}));
-  assert.deepEqual(findCatalogNamePrefixCandidates(broad, '宽泛系列'), []);
-  assert.equal(findCatalogNamePrefixCandidates(broad.slice(0, 6), '宽泛系列').length, 6);
+// 2026-10-16 规则变更: stored names containing the surface, not only beginning with it.
+test('catalog name listing reads stored record names containing the surface and proposes nothing when broad or empty', () => {
+  assert.deepEqual(findCatalogNameContainmentCandidates(catalog, '匿名前缀'), ['970001', '970003']);
+  assert.deepEqual(findCatalogNameContainmentCandidates(catalog, '匿名前缀 阿尔法'), ['970001']);
+  assert.deepEqual(findCatalogNameContainmentCandidates(catalog, '前缀'), ['970001', '970003']);
+  assert.deepEqual(findCatalogNameContainmentCandidates(catalog, '不存在的称呼'), []);
+  assert.deepEqual(findCatalogNameContainmentCandidates(catalog, ''), []);
+  const broad = Array.from({length: 7}, (_, i) => ({id: `97010${i}`, name: `第${i}张宽泛系列`}));
+  assert.deepEqual(findCatalogNameContainmentCandidates(broad, '宽泛系列'), []);
+  assert.equal(findCatalogNameContainmentCandidates(broad.slice(0, 6), '宽泛系列').length, 6);
 });
 
 test('an unreferenced group surface reaches the one selection call and binds only through it', async () => {
@@ -102,12 +104,15 @@ test('broad, absent or nested group surfaces add no selection work', async () =>
 
 // Reported 2026-10-16: two names written without their suffix were answered
 // with "missing card text"; the extractor can file such surfaces as groups.
-test('real catalog: suffix-less group surfaces are offered with their catalog owners', async () => {
+// 至天 is the end of 月女神之至天 (23503), not its beginning.
+test('real catalog: partial group surfaces are offered with their catalog owners', async () => {
   const {cards} = await loadPreparedRagCardData();
-  assert.deepEqual(findCatalogNamePrefixCandidates(cards, '对极英雄'), ['11310']);
-  assert.deepEqual(findCatalogNamePrefixCandidates(cards, '超越召唤兽'), ['22982']);
-  assert.deepEqual(findCatalogNamePrefixCandidates(cards, '元素英雄'), []);
-  assert.deepEqual(findCatalogNamePrefixCandidates(cards, '召唤兽'), []);
+  assert.deepEqual(findCatalogNameContainmentCandidates(cards, '对极英雄'), ['11310']);
+  assert.deepEqual(findCatalogNameContainmentCandidates(cards, '超越召唤兽'), ['22982']);
+  const zhitian = findCatalogNameContainmentCandidates(cards, '至天');
+  assert.ok(zhitian.includes('23503'), JSON.stringify(zhitian));
+  assert.ok(zhitian.length <= 6, JSON.stringify(zhitian));
+  for (const broad of ['元素英雄', '召唤兽', '龙']) assert.deepEqual(findCatalogNameContainmentCandidates(cards, broad), [], broad);
   const expected = {'对极英雄': '11310', '超越召唤兽': '22982'};
   const {result, tasks, prompts, requests} = await run({cards,
     question: '对方场上有对极英雄和毁灭凤凰人，我可以用超融合把这两只怪融合成超越召唤兽吗？',
@@ -122,5 +127,19 @@ test('real catalog: suffix-less group surfaces are offered with their catalog ow
   assert.deepEqual(result.cardResolution.resolvedCards.map(card => [String(card.id), card.input]).sort(), [
     ['11310', '对极英雄'], ['16524', '毁灭凤凰人'], ['22982', '超越召唤兽'], ['7445', '超融合'],
   ]);
+  assert.deepEqual(result.cardResolution.unresolvedMentions, []);
+});
+
+test('real catalog: 至天 filed as a group reaches selection with 月女神之至天 as a proposal', async () => {
+  const {cards} = await loadPreparedRagCardData();
+  const {result, tasks, prompts} = await run({cards, question: '怪兽被贴到了后场算不算入至天的计数',
+    extraction: {cardNames: [], groupMentions: ['至天'], describedCards: []},
+    choose: surface => surface === '至天' ? '23503' : null});
+  assert.deepEqual(tasks, ['card_name_extraction', 'card_identity_selection']);
+  const [set] = setsOf(prompts[1]);
+  assert.equal(set.surface, '至天');
+  assert.ok(set.candidates.some(candidate => candidate.cid === '23503'));
+  assert.deepEqual(result.cardResolution.resolvedCards.map(card => [String(card.id), card.input, card.resolutionSource]),
+    [['23503', '至天', 'model_candidate_selection']]);
   assert.deepEqual(result.cardResolution.unresolvedMentions, []);
 });

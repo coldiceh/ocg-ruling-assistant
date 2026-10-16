@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { extractRagCards, findCatalogNamePrefixCandidates, normalizeCardKey } from "./ragCardExtractor.mjs";
+import { extractRagCards, findCatalogNameContainmentCandidates, normalizeCardKey } from "./ragCardExtractor.mjs";
 import { buildCardNicknameReferences, applyCardNicknameResolution } from './ragCardNicknames.mjs';
 import { loadCardNicknameData } from './ragCardNicknameData.mjs';
 import {CARD_CANDIDATE_CONFIRMATION_LIMITS, confirmPendingCardCandidates} from './ragCardCandidateConfirmation.mjs';
@@ -196,11 +196,11 @@ async function resolveExtractedCardNames({query, data, cardNameModel, localCardR
 // The extractor classifies each surface as a card or a group, and only sees the
 // local catalog through the references above. A group surface for which it was
 // shown no reference was classified without that evidence; when the surface
-// begins the stored names of a few catalog records (e.g. a name written without
-// its suffix), those records become proposals for the existing confirmation
-// step, which reads the question and full card texts and may select one or
-// none. This never binds by itself, and a surface the extractor saw a reference
-// for keeps its group classification.
+// is contained in the stored names of a few catalog records (e.g. a name
+// written without its prefix or suffix), those records become proposals for the
+// existing confirmation step, which reads the question and full card texts and
+// may select one or none. This never binds by itself, and a surface the
+// extractor saw a reference for keeps its group classification.
 function addUnreferencedGroupMentionProposals(cardResolution, {query, cards = [], groupMentions = [],
   referencedInputs = []} = {}) {
   if (!Array.isArray(groupMentions) || !groupMentions.length) return cardResolution;
@@ -218,10 +218,10 @@ function addUnreferencedGroupMentionProposals(cardResolution, {query, cards = []
     // part of another mention's wording.
     if (!key || !text.includes(input.normalize('NFKC')) || referencedKeys.has(key)
       || mentionKeys.some(other => other.includes(key))) continue;
-    const ids = findCatalogNamePrefixCandidates(cards, input,
+    const ids = findCatalogNameContainmentCandidates(cards, input,
       {limit: CARD_CANDIDATE_CONFIRMATION_LIMITS.candidatesPerMention}).filter(id => !resolvedIds.has(id));
     if (!ids.length) continue;
-    unresolvedMentions.push({input, reason: 'model_group_mention_name_prefix', source: 'model_card_name_extractor',
+    unresolvedMentions.push({input, reason: 'model_group_mention_catalog_name', source: 'model_card_name_extractor',
       confidence: 'low', searchTexts: [], canonicalNames: [], proposedCardIds: ids, groupMentionProposal: true});
     mentionKeys.push(key);
     added = true;
