@@ -80,7 +80,7 @@ function engine(request) {
 const calls = [];
 async function modelCall(opts) {
   const result = await runner.call(opts);
-  calls.push({ qid: opts.qid, stage: opts.stage, model: opts.model, cacheHit: result.cacheHit, status: result.status,
+  calls.push({ qid: opts.qid, stage: opts.stage, model: opts.model, cacheHit: result.cacheHit, bodyHash: result.bodyHash, status: result.status,
     usage: result.usage, costUsd: result.costUsd, ms: result.ms });
   return result;
 }
@@ -355,7 +355,7 @@ function finish(record, t0) {
   const mine = calls.filter((c) => c.qid === record.qid);
   record.metrics = {
     totalMs: Date.now() - t0,
-    modelCalls: mine.map((c) => ({ stage: c.stage, model: c.model, cacheHit: c.cacheHit, status: c.status,
+    modelCalls: mine.map((c) => ({ stage: c.stage, model: c.model, cacheHit: c.cacheHit, bodyHash: c.bodyHash, status: c.status,
       input: c.usage?.input_tokens ?? null, cached: c.usage?.input_tokens_details?.cached_tokens ?? null,
       output: c.usage?.output_tokens ?? null, reasoning: c.usage?.output_tokens_details?.reasoning_tokens ?? null,
       costUsd: c.costUsd, ms: c.ms })),

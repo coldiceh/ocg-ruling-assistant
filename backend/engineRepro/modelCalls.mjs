@@ -76,7 +76,7 @@ export function createModelRunner({ outDir, apiKey = null, mock = null, budgetUs
       const cached = JSON.parse(readFileSync(cachePath, "utf8"));
       appendFileSync(ledgerPath, JSON.stringify({ ...row, cacheHit: true, usage: cached.usage, costUsd: cached.costUsd,
         ms: 0, status: cached.status }) + "\n");
-      return { ...cached, cacheHit: true };
+      return { ...cached, cacheHit: true, bodyHash };
     }
     if (maxInputTokens && row.inputTokensEstimate > maxInputTokens) {
       const error = new Error(`input estimate ${row.inputTokensEstimate} > cap ${maxInputTokens}`);
@@ -136,7 +136,7 @@ export function createModelRunner({ outDir, apiKey = null, mock = null, budgetUs
     appendFileSync(ledgerPath, JSON.stringify({ ...row, cacheHit: false, usage, costUsd, ms, status: record.status, routing: record.routing,
       incomplete: record.incomplete, mock: Boolean(mock) }) + "\n");
     log(`${qid} ${stage} ${model} status=${record.status} in=${usage?.input_tokens ?? "?"} out=${usage?.output_tokens ?? "?"} $${(costUsd ?? 0).toFixed(4)} ${ms}ms`);
-    return { ...record, cacheHit: false };
+    return { ...record, cacheHit: false, bodyHash };
   }
 
   return { call, spentUsd: () => spent };
