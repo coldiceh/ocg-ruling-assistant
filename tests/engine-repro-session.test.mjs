@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { appendEngineReproSection, attachEngineReproAtMainCompletion, createEngineReproSession, readEngineReproAtMainCompletion } from "../backend/engineRepro/session.mjs";
+import { appendEngineReproSection, attachEngineReproWhenReady, awaitEngineReproAtMainCompletion, createEngineReproSession,
+  engineReproSectionText } from "../backend/engineRepro/session.mjs";
 import { createEngineReproLimits } from "../backend/engineRepro/limits.mjs";
 
 function fakeRedis() {
@@ -51,55 +52,96 @@ function makeSession({ delayMs, clockRef, redis, isAdmin = true, auditId = "audi
   return { session, pending };
 }
 
-test("finished before the answer: the section is attached after the answer text", async () => {
+// Fake clock for the waiting side: each poll sleep yields to the event loop and advances the clock.
+const pollSleep = (clockRef) => async (ms) => { await new Promise((r) => setTimeout(r, 2)); clockRef.t += ms; };
+
+test("finished before the answer: attached right away, nothing waited, no answer delay recorded", async () => {
   const redis = fakeRedis();
   const clockRef = { t: 1000 };
   const { session, pending } = makeSession({ delayMs: 5, clockRef, redis });
   session.onCardTextsReady({ question: "q", cardResolution, cards });
   await Promise.all(pending);
   clockRef.t = 9000;
-  const answer = await attachEngineReproAtMainCompletion({ shortAnswer: "主回答" },
-    { env: {}, auditId: "audit-1", requestStartedAt: 0, now: () => clockRef.t, command: redis.command });
+  const answer = await attachEngineReproWhenReady({ shortAnswer: "主回答" },
+    { env: {}, auditId: "audit-1", requestStartedAt: 0, waitDeadlineAt: 280000, now: () => clockRef.t, command: redis.command,
+      sleep: pollSleep(clockRef) });
   assert.equal(answer.engineRepro.status, "done");
   assert.equal(answer.engineRepro.questionStatus, "已复现");
+  assert.equal(answer.engineRepro.waitedMs, 0);
+  assert.equal(answer.engineRepro.mainCompletedAtMs, 9000);
   assert.match(answer.shortAnswer, /^主回答\n\n【引擎复现/u);
   const audit = JSON.parse(redis.data.get("audit:audit-1"));
   assert.equal(audit.engineRepro.status, "已复现");
-  assert.equal(audit.engineRepro.latencyDefect, null);
+  assert.equal(audit.engineRepro.answerDelay, null);
 });
 
-test("not finished when the answer completes: a notice, no waiting, and a latency defect in the record", async () => {
+test("not finished when the answer completes: the response waits for it; the delay is recorded", async () => {
   const redis = fakeRedis();
   const clockRef = { t: 1000 };
   const { session, pending } = makeSession({ delayMs: 30, clockRef, redis });
   session.onCardTextsReady({ question: "q", cardResolution, cards });
   await new Promise((r) => setTimeout(r, 0));             // let the start record land
-  const answer = await attachEngineReproAtMainCompletion({ shortAnswer: "主回答" },   // answer completes now
-    { env: {}, auditId: "audit-1", requestStartedAt: 0, now: () => clockRef.t, command: redis.command });
-  assert.equal(answer.engineRepro.status, "pending");
-  assert.match(answer.shortAnswer, /引擎复现未在主回答完成前完成（截至主回答完成已耗时 0\.0 秒）/u);
+  const answer = await attachEngineReproWhenReady({ shortAnswer: "主回答" },   // the answer completes now
+    { env: {}, auditId: "audit-1", requestStartedAt: 0, waitDeadlineAt: 280000, now: () => clockRef.t, command: redis.command,
+      sleep: async (ms) => { await new Promise((r) => setTimeout(r, 5)); } });
+  assert.equal(answer.engineRepro.status, "done");
+  assert.match(answer.shortAnswer, /^主回答\n\n【引擎复现（实验性，未经评测）】\n状态：已复现/u);
   await Promise.all(pending);
   const audit = JSON.parse(redis.data.get("audit:audit-1"));
-  assert.ok(audit.engineRepro.latencyDefect.overshootMs > 0);
+  assert.equal(audit.engineRepro.answerDelay.delayMs, 30);
+  assert.equal(audit.engineRepro.answerDelay.mainCompletedAtMs, 1000);
 });
 
-test("two requests (prepare, then finalize): finalize reads once and records its completion time", async () => {
+test("two requests (prepare, then finalize): finalize waits on the stored result by history-record id", async () => {
   const redis = fakeRedis();
   const clockRef = { t: 1000 };
   const { session, pending } = makeSession({ delayMs: 30, clockRef, redis });
-  session.onCardTextsReady({ question: "q", cardResolution, cards });
-  // finalize completes before the reproduction
+  session.onCardTextsReady({ question: "q", cardResolution, cards });   // in the preparation request
   await new Promise((r) => setTimeout(r, 0));
-  const early = await readEngineReproAtMainCompletion({ env: {}, auditId: "audit-1", requestStartedAt: 0,
-    now: () => clockRef.t, command: redis.command });
-  assert.equal(early.status, "pending");
+  // the finalize request knows only the audit id and the preparation's request start
+  const section = await awaitEngineReproAtMainCompletion({ env: {}, auditId: "audit-1", requestStartedAt: 0,
+    waitDeadlineAt: 280000, now: () => clockRef.t, command: redis.command, sleep: async () => { await new Promise((r) => setTimeout(r, 5)); } });
+  assert.equal(section.status, "done");
+  assert.equal(section.questionStatus, "已复现");
   await Promise.all(pending);
-  const record = JSON.parse(redis.data.get("engine-repro:v1:default:result:audit-1"));
-  assert.ok(record.latencyDefect && record.latencyDefect.overshootMs > 0);
-  // a later read (e.g. status polling) sees the stored result
-  const later = await readEngineReproAtMainCompletion({ env: {}, auditId: "audit-1", requestStartedAt: 0,
-    now: () => clockRef.t, command: redis.command });
-  assert.equal(later.status, "done");
+});
+
+test("past the wait deadline: the answer goes out with a notice; the late result is still stored and marked", async () => {
+  const redis = fakeRedis();
+  const clockRef = { t: 1000 };
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  const pending = [];
+  const session = createEngineReproSession({
+    env: { ENGINE_REPRO_ENABLED: "true" }, isAdmin: true, requestStartedAt: 0, auditIdPromise: Promise.resolve("audit-t"),
+    now: () => clockRef.t, waitUntil: (p) => pending.push(p), engine, cidMap: { 12950: 14558127 },
+    limits: { admit: async () => {}, reserve: async () => ({}), settle: async () => {} },
+    modelCall: async () => { await gate; clockRef.t += 500000;
+      return { status: "completed", outputText: JSON.stringify(plan), usage: {}, costUsd: 0, ms: 1 }; },
+    command: redis.command, saveAudit: async (id, patch) => { redis.data.set(`audit:${id}`, JSON.stringify(patch)); },
+  });
+  session.onCardTextsReady({ question: "q", cardResolution, cards });
+  await new Promise((r) => setTimeout(r, 0));
+  const answer = await attachEngineReproWhenReady({ shortAnswer: "主回答" },
+    { env: {}, auditId: "audit-t", requestStartedAt: 0, waitDeadlineAt: 4000, pollMs: 1000, now: () => clockRef.t,
+      command: redis.command, sleep: pollSleep(clockRef) });
+  assert.equal(answer.engineRepro.status, "timeout");
+  assert.equal(answer.engineRepro.waitedMs, 3000);
+  assert.match(answer.shortAnswer, /引擎复现在等待上限内未完成（复现已耗时 3\.0 秒，主回答完成后已等待 3\.0 秒）/u);
+  release();
+  await Promise.all(pending);
+  const audit = JSON.parse(redis.data.get("audit:audit-t"));
+  assert.equal(audit.engineRepro.answerDelay.waitTimedOutAtMs, 4000);
+});
+
+test("a reproduction that never started is not waited for", async () => {
+  const redis = fakeRedis();
+  let slept = 0;
+  const section = await awaitEngineReproAtMainCompletion({ env: {}, auditId: "audit-none", requestStartedAt: 0,
+    waitDeadlineAt: 280000, now: () => 5, command: redis.command, sleep: async () => { slept += 1; } });
+  assert.equal(section, null);
+  assert.equal(slept, 0);
+  assert.equal(engineReproSectionText(null), "");
 });
 
 test("not an administrator: nothing runs and nothing is attached", async () => {
@@ -108,8 +150,8 @@ test("not an administrator: nothing runs and nothing is attached", async () => {
   assert.equal(session.enabled, false);
   session.onCardTextsReady({ question: "q", cardResolution, cards });
   assert.equal(pending.length, 0);
-  const answer = await attachEngineReproAtMainCompletion({ shortAnswer: "a" },
-    { env: {}, auditId: "audit-1", requestStartedAt: 0, now: () => 0, command: redis.command });
+  const answer = await attachEngineReproWhenReady({ shortAnswer: "a" },
+    { env: {}, auditId: "audit-1", requestStartedAt: 0, waitDeadlineAt: 280000, now: () => 0, command: redis.command });
   assert.equal(answer.shortAnswer, "a");
   assert.equal(appendEngineReproSection({ shortAnswer: "a" }, null).shortAnswer, "a");
 });
@@ -153,7 +195,8 @@ test("answer service wiring: the pipeline gets the observer and the finished sec
     },
     attachEngineRepro: (answer, options) => {
       assert.equal(options.auditId, "audit-w");
-      return attachEngineReproAtMainCompletion(answer, { ...options, now: () => clockRef.t, command: redis.command });
+      assert.ok(options.waitDeadlineAt - Date.now() > 270000, "deadline counted from this invocation");
+      return attachEngineReproWhenReady(answer, { ...options, now: () => clockRef.t, command: redis.command });
     },
     answerRuling: async (options) => {
       assert.equal(typeof options.onCardTextsReady, "function");

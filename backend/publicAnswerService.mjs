@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { attachEngineReproAtMainCompletion, createEngineReproSession } from "./engineRepro/session.mjs";
+import { attachEngineReproWhenReady, createEngineReproSession, engineReproWaitDeadline } from "./engineRepro/session.mjs";
 import { getPublicReleaseInfo } from './publicReleaseInfo.mjs';
 import {
   createPublicAnswerModelEnv,
@@ -246,7 +246,7 @@ export async function answerPublicRulingQuestion({
   prepareForContinuation = false,
   engineReproAdmin = false,
   createEngineRepro = createEngineReproSession,
-  attachEngineRepro = attachEngineReproAtMainCompletion,
+  attachEngineRepro = attachEngineReproWhenReady,
 } = {}) {
   const publicRequestStartedAt = Date.now();
   const requestDiagnostics = { requestId: randomUUID(), startedAt: new Date(publicRequestStartedAt).toISOString() };
@@ -428,18 +428,19 @@ export async function answerPublicRulingQuestion({
         ? saveSelectionDiagnostic({ event, requestId: requestDiagnostics.requestId, env }) : undefined,
       nonCardElapsedBeforePipelineMs: Math.max(0, Date.now() - publicRequestStartedAt),
       ...(prepareForContinuation === true ? { prepareForContinuation: true } : {}),
-      ...(engineRepro.enabled ? { onCardTextsReady: engineRepro.onCardTextsReady,
-        onEvidenceReady: engineRepro.onEvidenceReady } : {}),
+      ...(engineRepro.enabled ? { onCardTextsReady: engineRepro.onCardTextsReady } : {}),
     });
     requestDiagnostics.completedAt = new Date().toISOString();
     requestDiagnostics.durationMs = Math.max(0, Date.now() - publicRequestStartedAt);
     answer = { ...answer, answerLocale: normalizedPayload.answerLocale,
       debug: { ...answer.debug, requestDiagnostics } };
     if (!prepareForContinuation) answer = await withPublicGenerationInfo(answer, profile, env, {fallbackFrom:selection.fallbackFrom});
-    // The answer is complete here: attach the reproduction only if it already finished.
+    // The answer is complete here: the response waits for the reproduction, up to this
+    // invocation's own duration limit.
     if (!prepareForContinuation && engineRepro.enabled && engineRepro.state.started) {
       answer = await attachEngineRepro(answer, { env,
-        auditId: (await auditPromise)?.entry?.id || null, requestStartedAt: publicRequestStartedAt });
+        auditId: (await auditPromise)?.entry?.id || null, requestStartedAt: publicRequestStartedAt,
+        waitDeadlineAt: engineReproWaitDeadline(publicRequestStartedAt, env) });
     }
     const audit = await auditPromise;
     if (answer.status !== "evidence_prepared") {

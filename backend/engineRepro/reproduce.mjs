@@ -6,8 +6,7 @@ import { DEFAULT_DECK, DEFAULT_SEED, FILLER_CARDS, PLANNER_INSTRUCTIONS, PROMPT_
   buildPlannerInput, buildRepairInput } from "./plannerPrompt.mjs";
 import { STATUS, aggregateQuestion, renderQuestion } from "./aggregate.mjs";
 
-export const DEFAULT_PLANNER = Object.freeze({ model: "gpt-6.1-sol", effort: "low", maxOutput: 1600, maxInput: 8000,
-  serviceTier: null });
+export const DEFAULT_PLANNER = Object.freeze({ model: "gpt-6.1-sol", effort: "low", maxOutput: 1600, maxInput: 8000 });
 const REASON_CODES = ["pure_rule", "archetype_level", "tournament_policy", "ruleset_version"];
 
 // The main answer's card resolution -> the identity record used here.
@@ -168,10 +167,9 @@ function summarizeEngine(r) {
  * @param modelCall    async ({stage, model, instructions, input, reasoningEffort, maxOutputTokens, maxInputTokens})
  *                     -> {status, incomplete, outputText, usage, costUsd, ms, cacheHit}
  * @param clock        () -> ms since the request started (timings are reported on that axis)
- * @param allowRepair  () -> boolean, asked right before the repair call; false skips it (deadline policy)
  */
 export async function runEngineReproduction({ question, identity, cardsById, cidMap, engine, modelCall,
-  planner = DEFAULT_PLANNER, includeOfficialQa = false, clock = () => 0, allowRepair = () => true, record: base = {} }) {
+  planner = DEFAULT_PLANNER, includeOfficialQa = false, clock = () => 0, record: base = {} }) {
   const record = { ...base, text: question, promptVersion: PROMPT_VERSION, planner, includeOfficialQa,
     plannerCalled: false, identity, timings: { startedAtMs: clock(), plannerMs: 0, repairMs: 0, engineMs: 0 } };
   const finish = () => {
@@ -193,8 +191,7 @@ export async function runEngineReproduction({ question, identity, cardsById, cid
     }
   };
   const modelOpts = (stage, input) => ({ stage, model: planner.model, instructions: PLANNER_INSTRUCTIONS, input,
-    reasoningEffort: planner.effort, maxOutputTokens: planner.maxOutput, maxInputTokens: planner.maxInput,
-    ...(planner.serviceTier ? { serviceTier: planner.serviceTier } : {}) });
+    reasoningEffort: planner.effort, maxOutputTokens: planner.maxOutput, maxInputTokens: planner.maxInput });
 
   if (!identity.resolved.length && !identity.unresolved.length) {
     record.preStatus = { status: STATUS.NA, reason: "no_card_mentioned",
@@ -283,13 +280,6 @@ export async function runEngineReproduction({ question, identity, cardsById, cid
   if (planLevelProblems.length) failures.push({ plan_level: true, problems: planLevelProblems });
   else for (const sq of record.subQuestions) for (const b of sq.branches) if (!b.engine || b.engine.status !== "replayed") failures.push(compactFailure(sq, b));
   if (!failures.length) return finish();
-  // Deadline policy: once the main answer is in its final generation, a repair (a second planner
-  // call) would very likely finish after it, so the first engine result is delivered instead.
-  if (!allowRepair()) {
-    record.repairSkipped = "main_answer_generating";
-    if (planLevelProblems.length) record.planFailure = "invalid_input";
-    return finish();
-  }
   record.repairCalled = true;
   const repairInput = buildRepairInput({ plannerInput, previousPlan: plan || String(r1.outputText || "").slice(0, 4000), failures,
     planLevel: planLevelProblems.length > 0 });

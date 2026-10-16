@@ -75,7 +75,7 @@ export function safeQueryAuditEngineRepro(source) {
     reasonCodes: (Array.isArray(source.reasonCodes) ? source.reasonCodes : []).map(token).filter(Boolean).slice(0, 8),
     flags: (Array.isArray(source.flags) ? source.flags : []).map(token).filter(Boolean).slice(0, 8),
     timings: numbers(source.timings),
-    latencyDefect: source.latencyDefect ? numbers(source.latencyDefect) : null,
+    answerDelay: source.answerDelay ? numbers(source.answerDelay) : null,
     plannerCalls: Number.isSafeInteger(source.plannerCalls) && source.plannerCalls >= 0 && source.plannerCalls <= 4 ? source.plannerCalls : null,
     rendered: typeof source.rendered === 'string' ? source.rendered.slice(0, 12000) : null,
   };

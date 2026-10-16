@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
-import { createEngineReproSession, plannerFromEnv } from "../backend/engineRepro/session.mjs";
+import { createEngineReproSession, DEFAULT_WAIT_BUDGET_MS, engineReproWaitDeadline, FUNCTION_MAX_DURATION_MS,
+  plannerFromEnv } from "../backend/engineRepro/session.mjs";
 import { expandPlanDefaults, runEngineReproduction } from "../backend/engineRepro/reproduce.mjs";
-import { createOfficialModelCall, usageCostUsd, worstCaseCostUsd } from "../backend/engineRepro/modelCalls.mjs";
 import { DEFAULT_DECK } from "../backend/engineRepro/plannerPrompt.mjs";
 
 const identity = { resolved: [{ cid: "12950", mentionedAs: ["灰流丽"], resolutionSources: [] }], unresolved: [], groupMentions: [] };
@@ -56,88 +57,42 @@ test("branches run in parallel and the engine phase is counted as wall time", as
   assert.equal(record.subQuestions[0].branches[0].scenario.schema, "ocg-repro-scenario/v1");
 });
 
-test("after the main answer's evidence is ready, no repair call is started", async () => {
-  const calls = [];
-  const record = await runEngineReproduction({ question: "q", identity, cardsById, cidMap: { 12950: 14558127 },
-    engine: fakeEngine({ mismatch: true }), allowRepair: () => false,
-    modelCall: async (opts) => { calls.push(opts.stage); return { status: "completed", outputText: JSON.stringify(compactPlan([branch("b1")])), usage: {} }; } });
-  assert.deepEqual(calls, ["plan"]);
-  assert.equal(record.repairSkipped, "main_answer_generating");
-  assert.equal(record.summary.status, "未复现");
-  assert.ok(record.summary.flags.includes("repair_skipped"));
-  assert.match(record.rendered, /修复因时限跳过/u);
-});
-
-test("session: the engine service is woken at creation (configured URL only); evidence-ready is recorded once", () => {
+test("session: the engine service is woken at creation (configured URL, admin, no injected engine only)", () => {
   const warmed = [];
   const make = (env, extra = {}) => createEngineReproSession({ env: { ENGINE_REPRO_ENABLED: "true", ...env }, isAdmin: true,
-    requestStartedAt: 0, now: () => 1234, waitUntil: () => {}, command: async () => null,
+    requestStartedAt: 0, now: () => 0, waitUntil: () => {}, command: async () => null,
     warmEngine: (opts) => { warmed.push(opts.baseUrl); return Promise.resolve(true); }, ...extra });
-  const session = make({ ENGINE_REPRO_URL: "https://engine.example.test" });
+  make({ ENGINE_REPRO_URL: "https://engine.example.test" });
+  make({});
+  make({ ENGINE_REPRO_URL: "https://x.test" }, { engine: async () => ({}) });
+  make({ ENGINE_REPRO_URL: "https://y.test" }, { isAdmin: false });
   assert.deepEqual(warmed, ["https://engine.example.test"]);
-  make({});                                                    // no URL: nothing to wake
-  make({ ENGINE_REPRO_URL: "https://x.test" }, { engine: async () => ({}) });  // injected engine: no wake
-  createEngineReproSession({ env: { ENGINE_REPRO_ENABLED: "true", ENGINE_REPRO_URL: "https://y.test" }, isAdmin: false,
-    warmEngine: (opts) => { warmed.push(opts.baseUrl); return Promise.resolve(true); } });   // not admin: no wake
-  assert.deepEqual(warmed, ["https://engine.example.test"]);
-  session.onEvidenceReady();
-  session.onEvidenceReady();
-  assert.equal(session.state.mainEvidenceReadyAtMs, 1234);
 });
 
-test("session with a mismatching first plan and evidence already ready: delivered without repair", async () => {
-  const stages = [];
-  const session = createEngineReproSession({
-    env: { ENGINE_REPRO_ENABLED: "true" }, isAdmin: true, requestStartedAt: 0, auditIdPromise: Promise.resolve(null),
-    now: () => 0, waitUntil: () => {}, engine: fakeEngine({ mismatch: true }),
-    modelCall: async (opts) => { stages.push(opts.stage); session.onEvidenceReady();
-      return { status: "completed", outputText: JSON.stringify(compactPlan([branch("b1")])), usage: {} }; },
-    limits: { admit: async () => {}, reserve: async () => ({}), settle: async () => {} },
-    cidMap: { 12950: 14558127 }, command: async () => null,
-  });
-  session.onCardTextsReady({ question: "q", cardResolution: { resolvedCards: [{ id: "12950", input: "灰流丽" }] },
-    cards: [{ id: "12950", name: "灰流丽", effectText: "t" }] });
-  const record = await session.promise;
-  assert.deepEqual(stages, ["plan"]);
-  assert.equal(record.repairSkipped, "main_answer_generating");
+test("the wait deadline stays inside the answer function's maxDuration in vercel.json", () => {
+  const vercel = JSON.parse(readFileSync(new URL("../vercel.json", import.meta.url), "utf8"));
+  assert.equal(vercel.functions["api/answer.js"].maxDuration * 1000, FUNCTION_MAX_DURATION_MS);
+  assert.ok(DEFAULT_WAIT_BUDGET_MS < FUNCTION_MAX_DURATION_MS);
+  assert.equal(engineReproWaitDeadline(1000, {}), 1000 + DEFAULT_WAIT_BUDGET_MS);
+  assert.equal(engineReproWaitDeadline(1000, { ENGINE_REPRO_WAIT_BUDGET_MS: "60000" }), 61000);
+  assert.equal(engineReproWaitDeadline(1000, { ENGINE_REPRO_WAIT_BUDGET_MS: "999999" }), 1000 + DEFAULT_WAIT_BUDGET_MS);
+  assert.equal(plannerFromEnv({ ENGINE_REPRO_PLANNER_MAX_OUTPUT: "1200" }).maxOutput, 1200);
+  assert.equal("serviceTier" in plannerFromEnv({ ENGINE_REPRO_SERVICE_TIER: "priority" }), false);
 });
 
-test("Fast mode is opt-in; the request carries service_tier and the served tier sets the price", async () => {
-  assert.equal(plannerFromEnv({}).serviceTier, null);
-  assert.equal(plannerFromEnv({ ENGINE_REPRO_SERVICE_TIER: "priority" }).serviceTier, "priority");
-  assert.equal(plannerFromEnv({ ENGINE_REPRO_SERVICE_TIER: "ultra" }).serviceTier, null);
-  const usage = { input_tokens: 1000, output_tokens: 500 };
-  assert.equal(usageCostUsd("gpt-6.1-sol", usage, "priority"), 2 * usageCostUsd("gpt-6.1-sol", usage));
-  assert.equal(usageCostUsd("gpt-6.1-sol", usage, "default"), usageCostUsd("gpt-6.1-sol", usage));
-  assert.ok(worstCaseCostUsd("gpt-6.1-sol", "abc", 100, "priority") > 2 * worstCaseCostUsd("gpt-6.1-sol", "abc", 100));
-  const bodies = [];
-  const settled = [];
-  const call = createOfficialModelCall({ env: { ENGINE_REPRO_OPENAI_API_KEY: "k" },
-    limits: { reserve: async (usd) => ({ usd }), settle: async (r, usd) => settled.push(usd) },
-    fetchImpl: async (_url, init) => { bodies.push(JSON.parse(init.body));
-      return new Response(JSON.stringify({ status: "completed", service_tier: "default", usage, output: [] }), { status: 200 }); } });
-  const r = await call({ model: "gpt-6.1-sol", input: "x", reasoningEffort: "low", maxOutputTokens: 100, serviceTier: "priority" });
-  assert.equal(bodies[0].service_tier, "priority");
-  assert.equal(r.servedTier, "default");
-  assert.equal(settled[0], usageCostUsd("gpt-6.1-sol", usage));
-  await call({ model: "gpt-6.1-sol", input: "x", reasoningEffort: "low", maxOutputTokens: 100 });
-  assert.equal("service_tier" in bodies[1], false);
-});
-
-test("answer service passes the evidence-ready observer to the pipeline only for admins", async () => {
-  const { answerPublicRulingQuestion } = await import("../backend/publicAnswerService.mjs");
+test("finalize (second web request) waits with a deadline counted from its own start", async () => {
+  const { finalizePublicAnswer } = await import("../backend/publicPreparedAnswerService.mjs");
+  const preparation = { profileId: "official-astra-low", pipeline: "rag_baseline", continuation: { promptBundle: { prompt: "x" } }, rulingVersion: "latest",
+    startedAt: 0, auditId: "audit-f", requestDiagnostics: { scope: { scope: "in_scope" } },
+    engineRepro: { enabled: true, requestStartedAt: 111 } };
   let seen = null;
-  await answerPublicRulingQuestion({
-    payload: { question: "Synthetic question" },
-    env: { MODEL_PROVIDER: "mock", ENGINE_REPRO_ENABLED: "true" },
-    engineReproAdmin: true,
-    appendAudit: async () => ({ entry: { id: "a" } }), updateAudit: async () => ({ updated: true }),
-    assetsResident: () => true, preloadAssets: () => ({}),
-    classifyScope: async () => ({ scope: "in_scope", confidence: "high" }),
-    readRiskControl: async () => ({ ok: true, active: false }),
-    createEngineRepro: () => ({ enabled: true, state: { started: false }, onCardTextsReady() {}, onEvidenceReady() {} }),
-    attachEngineRepro: (answer) => answer,
-    answerRuling: async (options) => { seen = options; return { shortAnswer: "a" }; },
-  });
-  assert.equal(typeof seen.onEvidenceReady, "function");
+  const before = Date.now();
+  const result = await finalizePublicAnswer({ preparation, env: { MODEL_PROVIDER: "mock" },
+    selectProfile: async () => ({ profile: { id: "official-astra-low", provider: "openai" } }),
+    finalize: async () => ({ shortAnswer: "a" }), addGeneration: async (answer) => answer, updateAudit: async () => ({ updated: true }),
+    attachEngineRepro: async (answer, options) => { seen = options; return { ...answer, shortAnswer: `${answer.shortAnswer}\n\nR` }; } });
+  assert.equal(seen.auditId, "audit-f");
+  assert.equal(seen.requestStartedAt, 111);
+  assert.ok(seen.waitDeadlineAt >= before + DEFAULT_WAIT_BUDGET_MS && seen.waitDeadlineAt <= Date.now() + DEFAULT_WAIT_BUDGET_MS);
+  assert.match(result.answer.shortAnswer, /R$/u);
 });

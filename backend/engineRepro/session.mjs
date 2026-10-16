@@ -1,14 +1,12 @@
 // Production wiring of the engine-reproduction section (experimental, admin-only).
 //
 // The reproduction starts the moment the main pipeline has its card resolution and card texts
-// (it reuses that exact resolution and data snapshot), runs alongside retrieval / selection /
-// generation, and is attached to the answer if it finished before the answer did. There is no
-// grace period: an unfinished reproduction is reported as a latency defect, keeps running in the
-// background (waitUntil) and still writes its result to the history record.
-//
-// Latency measures on the reproduction side only (the answer never waits): the engine service is
-// woken when the session is created; once the main answer has its evidence and only final
-// generation is left (onEvidenceReady), no repair call is started any more.
+// (it reuses that exact resolution and data snapshot) and runs alongside retrieval / selection /
+// generation. The response is sent when both are ready: when the main answer completes, its
+// completion time is recorded and the request waits for the stored reproduction result. The only
+// limit is the function's own duration (vercel.json maxDuration for api/answer.js): past the wait
+// deadline the answer goes out with a one-line notice, and the reproduction still writes its
+// result to the history record. The engine service is woken when the session is created.
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -38,6 +36,15 @@ export function defaultWaitUntil(promise) {
 const keyPrefix = (env) => `engine-repro:v1:${String(env.PUBLIC_OPENAI_BUDGET_RUN_ID || "default").replace(/[^A-Za-z0-9_-]/gu, "")}`;
 const RESULT_TTL_SECONDS = "2592000";
 
+// api/answer.js runs at most 300 s (vercel.json). Waiting ends 20 s before that so the answer,
+// its audit update and the response still fit; a test keeps this tied to vercel.json.
+export const FUNCTION_MAX_DURATION_MS = 300_000;
+export const DEFAULT_WAIT_BUDGET_MS = FUNCTION_MAX_DURATION_MS - 20_000;
+export function engineReproWaitDeadline(invocationStartedAt, env = {}) {
+  const budget = Number(env.ENGINE_REPRO_WAIT_BUDGET_MS);
+  return invocationStartedAt + (budget > 0 && budget <= DEFAULT_WAIT_BUDGET_MS ? budget : DEFAULT_WAIT_BUDGET_MS);
+}
+
 function storedRecord(record) {
   // Keep replay material (scenario, actions, responses, versions, log); cap the size.
   let value = JSON.stringify(record);
@@ -50,8 +57,9 @@ function storedRecord(record) {
 
 export function engineReproSectionText(section) {
   if (!section) return "";
-  if (section.status === "pending") {
-    return `【引擎复现（实验性）】引擎复现未在主回答完成前完成（截至主回答完成已耗时 ${(section.elapsedMs / 1000).toFixed(1)} 秒）。`;
+  if (section.status === "timeout") {
+    return `【引擎复现（实验性）】引擎复现在等待上限内未完成（复现已耗时 ${(section.elapsedMs / 1000).toFixed(1)} 秒，`
+      + `主回答完成后已等待 ${(section.waitedMs / 1000).toFixed(1)} 秒）。结果仍会写入历史记录。`;
   }
   return section.rendered || "";
 }
@@ -72,12 +80,10 @@ function sectionFromRecord(record) {
 }
 
 export function plannerFromEnv(env = {}) {
-  const tier = String(env.ENGINE_REPRO_SERVICE_TIER || "").trim();
   return { ...DEFAULT_PLANNER,
     model: env.ENGINE_REPRO_PLANNER_MODEL || DEFAULT_PLANNER.model,
     effort: env.ENGINE_REPRO_PLANNER_EFFORT || DEFAULT_PLANNER.effort,
-    maxOutput: Number(env.ENGINE_REPRO_PLANNER_MAX_OUTPUT) > 0 ? Number(env.ENGINE_REPRO_PLANNER_MAX_OUTPUT) : DEFAULT_PLANNER.maxOutput,
-    serviceTier: ["priority", "fast"].includes(tier) ? tier : null };
+    maxOutput: Number(env.ENGINE_REPRO_PLANNER_MAX_OUTPUT) > 0 ? Number(env.ENGINE_REPRO_PLANNER_MAX_OUTPUT) : DEFAULT_PLANNER.maxOutput };
 }
 
 export function createEngineReproSession({
@@ -88,7 +94,7 @@ export function createEngineReproSession({
 }) {
   const enabled = engineReproEnabled(env) && isAdmin === true;
   const clock = () => now() - requestStartedAt;
-  const state = { started: false, done: false, record: null, startedAtMs: null, mainEvidenceReadyAtMs: null };
+  const state = { started: false, done: false, record: null, startedAtMs: null };
   let promise = null;
   // Cold start overlaps card-name extraction instead of sitting in front of the planner.
   if (enabled && !engine && env.ENGINE_REPRO_URL) {
@@ -99,18 +105,23 @@ export function createEngineReproSession({
     const auditId = await auditIdPromise;
     if (!auditId) return;
     const prefix = keyPrefix(env);
-    record.timings.mainEvidenceReadyAtMs = state.mainEvidenceReadyAtMs;
-    await command(env, fetchImpl, ["SET", `${prefix}:result:${auditId}`, storedRecord(record), "EX", RESULT_TTL_SECONDS]);
-    // When the answer completed first, its completion time is already stored (see attachEngineReproAtMainCompletion).
+    // The waiting answer polls for this key, so one failed write is retried once.
+    const writeResult = () => command(env, fetchImpl, ["SET", `${prefix}:result:${auditId}`, storedRecord(record), "EX", RESULT_TTL_SECONDS]);
+    await writeResult().catch(writeResult);
+    // When the answer completed first, its completion time is already stored (see
+    // awaitEngineReproAtMainCompletion): the difference is how long the response waited for this.
     const storedMain = await command(env, fetchImpl, ["GET", `${prefix}:main:${auditId}`]).catch(() => null);
-    const mainAt = storedMain ? JSON.parse(storedMain).mainCompletedAtMs : null;
-    if (mainAt !== null && record.timings.finishedAtMs > mainAt) {
-      record.latencyDefect = { reproFinishedAtMs: record.timings.finishedAtMs, mainCompletedAtMs: mainAt,
-        overshootMs: record.timings.finishedAtMs - mainAt };
+    const main = storedMain ? JSON.parse(storedMain) : null;
+    if (main && record.timings.finishedAtMs > main.mainCompletedAtMs) {
+      record.answerDelay = { mainCompletedAtMs: main.mainCompletedAtMs, reproFinishedAtMs: record.timings.finishedAtMs,
+        delayMs: record.timings.finishedAtMs - main.mainCompletedAtMs };
+      if (Number.isFinite(main.gaveUpAtMs) && record.timings.finishedAtMs > main.gaveUpAtMs) {
+        record.answerDelay.waitTimedOutAtMs = main.gaveUpAtMs;
+      }
       await command(env, fetchImpl, ["SET", `${prefix}:result:${auditId}`, storedRecord(record), "EX", RESULT_TTL_SECONDS]);
     }
     await saveAudit?.(auditId, { engineRepro: { status: record.summary?.status, reasonCodes: record.summary?.reasonCodes,
-      flags: record.summary?.flags, timings: record.timings, latencyDefect: record.latencyDefect || null,
+      flags: record.summary?.flags, timings: record.timings, answerDelay: record.answerDelay || null,
       plannerCalls: (record.planRaw || []).length, rendered: String(record.rendered || "").slice(0, 12000) } });
   };
 
@@ -119,12 +130,6 @@ export function createEngineReproSession({
     requestStartedAt,
     state,
     get promise() { return promise; },
-
-    // Called by the main pipeline when its evidence is ready and only final generation remains.
-    onEvidenceReady() {
-      if (!enabled || state.mainEvidenceReadyAtMs !== null) return;
-      state.mainEvidenceReadyAtMs = clock();
-    },
 
     // Called by the main pipeline once card resolution and card texts are ready.
     onCardTextsReady({ question, cardResolution, groupMentions = [], cards = [] }) {
@@ -140,7 +145,6 @@ export function createEngineReproSession({
           await lim.admit();
           return await runEngineReproduction({
             question, identity, cardsById, cidMap: cidMap || loadCidMap(), clock,
-            allowRepair: () => state.mainEvidenceReadyAtMs === null,
             planner: planner || plannerFromEnv(env),
             engine: engine || createHttpEngineClient({ baseUrl: env.ENGINE_REPRO_URL, secret: env.ENGINE_REPRO_SECRET, fetchImpl }),
             modelCall: modelCall || createOfficialModelCall({ env, limits: lim, fetchImpl }),
@@ -168,24 +172,42 @@ export function createEngineReproSession({
   };
 }
 
-// The only delivery mechanism, the same for every channel and request shape: at the moment the
-// answer completes, record that time and read the stored reproduction result exactly once.
-export async function readEngineReproAtMainCompletion({ env, auditId, requestStartedAt, fetchImpl = globalThis.fetch,
-  now = Date.now, command = redisCommand }) {
+// The only delivery mechanism, the same for every channel and request shape: when the answer
+// completes, record that time, then wait (polling the stored result by history-record id) until
+// the reproduction's result is there. A reproduction that never started is not waited for.
+const defaultSleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+export async function awaitEngineReproAtMainCompletion({ env, auditId, requestStartedAt, waitDeadlineAt,
+  pollMs = 300, fetchImpl = globalThis.fetch, now = Date.now, sleep = defaultSleep, command = redisCommand }) {
   if (!auditId) return null;
   const prefix = keyPrefix(env);
   const mainCompletedAtMs = now() - requestStartedAt;
-  await command(env, fetchImpl, ["SET", `${prefix}:main:${auditId}`, JSON.stringify({ mainCompletedAtMs }), "EX", RESULT_TTL_SECONDS])
-    .catch(() => null);
-  const stored = await command(env, fetchImpl, ["GET", `${prefix}:result:${auditId}`]).catch(() => null);
-  if (stored) return { ...sectionFromRecord(JSON.parse(stored)), mainCompletedAtMs };
+  const mainKey = `${prefix}:main:${auditId}`;
+  await command(env, fetchImpl, ["SET", mainKey, JSON.stringify({ mainCompletedAtMs }), "EX", RESULT_TTL_SECONDS]).catch(() => null);
+  const read = async () => {
+    const stored = await command(env, fetchImpl, ["GET", `${prefix}:result:${auditId}`]).catch(() => null);
+    return stored ? JSON.parse(stored) : null;
+  };
+  const done = (record) => ({ ...sectionFromRecord(record), mainCompletedAtMs,
+    waitedMs: Math.max(0, now() - requestStartedAt - mainCompletedAtMs) });
+  let record = await read();
+  if (record) return done(record);
   const started = await command(env, fetchImpl, ["GET", `${prefix}:started:${auditId}`]).catch(() => null);
   if (!started) return null;   // the reproduction never started for this question
   const startedAtMs = JSON.parse(started).startedAtMs;
-  return { status: "pending", elapsedMs: mainCompletedAtMs - startedAtMs, startedAtMs, mainCompletedAtMs };
+  while (now() < waitDeadlineAt) {
+    await sleep(Math.min(pollMs, Math.max(0, waitDeadlineAt - now())));
+    record = await read();
+    if (record) return done(record);
+  }
+  const gaveUpAtMs = now() - requestStartedAt;
+  await command(env, fetchImpl, ["SET", mainKey, JSON.stringify({ mainCompletedAtMs, gaveUpAtMs }), "EX", RESULT_TTL_SECONDS])
+    .catch(() => null);
+  return { status: "timeout", startedAtMs, mainCompletedAtMs, gaveUpAtMs,
+    elapsedMs: gaveUpAtMs - startedAtMs, waitedMs: gaveUpAtMs - mainCompletedAtMs };
 }
 
-export async function attachEngineReproAtMainCompletion(answer, options) {
-  const section = await readEngineReproAtMainCompletion(options).catch(() => null);
+export async function attachEngineReproWhenReady(answer, options) {
+  const section = await awaitEngineReproAtMainCompletion(options).catch(() => null);
   return appendEngineReproSection(answer, section);
 }

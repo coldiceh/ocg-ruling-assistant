@@ -68,7 +68,7 @@ const latency = [];
 for (const r of records) {
   if (r.error || !r.metrics) continue;
   const calls = (stage) => r.metrics.modelCalls.filter((c) => c.stage === stage).map((c) => ({ ...c, paid: paidOf(c) }));
-  const fmt = (cs) => cs.map((c) => `${((c.paid?.ms ?? c.ms) / 1000).toFixed(1)} s / ${c.output ?? "?"} tok${c.servedTier ? ` (${c.servedTier})` : ""}`).join("；") || "—";
+  const fmt = (cs) => cs.map((c) => `${((c.paid?.ms ?? c.ms) / 1000).toFixed(1)} s / ${c.output ?? "?"} tok`).join("；") || "—";
   const plan = calls("plan");
   const repair = calls("repair");
   const totalMs = sum([...plan, ...repair].map((c) => c.paid?.ms ?? c.ms)) + (r.metrics.engineMs || 0);
