@@ -126,3 +126,53 @@ test("own daily budget bucket: refusal fails the reproduction closed", async () 
   assert.equal(record.summary.status, "未复现");
   assert.deepEqual(record.summary.reasonCodes, ["budget_exceeded"]);
 });
+
+test("answer service wiring: the pipeline gets the observer and the finished section follows the answer", async () => {
+  const { answerPublicRulingQuestion } = await import("../backend/publicAnswerService.mjs");
+  const redis = fakeRedis();
+  const clockRef = { t: 0 };
+  let observed = null;
+  const result = await answerPublicRulingQuestion({
+    payload: { question: "Synthetic question" },
+    env: { MODEL_PROVIDER: "mock", UPSTASH_REDIS_REST_URL: "https://redis.example.test", UPSTASH_REDIS_REST_TOKEN: "t",
+      ENGINE_REPRO_ENABLED: "true" },
+    engineReproAdmin: true,
+    appendAudit: async () => ({ entry: { id: "audit-w" } }),
+    updateAudit: async () => ({ updated: true }),
+    assetsResident: () => true,
+    classifyScope: async () => ({ scope: "in_scope", confidence: "high" }),
+    readRiskControl: async () => ({ ok: true, active: false }),
+    preloadAssets: () => ({}),
+    createEngineRepro: (options) => {
+      const made = makeSession({ delayMs: 1, clockRef, redis });
+      observed = { options, made };
+      return made.session;
+    },
+    answerRuling: async (options) => {
+      assert.equal(typeof options.onCardTextsReady, "function");
+      options.onCardTextsReady({ question: "Synthetic question", cardResolution, cards });
+      await Promise.all(observed.made.pending);
+      return { shortAnswer: "Synthetic ruling" };
+    },
+  });
+  assert.equal(observed.options.isAdmin, true);
+  assert.match(result.answer.shortAnswer, /^Synthetic ruling\n\n【引擎复现/u);
+  assert.equal(result.answer.engineRepro.status, "done");
+});
+
+test("answer service wiring: without an admin session the pipeline gets no observer", async () => {
+  const { answerPublicRulingQuestion } = await import("../backend/publicAnswerService.mjs");
+  const result = await answerPublicRulingQuestion({
+    payload: { question: "Synthetic question" },
+    env: { MODEL_PROVIDER: "mock", ENGINE_REPRO_ENABLED: "true" },
+    appendAudit: async () => null, assetsResident: () => true, preloadAssets: () => ({}),
+    classifyScope: async () => ({ scope: "in_scope", confidence: "high" }),
+    readRiskControl: async () => ({ ok: true, active: false }),
+    answerRuling: async (options) => {
+      assert.equal(options.onCardTextsReady, undefined);
+      return { shortAnswer: "Synthetic ruling" };
+    },
+  });
+  assert.equal(result.answer.shortAnswer, "Synthetic ruling");
+  assert.equal(result.answer.engineRepro, undefined);
+});
