@@ -17,7 +17,7 @@ import { parseArgs } from "node:util";
 import { classifyPublicQueryScope } from "../backend/publicQueryScopeClassifier.mjs";
 import { startCardNameExtraction } from "../backend/ragRulingPipeline.mjs";
 import { createModelRunner } from "../backend/engineRepro/modelCalls.mjs";
-import { FILLER_CARDS, PLANNER_INSTRUCTIONS, PROMPT_VERSION, buildPlannerInput, buildRepairInput } from "../backend/engineRepro/plannerPrompt.mjs";
+import { FILLER_CARDS, PLANNER_INSTRUCTIONS, PROMPT_VERSION, TOOL_CARD_CODES, buildPlannerInput, buildRepairInput } from "../backend/engineRepro/plannerPrompt.mjs";
 import { STATUS, aggregateQuestion, renderQuestion } from "../backend/engineRepro/aggregate.mjs";
 
 const HERE = resolve(new URL(".", import.meta.url).pathname, "..");
@@ -273,8 +273,13 @@ async function processQuestion(q) {
       effectText: raw.effectText || "", pendulumEffectText: raw.pendulumEffectText || "" };
   });
   record.cards = cards.map((c) => ({ code: c.code, cid: c.cid, engineName: c.engineName, mentionedAs: c.mentionedAs }));
-  const allowed = [...codes, ...FILLER_CARDS.map((c) => c.code)];
-  const plannerInput = buildPlannerInput({ question: q.text, cards, includeOfficialQa: args["include-official-qa"] });
+  const relatedCards = engine({ op: "related", codes }).related;
+  const toolCards = engine({ op: "cards", codes: [...TOOL_CARD_CODES], with_text: true }).cards
+    .map((c) => ({ code: c.code, name: c.name, types: c.types.join("/"), text: c.text }));
+  record.relatedRefs = relatedCards.map((e) => ({ ref: e.ref, kind: e.kind, total: e.total ?? e.cards.length, shown: e.cards.length }));
+  const allowed = [...codes, ...FILLER_CARDS.map((c) => c.code), ...TOOL_CARD_CODES,
+    ...relatedCards.flatMap((e) => e.cards.map((c) => c.code))];
+  const plannerInput = buildPlannerInput({ question: q.text, cards, relatedCards, toolCards, includeOfficialQa: args["include-official-qa"] });
   // 4. plan (call 1)
   record.plannerCalled = true;
   const r1 = await modelCall({ qid: q.qid, stage: "plan", model: planner.model, instructions: PLANNER_INSTRUCTIONS,

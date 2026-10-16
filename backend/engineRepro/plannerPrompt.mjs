@@ -16,6 +16,10 @@ export const FILLER_CARDS = Object.freeze([
   { code: 89631139, name: "青眼白龙", note: "通常怪兽 8星 光/龙 3000/2500" },
 ]);
 
+// Generic tool cards shared by every question (fixed list; engine text is attached at run time).
+export const TOOL_CARD_CODES = Object.freeze([83764718, 81439173, 5318639, 8267140, 53129443, 12580477, 94192409,
+  14087893, 41420027, 4206964, 72892473]);
+
 const REASON_CODES = ["pure_rule", "archetype_level", "tournament_policy", "ruleset_version"];
 
 export const PLANNER_INSTRUCTIONS = [
@@ -44,11 +48,12 @@ export const PLANNER_INSTRUCTIONS = [
   "- archetype_level：问一整个字段的卡（例如“斩机怪兽”），而不是具体某张卡；archetype_name 填字段名。不要挑一张卡代表整个字段。",
   "- tournament_policy：比赛规程、裁判处理、判罚。",
   "- ruleset_version：题面明确提到 TCG、历史时点、旧卡文或禁限表时才用。用英文或日文提问不等于问 TCG。",
-  "涉及具体卡、但前置状态搭不出来（处于伤害步骤中、本回合已通常召唤、本回合刚盖放、已用过每回合一次、连锁进行中、“之前曾经……”）不是 not_applicable：判 applicable，能用 setup 动作打出来就打出来，打不出来就在该子问题 unrepresentable 写明是哪个前置条件、branches 为空。不得用近似局面冒充。",
+  "涉及具体卡、但前置状态搭不出来（处于伤害步骤中、本回合已通常召唤、本回合刚盖放、已用过每回合一次、连锁进行中、“之前曾经……”）不是 not_applicable：判 applicable。",
+  "题目结论依赖的前置条件（例如“刚盖放”“本回合已召唤”“某效果已发动并处理完”“处于某个连锁或时点”）要用 setup 动作打出来；与结论无关的来历（怪兽怎么上的场、卡是哪个回合盖的）可以直接预置，并写进 assumptions。缺少辅助卡时先从“相关卡”“通用工具卡”里找，再考虑 extra_cards。确实无法打出时才在该子问题 unrepresentable 写明是哪个前置条件、branches 为空。不得用会改变结论的近似局面冒充。",
   "一题多问：拆成多个 sub_questions，各自搭局面。某个假设会改变结论时，最多 2 个分支（同一子问题下），各分支写清 assumption；不要选优或合并。",
   "",
   "## 卡号",
-  "只能使用：①“题目中的卡”列出的卡号；②“填充卡”列出的卡号；③你在 extra_cards 里写明卡号和引擎卡库正式名的其他卡（会被逐字核对，不一致即失败，不要凭模糊记忆写卡号）。题面没有点名、只需要“一只怪兽”时用填充卡，并写进 assumptions。",
+  "只能使用：①“题目中的卡”；②“填充卡”；③“相关卡”（从题目卡的卡文里按「」名称机械取出的卡与字段成员）；④“通用工具卡”；⑤你在 extra_cards 里写明卡号和引擎卡库正式名的其他卡（会被逐字核对，写错算失败）。题面没有点名、只需要“一只怪兽”时用填充卡，并写进 assumptions。",
   "",
   "## scenario（局面）",
   "格式：{\"schema\":\"ocg-repro-scenario/v1\",\"seed\":整数,\"first_player\":0或1,\"players\":[P0,P1]}。P0 = 提问者（“我/我方/自己”），P1 = 对方。题目说“对方回合”时 first_player=1。",
@@ -88,12 +93,14 @@ export const PLANNER_INSTRUCTIONS = [
 
 export const PROMPT_VERSION = createHash("sha256").update(PLANNER_INSTRUCTIONS).digest("hex").slice(0, 12);
 
-export function buildPlannerInput({ question, cards, includeOfficialQa = false, officialQa = [] }) {
+export function buildPlannerInput({ question, cards, relatedCards = [], toolCards = [], includeOfficialQa = false, officialQa = [] }) {
   const parts = ["## 题目（原文）", question, "", "## 题目中的卡（身份已确认）"];
   for (const card of cards) {
     parts.push(JSON.stringify(compactCard(card)));
   }
   parts.push("", "## 填充卡", JSON.stringify(FILLER_CARDS));
+  if (relatedCards.length) parts.push("", "## 相关卡", ...relatedCards.map((item) => JSON.stringify(item)));
+  if (toolCards.length) parts.push("", "## 通用工具卡", ...toolCards.map((item) => JSON.stringify(item)));
   if (includeOfficialQa && officialQa.length) {
     parts.push("", "## 相关官方 Q&A（消融开关打开时才提供）", ...officialQa.map((item) => JSON.stringify(item)));
   }
