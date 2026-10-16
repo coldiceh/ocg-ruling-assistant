@@ -43,10 +43,12 @@ test("saved preparations cannot have their evidence selector replaced", () => {
   }
 });
 
-test("new requests default to Decisions and isolate explicit Luna from other requests", async () => {
-  const env = { MODEL_PROVIDER: "mock", EVIDENCE_SELECTOR: "luna" };
+// 2026-10-16 规则变更: the public default is Luna again; Decisions stays selectable.
+// The deployment env value differs from the default to show it cannot replace it.
+test("new requests default to Luna and isolate an explicit choice from other requests", async () => {
+  const env = { MODEL_PROVIDER: "mock", EVIDENCE_SELECTOR: "decisions" };
   for (const prepareForContinuation of [false, true]) {
-    for (const requested of [undefined, "luna", "decisions", undefined]) {
+    for (const requested of [undefined, "decisions", "luna", "decisions", undefined]) {
       let seen;
       await answerPublicRulingQuestion({
         payload: { question: "Synthetic question", ...(requested ? { evidenceSelector: requested } : {}) },
@@ -60,19 +62,19 @@ test("new requests default to Decisions and isolate explicit Luna from other req
           return { status: "evidence_prepared", shortAnswer: "Synthetic answer" };
         },
       });
-      assert.equal(seen.env.EVIDENCE_SELECTOR, requested || "decisions");
+      assert.equal(seen.env.EVIDENCE_SELECTOR, requested || "luna");
       assert.equal(seen.prepareForContinuation, prepareForContinuation ? true : undefined);
-      assert.equal(env.EVIDENCE_SELECTOR, "luna");
+      assert.equal(env.EVIDENCE_SELECTOR, "decisions");
     }
   }
 });
 
 test("public capabilities expose the default and both evidence selectors", async () => {
   const info = await getPublicAnswerModelInfo({ env: { MODEL_PROVIDER: "mock" } });
-  assert.equal(info.defaultEvidenceSelector, "decisions");
+  assert.equal(info.defaultEvidenceSelector, "luna");
   assert.deepEqual(info.evidenceSelectors, [
-    { id: "decisions", label: "Decisions" },
     { id: "luna", label: "Luna" },
+    { id: "decisions", label: "Decisions" },
   ]);
 });
 
@@ -104,7 +106,7 @@ test("only Decisions receives its dedicated key after public model environment s
       },
     });
     assert.equal(actualEnv.OPENAI_DECISIONS_API_KEY,
-      evidenceSelector === "luna" ? undefined : env.OPENAI_DECISIONS_API_KEY);
+      evidenceSelector === "decisions" ? env.OPENAI_DECISIONS_API_KEY : undefined);
     assert.equal(actualEnv.BAI_API_KEY, env.BAI_API_KEY);
     for (const key of ["OPENAI_API_KEY", "OPENAI_BASE_URL", "OCG_FINAL_OPENAI_API_KEY",
       "GLM_API_KEY", "KIMI_API_KEY", "RELAY_API_KEY", "ADMIN_API_KEY"]) {

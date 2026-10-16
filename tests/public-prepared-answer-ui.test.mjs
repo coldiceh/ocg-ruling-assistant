@@ -122,7 +122,7 @@ test("prepare/finalize sends the exact two body shapes in serial order", async (
     question: "Synthetic question",
     mode: "rag",
     rulingModelProfile: "official-astra-low",
-    evidenceSelector: "decisions",
+    evidenceSelector: "luna",
     rulingVersion: "latest",
     answerLocale: "ja",
     action: "prepare",
@@ -208,7 +208,7 @@ test("prepare-only sends one prepare request and retains the downloadable packag
   assert.equal(result.kind, "prepared");
   assert.equal(requests.length, 1);
   assert.equal(requests[0].action, "prepare");
-  assert.equal(requests[0].evidenceSelector, "decisions");
+  assert.equal(requests[0].evidenceSelector, "luna");
   assert.deepEqual(clientInstance.getPreparedEvidencePackage(), evidencePackage);
 });
 
@@ -228,14 +228,17 @@ test("Luna choice reaches both evidence-only and complete workflows without a fi
   }
 });
 
-test("the evidence selector defaults to Decisions and is labeled in all supported languages", async () => {
+// 2026-10-16 规则变更: Luna selection (b.ai relay) is the default again and
+// Decisions (official API) is the alternative; the 2026-10-14 hidden-Luna
+// contract is superseded.
+test("the evidence selector defaults to Luna and is labeled in all supported languages", async () => {
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
   assert.match(html, /<label[^>]+for="evidenceSelector"/u);
-  assert.match(html, /value="decisions" selected>Decisions（默认）/u);
-  // 2026-10-14: Luna selection runs only on b.ai, so the option is hidden
-  // while every public step uses the official API (the backend still accepts it).
-  assert.doesNotMatch(html, /<option value="luna">/u);
-  assert.match(app, /evidenceSelector: ui\.evidenceSelector\?\.value \|\| "decisions"/u);
+  assert.match(html, /value="luna" selected>Luna（默认）/u);
+  assert.match(html, /<option id="evidenceSelectorDecisions" value="decisions">Decisions<\/option>/u);
+  assert.match(app, /evidenceSelector: ui\.evidenceSelector\?\.value \|\| "luna"/u);
+  assert.match(app, /"Luna（默认）": "Luna \(default\)"/u);
+  assert.match(app, /"Luna（默认）": "Luna（既定）"/u);
   assert.match(app, /"准备证据": "Evidence preparation"/u);
   assert.match(app, /"准备证据": "根拠資料の準備"/u);
   const pendingSource = app.slice(app.indexOf("function setQueryPending"), app.indexOf("function syncRulingVersionButtons"));

@@ -16,7 +16,7 @@ const uiTranslations = {
     "给项目 Star": "Star on GitHub",
     "输入问题": "Ask a question", "输入卡片、场面、连锁和需要判断的处理节点。": "Describe the cards, game state, Chain, and decision point.",
     "裁定模型": "Ruling model", "裁定流程": "Ruling process", "准备就绪": "Ready", "仅准备证据包": "Prepare evidence only",
-    "准备证据": "Evidence preparation", "Decisions（默认）": "Decisions (default)",
+    "准备证据": "Evidence preparation", "Luna（默认）": "Luna (default)",
     "查询": "Ask", "查询中…": "Working…", "证据包已准备": "Evidence prepared", "下载证据包": "Download evidence",
     "裁定结论": "Ruling", "未分析": "Not analyzed", "理由": "Reasoning", "相关卡片": "Related cards",
     "资料来源": "Sources", "风险提示": "Cautions", "最终裁定今日额度": "Today's ruling allowance",
@@ -40,7 +40,7 @@ const uiTranslations = {
     "给项目 Star": "GitHub で Star",
     "输入问题": "質問を入力", "输入卡片、场面、连锁和需要判断的处理节点。": "カード、盤面、チェーン、判断したい処理を入力してください。",
     "裁定模型": "裁定モデル", "裁定流程": "裁定の進行", "准备就绪": "準備完了", "仅准备证据包": "根拠資料のみ準備",
-    "准备证据": "根拠資料の準備", "Decisions（默认）": "Decisions（既定）",
+    "准备证据": "根拠資料の準備", "Luna（默认）": "Luna（既定）",
     "查询": "質問する", "查询中…": "処理中…", "证据包已准备": "根拠資料の準備完了", "下载证据包": "根拠資料をダウンロード",
     "裁定结论": "裁定結果", "未分析": "未分析", "理由": "理由", "相关卡片": "関連カード",
     "资料来源": "参照資料", "风险提示": "注意事項", "最终裁定今日额度": "本日の裁定枠",
@@ -139,7 +139,7 @@ function applyUiLocale(locale) {
     ".brand-block h1": "游戏王 OCG AI裁定",
     "#askTitle": "输入问题", ".panel-head p": "输入卡片、场面、连锁和需要判断的处理节点。",
     ".model-tier-label span": "裁定模型", ".model-strip span": "裁定流程",
-    "#evidenceSelectorLabel": "准备证据", "#evidenceSelectorDefault": "Decisions（默认）",
+    "#evidenceSelectorLabel": "准备证据", "#evidenceSelectorDefault": "Luna（默认）",
     "#prepareEvidenceButton": "仅准备证据包", "#evidencePackageTitle": "证据包已准备",
     "#evidencePackageDownload": "下载证据包", ".verdict-block .block-title span": "裁定结论",
     "#sourcesTitle": "资料来源", "#questionsTitle": "风险提示", "#cardsTitle": "相关卡片",
@@ -864,7 +864,7 @@ async function analyzeQuestion({ prepareOnly = false } = {}) {
     try {
       const answer = await requestBackendAnswer(text, requestedRulingVersion, {
         answerLocale,
-        evidenceSelector: ui.evidenceSelector?.value || "decisions",
+        evidenceSelector: ui.evidenceSelector?.value || "luna",
         signal: abortController.signal,
         requestId,
         prepareOnly,
@@ -896,7 +896,7 @@ async function analyzeQuestion({ prepareOnly = false } = {}) {
 
 async function requestBackendAnswer(text, requestedRulingVersion, {
   answerLocale = "zh-CN",
-  evidenceSelector = "decisions",
+  evidenceSelector = "luna",
   signal,
   requestId = null,
   prepareOnly = false,

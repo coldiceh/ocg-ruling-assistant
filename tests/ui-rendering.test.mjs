@@ -538,7 +538,7 @@ test("versioned backend answers require a matching server confirmation", async (
     question: "问题",
     mode: "rag",
     rulingModelProfile: "deepseek-v4-flash-high",
-    evidenceSelector: "decisions",
+    evidenceSelector: "luna",
     rulingVersion: "latest",
     answerLocale: "zh-CN",
     action: "prepare",

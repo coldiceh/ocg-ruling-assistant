@@ -80,8 +80,9 @@
             <label class="model-tier-label evidence-selector-label" for="evidenceSelector">
               <span id="evidenceSelectorLabel">准备证据</span>
               <select id="evidenceSelector">
-                <option id="evidenceSelectorDefault" value="decisions" selected>Decisions（默认）</option>
-                <!-- Luna selection runs on b.ai only; hidden while every public step uses the official API. -->
+                <!-- 2026-10-16: Luna selection (b.ai relay) is the default again; Decisions (official API) stays selectable. -->
+                <option id="evidenceSelectorDefault" value="luna" selected>Luna（默认）</option>
+                <option id="evidenceSelectorDecisions" value="decisions">Decisions</option>
               </select>
             </label>
             <div class="model-strip" aria-live="polite">

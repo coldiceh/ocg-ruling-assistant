@@ -44,8 +44,8 @@ export const PUBLIC_ANSWER_REQUEST_BODY_LIMIT_BYTES = 64 * 1024;
 const CLOUD_BUDGET_PROVIDERS = new Set(["relay", "openai", "bai", "deepseek", "glm"]);
 export const PUBLIC_ANSWER_QUESTION_LIMIT_CHARACTERS = 12_000;
 export const PUBLIC_ANSWER_LOCALES = Object.freeze(["zh-CN", "en", "ja"]);
-export const PUBLIC_EVIDENCE_SELECTORS = Object.freeze(["decisions", "luna"]);
-export const DEFAULT_PUBLIC_EVIDENCE_SELECTOR = "decisions";
+export const PUBLIC_EVIDENCE_SELECTORS = Object.freeze(["luna", "decisions"]);
+export const DEFAULT_PUBLIC_EVIDENCE_SELECTOR = "luna";
 // The public exact-question shortcut is temporarily disabled. Keep the
 // underlying matcher and pipeline available for internal evaluation and a
 // future, explicitly reviewed re-enable.
