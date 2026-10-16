@@ -3,7 +3,7 @@
 //
 //   node scripts/engine-repro-batch.mjs --questions FILE --out DIR --only S01,S02 \
 //        --engine-repo PATH_TO_OCG_SIM_CORE [--key-file FILE | --mock DIR] [--budget-usd 8] \
-//        [--planner-model gpt-6-astra] [--planner-effort low] [--planner-max-output 2000] \
+//        [--planner-model gpt-6-luna] [--planner-effort low] [--planner-max-output 2000] \
 //        [--planner-max-input 8000] [--include-official-qa]
 //
 // Per question: scope check (reused) -> card extraction + canonical names (reused; official Q&A
@@ -25,7 +25,7 @@ const { values: args } = parseArgs({ options: {
   questions: { type: "string" }, out: { type: "string" }, only: { type: "string" },
   "engine-repo": { type: "string" }, "engine-root": { type: "string" },
   "key-file": { type: "string" }, mock: { type: "string" }, "budget-usd": { type: "string", default: "0" },
-  "planner-model": { type: "string", default: "gpt-6-astra" }, "planner-effort": { type: "string", default: "low" },
+  "planner-model": { type: "string", default: "gpt-6-luna" }, "planner-effort": { type: "string", default: "low" },
   "planner-max-output": { type: "string", default: "2000" }, "planner-max-input": { type: "string", default: "8000" },
   "include-official-qa": { type: "boolean", default: false }, "cid-map": { type: "string" },
 } });

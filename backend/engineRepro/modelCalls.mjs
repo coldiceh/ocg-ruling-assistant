@@ -14,6 +14,8 @@ export const OFFICIAL_RESPONSES_URL = "https://api.openai.com/v1/responses";
 export const PRICES_USD_PER_MTOK = Object.freeze({
   "gpt-6-astra": { input: 10, cached: 1, cacheWrite: 12.5, output: 50 },
   "gpt-6-luna": { input: 0.10, cached: 0.01, cacheWrite: 0.125, output: 0.50 },
+  "gpt-6-sol": { input: 2, cached: 0.20, cacheWrite: 2.5, output: 10 },
+  "gpt-6.1-sol": { input: 2, cached: 0.10, cacheWrite: 2.5, output: 10 },
 });
 
 export function usageCostUsd(model, usage) {
