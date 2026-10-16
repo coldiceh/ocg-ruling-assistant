@@ -1,5 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "ignoreCommand": "echo \"$VERCEL_GIT_COMMIT_MESSAGE\" | grep -q '\\[vercel skip\\]'",
   "buildCommand": "pnpm run build:vercel",
   "outputDirectory": "public",
   "env": {
