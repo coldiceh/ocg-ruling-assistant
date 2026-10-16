@@ -6,7 +6,7 @@ import { spawn } from "node:child_process";
 export function createHttpEngineClient({ baseUrl, secret, fetchImpl = globalThis.fetch, timeoutMs = 30000 }) {
   const root = String(baseUrl || "").replace(/\/+$/u, "");
   if (!/^https?:\/\//u.test(root)) throw Object.assign(new Error("engine_repro_url_invalid"), { code: "engine_repro_not_configured" });
-  return async function engine(op, body) {
+  const engine = async function engine(op, body) {
     const response = await fetchImpl(`${root}/v1/${op}`, {
       method: "POST", redirect: "error",
       headers: { "content-type": "application/json", "x-engine-secret": String(secret || "") },
@@ -21,10 +21,21 @@ export function createHttpEngineClient({ baseUrl, secret, fetchImpl = globalThis
     }
     return payload;
   };
+  engine.cacheKey = `http:${root}`;
+  return engine;
+}
+
+// Wake the engine service (Cloud Run cold start) without waiting for it; GET /health needs no secret.
+export function warmHttpEngine({ baseUrl, fetchImpl = globalThis.fetch, timeoutMs = 20000 }) {
+  const root = String(baseUrl || "").replace(/\/+$/u, "");
+  if (!/^https?:\/\//u.test(root)) return Promise.resolve(false);
+  return Promise.resolve()
+    .then(() => fetchImpl(`${root}/health`, { method: "GET", redirect: "error", signal: AbortSignal.timeout(timeoutMs) }))
+    .then((response) => Boolean(response?.ok), () => false);
 }
 
 export function createLocalEngineClient({ repo, root }) {
-  return function engine(op, body) {
+  const engine = function engine(op, body) {
     return new Promise((resolvePromise, reject) => {
       const child = spawn("python3", ["-m", "ocgrepro", "api"], { cwd: repo,
         env: { PATH: process.env.PATH, OCG_REPRO_ROOT: root, LANG: "C.UTF-8" } });
@@ -40,4 +51,6 @@ export function createLocalEngineClient({ repo, root }) {
       child.stdin.end(JSON.stringify({ ...body, op }));
     });
   };
+  engine.cacheKey = `local:${repo}:${root}`;
+  return engine;
 }

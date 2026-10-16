@@ -16,7 +16,7 @@ export const REASON_ZH = Object.freeze({
 
 const FLAG_ZH = Object.freeze({
   with_assumptions: "含补充假设", branched: "分支", random_dependent: "依赖随机结果", what_not_why: "问“为什么”",
-  archetype_unverified: "字段名未核实",
+  archetype_unverified: "字段名未核实", repair_skipped: "修复因时限跳过（主回答已进入生成）",
 });
 
 // One branch result -> {ok, reason}
@@ -32,8 +32,9 @@ export function aggregateQuestion(record) {
   // pre-planner outcomes
   if (record.preStatus) return { status: record.preStatus.status, reasonCodes: [record.preStatus.reason], flags: [] };
   const plan = record.plan;
-  if (!plan) return { status: STATUS.FAIL, reasonCodes: [record.planFailure || "invalid_input"], flags: [] };
-  const flags = new Set();
+  const skipped = record.repairSkipped ? ["repair_skipped"] : [];
+  if (!plan) return { status: STATUS.FAIL, reasonCodes: [record.planFailure || "invalid_input"], flags: skipped };
+  const flags = new Set(skipped);
   if (plan.what_not_why === true) flags.add("what_not_why");
   if (plan.applicability === "not_applicable") {
     if (plan.reason_code === "archetype_level" && record.archetypeVerified === false) flags.add("archetype_unverified");

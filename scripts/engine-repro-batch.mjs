@@ -7,7 +7,8 @@
 //   OPENAI key: read from ENGINE_REPRO_OPENAI_API_KEY / OPENAI_DECISIONS_API_KEY / RAG_CARD_OPENAI_API_KEY
 //   node scripts/engine-repro-batch.mjs --questions FILE --out DIR --only S01,S02 \
 //        (--engine-repo PATH_TO_OCG_SIM_CORE | --engine-url URL with ENGINE_REPRO_SECRET) [--mock DIR] \
-//        [--budget-usd 2] [--planner-model gpt-6.1-sol] [--planner-effort low] [--planner-max-output 2000]
+//        [--budget-usd 2] [--planner-model gpt-6.1-sol] [--planner-effort low] [--planner-max-output 1600]
+//        [--service-tier priority]   (Fast mode; standard processing when omitted)
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
@@ -28,6 +29,7 @@ const { values: args } = parseArgs({ options: {
   "planner-max-output": { type: "string", default: String(DEFAULT_PLANNER.maxOutput) },
   "planner-max-input": { type: "string", default: String(DEFAULT_PLANNER.maxInput) },
   "include-official-qa": { type: "boolean", default: false },
+  "service-tier": { type: "string", default: "" },
 } });
 
 const outDir = resolve(args.out);
@@ -37,7 +39,8 @@ const only = args.only ? new Set(args.only.split(",").map((s) => s.trim())) : nu
 const cidMap = JSON.parse(readFileSync(join(HERE, "data", "engine-repro", "cid-passcode-map.json"), "utf8")).map;
 const allCards = JSON.parse(readFileSync(join(HERE, "data", "cards.json"), "utf8")).records;
 const planner = { model: args["planner-model"], effort: args["planner-effort"],
-  maxOutput: Number(args["planner-max-output"]), maxInput: Number(args["planner-max-input"]) };
+  maxOutput: Number(args["planner-max-output"]), maxInput: Number(args["planner-max-input"]),
+  serviceTier: ["priority", "fast"].includes(args["service-tier"]) ? args["service-tier"] : null };
 const LUNA = "gpt-6-luna";
 const engine = args["engine-url"]
   ? createHttpEngineClient({ baseUrl: args["engine-url"], secret: process.env.ENGINE_REPRO_SECRET })
@@ -75,7 +78,8 @@ const calls = [];
 async function cachedCall(qid, opts) {
   const result = await runner.call({ qid, ...opts });
   calls.push({ qid, stage: opts.stage, model: opts.model, cacheHit: result.cacheHit, bodyHash: result.bodyHash,
-    status: result.status, usage: result.usage, costUsd: result.costUsd, ms: result.ms });
+    status: result.status, usage: result.usage, costUsd: result.costUsd, ms: result.ms,
+    servedTier: result.servedTier || null });
   return result;
 }
 
@@ -129,7 +133,7 @@ function finish(record, t0) {
     modelCalls: mine.map((c) => ({ stage: c.stage, model: c.model, cacheHit: c.cacheHit, bodyHash: c.bodyHash, status: c.status,
       input: c.usage?.input_tokens ?? null, cached: c.usage?.input_tokens_details?.cached_tokens ?? null,
       output: c.usage?.output_tokens ?? null, reasoning: c.usage?.output_tokens_details?.reasoning_tokens ?? null,
-      costUsd: c.costUsd, ms: c.ms })),
+      costUsd: c.costUsd, ms: c.ms, servedTier: c.servedTier })),
     plannerCalls: mine.filter((c) => c.stage === "plan" || c.stage === "repair").length,
     engineMs: record.timings?.engineMs ?? 0,
   };

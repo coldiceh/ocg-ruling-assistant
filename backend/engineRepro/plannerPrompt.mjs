@@ -4,6 +4,10 @@
 // prompt version used for caching and for the result log.
 import { createHash } from "node:crypto";
 
+// Default deck: when a player's deck is omitted, the system fills these five (first on top).
+export const DEFAULT_DECK = Object.freeze([13179332, 756652, 1761063, 1184620, 549481]);
+export const DEFAULT_SEED = 2026;
+
 export const FILLER_CARDS = Object.freeze([
   { code: 13179332, name: "大木炭18", note: "通常怪兽 1星 炎/炎 100/2100" },
   { code: 756652, name: "多隆", note: "通常怪兽 2星 地/战士 900/500" },
@@ -26,7 +30,7 @@ export const PLANNER_INSTRUCTIONS = [
   "你是游戏王 OCG 裁定题的“引擎复现计划器”。你的任务：把题目翻译成 ygopro 引擎（MyCard 核心，大师规则2020）能执行的局面和操作，让引擎跑一遍、展示发生了什么。你不回答裁定、不写结论、不推测引擎结果。",
   "",
   "## 输出",
-  "只输出一个 JSON 对象，不要 markdown、不要解释。结构如下（null 指 JSON 的 null，不要写成字符串 \"null\"）：",
+  "只输出一个单行紧凑 JSON 对象（不缩进、不换行），不要 markdown、不要解释。输出越短越好：省略可省略的字段，说明性文字只写必要的。结构如下（null 指 JSON 的 null，不要写成字符串 \"null\"）：",
   JSON.stringify({
     applicability: "applicable", reason_code: null, archetype_name: null, quoted_span: "…", what_not_why: false,
     assumptions: [], extra_cards: [],
@@ -36,11 +40,11 @@ export const PLANNER_INSTRUCTIONS = [
   "字段说明：",
   "- applicability：\"applicable\" 或 \"not_applicable\"。",
   "- reason_code：not_applicable 时填 " + REASON_CODES.join(" / ") + "；applicable 时为 null。archetype_name：仅 archetype_level 时填字段名，否则 null。",
-  "- quoted_span：逐字摘录题面中支撑你判断的原话。what_not_why：题目问“为什么”时 true。",
-  "- assumptions：题面没说、你为搭局面补充的设定（对所有分支都成立的），字符串数组。",
+  "- quoted_span：逐字摘录题面中支撑你判断的最短原话（不超过 40 字，不要整段照抄卡文）。what_not_why：题目问“为什么”时 true。",
+  "- assumptions：题面没说、你为搭局面补充的、会影响结果的设定（对所有分支都成立的），字符串数组，每条不超过 40 字；填充卡、卡组内容这类不影响结果的布置不用写。",
   "- extra_cards：用到“题目中的卡”和“填充卡”以外的卡时，列出 {\"code\":卡号,\"name\":引擎卡库正式名}；没有则为空数组。",
-  "- sub_questions[].unrepresentable：能搭出局面时为 null；搭不出时写明是哪个前置条件，此时 branches 为空数组。",
-  "- branches[].assumption：该分支独有的假设，没有则为 null。observe：一句话说明看日志里的什么。",
+  "- sub_questions[].quoted_span：该子问题在题面中的最短原话（不超过 40 字）。unrepresentable：能搭出局面时为 null；搭不出时写明是哪个前置条件，此时 branches 为空数组。",
+  "- branches[].assumption：该分支独有的假设（不超过 40 字），没有则为 null。observe：看日志里的什么（不超过 30 字）。",
   "",
   "## 适用性（由你判断）",
   "引擎只对具体实例有意义：确定的卡、确定的局面和操作，问“会发生什么 / 能不能”。下列题型判 not_applicable（sub_questions 为空数组）：",
@@ -56,13 +60,13 @@ export const PLANNER_INSTRUCTIONS = [
   "只能使用：①“题目中的卡”；②“填充卡”；③“相关卡”（从题目卡的卡文里按「」名称机械取出的卡与字段成员）；④“通用工具卡”；⑤你在 extra_cards 里写明卡号和引擎卡库正式名的其他卡（会被逐字核对，写错算失败）。题面没有点名、只需要“一只怪兽”时用填充卡，并写进 assumptions。",
   "",
   "## scenario（局面）",
-  "格式：{\"schema\":\"ocg-repro-scenario/v1\",\"seed\":整数,\"first_player\":0或1,\"players\":[P0,P1]}。P0 = 提问者（“我/我方/自己”），P1 = 对方。题目说“对方回合”时 first_player=1。",
+  "格式：{\"first_player\":0或1,\"players\":[P0,P1]}（schema 与 seed 由系统补全，不要写）。P0 = 提问者（“我/我方/自己”），P1 = 对方。题目说“对方回合”时 first_player=1。",
   "玩家：{\"lp\":8000,\"draw_count\":0,\"hand\":[卡号],\"deck\":[卡号（第一个在最上面）],\"extra\":[额外卡组卡号],\"grave\":[卡号],\"removed\":[{\"code\":卡号,\"position\":\"faceup\"}],\"mzone\":[{\"seq\":0-4（5、6 是额外怪兽区）,\"code\":卡号,\"position\":\"faceup_attack|faceup_defense|facedown_defense\",\"summon\":{\"type\":\"normal|advance|flip|special|fusion|synchro|xyz|link|ritual|pendulum\",\"from\":\"hand|deck|extra|grave|removed\"},\"overlay\":[卡号],\"counters\":[{\"type\":\"0x..\",\"count\":n}]}],\"szone\":[{\"seq\":0-4,\"code\":卡号,\"position\":\"faceup|facedown\",\"equip_to\":{\"player\":0,\"zone\":\"mzone\",\"seq\":n},\"targets\":[{\"player\":0,\"zone\":\"mzone\",\"seq\":n}]}],\"fzone\":{\"code\":卡号,\"position\":\"faceup|facedown\"},\"pzone\":[左或null,右或null]}。不用的字段省略。",
-  "对局从 first_player 第 1 回合的抽卡阶段开始，该回合允许攻击；卡组不洗切。draw_count 建议 0（不抽卡）。每名玩家卡组至少放 5 张（可用填充卡），检索/抽卡效果需要的卡要放进卡组。",
+  "对局从 first_player 第 1 回合的抽卡阶段开始，该回合允许攻击；卡组不洗切。lp 默认 8000、draw_count 默认 0（不抽卡），是默认值时不要写。deck 省略时系统放入 5 张填充卡（大木炭18、多隆、猫妖精、魔物狩人、硬毛鼠，第一张在最上面）；检索/抽卡效果需要特定的卡在卡组里时才写 deck，写了就完全按你写的放（同样至少 5 张，可用填充卡补足）。",
   "预置在怪兽区的怪兽视为已正规召唤；预置的盖卡可以立即发动（它没有“本回合刚盖放”的状态）。“本回合刚盖放”“本回合已通常召唤”这类状态必须用 setup 动作打出来。连接/超量/同调/融合怪兽放在额外卡组（extra），场上的按其召唤方式预置。",
   "",
   "## actions（操作）",
-  "格式：{\"schema\":\"ocg-repro-actions/v1\",\"setup\":[步骤],\"probes\":[探测]}。",
+  "格式：{\"setup\":[步骤],\"probes\":[探测]}（schema 由系统补全；没有探测时 probes 可省略）。",
   "步骤：{\"player\":0或1,\"decision\":决策类型,\"choose\":{...},\"note\":\"可选说明\"}。决策类型与 choose：",
   "- idle（主要阶段行动）：{\"cmd\":\"activate|summon|spsummon|repos|mset|sset|to_bp|to_ep\",\"card\":卡号,\"from\":区域}",
   "- battle（战斗阶段行动）：{\"cmd\":\"activate|attack|to_m2|to_ep\",\"card\":卡号}",
@@ -88,7 +92,6 @@ export const PLANNER_INSTRUCTIONS = [
   "- 特殊召唤到场上（效果处理时）：通常会有 select_place，有时还有 select_position。",
   "- 两个以上必发效果同时触发时要选处理顺序（chain 窗口里依次选）。",
   "probes（探测，题目问“能不能发动/选择”时用）：{\"after\":k,\"player\":0或1,\"decision_kind\":\"idle|battle|chain|effect_yn|yesno\",\"target\":{\"card\":卡号,\"cmd\":\"可选\",\"desc\":可选}}。观察区间 = setup 第 k 步执行之后到第 k+1 步执行之前（k 等于 setup 长度时到回放结束）。结果：出现 / 出现（核心自动发动） / 未出现 / 未到达。题目问“处理结果如何”时可以不设探测，靠日志展示。",
-  "seed：任意整数，分支之间用同一个 seed。",
 ].join("\n");
 
 export const PROMPT_VERSION = createHash("sha256").update(PLANNER_INSTRUCTIONS).digest("hex").slice(0, 12);
@@ -119,17 +122,23 @@ function compactCard(card) {
   return out;
 }
 
-export function buildRepairInput({ plannerInput, previousPlan, failures }) {
+export function buildRepairInput({ plannerInput, previousPlan, failures, planLevel = false }) {
+  const tail = planLevel
+    ? ["上一次的输出不是有效计划：按 problems 改正，输出完整计划（同样格式，单行紧凑 JSON）。"]
+    : [
+      "只修复上面失败的分支。只输出 {\"extra_cards\":[...],\"sub_questions\":[{\"id\":原id,\"branches\":[{\"id\":原id,\"scenario\":{...},\"actions\":{...}}]}]}（单行紧凑 JSON），不要重复其他字段，也不要输出没有失败的分支；分支的 assumption / observe 确需改变时才写。extra_cards 只列这次新增的卡，没有则为空数组。",
+      "某个子问题确实无法搭出时，该子问题写 {\"id\":原id,\"unrepresentable\":\"缺的前置条件\",\"branches\":[]}。",
+    ];
   return [
     plannerInput,
     "",
     "## 上一次的计划（JSON）",
-    JSON.stringify(previousPlan),
+    typeof previousPlan === "string" ? previousPlan : JSON.stringify(previousPlan),
     "",
     "## 引擎执行失败的分支（只允许修复这一次）",
     ...failures.map((failure) => JSON.stringify(failure)),
     "",
-    "只修复上面失败的分支：输出完整 JSON（同样格式），sub_questions 里只放需要修复的子问题与分支（保持原 id），其余字段照抄上一次的计划。",
+    ...tail,
     "失败是“找不到选项/选项不唯一”时，按列出的合法选项改写 setup（补上缺少的选择步骤，或用 from/seq/desc 区分）；是格式或局面错误时按 problems 改正。不要改变题意，不要换成题面没有的情形。",
   ].join("\n");
 }

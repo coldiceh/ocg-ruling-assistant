@@ -18,23 +18,46 @@ export const PRICES_USD_PER_MTOK = Object.freeze({
   "gpt-6.1-sol": { input: 2, cached: 0.10, cacheWrite: 2.5, output: 10 },
 });
 
-export function usageCostUsd(model, usage) {
+// Fast mode (service_tier "priority"/"fast"): per-token premium. The priority-processing guide
+// gives 2x for gpt-5.6-sol and no figure for other models, so 2x is an assumption until the
+// invoice confirms it; the budget reservation uses 2.5x to stay above it. A response served at
+// standard speed reports service_tier "default" and is billed at the standard rate.
+export const SERVICE_TIER_PRICE_MULTIPLIER = Object.freeze({ priority: 2, fast: 2 });
+const SERVICE_TIER_RESERVE_MULTIPLIER = 2.5;
+const tierMultiplier = (tier) => SERVICE_TIER_PRICE_MULTIPLIER[tier] || 1;
+
+export function usageCostUsd(model, usage, servedTier = null) {
   const price = PRICES_USD_PER_MTOK[model];
   if (!price || !usage) return null;
+  const m = tierMultiplier(servedTier);
   const input = Number(usage.input_tokens || 0);
   const output = Number(usage.output_tokens || 0);
   const cached = Math.min(input, Number(usage.input_tokens_details?.cached_tokens || 0));
   const written = Math.min(input - cached, Number(usage.input_tokens_details?.cache_write_tokens || 0));
   const long = input > 272000;
-  return (((input - cached - written) * price.input + cached * price.cached + written * price.cacheWrite) * (long ? 2 : 1)
+  return m * (((input - cached - written) * price.input + cached * price.cached + written * price.cacheWrite) * (long ? 2 : 1)
     + output * price.output * (long ? 1.5 : 1)) / 1e6;
 }
 
 // Mechanical upper bound used only for the budget guard: every character counts as one token.
-export function worstCaseCostUsd(model, inputText, maxOutputTokens) {
+export function worstCaseCostUsd(model, inputText, maxOutputTokens, serviceTier = null) {
   const price = PRICES_USD_PER_MTOK[model];
   if (!price) return Infinity;
-  return (Array.from(inputText).length * price.input + maxOutputTokens * price.output) / 1e6;
+  const m = serviceTier && tierMultiplier(serviceTier) > 1 ? SERVICE_TIER_RESERVE_MULTIPLIER : 1;
+  return m * (Array.from(inputText).length * price.input + maxOutputTokens * price.output) / 1e6;
+}
+
+function requestBody({ model, instructions, input, reasoningEffort, maxOutputTokens, serviceTier }) {
+  return {
+    model,
+    ...(instructions ? { instructions } : {}),
+    input,
+    reasoning: { effort: reasoningEffort },
+    text: { format: { type: "json_object" } },
+    max_output_tokens: maxOutputTokens,
+    stream: false,
+    ...(serviceTier ? { service_tier: serviceTier } : {}),
+  };
 }
 
 // Rough token estimate for the per-call input cap (CJK ~1 token/char, other ~1 token/3 chars).
@@ -57,20 +80,13 @@ export function createModelRunner({ outDir, apiKey = null, mock = null, budgetUs
     }
   }
 
-  async function call({ qid, stage, model, instructions = null, input, reasoningEffort, maxOutputTokens, maxInputTokens = null }) {
-    const body = {
-      model,
-      ...(instructions ? { instructions } : {}),
-      input,
-      reasoning: { effort: reasoningEffort },
-      text: { format: { type: "json_object" } },
-      max_output_tokens: maxOutputTokens,
-      stream: false,
-    };
+  async function call({ qid, stage, model, instructions = null, input, reasoningEffort, maxOutputTokens, maxInputTokens = null,
+    serviceTier = null }) {
+    const body = requestBody({ model, instructions, input, reasoningEffort, maxOutputTokens, serviceTier });
     const bodyHash = createHash("sha256").update(JSON.stringify(body)).digest("hex");
     const cachePath = join(cacheDir, qid, `${stage}-${bodyHash.slice(0, 16)}.json`);
     const inputText = `${instructions || ""}\n${input}`;
-    const row = { at: new Date().toISOString(), qid, stage, model, reasoningEffort, maxOutputTokens, bodyHash,
+    const row = { at: new Date().toISOString(), qid, stage, model, reasoningEffort, maxOutputTokens, serviceTier, bodyHash,
       inputTokensEstimate: estimateTokens(inputText) };
     if (existsSync(cachePath)) {
       const cached = JSON.parse(readFileSync(cachePath, "utf8"));
@@ -84,7 +100,7 @@ export function createModelRunner({ outDir, apiKey = null, mock = null, budgetUs
       throw error;
     }
     if (!mock) {
-      const worst = worstCaseCostUsd(model, inputText, maxOutputTokens);
+      const worst = worstCaseCostUsd(model, inputText, maxOutputTokens, serviceTier);
       if (!(spent + worst <= budgetUsd)) {
         const error = new Error(`budget cap: spent ${spent.toFixed(4)} + worst ${worst.toFixed(4)} > ${budgetUsd}`);
         error.code = "budget_cap";
@@ -126,14 +142,17 @@ export function createModelRunner({ outDir, apiKey = null, mock = null, budgetUs
     const outputText = (payload.output || []).flatMap((item) => item?.type === "message" ? (item.content || []) : [])
       .filter((part) => part?.type === "output_text").map((part) => part.text).join("");
     const usage = payload.usage || null;
-    const costUsd = mock ? 0 : usageCostUsd(model, usage);
+    const servedTier = payload.service_tier || null;
+    const costUsd = mock ? 0 : usageCostUsd(model, usage, servedTier);
     if (!mock && Number.isFinite(costUsd)) spent += costUsd;
     const record = { status: payload.status || null, incomplete: payload.incomplete_details || null,
-      returnedModel: payload.model || null, responseId: payload.id || null, routing: payload.__routing || null, outputText, usage, costUsd, ms, mock: Boolean(mock) };
+      returnedModel: payload.model || null, responseId: payload.id || null, routing: payload.__routing || null, servedTier,
+      outputText, usage, costUsd, ms, mock: Boolean(mock) };
     mkdirSync(dirname(cachePath), { recursive: true });
     // Only completed responses are cached; an incomplete one is recorded in the ledger and returned.
     if (record.status === "completed") writeFileSync(cachePath, JSON.stringify(record, null, 1));
-    appendFileSync(ledgerPath, JSON.stringify({ ...row, cacheHit: false, usage, costUsd, ms, status: record.status, routing: record.routing,
+    appendFileSync(ledgerPath, JSON.stringify({ ...row, cacheHit: false, usage, costUsd, ms, status: record.status, servedTier,
+      routing: record.routing,
       incomplete: record.incomplete, mock: Boolean(mock) }) + "\n");
     log(`${qid} ${stage} ${model} status=${record.status} in=${usage?.input_tokens ?? "?"} out=${usage?.output_tokens ?? "?"} $${(costUsd ?? 0).toFixed(4)} ${ms}ms`);
     return { ...record, cacheHit: false, bodyHash };
@@ -151,15 +170,15 @@ export function engineReproApiKey(env = {}) {
 
 export function createOfficialModelCall({ env, limits, fetchImpl = globalThis.fetch }) {
   const apiKey = engineReproApiKey(env);
-  return async function modelCall({ model, instructions = null, input, reasoningEffort, maxOutputTokens, maxInputTokens = null }) {
+  return async function modelCall({ model, instructions = null, input, reasoningEffort, maxOutputTokens, maxInputTokens = null,
+    serviceTier = null }) {
     if (!apiKey) throw Object.assign(new Error("engine_repro_api_key_missing"), { code: "engine_repro_not_configured" });
-    const body = { model, ...(instructions ? { instructions } : {}), input, reasoning: { effort: reasoningEffort },
-      text: { format: { type: "json_object" } }, max_output_tokens: maxOutputTokens, stream: false };
+    const body = requestBody({ model, instructions, input, reasoningEffort, maxOutputTokens, serviceTier });
     const inputText = `${instructions || ""}\n${input}`;
     if (maxInputTokens && estimateTokens(inputText) > maxInputTokens) {
       throw Object.assign(new Error("engine_repro_input_cap_exceeded"), { code: "engine_repro_budget" });
     }
-    const reservation = await limits.reserve(worstCaseCostUsd(model, inputText, maxOutputTokens));
+    const reservation = await limits.reserve(worstCaseCostUsd(model, inputText, maxOutputTokens, serviceTier));
     const started = Date.now();
     let payload;
     let routing;
@@ -182,11 +201,12 @@ export function createOfficialModelCall({ env, limits, fetchImpl = globalThis.fe
       throw error;
     }
     const usage = payload.usage || null;
-    const costUsd = usageCostUsd(model, usage);
+    const servedTier = payload.service_tier || null;
+    const costUsd = usageCostUsd(model, usage, servedTier);
     await limits.settle(reservation, costUsd).catch(() => null);
     const outputText = (payload.output || []).flatMap((item) => item?.type === "message" ? (item.content || []) : [])
       .filter((part) => part?.type === "output_text").map((part) => part.text).join("");
     return { status: payload.status || null, incomplete: payload.incomplete_details || null, outputText, usage, costUsd,
-      ms: Date.now() - started, routing, cacheHit: false };
+      servedTier, ms: Date.now() - started, routing, cacheHit: false };
   };
 }

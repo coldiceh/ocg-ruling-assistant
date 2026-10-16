@@ -843,6 +843,7 @@ async function answerRagRulingQuestionInternal({
   nonCardElapsedBeforePipelineMs = 0,
   progress,
   onCardTextsReady,
+  onEvidenceReady,
 } = {}) {
   const pipelineStartedAt = Date.now();
   const timingsMs = {};
@@ -1178,6 +1179,11 @@ async function answerRagRulingQuestionInternal({
       }),
     });
     preparedPromptBundle = null;
+  }
+  // Optional observer (experimental engine reproduction): the evidence is final and only the
+  // answer generation remains. Never blocks or changes the answer.
+  if (typeof onEvidenceReady === "function") {
+    try { onEvidenceReady(); } catch { /* an observer failure never affects the answer */ }
   }
   if (prepareForContinuation !== true) {
     // Preserve the legacy single request and server capture stage sequence;

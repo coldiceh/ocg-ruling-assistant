@@ -2,11 +2,12 @@
 // repair call -> question-level status. Shared by the production answer path and the batch script.
 // Card identity always comes from the main answer's own card resolution (no second resolver).
 // Only mechanical checks happen here: field shapes, allowed card codes, exact names, budgets.
-import { FILLER_CARDS, PLANNER_INSTRUCTIONS, PROMPT_VERSION, TOOL_CARD_CODES, buildPlannerInput,
-  buildRepairInput } from "./plannerPrompt.mjs";
+import { DEFAULT_DECK, DEFAULT_SEED, FILLER_CARDS, PLANNER_INSTRUCTIONS, PROMPT_VERSION, TOOL_CARD_CODES,
+  buildPlannerInput, buildRepairInput } from "./plannerPrompt.mjs";
 import { STATUS, aggregateQuestion, renderQuestion } from "./aggregate.mjs";
 
-export const DEFAULT_PLANNER = Object.freeze({ model: "gpt-6.1-sol", effort: "low", maxOutput: 2000, maxInput: 8000 });
+export const DEFAULT_PLANNER = Object.freeze({ model: "gpt-6.1-sol", effort: "low", maxOutput: 1600, maxInput: 8000,
+  serviceTier: null });
 const REASON_CODES = ["pure_rule", "archetype_level", "tournament_policy", "ruleset_version"];
 
 // The main answer's card resolution -> the identity record used here.
@@ -25,6 +26,44 @@ export function identityFromCardResolution(cardResolution = {}, groupMentions = 
       .map((m) => ({ input: m.input, reason: m.reason || null })),
     groupMentions: Array.isArray(groupMentions) ? groupMentions : [],
   };
+}
+
+// Mechanical defaults the prompt tells the planner to omit (schema tags, seed, LP 8000, no draw,
+// the five-card filler deck). Explicit values are kept as written.
+export function expandPlanDefaults(scenario, actions) {
+  const sc = scenario && typeof scenario === "object" && !Array.isArray(scenario) ? { ...scenario } : scenario;
+  if (sc && typeof sc === "object") {
+    sc.schema ??= "ocg-repro-scenario/v1";
+    if (!Number.isSafeInteger(sc.seed)) sc.seed = DEFAULT_SEED;
+    if (Array.isArray(sc.players)) {
+      sc.players = sc.players.map((p) => {
+        if (!p || typeof p !== "object") return p;
+        const q = { ...p };
+        q.lp ??= 8000;
+        q.draw_count ??= 0;
+        if (q.deck === undefined) q.deck = [...DEFAULT_DECK];
+        return q;
+      });
+    }
+  }
+  const ac = actions && typeof actions === "object" && !Array.isArray(actions) ? { ...actions } : actions;
+  if (ac && typeof ac === "object") {
+    ac.schema ??= "ocg-repro-actions/v1";
+    ac.setup ??= [];
+    ac.probes ??= [];
+  }
+  return { scenario: sc, actions: ac };
+}
+
+// Tool cards are the same for every question on one engine build: fetch once per engine and process.
+const toolCardCache = new Map();
+function toolCardsFor(engine) {
+  const key = engine.cacheKey || null;
+  const load = () => engine("cards", { codes: [...TOOL_CARD_CODES], with_text: true })
+    .then((r) => r.cards.map((c) => ({ code: c.code, name: c.name, types: c.types.join("/"), text: c.text })));
+  if (!key) return load();
+  if (!toolCardCache.has(key)) toolCardCache.set(key, load().catch((error) => { toolCardCache.delete(key); throw error; }));
+  return toolCardCache.get(key);
 }
 
 function parseJsonObject(text) {
@@ -129,9 +168,10 @@ function summarizeEngine(r) {
  * @param modelCall    async ({stage, model, instructions, input, reasoningEffort, maxOutputTokens, maxInputTokens})
  *                     -> {status, incomplete, outputText, usage, costUsd, ms, cacheHit}
  * @param clock        () -> ms since the request started (timings are reported on that axis)
+ * @param allowRepair  () -> boolean, asked right before the repair call; false skips it (deadline policy)
  */
 export async function runEngineReproduction({ question, identity, cardsById, cidMap, engine, modelCall,
-  planner = DEFAULT_PLANNER, includeOfficialQa = false, clock = () => 0, record: base = {} }) {
+  planner = DEFAULT_PLANNER, includeOfficialQa = false, clock = () => 0, allowRepair = () => true, record: base = {} }) {
   const record = { ...base, text: question, promptVersion: PROMPT_VERSION, planner, includeOfficialQa,
     plannerCalled: false, identity, timings: { startedAtMs: clock(), plannerMs: 0, repairMs: 0, engineMs: 0 } };
   const finish = () => {
@@ -140,16 +180,21 @@ export async function runEngineReproduction({ question, identity, cardsById, cid
     record.timings.finishedAtMs = clock();
     return record;
   };
-  const timedEngine = async (op, body) => {
+  // engineMs is wall time spent waiting on the engine (parallel calls in one phase count once).
+  const enginePhase = async (fn) => {
     const t0 = clock();
-    try { return await engine(op, body); } finally { record.timings.engineMs += clock() - t0; }
+    try { return await fn(); } finally { record.timings.engineMs += clock() - t0; }
   };
+  const timedEngine = (op, body) => enginePhase(() => engine(op, body));
   const timedModel = async (opts) => {
     const t0 = clock();
     try { return await modelCall(opts); } finally {
       record.timings[opts.stage === "repair" ? "repairMs" : "plannerMs"] += clock() - t0;
     }
   };
+  const modelOpts = (stage, input) => ({ stage, model: planner.model, instructions: PLANNER_INSTRUCTIONS, input,
+    reasoningEffort: planner.effort, maxOutputTokens: planner.maxOutput, maxInputTokens: planner.maxInput,
+    ...(planner.serviceTier ? { serviceTier: planner.serviceTier } : {}) });
 
   if (!identity.resolved.length && !identity.unresolved.length) {
     record.preStatus = { status: STATUS.NA, reason: "no_card_mentioned",
@@ -166,31 +211,37 @@ export async function runEngineReproduction({ question, identity, cardsById, cid
 
   // planner context: engine facts by passcode + the main answer's card text by CID
   const codes = identity.resolved.map((c) => cidMap[c.cid]);
-  const facts = (await timedEngine("cards", { codes })).cards;
+  const [factsResponse, relatedResponse, toolCards] = await enginePhase(() => Promise.all([
+    engine("cards", { codes }), engine("related", { codes }), toolCardsFor(engine)]));
+  const facts = factsResponse.cards;
   const cards = identity.resolved.map((c, i) => {
     const raw = cardsById.get(c.cid) || {};
     return { code: codes[i], cid: c.cid, engineName: facts[i].name, engine: facts[i], mentionedAs: c.mentionedAs,
       effectText: raw.effectText || "", pendulumEffectText: raw.pendulumEffectText || "" };
   });
   record.cards = cards.map((c) => ({ code: c.code, cid: c.cid, engineName: c.engineName, mentionedAs: c.mentionedAs }));
-  const relatedCards = (await timedEngine("related", { codes })).related;
-  const toolCards = (await timedEngine("cards", { codes: [...TOOL_CARD_CODES], with_text: true })).cards
-    .map((c) => ({ code: c.code, name: c.name, types: c.types.join("/"), text: c.text }));
+  const relatedCards = relatedResponse.related;
   record.relatedRefs = relatedCards.map((e) => ({ ref: e.ref, kind: e.kind, total: e.total ?? e.cards.length, shown: e.cards.length }));
   const allowed = [...codes, ...FILLER_CARDS.map((c) => c.code), ...TOOL_CARD_CODES,
     ...relatedCards.flatMap((e) => e.cards.map((c) => c.code))];
   const plannerInput = buildPlannerInput({ question, cards, relatedCards, toolCards, includeOfficialQa });
 
+  // All branches in parallel (each is an independent duel on the engine service).
   const runBranches = async (onlyKeys = null) => {
+    const jobs = [];
     for (const sq of record.subQuestions) {
       if (sq.unrepresentable) continue;
       for (const b of sq.branches) {
         const key = `${sq.id}/${b.id}`;
         if (onlyKeys && !onlyKeys.has(key)) continue;
         if (b.planProblems) { b.engine = null; continue; }
-        b.engine = (await timedEngine("reproduce", { scenario: b.scenario, actions: b.actions })).result;
+        jobs.push(b);
       }
     }
+    if (!jobs.length) return;
+    const results = await enginePhase(() => Promise.all(jobs.map((b) =>
+      engine("reproduce", { scenario: b.scenario, actions: b.actions }).then((r) => r.result))));
+    jobs.forEach((b, i) => { b.engine = results[i]; });
   };
   const adoptPlan = async (plan) => {
     const check = await checkPlan(plan, allowed, timedEngine);
@@ -199,7 +250,7 @@ export async function runEngineReproduction({ question, identity, cardsById, cid
     record.subQuestions = (plan.sub_questions || []).map((sq) => ({ id: sq.id, quoted_span: sq.quoted_span,
       unrepresentable: sq.unrepresentable || null,
       branches: (sq.unrepresentable ? [] : (sq.branches || [])).map((b) => ({ id: b.id, assumption: b.assumption || null,
-        observe: b.observe || null, scenario: b.scenario, actions: b.actions,
+        observe: b.observe || null, ...expandPlanDefaults(b.scenario, b.actions),
         planProblems: check.branchProblems.get(`${sq.id}/${b.id}`) || null })) }));
     return check;
   };
@@ -211,8 +262,7 @@ export async function runEngineReproduction({ question, identity, cardsById, cid
 
   // call 1: plan
   record.plannerCalled = true;
-  const r1 = await timedModel({ stage: "plan", model: planner.model, instructions: PLANNER_INSTRUCTIONS,
-    input: plannerInput, reasoningEffort: planner.effort, maxOutputTokens: planner.maxOutput, maxInputTokens: planner.maxInput });
+  const r1 = await timedModel(modelOpts("plan", plannerInput));
   record.planRaw = [{ call: "plan", status: r1.status, incomplete: r1.incomplete, text: r1.outputText }];
   let plan = null;
   let planLevelProblems = [];
@@ -233,10 +283,17 @@ export async function runEngineReproduction({ question, identity, cardsById, cid
   if (planLevelProblems.length) failures.push({ plan_level: true, problems: planLevelProblems });
   else for (const sq of record.subQuestions) for (const b of sq.branches) if (!b.engine || b.engine.status !== "replayed") failures.push(compactFailure(sq, b));
   if (!failures.length) return finish();
+  // Deadline policy: once the main answer is in its final generation, a repair (a second planner
+  // call) would very likely finish after it, so the first engine result is delivered instead.
+  if (!allowRepair()) {
+    record.repairSkipped = "main_answer_generating";
+    if (planLevelProblems.length) record.planFailure = "invalid_input";
+    return finish();
+  }
   record.repairCalled = true;
-  const repairInput = buildRepairInput({ plannerInput, previousPlan: plan || String(r1.outputText || "").slice(0, 4000), failures });
-  const r2 = await timedModel({ stage: "repair", model: planner.model, instructions: PLANNER_INSTRUCTIONS,
-    input: repairInput, reasoningEffort: planner.effort, maxOutputTokens: planner.maxOutput, maxInputTokens: planner.maxInput });
+  const repairInput = buildRepairInput({ plannerInput, previousPlan: plan || String(r1.outputText || "").slice(0, 4000), failures,
+    planLevel: planLevelProblems.length > 0 });
+  const r2 = await timedModel(modelOpts("repair", repairInput));
   record.planRaw.push({ call: "repair", status: r2.status, incomplete: r2.incomplete, text: r2.outputText });
   let fix = null;
   try { fix = parseJsonObject(r2.outputText); } catch (e) { record.repairProblems = [`修复输出不是完整的 JSON：${e.message}`]; }
@@ -261,7 +318,7 @@ export async function runEngineReproduction({ question, identity, cardsById, cid
     for (const fb of fsq.branches || []) {
       const b = sq.branches.find((x) => x.id === fb.id);
       if (!b || (b.engine && b.engine.status === "replayed")) continue;
-      Object.assign(b, { scenario: fb.scenario, actions: fb.actions, observe: fb.observe || b.observe,
+      Object.assign(b, { ...expandPlanDefaults(fb.scenario, fb.actions), observe: fb.observe || b.observe,
         assumption: fb.assumption ?? b.assumption, repaired: true, firstEngine: b.engine ? summarizeEngine(b.engine) : null,
         firstPlanProblems: b.planProblems, planProblems: extraCheck.branchProblems.get(`${sq.id}/${b.id}`) || null });
       fixed.add(`${sq.id}/${b.id}`);

@@ -428,7 +428,8 @@ export async function answerPublicRulingQuestion({
         ? saveSelectionDiagnostic({ event, requestId: requestDiagnostics.requestId, env }) : undefined,
       nonCardElapsedBeforePipelineMs: Math.max(0, Date.now() - publicRequestStartedAt),
       ...(prepareForContinuation === true ? { prepareForContinuation: true } : {}),
-      ...(engineRepro.enabled ? { onCardTextsReady: engineRepro.onCardTextsReady } : {}),
+      ...(engineRepro.enabled ? { onCardTextsReady: engineRepro.onCardTextsReady,
+        onEvidenceReady: engineRepro.onEvidenceReady } : {}),
     });
     requestDiagnostics.completedAt = new Date().toISOString();
     requestDiagnostics.durationMs = Math.max(0, Date.now() - publicRequestStartedAt);
