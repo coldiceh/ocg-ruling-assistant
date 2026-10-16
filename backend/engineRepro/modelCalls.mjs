@@ -118,6 +118,9 @@ export function createModelRunner({ outDir, apiKey = null, mock = null, budgetUs
         throw error;
       }
       payload = JSON.parse(text);
+      // Non-secret routing facts, so the owner can confirm which organization/project paid.
+      payload.__routing = { organization: response.headers.get("openai-organization"),
+        project: response.headers.get("openai-project"), requestId: response.headers.get("x-request-id") };
     }
     const ms = Date.now() - started;
     const outputText = (payload.output || []).flatMap((item) => item?.type === "message" ? (item.content || []) : [])
@@ -126,11 +129,11 @@ export function createModelRunner({ outDir, apiKey = null, mock = null, budgetUs
     const costUsd = mock ? 0 : usageCostUsd(model, usage);
     if (!mock && Number.isFinite(costUsd)) spent += costUsd;
     const record = { status: payload.status || null, incomplete: payload.incomplete_details || null,
-      returnedModel: payload.model || null, responseId: payload.id || null, outputText, usage, costUsd, ms, mock: Boolean(mock) };
+      returnedModel: payload.model || null, responseId: payload.id || null, routing: payload.__routing || null, outputText, usage, costUsd, ms, mock: Boolean(mock) };
     mkdirSync(dirname(cachePath), { recursive: true });
     // Only completed responses are cached; an incomplete one is recorded in the ledger and returned.
     if (record.status === "completed") writeFileSync(cachePath, JSON.stringify(record, null, 1));
-    appendFileSync(ledgerPath, JSON.stringify({ ...row, cacheHit: false, usage, costUsd, ms, status: record.status,
+    appendFileSync(ledgerPath, JSON.stringify({ ...row, cacheHit: false, usage, costUsd, ms, status: record.status, routing: record.routing,
       incomplete: record.incomplete, mock: Boolean(mock) }) + "\n");
     log(`${qid} ${stage} ${model} status=${record.status} in=${usage?.input_tokens ?? "?"} out=${usage?.output_tokens ?? "?"} $${(costUsd ?? 0).toFixed(4)} ${ms}ms`);
     return { ...record, cacheHit: false };

@@ -170,8 +170,13 @@ function checkPlan(plan, allowedCodes) {
     else allowed.add(info.code);
   }
   const branchProblems = new Map();
+  for (const field of ["reason_code", "archetype_name"]) {
+    if (plan[field] === "null") problems.push(`${field} 写成了字符串 "null"，应为 JSON null`);
+  }
   for (const sq of plan.sub_questions || []) {
     if (!sq || typeof sq.id !== "string") { problems.push("sub_question 缺少 id"); continue; }
+    if (sq.unrepresentable === "null") problems.push(`${sq.id}: unrepresentable 写成了字符串 "null"，应为 JSON null`);
+    for (const b of sq.branches || []) if (b?.assumption === "null") problems.push(`${sq.id}/${b?.id}: assumption 写成了字符串 "null"，应为 JSON null`);
     const branches = Array.isArray(sq.branches) ? sq.branches : [];
     if (!sq.unrepresentable && (branches.length < 1 || branches.length > 2)) problems.push(`${sq.id}: branches 需要 1–2 个`);
     for (const b of branches) {
