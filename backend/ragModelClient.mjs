@@ -3117,7 +3117,7 @@ async function callBaiCard({ prompt, env, modelName, maxTokens, fetchImpl, reaso
       authorization: `Bearer ${env.BAI_CARD_API_KEY || env.BAI_API_KEY}`,
       "content-type": "application/json",
     }, body, { signal });
-    assertProviderHttpResponse(response, official ? "openai" : "bai");
+    if (!response?.ok) throw await providerHttpErrorWithFacts(response, official ? "openai" : "bai", { signal });
     return readProviderJson(response, { signal });
   };
   const request = { body, invoke, signal };
@@ -3682,6 +3682,37 @@ function assertProviderHttpResponse(response, provider) {
   const error = new Error(`${provider} ${Number.isInteger(status) ? status : "unknown"}`);
   error.status = Number.isInteger(status) ? status : null;
   throw markBudgetReservationOutcome(error, { mayExist: !releaseSafe });
+}
+
+// A failed provider response keeps its HTTP status and, when the body states
+// them, the provider's machine-readable error code and type (for example
+// OpenAI's 429 credit_balance_exhausted / insufficient_quota). The free-text
+// message is not kept because it can carry account identifiers.
+async function providerHttpErrorWithFacts(response, provider, { signal } = {}) {
+  let facts = { code: "", type: "" };
+  if (typeof response?.text === "function") {
+    try {
+      const text = await awaitProviderOperationOrAbort(() => response.text(), signal);
+      const parsed = JSON.parse(String(text || "").slice(0, 16384));
+      const detail = parsed?.error && typeof parsed.error === "object" ? parsed.error : parsed;
+      facts = { code: providerErrorToken(detail?.code), type: providerErrorToken(detail?.type) };
+    } catch (cause) {
+      if (signal?.aborted) throw cause;
+    }
+  }
+  try {
+    assertProviderHttpResponse(response, provider);
+  } catch (error) {
+    error.provider = provider;
+    if (facts.code) error.providerErrorCode = facts.code;
+    if (facts.type) error.providerErrorType = facts.type;
+    return error;
+  }
+  return markBudgetReservationOutcome(new Error(`${provider} unknown`), { mayExist: true });
+}
+
+function providerErrorToken(value) {
+  return typeof value === "string" && /^[A-Za-z0-9_.:-]{1,64}$/u.test(value) ? value : "";
 }
 
 function isProvablePreAcceptanceHttpRejection(status) {

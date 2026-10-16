@@ -1088,6 +1088,7 @@ async function postPublicAnswerProgressRequest({
         ? payload.error
         : typeof payload?.message === "string" ? payload.message : "",
       retryAfterSeconds: payload?.retryAfterSeconds,
+      scopeFailure: payload?.scopeFailure,
     });
   }
   const contentType = String(response.headers?.get?.("content-type") || "").toLowerCase();
@@ -1299,6 +1300,7 @@ async function readPublicAnswerProgressStream(response, requestedRulingVersion, 
               status,
               publicMessage: message,
               retryAfterSeconds: payload.retryAfterSeconds,
+              scopeFailure: payload.scopeFailure,
             });
           error.message = message;
           if (requestId === null || requestId === analysisRequestId) {
@@ -1449,7 +1451,7 @@ function createRulingVersionError({
   return error;
 }
 
-function createBackendRequestError({ code, status = 0, publicMessage = "", retryAfterSeconds, cause }) {
+function createBackendRequestError({ code, status = 0, publicMessage = "", retryAfterSeconds, scopeFailure, cause }) {
   const error = new Error(publicMessage || code, cause ? { cause } : undefined);
   error.code = code;
   error.status = status;
@@ -1458,7 +1460,25 @@ function createBackendRequestError({ code, status = 0, publicMessage = "", retry
   if (Number.isInteger(retryAfterSeconds) && retryAfterSeconds > 0 && retryAfterSeconds <= 86400) {
     error.retryAfterSeconds = retryAfterSeconds;
   }
+  const failure = normalizeScopeFailure(scopeFailure);
+  if (failure) error.scopeFailure = failure;
   return error;
+}
+
+// Keeps only short machine tokens from the server's scope failure record.
+function normalizeScopeFailure(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const token = (item) => (typeof item === "string" && /^[A-Za-z0-9_.:-]{1,80}$/u.test(item) ? item : "");
+  const kind = token(value.kind);
+  if (!kind) return null;
+  return {
+    kind,
+    provider: token(value.provider),
+    model: token(value.model),
+    httpStatus: Number.isInteger(value.httpStatus) && value.httpStatus >= 100 && value.httpStatus <= 599 ? value.httpStatus : null,
+    providerErrorCode: token(value.providerErrorCode),
+    providerErrorType: token(value.providerErrorType),
+  };
 }
 
 function setPreparedEvidencePackage(value) {
@@ -1673,8 +1693,48 @@ function renderBackendVersionError(error, requestedRulingVersion) {
   renderSources([]);
 }
 
+// A scope check that failed on the service side (model account, budget,
+// provider error, timeout). The question itself was never judged.
+function scopeServiceFailurePresentation(failure) {
+  const provider = { openai: "OpenAI", bai: "b.ai", deepseek: "DeepSeek" }[failure.provider]
+    || lt("模型服务", "Model service", "モデルサービス");
+  const upstreamCode = failure.providerErrorCode || failure.providerErrorType;
+  const upstream = failure.httpStatus ? `（HTTP ${failure.httpStatus}${upstreamCode ? ` · ${upstreamCode}` : ""}）` : "";
+  const upstreamEn = failure.httpStatus ? ` (HTTP ${failure.httpStatus}${upstreamCode ? ` · ${upstreamCode}` : ""})` : "";
+  const bases = {
+    site_budget_exhausted: lt("本站官方模型今日预算已用完", "The site's daily model budget is used up", "本日のモデル予算を使い切りました"),
+    provider_balance_exhausted: lt(`${provider} 账户余额不足${upstream}`, `${provider} account balance exhausted${upstreamEn}`, `${provider} のアカウント残高不足${upstream}`),
+    provider_rate_limited: lt(`${provider} 暂时限流${upstream}`, `${provider} rate limit${upstreamEn}`, `${provider} のレート制限${upstream}`),
+    provider_auth_failed: lt(`${provider} 拒绝了服务端密钥${upstream}`, `${provider} rejected the server key${upstreamEn}`, `${provider} がサーバーの鍵を拒否${upstream}`),
+    provider_unavailable: lt(`${provider} 服务暂时故障${upstream}`, `${provider} temporarily unavailable${upstreamEn}`, `${provider} の一時的な障害${upstream}`),
+    provider_rejected: lt(`${provider} 拒绝了请求${upstream}`, `${provider} rejected the request${upstreamEn}`, `${provider} がリクエストを拒否${upstream}`),
+    timeout: lt(`${provider} 响应超时`, `${provider} timed out`, `${provider} の応答タイムアウト`),
+    invalid_output: lt(`${provider} 返回结果无法解析`, `${provider} returned unusable output`, `${provider} の応答を解析できません`),
+    accounting_unavailable: lt("费用记账服务暂不可用", "Cost accounting is unavailable", "費用記録サービスを利用できません"),
+    not_configured: lt("服务端未配置范围检查模型", "No scope-check model is configured", "範囲確認モデルが未設定です"),
+  };
+  const step = failure.kind === "site_budget_exhausted"
+    ? lt("本站今日的官方模型预算已用完，次日自动恢复；问题本身无需修改。", "Today's model budget is used up and resets tomorrow. The question needs no changes.", "本日のモデル予算は使い切りました。翌日に回復します。質問の修正は不要です。")
+    : failure.kind === "provider_balance_exhausted"
+      ? lt("需要站长为模型服务账户充值；问题本身无需修改，恢复后重新提交即可。", "The site owner needs to top up the model account. The question needs no changes; resubmit once it is restored.", "サイト管理者によるモデルアカウントへのチャージが必要です。質問の修正は不要です。復旧後に再送信してください。")
+      : lt("请稍后重试；问题本身无需修改。若持续出现，请联系作者。", "Try again later. The question needs no changes. Contact the author if this persists.", "しばらくしてから再試行してください。質問の修正は不要です。続く場合は作者に連絡してください。");
+  return {
+    title: lt("问题范围检查暂不可用", "Question scope check unavailable", "質問の範囲を確認できません"),
+    status: tr("暂不可用"),
+    basis: bases[failure.kind] || lt(`范围检查模型调用失败${upstream}`, `Scope-check model call failed${upstreamEn}`, `範囲確認モデルの呼び出しに失敗${upstream}`),
+    message: lt("范围检查所用的模型调用失败，这是服务端问题，与问题内容无关。本次请求已停止，未开始检索或生成裁定。",
+      "The model used for the scope check failed. This is a service-side problem unrelated to the question. The request stopped before retrieval or ruling generation.",
+      "範囲確認に使うモデルの呼び出しに失敗しました。サーバー側の問題で、質問内容とは関係ありません。検索と裁定生成の前に処理を停止しました。"),
+    step,
+  };
+}
+
 function publicRequestFailurePresentation(error) {
   const code = String(error?.code || "");
+  if (code === "public_query_scope_unavailable" && error?.scopeFailure
+      && error.scopeFailure.kind !== "model_uncertain") {
+    return scopeServiceFailurePresentation(error.scopeFailure);
+  }
   if (code === "public_query_scope_unavailable") {
     return {
       title: lt("问题范围检查暂不可用", "Question scope check unavailable", "質問の範囲を確認できません"),

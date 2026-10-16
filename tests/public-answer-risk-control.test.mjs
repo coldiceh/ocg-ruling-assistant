@@ -294,3 +294,43 @@ test("PUBLIC_CARD_EXTRACTION_OVERLAP_SCOPE=off keeps card-name extraction inside
   assert.equal(downstream.preloadedCardNameExtraction, undefined);
   assert.ok(downstream.cloudBudget);
 });
+
+test("a service-side scope failure states its cause in the 503 message and payload", async () => {
+  const { publicAnswerHttpError } = await import("../backend/publicAnswerService.mjs");
+  const failure = { kind: "provider_balance_exhausted", provider: "openai", model: "gpt-6-luna", httpStatus: 429,
+    providerErrorCode: "credit_balance_exhausted", providerErrorType: "insufficient_quota" };
+  let thrown;
+  await assert.rejects(answerPublicRulingQuestion({
+    payload: { question: "Synthetic ruling question" }, env: PUBLIC_ENV,
+    appendAudit: async () => null,
+    readRiskControl: async () => ({ ok: true, active: false }),
+    classifyScope: async () => ({ scope: "uncertain", confidence: "low",
+      reasonCode: "classifier_http_429_credit_balance_exhausted", classified: false, failure }),
+    answerRuling: async () => assert.fail("a failed scope check must not reach the pipeline"),
+  }), (error) => { thrown = error; return true; });
+  assert.equal(thrown.code, "public_query_scope_unavailable");
+  assert.equal(thrown.statusCode, 503);
+  assert.match(thrown.message, /OpenAI 账户余额不足（HTTP 429 · credit_balance_exhausted）/u);
+  assert.match(thrown.message, /与问题内容无关/u);
+  const http = publicAnswerHttpError(thrown);
+  assert.equal(http.statusCode, 503);
+  assert.deepEqual(http.payload.scopeFailure, { ...failure,
+    reasonCode: "classifier_http_429_credit_balance_exhausted" });
+  assert.equal(http.payload.debug.requestDiagnostics.scope.failure.kind, "provider_balance_exhausted");
+});
+
+test("a model that answers uncertain is still asked for a clearer question", async () => {
+  await assert.rejects(answerPublicRulingQuestion({
+    payload: { question: "Synthetic ambiguous text" }, env: PUBLIC_ENV,
+    appendAudit: async () => null,
+    readRiskControl: async () => ({ ok: true, active: false }),
+    classifyScope: async () => ({ scope: "uncertain", confidence: "low", reasonCode: "ambiguous",
+      classified: false, provider: "bai", model: "gpt-6-luna" }),
+    answerRuling: async () => assert.fail("must not reach the pipeline"),
+  }), (error) => {
+    assert.equal(error.scopeFailure.kind, "model_uncertain");
+    assert.match(error.message, /请写明需要判断的规则或卡片互动/u);
+    assert.doesNotMatch(error.message, /服务端问题/u);
+    return true;
+  });
+});

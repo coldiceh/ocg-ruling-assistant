@@ -373,8 +373,9 @@ export async function answerPublicRulingQuestion({
     }
     if (scopeDecision?.scope !== "in_scope") {
       earlyExtractionAbort.abort(new Error("public_query_scope_unavailable"));
-      throw Object.assign(new Error("问题范围检查暂不可用，本次请求已暂停，请稍后重试。"), {
-        code: "public_query_scope_unavailable", statusCode: 503,
+      const scopeFailure = publicScopeFailure(scopeDecision);
+      throw Object.assign(new Error(publicScopeFailureMessage(scopeFailure)), {
+        code: "public_query_scope_unavailable", statusCode: 503, scopeFailure,
       });
     }
   }
@@ -457,7 +458,56 @@ function scopeDiagnostic(decision, durationMs) {
     returnedModel: decision?.returnedModel || null, provider: decision?.provider || null,
     thinkingMode: decision?.thinkingMode || null, durationMs: Math.max(0, durationMs),
     usage: decision?.usage || {}, estimatedCostCny: decision?.estimatedCostCny ?? null,
+    failure: decision?.failure || null,
   };
+}
+
+const SCOPE_FAILURE_KINDS = new Set(["model_uncertain", "invalid_output", "site_budget_exhausted",
+  "provider_balance_exhausted", "provider_rate_limited", "provider_auth_failed", "provider_unavailable",
+  "provider_rejected", "timeout", "accounting_unavailable", "not_configured", "failed"]);
+const SCOPE_PROVIDER_NAMES = Object.freeze({ openai: "OpenAI", bai: "b.ai", deepseek: "DeepSeek" });
+
+// The public description of a missing scope decision. A model that answered
+// "uncertain" is a question-wording matter; every other kind is a service-side
+// failure that says nothing about the question.
+export function publicScopeFailure(decision = {}) {
+  const failure = decision?.failure && typeof decision.failure === "object" ? decision.failure : {};
+  const token = (value) => (typeof value === "string" && /^[A-Za-z0-9_.:-]{1,80}$/u.test(value) ? value : null);
+  const kind = SCOPE_FAILURE_KINDS.has(failure.kind) ? failure.kind
+    : decision?.reasonCode === "ambiguous" ? "model_uncertain" : "failed";
+  const modelAnswered = kind === "model_uncertain";
+  return {
+    kind,
+    reasonCode: token(decision?.reasonCode),
+    provider: token(failure.provider) || (modelAnswered ? token(decision?.provider) : null),
+    model: token(failure.model) || (modelAnswered ? token(decision?.model) : null),
+    httpStatus: Number.isInteger(failure.httpStatus) ? failure.httpStatus : null,
+    providerErrorCode: token(failure.providerErrorCode),
+    providerErrorType: token(failure.providerErrorType),
+  };
+}
+
+export function publicScopeFailureMessage(failure = {}) {
+  if (failure.kind === "model_uncertain") {
+    return "问题范围检查未通过：模型未能确认本题是否属于游戏王规则与裁定，本次请求已停止。请写明需要判断的规则或卡片互动后重试。";
+  }
+  const provider = SCOPE_PROVIDER_NAMES[failure.provider] || "模型服务";
+  const upstreamCode = failure.providerErrorCode || failure.providerErrorType;
+  const upstream = failure.httpStatus ? `（HTTP ${failure.httpStatus}${upstreamCode ? ` · ${upstreamCode}` : ""}）` : "";
+  const causes = {
+    invalid_output: `${provider} 返回了无法解析的结果`,
+    site_budget_exhausted: "本站官方模型今日预算已用完",
+    provider_balance_exhausted: `${provider} 账户余额不足${upstream}`,
+    provider_rate_limited: `${provider} 暂时限流${upstream}`,
+    provider_auth_failed: `${provider} 拒绝了服务端密钥${upstream}`,
+    provider_unavailable: `${provider} 服务暂时故障${upstream}`,
+    provider_rejected: `${provider} 拒绝了请求${upstream}`,
+    timeout: `${provider} 未在时限内返回`,
+    accounting_unavailable: "费用记账服务暂不可用",
+    not_configured: "服务端未配置范围检查模型",
+  };
+  const cause = causes[failure.kind] || `范围检查模型调用失败${upstream}`;
+  return `问题范围检查暂不可用：${cause}。这是服务端问题，与问题内容无关；本次请求已停止，未开始检索或生成裁定。`;
 }
 
 export function shouldClassifyPublicQuestion(env = process.env) {
@@ -516,6 +566,7 @@ export function publicAnswerHttpError(error) {
       error: publicMessage || (error instanceof Error ? error.message : String(error)),
       code: error?.code || "answer_failed",
       ...(statusCode === 429 ? { retryAfterSeconds: Math.max(1, Math.ceil(Number(error?.retryAfterSeconds) || 60)) } : {}),
+      ...(error?.code === "public_query_scope_unavailable" && error?.scopeFailure ? { scopeFailure: error.scopeFailure } : {}),
       ...(officialQaBodyDetails ? { details: officialQaBodyDetails } : {}),
       ...((error?.cloudCosts || error?.requestDiagnostics || error?.boundedRetrieval || error?.decisionsFailure) ? {debug:{
         ...(error.cloudCosts ? {cloudCosts:error.cloudCosts} : {}),

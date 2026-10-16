@@ -2,6 +2,7 @@ import {
   callBaiLunaJsonTask,
   callDeepSeekJsonTask,
   isServerOwnedPrivateEvaluationEnv,
+  lunaCardProviderLabel,
   lunaCardTransportConfigured,
   modelNameForCardExtractionProvider,
 } from "./ragModelClient.mjs";
@@ -78,8 +79,12 @@ export async function classifyPublicQueryScope({
   const resolvedInvoke = invoke
     ?? (status.provider === "bai" ? callBaiLunaJsonTask : callDeepSeekJsonTask);
   if (!status.enabled || !normalizedQuestion || typeof resolvedInvoke !== "function") {
-    return uncertainDecision(status.reason || "classifier_unavailable");
+    return uncertainDecision(status.reason || "classifier_unavailable",
+      failureRecord(status.enabled ? "failed" : "not_configured"));
   }
+  // The provider that actually serves the request: the Luna task follows
+  // RAG_CARD_LUNA_CHANNEL (b.ai or the official OpenAI API).
+  const transport = status.provider === "bai" ? lunaCardProviderLabel("bai", env) : status.provider;
 
   const timeoutMs = boundedInteger(
     env.PUBLIC_QUERY_SCOPE_TIMEOUT_MS,
@@ -113,10 +118,11 @@ export async function classifyPublicQueryScope({
       returnedModel: payload?.returnedModel || null,
       estimatedCostCny: Number(payload?.estimatedCostCny || 0),
       estimatedCostUsd: Number(payload?.estimatedCostUsd || 0),
-    });
+    }, { transport });
   } catch (error) {
     if (signal?.aborted) throw error;
-    return uncertainDecision(classifierFailureCode(error));
+    return uncertainDecision(classifierFailureCode(error),
+      classifierFailure(error, { provider: transport, model: status.model }));
   } finally {
     timeout.cleanup();
   }
@@ -145,13 +151,12 @@ export function buildPublicQueryScopePrompt(question) {
   ].join("\n");
 }
 
-function normalizeScopeDecision(payload, metadata = {}) {
+function normalizeScopeDecision(payload, metadata = {}, { transport = null } = {}) {
   const rawScope = String(
     payload?.scope ?? payload?.category ?? payload?.classification ?? "",
   ).trim().toLowerCase();
-  const scope = ["in_scope", "out_of_scope", "uncertain"].includes(rawScope)
-    ? rawScope
-    : "uncertain";
+  const validScope = ["in_scope", "out_of_scope", "uncertain"].includes(rawScope);
+  const scope = validScope ? rawScope : "uncertain";
   const rawConfidence = String(payload?.confidence || "").trim().toLowerCase();
   const confidence = ["low", "medium", "high"].includes(rawConfidence)
     ? rawConfidence
@@ -167,10 +172,15 @@ function normalizeScopeDecision(payload, metadata = {}) {
     reasonCode: expectedReason,
     classified: scope !== "uncertain",
     ...metadata,
+    // An answer without one of the three allowed scope values is unusable
+    // output, which the page reports differently from the model saying
+    // "uncertain".
+    ...(validScope ? {} : { failure: failureRecord("invalid_output", {
+      provider: transport, model: metadata.model }) }),
   };
 }
 
-function uncertainDecision(reasonCode) {
+function uncertainDecision(reasonCode, failure = null) {
   return {
     scope: "uncertain",
     confidence: "low",
@@ -183,6 +193,7 @@ function uncertainDecision(reasonCode) {
     usage: {},
     estimatedCostCny: 0,
     estimatedCostUsd: 0,
+    ...(failure ? { failure } : {}),
   };
 }
 
@@ -190,7 +201,75 @@ function classifierFailureCode(error) {
   const code = String(error?.code || "").trim();
   if (code) return `classifier_${code}`.slice(0, 80);
   if (error?.name === "AbortError") return "classifier_timeout";
+  if (Number.isInteger(error?.status)) {
+    const providerCode = safeToken(error?.providerErrorCode) || safeToken(error?.providerErrorType);
+    return `classifier_http_${error.status}${providerCode ? `_${providerCode}` : ""}`.slice(0, 80);
+  }
   return "classifier_failed";
+}
+
+// OpenAI billing codes (429) and the shared quota type; DeepSeek reports an
+// empty balance as HTTP 402.
+const PROVIDER_BALANCE_ERROR_CODES = new Set([
+  "credit_balance_exhausted",
+  "organization_spend_limit_exceeded",
+  "project_spend_limit_exceeded",
+  "organization_usage_limit_exceeded",
+  "billing_hard_limit_reached",
+  "insufficient_quota",
+]);
+
+// Why no scope decision was made, read only from transport and accounting
+// facts: the HTTP status, the provider's machine-readable error code and
+// type, and this service's own ledger and timeout error codes. The label is
+// shown to the user; it never decides scope.
+function classifierFailure(error, { provider = null, model = null } = {}) {
+  const code = String(error?.code || "").trim();
+  const message = String(error?.message || "");
+  const httpStatus = Number.isInteger(error?.status) ? error.status : null;
+  const providerErrorCode = safeToken(error?.providerErrorCode);
+  const providerErrorType = safeToken(error?.providerErrorType);
+  let kind = "failed";
+  if (code === "official_daily_budget_exceeded" || code === "api_daily_budget_exceeded"
+      || message === "cloud_budget_total_exceeded") {
+    kind = "site_budget_exhausted";
+  } else if (httpStatus === 402 || PROVIDER_BALANCE_ERROR_CODES.has(providerErrorCode)
+      || providerErrorType === "insufficient_quota") {
+    kind = "provider_balance_exhausted";
+  } else if (httpStatus === 429) {
+    kind = "provider_rate_limited";
+  } else if (httpStatus === 401 || httpStatus === 403) {
+    kind = "provider_auth_failed";
+  } else if (httpStatus !== null && httpStatus >= 500) {
+    kind = "provider_unavailable";
+  } else if (httpStatus !== null && httpStatus >= 400) {
+    kind = "provider_rejected";
+  } else if (code === "public_query_scope_timeout" || code === "MODEL_PROVIDER_TIMEOUT"
+      || error?.name === "AbortError" || error?.name === "TimeoutError") {
+    kind = "timeout";
+  } else if (code === "bai_json_task_invalid_json" || code === "deepseek_json_task_invalid_json"
+      || /_response_[a-z_]+:/u.test(message)) {
+    kind = "invalid_output";
+  } else if (message.startsWith("cloud_budget_")) {
+    kind = "accounting_unavailable";
+  }
+  return failureRecord(kind, { provider, model, httpStatus, providerErrorCode, providerErrorType });
+}
+
+function failureRecord(kind, { provider = null, model = null, httpStatus = null,
+  providerErrorCode = "", providerErrorType = "" } = {}) {
+  return {
+    kind,
+    provider: safeToken(provider) || null,
+    model: safeToken(model) || null,
+    httpStatus: Number.isInteger(httpStatus) ? httpStatus : null,
+    providerErrorCode: safeToken(providerErrorCode) || null,
+    providerErrorType: safeToken(providerErrorType) || null,
+  };
+}
+
+function safeToken(value) {
+  return typeof value === "string" && /^[A-Za-z0-9_.:-]{1,64}$/u.test(value) ? value : "";
 }
 
 function createAbortTimeout({ signal, timeoutMs }) {

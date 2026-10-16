@@ -303,3 +303,77 @@ test("a caller abort remains an abort instead of becoming a fail-open decision",
   controller.abort(new Error("caller disconnected"));
   await assert.rejects(pending, /caller disconnected/u);
 });
+
+// 2026-10-16: an empty OpenAI balance surfaced only as a bare 503. A failed
+// scope check now records why, from transport and ledger facts only.
+const OFFICIAL_SCOPE_ENV = Object.freeze({
+  ...CONFIGURED_ENV,
+  PUBLIC_QUERY_SCOPE_PROVIDER: "bai",
+  RAG_CARD_LUNA_CHANNEL: "official",
+  OPENAI_DECISIONS_API_KEY: "test-official-key",
+  PUBLIC_OPENAI_BUDGET_RUN_ID: "official-scope-test",
+  UPSTASH_REDIS_REST_URL: "https://redis.example.test",
+  UPSTASH_REDIS_REST_TOKEN: "redis-secret",
+});
+
+function officialScopeFetch({ ledger = "reserved", provider }) {
+  return async (url) => {
+    if (String(url).startsWith("https://redis.example.test")) {
+      return new Response(JSON.stringify({ result: [ledger] }), { status: 200 });
+    }
+    return provider();
+  };
+}
+
+test("an exhausted OpenAI balance is reported with its HTTP status and error code but not the provider message", async () => {
+  const result = await classifyPublicQueryScope({
+    question: "连锁处理时对象不在场了，效果还处理吗？",
+    env: OFFICIAL_SCOPE_ENV,
+    fetchImpl: officialScopeFetch({ provider: () => new Response(JSON.stringify({ error: {
+      message: "Your organization org-SECRET123 has no prepaid credits remaining.",
+      type: "insufficient_quota", code: "credit_balance_exhausted" } }), { status: 429 }) }),
+  });
+  assert.equal(result.scope, "uncertain");
+  assert.equal(result.reasonCode, "classifier_http_429_credit_balance_exhausted");
+  assert.deepEqual(result.failure, {
+    kind: "provider_balance_exhausted", provider: "openai", model: "gpt-6-luna", httpStatus: 429,
+    providerErrorCode: "credit_balance_exhausted", providerErrorType: "insufficient_quota",
+  });
+  assert.doesNotMatch(JSON.stringify(result), /org-SECRET123|prepaid credits/u);
+});
+
+test("scope failures are labeled by kind without changing the uncertain decision", async () => {
+  const blocked = await classifyPublicQueryScope({ question: "任意规则问题", env: OFFICIAL_SCOPE_ENV,
+    fetchImpl: officialScopeFetch({ ledger: "blocked", provider: () => assert.fail("blocked before dispatch") }) });
+  assert.equal(blocked.scope, "uncertain");
+  assert.equal(blocked.failure.kind, "site_budget_exhausted");
+
+  const cases = [
+    [Object.assign(new Error("deepseek 402"), { status: 402 }), "provider_balance_exhausted"],
+    [Object.assign(new Error("openai 429"), { status: 429, providerErrorCode: "rate_limit_exceeded" }), "provider_rate_limited"],
+    [Object.assign(new Error("openai 401"), { status: 401 }), "provider_auth_failed"],
+    [Object.assign(new Error("openai 503"), { status: 503, providerErrorCode: "server_is_overloaded" }), "provider_unavailable"],
+    [Object.assign(new Error("openai 400"), { status: 400 }), "provider_rejected"],
+    [Object.assign(new Error("public_query_scope_timeout"), { code: "MODEL_PROVIDER_TIMEOUT", name: "TimeoutError" }), "timeout"],
+    [Object.assign(new Error("invalid JSON"), { code: "bai_json_task_invalid_json" }), "invalid_output"],
+    [new Error("cloud_budget_store_http_500"), "accounting_unavailable"],
+    [new Error("unexpected"), "failed"],
+  ];
+  for (const [error, kind] of cases) {
+    const result = await classifyPublicQueryScope({ question: "任意规则问题", env: CONFIGURED_ENV,
+      invoke: async () => { throw error; } });
+    assert.equal(result.scope, "uncertain", kind);
+    assert.equal(result.failure.kind, kind, error.message);
+    assert.equal(result.failure.provider, "deepseek");
+  }
+
+  const malformed = await classifyPublicQueryScope({ question: "任意规则问题", env: CONFIGURED_ENV,
+    invoke: async () => ({ scope: "definitely_block" }) });
+  assert.equal(malformed.failure.kind, "invalid_output");
+  const modelUncertain = await classifyPublicQueryScope({ question: "任意规则问题", env: CONFIGURED_ENV,
+    invoke: async () => ({ scope: "uncertain", confidence: "low", reasonCode: "ambiguous" }) });
+  assert.equal(modelUncertain.reasonCode, "ambiguous");
+  assert.equal(modelUncertain.failure, undefined);
+  const unconfigured = await classifyPublicQueryScope({ question: "任意规则问题", env: {} });
+  assert.equal(unconfigured.failure.kind, "not_configured");
+});

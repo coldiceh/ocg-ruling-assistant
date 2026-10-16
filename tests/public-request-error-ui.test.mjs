@@ -184,3 +184,46 @@ test("normal EOF without an SSE end marker displays incomplete delivery and pres
   assert.doesNotMatch(JSON.stringify(ui), /版本协议校验失败|无法确认回答版本|未调用|未计费|未开始裁定/);
   assert.equal(calls, 1);
 });
+
+test("a service-side scope failure shows its cause and does not blame the question", async () => {
+  const message = "问题范围检查暂不可用：OpenAI 账户余额不足（HTTP 429 · credit_balance_exhausted）。这是服务端问题，与问题内容无关；本次请求已停止，未开始检索或生成裁定。";
+  const scopeFailure = { kind: "provider_balance_exhausted", provider: "openai", model: "gpt-6-luna", httpStatus: 429,
+    providerErrorCode: "credit_balance_exhausted", providerErrorType: "insufficient_quota", reasonCode: "x" };
+  for (const transport of ["http", "sse"]) {
+    const payload = { code: "public_query_scope_unavailable", statusCode: 503, error: message, message, scopeFailure };
+    const request = requestWith(async () => (transport === "http"
+      ? Response.json(payload, { status: 503 })
+      : new Response(`event: error\ndata: ${JSON.stringify(payload)}\n\n`, { headers: { "content-type": "text/event-stream" } })));
+    let captured;
+    await assert.rejects(request("Synthetic input only", "latest"), (error) => { captured = error; return true; });
+    assert.equal(captured.scopeFailure.kind, "provider_balance_exhausted", transport);
+    const { ui, render } = renderer(); render(captured, "latest");
+    assert.equal(ui.verdictTitle.textContent, "问题范围检查暂不可用");
+    assert.equal(ui.rulingBasisText.textContent, "OpenAI 账户余额不足（HTTP 429 · credit_balance_exhausted）");
+    assert.match(ui.verdictBody.textContent, /与问题内容无关/u);
+    assert.match(ui.stepsList.items.join(""), /充值/u);
+    assert.doesNotMatch(JSON.stringify(ui), /请确认问题中包含/u);
+    assert.ok(ui.questionsList.items.includes(message));
+  }
+
+  const budget = requestWith(async () => Response.json({ code: "public_query_scope_unavailable",
+    scopeFailure: { kind: "site_budget_exhausted" } }, { status: 503 }));
+  let budgetError;
+  await assert.rejects(budget("Synthetic input only", "latest"), (error) => { budgetError = error; return true; });
+  const budgetView = renderer(); budgetView.render(budgetError, "latest");
+  assert.equal(budgetView.ui.rulingBasisText.textContent, "本站官方模型今日预算已用完");
+
+  const uncertain = requestWith(async () => Response.json({ code: "public_query_scope_unavailable",
+    scopeFailure: { kind: "model_uncertain", provider: "openai" } }, { status: 503 }));
+  let uncertainError;
+  await assert.rejects(uncertain("Synthetic input only", "latest"), (error) => { uncertainError = error; return true; });
+  const uncertainView = renderer(); uncertainView.render(uncertainError, "latest");
+  assert.match(uncertainView.ui.stepsList.items.join(""), /请确认问题中包含/u);
+
+  const unsafe = requestWith(async () => Response.json({ code: "public_query_scope_unavailable",
+    scopeFailure: { kind: "provider_rejected", provider: "<img src=x>", providerErrorCode: "a b" } }, { status: 503 }));
+  let unsafeError;
+  await assert.rejects(unsafe("Synthetic input only", "latest"), (error) => { unsafeError = error; return true; });
+  assert.equal(unsafeError.scopeFailure.provider, "");
+  assert.equal(unsafeError.scopeFailure.providerErrorCode, "");
+});
