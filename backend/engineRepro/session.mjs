@@ -14,7 +14,7 @@ import { createHttpEngineClient, warmHttpEngine } from "./engineClient.mjs";
 import { createEngineReproLimits, redisCommand } from "./limits.mjs";
 import { createOfficialModelCall } from "./modelCalls.mjs";
 import { DEFAULT_PLANNER, identityFromCardResolution, runEngineReproduction } from "./reproduce.mjs";
-import { STATUS } from "./aggregate.mjs";
+import { STATUS, renderQuestion } from "./aggregate.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 let cidMapCache = null;
@@ -76,14 +76,17 @@ export function appendEngineReproSection(answer, section) {
 
 function sectionFromRecord(record) {
   return { status: "done", questionStatus: record.summary?.status, reasonCodes: record.summary?.reasonCodes || [],
-    flags: record.summary?.flags || [], rendered: record.rendered, timings: record.timings };
+    flags: record.summary?.flags || [], rendered: record.rendered, timings: record.timings,
+    plannerContext: record.plannerContext || [], modelUsage: record.modelUsage || [] };
 }
 
 export function plannerFromEnv(env = {}) {
+  const maxInput = Number(env.ENGINE_REPRO_PLANNER_MAX_INPUT);
   return { ...DEFAULT_PLANNER,
     model: env.ENGINE_REPRO_PLANNER_MODEL || DEFAULT_PLANNER.model,
     effort: env.ENGINE_REPRO_PLANNER_EFFORT || DEFAULT_PLANNER.effort,
-    maxOutput: Number(env.ENGINE_REPRO_PLANNER_MAX_OUTPUT) > 0 ? Number(env.ENGINE_REPRO_PLANNER_MAX_OUTPUT) : DEFAULT_PLANNER.maxOutput };
+    maxOutput: Number(env.ENGINE_REPRO_PLANNER_MAX_OUTPUT) > 0 ? Number(env.ENGINE_REPRO_PLANNER_MAX_OUTPUT) : DEFAULT_PLANNER.maxOutput,
+    maxInput: Number.isSafeInteger(maxInput) && maxInput > 0 ? maxInput : DEFAULT_PLANNER.maxInput };
 }
 
 export function createEngineReproSession({
@@ -152,10 +155,14 @@ export function createEngineReproSession({
         } catch (error) {
           // Budget, rate limit, missing configuration, engine or model outage: fail closed, never affect the answer.
           const reason = /budget|rate_limited|input_cap/u.test(String(error.code || error.message)) ? "budget_exceeded" : "engine_error";
-          const record = { text: question, identity, timings: { startedAtMs: state.startedAtMs, finishedAtMs: clock() },
+          const previous = error.engineReproRecord;
+          const record = { ...previous, text: question, identity,
+            timings: { ...previous?.timings, startedAtMs: state.startedAtMs, finishedAtMs: clock() },
             error: { code: error.code || null, message: String(error.message || error).slice(0, 300) },
-            summary: { status: STATUS.FAIL, reasonCodes: [reason], flags: [] } };
-          record.rendered = `【引擎复现（实验性，未经评测）】\n状态：未复现 —— ${reason}（${record.error.code || record.error.message}）`;
+            summary: { status: STATUS.FAIL, reasonCodes: [reason],
+              flags: previous?.plannerContext?.some((context) => context.trimmed) ? ["context_trimmed"] : [] } };
+          record.rendered = previous ? renderQuestion(record, record.summary)
+            : `【引擎复现（实验性，未经评测）】\n状态：未复现 —— ${reason}（${record.error.code || record.error.message}）`;
           return record;
         }
       };

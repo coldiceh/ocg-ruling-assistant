@@ -37,7 +37,8 @@ export function worstCaseCostUsd(model, inputText, maxOutputTokens) {
   return (Array.from(inputText).length * price.input + maxOutputTokens * price.output) / 1e6;
 }
 
-// Rough token estimate for the per-call input cap (CJK ~1 token/char, other ~1 token/3 chars).
+// Rough estimate for the soft context target (CJK ~1 token/char, other ~1 token/3 chars).
+// Not a tokenizer or a billing count; observed provider usage is recorded separately.
 export function estimateTokens(text) {
   const chars = Array.from(String(text));
   const cjk = chars.filter((c) => /[　-鿿＀-￯]/u.test(c)).length;
@@ -71,18 +72,15 @@ export function createModelRunner({ outDir, apiKey = null, mock = null, budgetUs
     const cachePath = join(cacheDir, qid, `${stage}-${bodyHash.slice(0, 16)}.json`);
     const inputText = `${instructions || ""}\n${input}`;
     const row = { at: new Date().toISOString(), qid, stage, model, reasoningEffort, maxOutputTokens, bodyHash,
-      inputTokensEstimate: estimateTokens(inputText) };
+      inputTokensEstimate: estimateTokens(inputText), maxInputTokens };
     if (existsSync(cachePath)) {
       const cached = JSON.parse(readFileSync(cachePath, "utf8"));
       appendFileSync(ledgerPath, JSON.stringify({ ...row, cacheHit: true, usage: cached.usage, costUsd: cached.costUsd,
         ms: 0, status: cached.status }) + "\n");
       return { ...cached, cacheHit: true, bodyHash };
     }
-    if (maxInputTokens && row.inputTokensEstimate > maxInputTokens) {
-      const error = new Error(`input estimate ${row.inputTokensEstimate} > cap ${maxInputTokens}`);
-      error.code = "input_cap_exceeded";
-      throw error;
-    }
+    // Reproduction trims optional context before this call. Essential card text
+    // can still exceed its soft target; only the monetary budget rejects a call.
     if (!mock) {
       const worst = worstCaseCostUsd(model, inputText, maxOutputTokens);
       if (!(spent + worst <= budgetUsd)) {
@@ -156,9 +154,7 @@ export function createOfficialModelCall({ env, limits, fetchImpl = globalThis.fe
     const body = { model, ...(instructions ? { instructions } : {}), input, reasoning: { effort: reasoningEffort },
       text: { format: { type: "json_object" } }, max_output_tokens: maxOutputTokens, stream: false };
     const inputText = `${instructions || ""}\n${input}`;
-    if (maxInputTokens && estimateTokens(inputText) > maxInputTokens) {
-      throw Object.assign(new Error("engine_repro_input_cap_exceeded"), { code: "engine_repro_budget" });
-    }
+    // maxInputTokens is a soft trimming target, never a second rejection gate.
     const reservation = await limits.reserve(worstCaseCostUsd(model, inputText, maxOutputTokens));
     const started = Date.now();
     let payload;

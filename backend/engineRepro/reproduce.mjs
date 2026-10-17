@@ -2,11 +2,11 @@
 // repair call -> question-level status. Shared by the production answer path and the batch script.
 // Card identity always comes from the main answer's own card resolution (no second resolver).
 // Only mechanical checks happen here: field shapes, allowed card codes, exact names, budgets.
-import { DEFAULT_DECK, DEFAULT_SEED, FILLER_CARDS, PLANNER_INSTRUCTIONS, PROMPT_VERSION, TOOL_CARD_CODES,
-  buildPlannerInput, buildRepairInput } from "./plannerPrompt.mjs";
+import { DEFAULT_DECK, DEFAULT_SEED, FILLER_CARDS, PLANNER_INSTRUCTIONS, PROMPT_VERSION, TOOL_CARD_CODES } from "./plannerPrompt.mjs";
+import { preparePlannerContext } from "./plannerContext.mjs";
 import { STATUS, aggregateQuestion, renderQuestion } from "./aggregate.mjs";
 
-export const DEFAULT_PLANNER = Object.freeze({ model: "gpt-6.1-sol", effort: "low", maxOutput: 1600, maxInput: 8000 });
+export const DEFAULT_PLANNER = Object.freeze({ model: "gpt-6.1-sol", effort: "low", maxOutput: 1600, maxInput: 16000 });
 const REASON_CODES = ["pure_rule", "archetype_level", "tournament_policy", "ruleset_version"];
 
 // The main answer's card resolution -> the identity record used here.
@@ -171,7 +171,8 @@ function summarizeEngine(r) {
 export async function runEngineReproduction({ question, identity, cardsById, cidMap, engine, modelCall,
   planner = DEFAULT_PLANNER, includeOfficialQa = false, clock = () => 0, record: base = {} }) {
   const record = { ...base, text: question, promptVersion: PROMPT_VERSION, planner, includeOfficialQa,
-    plannerCalled: false, identity, timings: { startedAtMs: clock(), plannerMs: 0, repairMs: 0, engineMs: 0 } };
+    plannerCalled: false, identity, plannerContext: [], modelUsage: [],
+    timings: { startedAtMs: clock(), plannerMs: 0, repairMs: 0, engineMs: 0 } };
   const finish = () => {
     record.summary = aggregateQuestion(record);
     record.rendered = renderQuestion(record, record.summary);
@@ -186,7 +187,16 @@ export async function runEngineReproduction({ question, identity, cardsById, cid
   const timedEngine = (op, body) => enginePhase(() => engine(op, body));
   const timedModel = async (opts) => {
     const t0 = clock();
-    try { return await modelCall(opts); } finally {
+    try {
+      const result = await modelCall(opts);
+      record.modelUsage.push({ stage: opts.stage, inputTokensEstimate: record.plannerContext.at(-1).inputTokensEstimate,
+        inputTokens: result.usage?.input_tokens ?? null, outputTokens: result.usage?.output_tokens ?? null,
+        costUsd: Number.isFinite(result.costUsd) ? result.costUsd : null });
+      return result;
+    } catch (error) {
+      if (error && typeof error === "object") error.engineReproRecord = record;
+      throw error;
+    } finally {
       record.timings[opts.stage === "repair" ? "repairMs" : "plannerMs"] += clock() - t0;
     }
   };
@@ -221,7 +231,9 @@ export async function runEngineReproduction({ question, identity, cardsById, cid
   record.relatedRefs = relatedCards.map((e) => ({ ref: e.ref, kind: e.kind, total: e.total ?? e.cards.length, shown: e.cards.length }));
   const allowed = [...codes, ...FILLER_CARDS.map((c) => c.code), ...TOOL_CARD_CODES,
     ...relatedCards.flatMap((e) => e.cards.map((c) => c.code))];
-  const plannerInput = buildPlannerInput({ question, cards, relatedCards, toolCards, includeOfficialQa });
+  const contextOptions = { question, cards, relatedCards, toolCards, includeOfficialQa, maxInput: planner.maxInput };
+  const planned = preparePlannerContext(contextOptions);
+  record.plannerContext.push(planned.context);
 
   // All branches in parallel (each is an independent duel on the engine service).
   const runBranches = async (onlyKeys = null) => {
@@ -259,7 +271,7 @@ export async function runEngineReproduction({ question, identity, cardsById, cid
 
   // call 1: plan
   record.plannerCalled = true;
-  const r1 = await timedModel(modelOpts("plan", plannerInput));
+  const r1 = await timedModel(modelOpts("plan", planned.input));
   record.planRaw = [{ call: "plan", status: r1.status, incomplete: r1.incomplete, text: r1.outputText }];
   let plan = null;
   let planLevelProblems = [];
@@ -281,9 +293,10 @@ export async function runEngineReproduction({ question, identity, cardsById, cid
   else for (const sq of record.subQuestions) for (const b of sq.branches) if (!b.engine || b.engine.status !== "replayed") failures.push(compactFailure(sq, b));
   if (!failures.length) return finish();
   record.repairCalled = true;
-  const repairInput = buildRepairInput({ plannerInput, previousPlan: plan || String(r1.outputText || "").slice(0, 4000), failures,
-    planLevel: planLevelProblems.length > 0 });
-  const r2 = await timedModel(modelOpts("repair", repairInput));
+  const repaired = preparePlannerContext({ ...contextOptions,
+    repair: { previousPlan: plan || String(r1.outputText || "").slice(0, 4000), failures, planLevel: planLevelProblems.length > 0 } });
+  record.plannerContext.push(repaired.context);
+  const r2 = await timedModel(modelOpts("repair", repaired.input));
   record.planRaw.push({ call: "repair", status: r2.status, incomplete: r2.incomplete, text: r2.outputText });
   let fix = null;
   try { fix = parseJsonObject(r2.outputText); } catch (e) { record.repairProblems = [`修复输出不是完整的 JSON：${e.message}`]; }

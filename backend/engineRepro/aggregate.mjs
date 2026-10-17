@@ -17,6 +17,7 @@ export const REASON_ZH = Object.freeze({
 const FLAG_ZH = Object.freeze({
   with_assumptions: "含补充假设", branched: "分支", random_dependent: "依赖随机结果", what_not_why: "问“为什么”",
   archetype_unverified: "字段名未核实",
+  context_trimmed: "上下文已裁剪",
 });
 
 // One branch result -> {ok, reason}
@@ -29,11 +30,12 @@ function branchOutcome(branch) {
 }
 
 export function aggregateQuestion(record) {
+  const contextFlags = record.plannerContext?.some((context) => context.trimmed) ? ["context_trimmed"] : [];
   // pre-planner outcomes
-  if (record.preStatus) return { status: record.preStatus.status, reasonCodes: [record.preStatus.reason], flags: [] };
+  if (record.preStatus) return { status: record.preStatus.status, reasonCodes: [record.preStatus.reason], flags: contextFlags };
   const plan = record.plan;
-  if (!plan) return { status: STATUS.FAIL, reasonCodes: [record.planFailure || "invalid_input"], flags: [] };
-  const flags = new Set();
+  if (!plan) return { status: STATUS.FAIL, reasonCodes: [record.planFailure || "invalid_input"], flags: contextFlags };
+  const flags = new Set(contextFlags);
   if (plan.what_not_why === true) flags.add("what_not_why");
   if (plan.applicability === "not_applicable") {
     if (plan.reason_code === "archetype_level" && record.archetypeVerified === false) flags.add("archetype_unverified");
@@ -71,7 +73,17 @@ export function renderQuestion(record, summary) {
   const reasons = summary.reasonCodes.filter(Boolean).map((c) => `${REASON_ZH[c] || c}（${c}）`).join("；");
   const flags = summary.flags.map((f) => FLAG_ZH[f] || f).join("、");
   lines.push(`状态：${summary.status}${reasons ? ` —— ${reasons}` : ""}${flags ? `　标记：${flags}` : ""}`);
+  for (const context of record.plannerContext || []) {
+    if (!context.trimmed) continue;
+    const removed = context.removed.map((item) => item.kind === "related_cards"
+      ? `按「」取出的相关卡：${item.refs.map((ref) => `「${ref.ref}」[${ref.cards.map((c) => `${c.name}(${c.code})`).join("、")}]`).join("；")}`
+      : `固定工具卡：${item.cards.map((c) => `${c.name}(${c.code})`).join("、")}`).join("；");
+    lines.push(`上下文已裁剪（${context.stage === "repair" ? "修复" : "规划"}）：去掉${removed}。`,
+      `输入估算：${context.initialTokensEstimate} → ${context.inputTokensEstimate}，目标 ${context.maxInputTokens}；题目及点名卡文保留。`);
+    if (context.overLimitAfterTrim) lines.push("保留内容仍超过输入估算目标，继续规划。");
+  }
   const plan = record.plan;
+  if (record.error) lines.push(`复现错误：${record.error.code || record.error.message}`);
   if (record.preStatus?.detail) lines.push(record.preStatus.detail);
   if (plan?.quoted_span) lines.push(`题面依据：「${plan.quoted_span}」`);
   if (summary.status === STATUS.NA) {
