@@ -1496,6 +1496,28 @@ svg {
   margin: 0 0 12px;
 }
 
+.engine-repro-replay {
+  margin: 12px 0 0;
+}
+
+.engine-repro-replay summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.engine-repro-replay pre {
+  max-height: 480px;
+  margin: 10px 0 0;
+  padding: 10px 12px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: 12px/1.6 Consolas, "Microsoft YaHei", monospace;
+}
+
 .markdown-table-scroll {
   max-width: 100%;
   margin: 0 0 12px;

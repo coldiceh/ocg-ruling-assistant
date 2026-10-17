@@ -133,7 +133,10 @@ test("trimming is retained in stored results and the delivered API section", asy
   const delivered = await attachEngineReproWhenReady({ shortAnswer: "主回答" }, { env: {}, auditId: "test", requestStartedAt: 0, now: () => 20, command });
   assert.equal(delivered.engineRepro.plannerContext[0].trimmed, true);
   assert.ok(delivered.engineRepro.flags.includes("context_trimmed"));
-  assert.match(delivered.shortAnswer, /上下文已裁剪/u);
+  // a debugging detail: kept in the full replay field, not in the short section of the answer text
+  assert.match(delivered.engineRepro.rendered, /上下文已裁剪/u);
+  assert.doesNotMatch(delivered.shortAnswer, /上下文已裁剪/u);
+  assert.match(delivered.shortAnswer, /^主回答\n\n【引擎复现（实验性）】不适用\n\n原因：/u);
 });
 
 test("a financial failure after trimming retains the context marker and removal details", async () => {

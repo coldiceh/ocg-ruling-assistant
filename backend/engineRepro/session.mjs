@@ -15,6 +15,7 @@ import { createEngineReproLimits, redisCommand } from "./limits.mjs";
 import { createOfficialModelCall } from "./modelCalls.mjs";
 import { DEFAULT_PLANNER, identityFromCardResolution, runEngineReproduction } from "./reproduce.mjs";
 import { STATUS, renderQuestion } from "./aggregate.mjs";
+import { CONCISE_HEADER, engineReproConciseText, engineReproDigest, officialQaDirectFromAnswer } from "./concise.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 let cidMapCache = null;
@@ -55,28 +56,34 @@ function storedRecord(record) {
   return value;
 }
 
-export function engineReproSectionText(section) {
+// The short, user-facing section (concise.mjs). The full step-by-step replay is not part of the
+// answer text: it stays in section.rendered (response field engineRepro.rendered and the history
+// record), and the website shows it in a collapsed block under the short section.
+export function engineReproSectionText(section, { officialQaDirect = null } = {}) {
   if (!section) return "";
   if (section.status === "timeout") {
-    return `【引擎复现（实验性）】引擎复现在等待上限内未完成（复现已耗时 ${(section.elapsedMs / 1000).toFixed(1)} 秒，`
+    return `${CONCISE_HEADER}未完成\n\n引擎复现在等待上限内未完成（复现已耗时 ${(section.elapsedMs / 1000).toFixed(1)} 秒，`
       + `主回答完成后已等待 ${(section.waitedMs / 1000).toFixed(1)} 秒）。结果仍会写入历史记录。`;
   }
-  return section.rendered || "";
+  return section.digest ? engineReproConciseText(section.digest, { officialQaDirect }) : "";
 }
 
-/** Insert the section after the answer text (before an embedded generation footer, if any). */
+/** Insert the short section after the answer text (before an embedded generation footer, if any). */
 export function appendEngineReproSection(answer, section) {
   if (!section || !answer || typeof answer !== "object") return answer;
-  const text = engineReproSectionText(section);
+  const officialQaDirect = officialQaDirectFromAnswer(answer);
+  const text = engineReproSectionText(section, { officialQaDirect });
+  const engineRepro = { ...section, concise: text, officialQaDirect };
+  if (!text) return { ...answer, engineRepro };
   const shortAnswer = typeof answer.shortAnswer === "string" ? answer.shortAnswer : "";
   const footer = answer.generation?.embeddedInAnswerText === true ? String(answer.generation.answerTextFooter || "") : "";
   const body = footer && shortAnswer.endsWith(footer) ? shortAnswer.slice(0, -footer.length) : shortAnswer;
-  return { ...answer, engineRepro: section, shortAnswer: `${body}\n\n${text}${footer && shortAnswer.endsWith(footer) ? footer : ""}` };
+  return { ...answer, engineRepro, shortAnswer: `${body}\n\n${text}${footer && shortAnswer.endsWith(footer) ? footer : ""}` };
 }
 
 function sectionFromRecord(record) {
   return { status: "done", questionStatus: record.summary?.status, reasonCodes: record.summary?.reasonCodes || [],
-    flags: record.summary?.flags || [], rendered: record.rendered, timings: record.timings,
+    flags: record.summary?.flags || [], rendered: record.rendered, digest: engineReproDigest(record), timings: record.timings,
     plannerContext: record.plannerContext || [], modelUsage: record.modelUsage || [] };
 }
 

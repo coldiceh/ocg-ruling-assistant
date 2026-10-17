@@ -21,7 +21,7 @@ const FLAG_ZH = Object.freeze({
 });
 
 // One branch result -> {ok, reason}
-function branchOutcome(branch) {
+export function branchOutcome(branch) {
   const r = branch.engine;
   if (!r) return { ok: false, reason: branch.planReason || "invalid_input" };
   if (r.status === "replayed") return { ok: true, reason: null };

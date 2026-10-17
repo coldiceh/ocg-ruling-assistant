@@ -1922,6 +1922,7 @@ function renderRagAnswer(answer) {
   ui.verdictTitle.textContent = tr(state.title);
   ui.rulingBasisText.textContent = tr(state.basis);
   renderMarkdown(ui.verdictBody, answer.shortAnswer || "当前无法给出可靠分析。", buildSourceLinkMap(answer?.usedEvidence));
+  renderEngineReproReplay(ui.verdictBody, answer?.engineRepro);
   renderSubAnswers([]);
   ui.stepsTitle.textContent = tr("理由");
   ui.stepsList.hidden = false;
@@ -1941,6 +1942,23 @@ function renderRagAnswer(answer) {
   })));
   renderParserDebug(answer.debug || null);
   renderFeedbackPanel(answer);
+}
+
+// The answer text ends with the short engine-reproduction section; the engine service's full
+// step-by-step replay goes under it, collapsed by default and preformatted (its line breaks are
+// part of the content and are not Markdown).
+function renderEngineReproReplay(container, engineRepro) {
+  const rendered = typeof engineRepro?.rendered === "string" ? engineRepro.rendered.replace(/\r\n?/gu, "\n").trim() : "";
+  if (!rendered) return;
+  const details = document.createElement("details");
+  details.className = "engine-repro-replay";
+  const summary = document.createElement("summary");
+  summary.textContent = lt("展开完整回放", "Show the full replay", "完全なリプレイを表示");
+  const pre = document.createElement("pre");
+  pre.textContent = rendered;
+  details.appendChild(summary);
+  details.appendChild(pre);
+  container.appendChild(details);
 }
 
 function ragEvidenceLabel(type) {
@@ -4930,6 +4948,7 @@ function renderAdminQuestionHistory(entries) {
     appendAdminHistoryField(details, "提问来源", adminHistoryChannelLabel(entry?.requestChannel));
     appendAdminHistoryField(details, "问题全文", adminHistoryText(entry?.question));
     appendAdminHistoryField(details, "结果 / 答案全文", adminHistoryAnswerText(entry));
+    if (entry?.engineRepro?.rendered) appendAdminHistoryField(details, "引擎复现完整回放", adminHistoryText(entry.engineRepro.rendered));
     appendAdminHistoryField(details, "调用者 IP", adminHistoryText(entry?.ip));
     appendAdminHistoryField(details, "IP 来源", adminHistoryIpSourceLabel(entry?.ipSource));
     appendAdminHistoryField(details, "时间", formatAdminDate(entry?.createdAt) || "未记录");

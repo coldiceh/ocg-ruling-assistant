@@ -2058,6 +2058,59 @@ test("renderBackendAnswer formats markdown safely and presents titled source lin
   assert.match(testNodeText(ui.verdictBody), /预计还需 31 分钟/u);
 });
 
+test("engine reproduction: short section in the answer text, full replay collapsed and preformatted below it", async () => {
+  const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+  const source = [
+    sourceBetween(app, "function renderBackendAnswer", "function renderAnswerVersion"),
+    sourceBetween(app, "function providerFailurePresentation", "async function loadBudgetStatus"),
+    sourceBetween(app, "function formatRiskFlag", "function formatProvisionalVerdict"),
+    sourceBetween(app, "function renderList", "function startPendingStages"),
+    sourceBetween(app, "function safeHttpUrl", "function startPendingStages"),
+    sourceBetween(app, "function renderSources", "function renderFeedbackPanel"),
+  ].join("\n");
+  const document = createTestDocument();
+  const ui = Object.fromEntries([
+    "resultGrid", "stepsTitle", "stepsList", "verdictBlock", "confidenceText", "verdictTitle",
+    "rulingBasisText", "verdictBody", "questionsList", "sourcesList",
+  ].map((name) => [name, { ...document.createElement("div"), classList: { remove() {} } }]));
+  const render = new Function("ui", "document", "clearElement", "appendText", `
+    let lastRenderedBackendAnswer;
+    const tr = value => value, lt = (zh) => zh, localeNames = {}, supportedLocales = ["zh-CN", "en", "ja"];
+    const debugUiEnabled = false;
+    const noop = () => {};
+    const completePendingStages = noop, renderAnswerVersion = noop, renderEngineSimulation = noop;
+    const renderCards = noop, pendingModelCardNames = noop, renderSubAnswers = noop, renderParserDebug = noop, renderFeedbackPanel = noop;
+    const updateModelStatus = noop, renderBudgetStatus = noop, loadBudgetStatus = noop;
+    const modelProviderLabel = noop, modelStatusFromAnswer = noop, basisFromBackendMode = noop;
+    ${source}
+    return renderBackendAnswer;
+  `)(ui, document, clearTestElement, appendTestText);
+  const replay = "【引擎复现（实验性，未经评测）】\n状态：已复现\n  · 此时 P1 本可发动：灰流丽（未发动）\n  窗口（决策#7，主要阶段1）";
+  const shortAnswer = ["主回答。", "【引擎复现（实验性）】已复现", "引擎在下面的局面里：我方在主要阶段1可以选择「发动超融合」。",
+    "引擎只显示它运行的结果，卡片脚本可能有 bug，不代表官方裁定。"].join("\n\n");
+  render({ answerLevel: "rule_analysis", mode: "rag_baseline", shortAnswer, usedEvidence: [], debug: {},
+    engineRepro: { status: "done", rendered: replay, concise: "" } });
+  const children = ui.verdictBody.childNodes;
+  // every short-section line is its own paragraph (blank-line separated Markdown)
+  const inlineText = (node) => String(node.textContent || "") + (node.childNodes || []).map(inlineText).join("");
+  assert.deepEqual(children.slice(0, -1).map((node) => node.tagName), ["p", "p", "p", "p"]);
+  assert.deepEqual(children.slice(0, -1).map(inlineText), shortAnswer.split("\n\n"));
+  const details = children.at(-1);
+  assert.equal(details.tagName, "details");
+  assert.equal(details.className, "engine-repro-replay");
+  assert.notEqual(details.open, true, "collapsed by default");
+  assert.equal(details.childNodes[0].tagName, "summary");
+  assert.equal(details.childNodes[0].textContent, "展开完整回放");
+  assert.equal(details.childNodes[1].tagName, "pre");
+  assert.equal(details.childNodes[1].textContent, replay, "line breaks of the full replay are kept");
+
+  render({ answerLevel: "rule_analysis", mode: "rag_baseline", shortAnswer: "主回答。", usedEvidence: [], debug: {} });
+  assert.equal(ui.verdictBody.childNodes.some((node) => node.tagName === "details"), false);
+  render({ answerLevel: "rule_analysis", mode: "rag_baseline", shortAnswer: "主回答。", usedEvidence: [], debug: {},
+    engineRepro: { status: "timeout", waitedMs: 1 } });
+  assert.equal(ui.verdictBody.childNodes.some((node) => node.tagName === "details"), false);
+});
+
 test("budget labels show current final ruling providers and omit the retired relay", async () => {
   const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
   assert.match(app, /bucket\?\.provider === "bai" \? "GPT最终裁定"/u);

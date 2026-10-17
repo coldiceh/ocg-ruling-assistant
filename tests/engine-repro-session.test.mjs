@@ -85,7 +85,13 @@ test("not finished when the answer completes: the response waits for it; the del
     { env: {}, auditId: "audit-1", requestStartedAt: 0, waitDeadlineAt: 280000, now: () => clockRef.t, command: redis.command,
       sleep: async (ms) => { await new Promise((r) => setTimeout(r, 5)); } });
   assert.equal(answer.engineRepro.status, "done");
-  assert.match(answer.shortAnswer, /^主回答\n\n【引擎复现（实验性，未经评测）】\n状态：已复现/u);
+  // the answer text carries only the short section; the full replay stays in engineRepro.rendered
+  assert.match(answer.shortAnswer, /^主回答\n\n【引擎复现（实验性）】已复现\n\n引擎在下面的局面里：/u);
+  assert.match(answer.shortAnswer, /局面：我方手卡 灰流丽。/u);
+  assert.doesNotMatch(answer.shortAnswer, /状态：|未经评测|【引擎复现】/u);
+  assert.match(answer.engineRepro.rendered, /^【引擎复现（实验性，未经评测）】\n状态：已复现/u);
+  assert.match(answer.engineRepro.rendered, /【引擎复现】\n {2}状态：已按步骤回放完成/u);
+  assert.equal(answer.shortAnswer.endsWith(answer.engineRepro.concise), true);
   await Promise.all(pending);
   const audit = JSON.parse(redis.data.get("audit:audit-1"));
   assert.equal(audit.engineRepro.answerDelay.delayMs, 30);
@@ -103,6 +109,8 @@ test("two requests (prepare, then finalize): finalize waits on the stored result
     waitDeadlineAt: 280000, now: () => clockRef.t, command: redis.command, sleep: async () => { await new Promise((r) => setTimeout(r, 5)); } });
   assert.equal(section.status, "done");
   assert.equal(section.questionStatus, "已复现");
+  assert.equal(section.digest.status, "已复现");
+  assert.match(section.rendered, /^【引擎复现（实验性，未经评测）】/u);
   await Promise.all(pending);
 });
 
@@ -127,7 +135,7 @@ test("past the wait deadline: the answer goes out with a notice; the late result
       command: redis.command, sleep: pollSleep(clockRef) });
   assert.equal(answer.engineRepro.status, "timeout");
   assert.equal(answer.engineRepro.waitedMs, 3000);
-  assert.match(answer.shortAnswer, /引擎复现在等待上限内未完成（复现已耗时 3\.0 秒，主回答完成后已等待 3\.0 秒）/u);
+  assert.match(answer.shortAnswer, /^主回答\n\n【引擎复现（实验性）】未完成\n\n引擎复现在等待上限内未完成（复现已耗时 3\.0 秒，主回答完成后已等待 3\.0 秒）/u);
   release();
   await Promise.all(pending);
   const audit = JSON.parse(redis.data.get("audit:audit-t"));
@@ -225,4 +233,35 @@ test("answer service wiring: without an admin session the pipeline gets no obser
   });
   assert.equal(result.answer.shortAnswer, "Synthetic ruling");
   assert.equal(result.answer.engineRepro, undefined);
+});
+
+test("both request shapes give the same short section; the official Q&A line follows the evidence-pack count", async () => {
+  const { finalizePublicAnswer } = await import("../backend/publicPreparedAnswerService.mjs");
+  const { OFFICIAL_QA_ABSENT_LINE, OFFICIAL_QA_PRESENT_LINE } = await import("../backend/engineRepro/concise.mjs");
+  const redis = fakeRedis();
+  const clockRef = { t: 1000 };
+  const { session, pending } = makeSession({ delayMs: 1, clockRef, redis });
+  session.onCardTextsReady({ question: "q", cardResolution, cards });
+  await Promise.all(pending);
+  const options = { env: {}, auditId: "audit-1", requestStartedAt: 0, waitDeadlineAt: 280000, now: () => clockRef.t,
+    command: redis.command };
+  const mainAnswer = (count) => ({ shortAnswer: "主回答", debug: { retrievalCounts: { officialQaDirectCandidates: count } } });
+
+  const single = await attachEngineReproWhenReady(mainAnswer(0), options);
+  const prepared = await finalizePublicAnswer({
+    preparation: { profileId: "official-astra-low", pipeline: "rag_baseline", continuation: { promptBundle: { prompt: "x" } },
+      rulingVersion: "latest", startedAt: 0, auditId: "audit-1", requestDiagnostics: { scope: { scope: "in_scope" } },
+      progress: { totalMs: 0 }, engineRepro: { enabled: true, requestStartedAt: 0 } },
+    env: { MODEL_PROVIDER: "mock" },
+    selectProfile: async () => ({ profile: { id: "official-astra-low", provider: "openai" } }),
+    finalize: async () => mainAnswer(0), addGeneration: async (answer) => answer, updateAudit: async () => ({ updated: true }),
+    attachEngineRepro: (answer, attachOptions) => attachEngineReproWhenReady(answer, { ...attachOptions, now: () => clockRef.t,
+      command: redis.command }),
+  });
+  assert.equal(prepared.answer.shortAnswer, single.shortAnswer);
+  assert.equal(prepared.answer.engineRepro.rendered, single.engineRepro.rendered);
+  assert.ok(single.shortAnswer.includes(OFFICIAL_QA_ABSENT_LINE));
+  const withDirect = await attachEngineReproWhenReady(mainAnswer(1), options);
+  assert.ok(withDirect.shortAnswer.includes(OFFICIAL_QA_PRESENT_LINE));
+  assert.ok(!withDirect.shortAnswer.includes(OFFICIAL_QA_ABSENT_LINE));
 });
