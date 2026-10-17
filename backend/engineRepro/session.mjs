@@ -1,4 +1,6 @@
-// Production wiring of the engine-reproduction section (experimental, admin-only).
+// Production wiring of the engine-reproduction section (experimental; public since 2026-10-16,
+// stage 4: it runs for every public request while ENGINE_REPRO_ENABLED is on, inside its own
+// daily budget bucket and per-minute rate limit, limits.mjs).
 //
 // The reproduction starts the moment the main pipeline has its card resolution and card texts
 // (it reuses that exact resolution and data snapshot) and runs alongside retrieval / selection /
@@ -15,7 +17,7 @@ import { createEngineReproLimits, redisCommand } from "./limits.mjs";
 import { createOfficialModelCall } from "./modelCalls.mjs";
 import { DEFAULT_PLANNER, identityFromCardResolution, runEngineReproduction } from "./reproduce.mjs";
 import { STATUS, renderQuestion } from "./aggregate.mjs";
-import { CONCISE_HEADER, engineReproConciseText, engineReproDigest, officialQaDirectFromAnswer } from "./concise.mjs";
+import { CONCISE_HEADER, OFFICIAL_QA_STATE, engineReproConciseText, engineReproDigest, officialQaStateFromAnswer } from "./concise.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 let cidMapCache = null;
@@ -59,21 +61,23 @@ function storedRecord(record) {
 // The short, user-facing section (concise.mjs). The full step-by-step replay is not part of the
 // answer text: it stays in section.rendered (response field engineRepro.rendered and the history
 // record), and the website shows it in a collapsed block under the short section.
-export function engineReproSectionText(section, { officialQaDirect = null } = {}) {
+export function engineReproSectionText(section, { officialQaState = null } = {}) {
   if (!section) return "";
   if (section.status === "timeout") {
-    return `${CONCISE_HEADER}未完成\n\n引擎复现在等待上限内未完成（复现已耗时 ${(section.elapsedMs / 1000).toFixed(1)} 秒，`
+    return `${CONCISE_HEADER}未完成\n\nygopro 引擎复现在等待上限内未完成（复现已耗时 ${(section.elapsedMs / 1000).toFixed(1)} 秒，`
       + `主回答完成后已等待 ${(section.waitedMs / 1000).toFixed(1)} 秒）。结果仍会写入历史记录。`;
   }
-  return section.digest ? engineReproConciseText(section.digest, { officialQaDirect }) : "";
+  return section.digest ? engineReproConciseText(section.digest, { officialQaState }) : "";
 }
 
 /** Insert the short section after the answer text (before an embedded generation footer, if any). */
 export function appendEngineReproSection(answer, section) {
   if (!section || !answer || typeof answer !== "object") return answer;
-  const officialQaDirect = officialQaDirectFromAnswer(answer);
-  const text = engineReproSectionText(section, { officialQaDirect });
-  const engineRepro = { ...section, concise: text, officialQaDirect };
+  const officialQaState = officialQaStateFromAnswer(answer);
+  const text = engineReproSectionText(section, { officialQaState });
+  // officialQaDirect (true / false / null) is kept for existing readers of the response.
+  const officialQaDirect = officialQaState === null ? null : officialQaState === OFFICIAL_QA_STATE.DIRECT;
+  const engineRepro = { ...section, concise: text, officialQaState, officialQaDirect };
   if (!text) return { ...answer, engineRepro };
   const shortAnswer = typeof answer.shortAnswer === "string" ? answer.shortAnswer : "";
   const footer = answer.generation?.embeddedInAnswerText === true ? String(answer.generation.answerTextFooter || "") : "";
@@ -97,12 +101,12 @@ export function plannerFromEnv(env = {}) {
 }
 
 export function createEngineReproSession({
-  env, isAdmin = false, requestStartedAt = Date.now(), auditIdPromise = Promise.resolve(null),
+  env, requestStartedAt = Date.now(), auditIdPromise = Promise.resolve(null),
   fetchImpl = globalThis.fetch, now = Date.now, waitUntil = defaultWaitUntil,
   engine = null, modelCall = null, limits = null, cidMap = null, planner = null, saveAudit = null,
   command = redisCommand, warmEngine = warmHttpEngine,
 }) {
-  const enabled = engineReproEnabled(env) && isAdmin === true;
+  const enabled = engineReproEnabled(env);
   const clock = () => now() - requestStartedAt;
   const state = { started: false, done: false, record: null, startedAtMs: null };
   let promise = null;
@@ -169,7 +173,7 @@ export function createEngineReproSession({
             summary: { status: STATUS.FAIL, reasonCodes: [reason],
               flags: previous?.plannerContext?.some((context) => context.trimmed) ? ["context_trimmed"] : [] } };
           record.rendered = previous ? renderQuestion(record, record.summary)
-            : `【引擎复现（实验性，未经评测）】\n状态：未复现 —— ${reason}（${record.error.code || record.error.message}）`;
+            : `【ygopro 引擎复现（实验性，未经评测）】\n状态：未复现 —— ${reason}（${record.error.code || record.error.message}）`;
           return record;
         }
       };

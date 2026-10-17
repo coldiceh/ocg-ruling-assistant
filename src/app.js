@@ -76,7 +76,8 @@ Object.assign(uiTranslations.en, {
   "平均出答案时间统计已关闭。": "Answer-time statistics are disabled.",
   "平均出答案时间暂不可用（未配置统计存储）。": "Answer-time statistics are not configured.",
   "平均出答案时间暂时读取失败。": "Answer-time statistics could not be loaded.",
-  "GPT最终裁定": "GPT final ruling", "未读取": "Unavailable", "暂不可用": "Unavailable",
+  "GPT最终裁定": "GPT final ruling", "官方 GPT（本站每日额度）": "Official GPT (this site's daily allowance)",
+  "未读取": "Unavailable", "暂不可用": "Unavailable",
   "在 GitHub 反馈这个回答": "Report this answer on GitHub", "暂无卡图": "No card image",
   "用户提供文本": "User-provided text", "本地数据库": "Local database",
   "暂未读取到效果文本。": "Card text is unavailable.", "卡片文本 / FAQ / 相关资料": "Card text / FAQ / related sources",
@@ -106,7 +107,8 @@ Object.assign(uiTranslations.ja, {
   "平均出答案时间统计已关闭。": "回答時間の集計は無効です。",
   "平均出答案时间暂不可用（未配置统计存储）。": "回答時間の集計は設定されていません。",
   "平均出答案时间暂时读取失败。": "回答時間を読み込めませんでした。",
-  "GPT最终裁定": "GPT 最終裁定", "未读取": "取得不可", "暂不可用": "利用できません",
+  "GPT最终裁定": "GPT 最終裁定", "官方 GPT（本站每日额度）": "公式 GPT（本サイトの1日あたり利用枠）",
+  "未读取": "取得不可", "暂不可用": "利用できません",
   "在 GitHub 反馈这个回答": "この回答を GitHub で報告", "暂无卡图": "カード画像なし",
   "用户提供文本": "ユーザー提供のテキスト", "本地数据库": "ローカルデータベース",
   "暂未读取到效果文本。": "カードテキストを取得できません。", "卡片文本 / FAQ / 相关资料": "カードテキスト / FAQ / 関連資料",
@@ -646,6 +648,7 @@ function selectRulingModelProfile(value) {
   rulingModelSelectionWasManual = true;
   ui.rulingModelSelect.value = nextProfile;
   updateRulingModelSelectionStatus();
+  if (lastPublicBudgetStatus) renderBudgetBucketViews(lastPublicBudgetStatus);
   setQueryPending(false);
 }
 
@@ -1953,7 +1956,7 @@ function renderEngineReproReplay(container, engineRepro) {
   const details = document.createElement("details");
   details.className = "engine-repro-replay";
   const summary = document.createElement("summary");
-  summary.textContent = lt("展开完整回放", "Show the full replay", "完全なリプレイを表示");
+  summary.textContent = lt("展开 ygopro 完整回放", "Show the full ygopro replay", "ygopro の完全なリプレイを表示");
   const pre = document.createElement("pre");
   pre.textContent = rendered;
   details.appendChild(summary);
@@ -2150,17 +2153,40 @@ function renderBudgetStatus(status, message = "") {
   ui.budgetHint.textContent = message ? tr(message) : status?.storageWarning
     ? lt(status.storageWarning, "Allowance status is temporarily unavailable.", "利用枠の状態を取得できません。")
     : tr("每日北京时间 0 点更新。");
+  renderBudgetBucketViews(status);
+}
+
+function renderBudgetBucketViews(status) {
   const buckets = status?.buckets || (status?.bucket ? [status.bucket] : []);
   renderBudgetBuckets(buckets);
   renderAdminPublicBudgetStatus(buckets);
 }
 
+// The provider of the ruling-model profile this page sends with a question (the server default
+// unless the visitor picked another), from the GET /api/answer capabilities. Empty when those
+// capabilities were not read: the page then does not know which provider answers.
+function currentRulingModelProvider() {
+  if (!rulingModelCapabilitiesAvailable) return "";
+  const profile = (appConfig.rulingModelProfiles || []).find((item) => item?.id === selectedRulingModelProfile);
+  return String(profile?.provider || "").trim().toLowerCase();
+}
+
+// The final-ruling bucket(s) the public answer actually spends from. /api/budget does not say
+// which profile the public answer uses, so the provider of the current ruling-model profile picks
+// the bucket with the same provider (official-astra-low -> final_ruling:openai). Only when that
+// provider is unknown does the widget fall back to every final-ruling bucket except the official
+// and relay ones.
+function publicFinalRulingBuckets(buckets = []) {
+  const finalBuckets = Array.isArray(buckets) ? buckets.filter((bucket) => bucket?.stage === "final_ruling") : [];
+  const provider = currentRulingModelProvider();
+  if (provider) return finalBuckets.filter((bucket) => bucket?.provider === provider);
+  return finalBuckets.filter((bucket) => bucket?.provider !== "openai" && bucket?.provider !== "relay");
+}
+
 function renderAdminPublicBudgetStatus(buckets = []) {
   if (!ui.adminBudgetPools) return;
   clearElement(ui.adminBudgetPools);
-  const publicBuckets = Array.isArray(buckets)
-    ? buckets.filter((bucket) => bucket?.stage === "final_ruling" && bucket?.provider !== "openai" && bucket?.provider !== "relay")
-    : [];
+  const publicBuckets = publicFinalRulingBuckets(buckets);
   if (!publicBuckets.length) {
     appendText(ui.adminBudgetPools, "p", "今日额度暂未读取或未配置。");
     return;
@@ -2168,8 +2194,7 @@ function renderAdminPublicBudgetStatus(buckets = []) {
   for (const bucket of publicBuckets) {
     const card = document.createElement("article");
     card.className = "admin-budget-pool";
-    const title = bucket?.provider === "bai" ? "GPT最终裁定"
-      : String(bucket?.label || [bucket?.provider, bucket?.stage].filter(Boolean).join(" · ") || "公开问答");
+    const title = String(bucket?.label || [bucket?.provider, bucket?.stage].filter(Boolean).join(" · ") || "公开问答");
     appendText(card, "strong", title);
     const currency = bucket?.currency === "USD" ? "USD" : "CNY";
     const spentRaw = currency === "USD" ? (bucket?.spentTodayUsd ?? bucket?.spentToday) : (bucket?.spentTodayCny ?? bucket?.spentToday);
@@ -2187,13 +2212,13 @@ function renderAdminPublicBudgetStatus(buckets = []) {
 function renderBudgetBuckets(buckets = []) {
   if (!ui.budgetBucketList) return;
   ui.budgetBucketList.replaceChildren();
-  const publicBuckets = Array.isArray(buckets) ? buckets.filter(bucket => bucket?.stage === "final_ruling" && bucket?.provider !== "openai" && bucket?.provider !== "relay") : [];
+  const publicBuckets = publicFinalRulingBuckets(buckets);
   for (const bucket of publicBuckets) {
     const row = document.createElement("div");
     row.className = "budget-bucket";
     const label = document.createElement("span");
-    label.textContent = bucket?.provider === "bai" ? tr("GPT最终裁定")
-      : String(bucket?.label || [bucket?.provider, bucket?.stage].filter(Boolean).join(" · ") || lt("模型用量", "Model usage", "モデル使用量"));
+    label.textContent = bucket?.label ? tr(String(bucket.label))
+      : [bucket?.provider, bucket?.stage].filter(Boolean).join(" · ") || lt("模型用量", "Model usage", "モデル使用量");
     const value = document.createElement("strong");
     const currency = bucket?.currency === "USD" ? "USD" : "CNY";
     const rawSpent = currency === "USD"
@@ -4948,7 +4973,7 @@ function renderAdminQuestionHistory(entries) {
     appendAdminHistoryField(details, "提问来源", adminHistoryChannelLabel(entry?.requestChannel));
     appendAdminHistoryField(details, "问题全文", adminHistoryText(entry?.question));
     appendAdminHistoryField(details, "结果 / 答案全文", adminHistoryAnswerText(entry));
-    if (entry?.engineRepro?.rendered) appendAdminHistoryField(details, "引擎复现完整回放", adminHistoryText(entry.engineRepro.rendered));
+    if (entry?.engineRepro?.rendered) appendAdminHistoryField(details, "ygopro 引擎复现完整回放", adminHistoryText(entry.engineRepro.rendered));
     appendAdminHistoryField(details, "调用者 IP", adminHistoryText(entry?.ip));
     appendAdminHistoryField(details, "IP 来源", adminHistoryIpSourceLabel(entry?.ipSource));
     appendAdminHistoryField(details, "时间", formatAdminDate(entry?.createdAt) || "未记录");

@@ -58,22 +58,38 @@ OCG_ENGINE_TIMEOUT_MS=20000
 
 ## 引擎复现段的显示（2026-10-16）
 
-实验性的引擎复现段（`ENGINE_REPRO_ENABLED` 打开且为管理员会话时运行，代码在 `backend/engineRepro/`）跟在主回答后面。主回答正文里只放给用户看的短段，逐步回放不再拼进正文：
+实验性的引擎复现段（`ENGINE_REPRO_ENABLED` 打开时运行，代码在 `backend/engineRepro/`）跟在主回答后面。段落里点名所用引擎是 ygopro（MyCard 版核心）。主回答正文里只放给用户看的短段，逐步回放不再拼进正文：
 
 ```
-【引擎复现（实验性）】已复现
-引擎在下面的局面里：我方在主要阶段1可以选择「发动超融合」。
+【ygopro 引擎复现（实验性）】已复现
+ygopro（MyCard 版核心）在下面的局面里：我方在主要阶段1可以选择「发动超融合」。
 局面：我方手卡 超融合，额外卡组 埃翁；对方场上 对极英雄 混沌侠、毁灭凤凰人（表侧攻击）。
 假设：双方无其他适用效果；我方有填充卡可供舍弃。
-本题没有找到直接对应的官方 Q&A：主回答是依据规则资料的分析，引擎结果是另一个独立来源，两者都可能有错。
-引擎只显示它运行的结果，卡片脚本可能有 bug，不代表官方裁定。
+本题没有找到官方 Q&A；主回答是依据规则资料的分析，ygopro 的结果是另一个独立来源，两者都可能有错。
+ygopro 只显示它运行的结果，卡片脚本可能有 bug，不代表官方裁定。
 ```
 
-- 短段由 `backend/engineRepro/concise.mjs` 生成：`engineReproDigest(record)` 从复现记录的结构化字段（`summary.status` / `reasonCodes`、`plan.assumptions`、各分支的 `assumption`、引擎结果的 `probes` / `decisions`、分支的起始 `scenario`、`cards`）取出要显示的内容，`engineReproConciseText(digest, { officialQaDirect })` 排成文字。只做机械转述，不读题面文字，不判断主回答与引擎是否一致，也不判断谁对。
-- 状态只有四类：已复现、部分复现、未复现、不适用。未复现和不适用只给状态和一句原因（原因码翻成人话）。等待超时显示“未完成”。
+- 短段由 `backend/engineRepro/concise.mjs` 生成：`engineReproDigest(record)` 从复现记录的结构化字段（`summary.status` / `reasonCodes`、`plan.assumptions`、各分支的 `assumption`、引擎结果的 `probes` / `decisions`、分支的起始 `scenario`、`cards`、准入失败时的 `error.code`）取出要显示的内容，`engineReproConciseText(digest, { officialQaState })` 排成文字。只做机械转述，不读题面文字，不判断主回答与引擎是否一致，也不判断谁对。
+- 状态只有四类：已复现、部分复现、未复现、不适用，标题行都是“【ygopro 引擎复现（实验性）】”加状态。未复现和不适用只给状态和一句原因（原因码翻成人话）。等待超时显示“未完成”，说明“ygopro 引擎复现在等待上限内未完成……”。
+- 复现自己的每日预算桶（`ENGINE_REPRO_DAILY_LIMIT_USD`）或每分钟限频（`ENGINE_REPRO_MAX_PER_MINUTE`）拒绝时（`error.code` 为 `engine_repro_daily_budget_exceeded` / `engine_repro_rate_limited`），短段只有一行：“【ygopro 引擎复现（实验性）】今日额度已用完，本题没有完成 ygopro 复现。”或“【ygopro 引擎复现（实验性）】每分钟次数已达上限，本题没有运行 ygopro 复现。”原因码仍记为 `budget_exceeded`。
 - 每个探测点一句话：出现、未出现、未到达、核心自动发动；只能确认到卡时注明。时点取自引擎窗口的阶段和回合玩家。多个子问题、同题两种假设的对照分支各占一行。
 - 局面只列题目点名的卡（主回答识别出的卡）及其区域和表示形式；填充卡和其他辅助卡只写“（另有填充卡）”或“（另有其他辅助卡）”。不写区域编号、基本分、卡组张数、先攻。假设最多列 3 条，多出的写“等”。
-- 官方 Q&A 那一行是机械判断：看准备阶段证据包（`continuation.evidence`）里 `officialQaDirectCandidates` 是否为空，这个数由最终生成步骤原样写进回答的 `debug.retrievalCounts.officialQaDirectCandidates`，两种请求形态（单次、准备+生成）读的是同一个字段，与最终模型的措辞无关。读不到这个数时省略这一行。
+- 官方 Q&A 那一行是机械判断，`officialQaStateFromAnswer(answer)` 只看准备阶段证据包（`continuation.evidence`）的两个数：`officialQaDirectCandidates` 和 `officialQaRelated` 的条数。最终生成步骤（`finalizePreparedRagRulingQuestionCore`，两种请求形态共用）把它们原样写进回答的 `debug.retrievalCounts.officialQaDirectCandidates` / `debug.retrievalCounts.officialQaRelated`，与最终模型的措辞无关。三态：
+  - 直接候选 > 0：“本题有直接对应的官方 Q&A，以官方裁定为准；ygopro 的结果只作参考。”
+  - 直接候选 = 0、相关官方 Q&A > 0：“本题没有完全对应的官方 Q&A；主回答参考了相关官方 Q&A 和规则资料，ygopro 的结果是另一个独立来源，两者都可能有错。”
+  - 两者都为 0：“本题没有找到官方 Q&A；主回答是依据规则资料的分析，ygopro 的结果是另一个独立来源，两者都可能有错。”
+  - 需要的计数读不到时省略这一行。
 - 各行之间用空行分隔，网页和按 Markdown 显示的 Bot 都会分行。
-- 完整逐步回放（引擎服务渲染的全文，含每个窗口“本可发动”、区域编号、基本分、版本号、跳过的窗口数等调试信息）保留在响应的 `engineRepro.rendered` 和历史记录的 `engineRepro.rendered` 里。网页端在短段下面放一个默认折叠的“展开完整回放”区域，用等宽预格式化显示，保留原有换行；管理员历史记录另有“引擎复现完整回放”一栏。API/Bot 渠道的 `shortAnswer` 只含短段。
-- 响应的 `engineRepro` 另带 `concise`（短段原文）、`officialQaDirect`（true / false / null）和 `digest`（短段用到的结构化数据）。
+- 完整逐步回放（引擎服务渲染的全文，含每个窗口“本可发动”、区域编号、基本分、版本号、跳过的窗口数等调试信息，标题为“【ygopro 引擎复现（实验性，未经评测）】”）保留在响应的 `engineRepro.rendered` 和历史记录的 `engineRepro.rendered` 里。网页端在短段下面放一个默认折叠的“展开 ygopro 完整回放”区域，用等宽预格式化显示，保留原有换行；管理员历史记录另有“ygopro 引擎复现完整回放”一栏。API/Bot 渠道的 `shortAnswer` 只含短段。
+- 响应的 `engineRepro` 另带 `concise`（短段原文）、`officialQaState`（`direct` / `related` / `none` / null）、`officialQaDirect`（true / false / null，兼容旧读者，由 `officialQaState` 推出）和 `digest`（短段用到的结构化数据）。
+
+### 公开显示（阶段 4，2026-10-16 起）
+
+2026-10-16 起引擎复现段对公开请求显示，仍为实验性功能。是否运行只看 `ENGINE_REPRO_ENABLED`：打开时，单次请求（`POST /api/answer`）和准备+生成两步请求（`action: "prepare"` / `"finalize"`）都对所有访客运行并显示，不再检查管理员会话；关闭时两种形态都不运行、不显示。
+
+保留不变的限制：
+
+- 复现自己的每日预算桶 `ENGINE_REPRO_DAILY_LIMIT_USD`（默认 1 美元，按 UTC 日期计）和每分钟限频 `ENGINE_REPRO_MAX_PER_MINUTE`（默认 6 次，每次复现计一次），都存在 Upstash 的独立键里，不动主回答的额度。用尽时短段只有一行（见上）。
+- 等待上限：响应最多等到本次函数调用开始后 `DEFAULT_WAIT_BUDGET_MS`（`vercel.json` 里 `api/answer.js` 的 `maxDuration` 减 20 秒），可用 `ENGINE_REPRO_WAIT_BUDGET_MS` 调小；超时显示“未完成”，结果仍写入历史记录。
+- 没启动的复现不等待（主流程在取到卡文之前就结束的请求，例如范围检查拒绝）。
+- 历史记录（`engineRepro` 字段）和响应里的诊断字段与管理员阶段相同。

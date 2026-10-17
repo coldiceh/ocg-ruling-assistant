@@ -244,7 +244,6 @@ export async function answerPublicRulingQuestion({
   assetsResident = ragRequestAssetsResident,
   startCardExtraction = startCardNameExtraction,
   prepareForContinuation = false,
-  engineReproAdmin = false,
   createEngineRepro = createEngineReproSession,
   attachEngineRepro = attachEngineReproWhenReady,
 } = {}) {
@@ -273,9 +272,10 @@ export async function answerPublicRulingQuestion({
     profileId: normalizedPayload.rulingModelProfile || env.PUBLIC_RULING_MODEL_PROFILE,
     requestContext,
   })).catch(() => null);
-  // Experimental engine reproduction (ENGINE_REPRO_ENABLED + admin session only). It observes
-  // the pipeline's card resolution and never delays or changes the answer.
-  const engineRepro = createEngineRepro({ env, isAdmin: engineReproAdmin === true,
+  // Experimental engine reproduction: every public request while ENGINE_REPRO_ENABLED is on
+  // (its own daily budget and per-minute limit apply). It observes the pipeline's card
+  // resolution and never changes the answer.
+  const engineRepro = createEngineRepro({ env,
     requestStartedAt: publicRequestStartedAt, auditIdPromise: auditPromise.then((audit) => audit?.entry?.id || null),
     saveAudit: (auditId, patch) => saveQueryAuditUpdate(auditId, patch, env, updateAudit) });
   const auditResult = async (answer, status, extra = {}) => {

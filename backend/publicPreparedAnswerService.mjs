@@ -11,14 +11,13 @@ import { attachEngineReproWhenReady, engineReproWaitDeadline } from './engineRep
 export async function preparePublicAnswer({
   payload, env, signal, progress, store,
   answerPublic = answerPublicRulingQuestion, now = Date.now,
-  requestContext, updateAudit = updateQueryAudit, engineReproAdmin = false,
+  requestContext, updateAudit = updateQueryAudit,
 } = {}) {
   let result;
   try {
   signal?.throwIfAborted();
   const startedAt = now();
-  result = await answerPublic({ payload, env, signal, progress, requestContext, prepareForContinuation: true,
-    engineReproAdmin });
+  result = await answerPublic({ payload, env, signal, progress, requestContext, prepareForContinuation: true });
   // Existing early answers (for example empty/non-ruling requests) do not
   // require another model call, and keep their original public envelope.
   if (result.answer?.status !== "evidence_prepared") return result;

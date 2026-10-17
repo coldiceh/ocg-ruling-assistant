@@ -57,15 +57,15 @@ test("branches run in parallel and the engine phase is counted as wall time", as
   assert.equal(record.subQuestions[0].branches[0].scenario.schema, "ocg-repro-scenario/v1");
 });
 
-test("session: the engine service is woken at creation (configured URL, admin, no injected engine only)", () => {
+test("session: the engine service is woken at creation (configured URL, switch on, no injected engine only)", () => {
   const warmed = [];
-  const make = (env, extra = {}) => createEngineReproSession({ env: { ENGINE_REPRO_ENABLED: "true", ...env }, isAdmin: true,
+  const make = (env, extra = {}) => createEngineReproSession({ env: { ENGINE_REPRO_ENABLED: "true", ...env },
     requestStartedAt: 0, now: () => 0, waitUntil: () => {}, command: async () => null,
     warmEngine: (opts) => { warmed.push(opts.baseUrl); return Promise.resolve(true); }, ...extra });
   make({ ENGINE_REPRO_URL: "https://engine.example.test" });
   make({});
   make({ ENGINE_REPRO_URL: "https://x.test" }, { engine: async () => ({}) });
-  make({ ENGINE_REPRO_URL: "https://y.test" }, { isAdmin: false });
+  make({ ENGINE_REPRO_URL: "https://y.test", ENGINE_REPRO_ENABLED: "off" });
   assert.deepEqual(warmed, ["https://engine.example.test"]);
 });
 
@@ -105,7 +105,7 @@ test("single request: the answer's own latency excludes the wait for the reprodu
   const audits = [];
   const result = await answerPublicRulingQuestion({
     payload: { question: "Synthetic question" },
-    env: { MODEL_PROVIDER: "mock", ENGINE_REPRO_ENABLED: "true" }, engineReproAdmin: true,
+    env: { MODEL_PROVIDER: "mock", ENGINE_REPRO_ENABLED: "true" },
     appendAudit: async () => ({ entry: { id: "a" } }), updateAudit: async ({ patch }) => { audits.push(patch); return { updated: true }; },
     assetsResident: () => true, preloadAssets: () => ({}),
     classifyScope: async () => ({ scope: "in_scope", confidence: "high" }),

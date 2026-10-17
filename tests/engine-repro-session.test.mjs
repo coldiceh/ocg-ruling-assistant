@@ -3,6 +3,7 @@ import test from "node:test";
 import { appendEngineReproSection, attachEngineReproWhenReady, awaitEngineReproAtMainCompletion, createEngineReproSession,
   engineReproSectionText } from "../backend/engineRepro/session.mjs";
 import { createEngineReproLimits } from "../backend/engineRepro/limits.mjs";
+import { engineReproDigest } from "../backend/engineRepro/concise.mjs";
 
 function fakeRedis() {
   const data = new Map();
@@ -36,10 +37,10 @@ const engine = async (op) => {
 const cardResolution = { resolvedCards: [{ id: "12950", input: "灰流丽", resolutionSource: "model_canonical_exact" }] };
 const cards = [{ id: "12950", name: "灰流丽", effectText: "text" }];
 
-function makeSession({ delayMs, clockRef, redis, isAdmin = true, auditId = "audit-1", limits }) {
+function makeSession({ delayMs, clockRef, redis, auditId = "audit-1", limits, env = { ENGINE_REPRO_ENABLED: "true" } }) {
   const pending = [];
   const session = createEngineReproSession({
-    env: { ENGINE_REPRO_ENABLED: "true" }, isAdmin, requestStartedAt: 0, auditIdPromise: Promise.resolve(auditId),
+    env, requestStartedAt: 0, auditIdPromise: Promise.resolve(auditId),
     now: () => clockRef.t, waitUntil: (p) => pending.push(p), engine, cidMap: { 12950: 14558127 },
     limits: limits || { admit: async () => {}, reserve: async () => ({}), settle: async () => {} },
     modelCall: async () => {
@@ -69,7 +70,7 @@ test("finished before the answer: attached right away, nothing waited, no answer
   assert.equal(answer.engineRepro.questionStatus, "已复现");
   assert.equal(answer.engineRepro.waitedMs, 0);
   assert.equal(answer.engineRepro.mainCompletedAtMs, 9000);
-  assert.match(answer.shortAnswer, /^主回答\n\n【引擎复现/u);
+  assert.match(answer.shortAnswer, /^主回答\n\n【ygopro 引擎复现/u);
   const audit = JSON.parse(redis.data.get("audit:audit-1"));
   assert.equal(audit.engineRepro.status, "已复现");
   assert.equal(audit.engineRepro.answerDelay, null);
@@ -86,10 +87,10 @@ test("not finished when the answer completes: the response waits for it; the del
       sleep: async (ms) => { await new Promise((r) => setTimeout(r, 5)); } });
   assert.equal(answer.engineRepro.status, "done");
   // the answer text carries only the short section; the full replay stays in engineRepro.rendered
-  assert.match(answer.shortAnswer, /^主回答\n\n【引擎复现（实验性）】已复现\n\n引擎在下面的局面里：/u);
+  assert.match(answer.shortAnswer, /^主回答\n\n【ygopro 引擎复现（实验性）】已复现\n\nygopro（MyCard 版核心）在下面的局面里：/u);
   assert.match(answer.shortAnswer, /局面：我方手卡 灰流丽。/u);
   assert.doesNotMatch(answer.shortAnswer, /状态：|未经评测|【引擎复现】/u);
-  assert.match(answer.engineRepro.rendered, /^【引擎复现（实验性，未经评测）】\n状态：已复现/u);
+  assert.match(answer.engineRepro.rendered, /^【ygopro 引擎复现（实验性，未经评测）】\n状态：已复现/u);
   assert.match(answer.engineRepro.rendered, /【引擎复现】\n {2}状态：已按步骤回放完成/u);
   assert.equal(answer.shortAnswer.endsWith(answer.engineRepro.concise), true);
   await Promise.all(pending);
@@ -110,7 +111,7 @@ test("two requests (prepare, then finalize): finalize waits on the stored result
   assert.equal(section.status, "done");
   assert.equal(section.questionStatus, "已复现");
   assert.equal(section.digest.status, "已复现");
-  assert.match(section.rendered, /^【引擎复现（实验性，未经评测）】/u);
+  assert.match(section.rendered, /^【ygopro 引擎复现（实验性，未经评测）】/u);
   await Promise.all(pending);
 });
 
@@ -121,7 +122,7 @@ test("past the wait deadline: the answer goes out with a notice; the late result
   const gate = new Promise((r) => { release = r; });
   const pending = [];
   const session = createEngineReproSession({
-    env: { ENGINE_REPRO_ENABLED: "true" }, isAdmin: true, requestStartedAt: 0, auditIdPromise: Promise.resolve("audit-t"),
+    env: { ENGINE_REPRO_ENABLED: "true" }, requestStartedAt: 0, auditIdPromise: Promise.resolve("audit-t"),
     now: () => clockRef.t, waitUntil: (p) => pending.push(p), engine, cidMap: { 12950: 14558127 },
     limits: { admit: async () => {}, reserve: async () => ({}), settle: async () => {} },
     modelCall: async () => { await gate; clockRef.t += 500000;
@@ -135,7 +136,7 @@ test("past the wait deadline: the answer goes out with a notice; the late result
       command: redis.command, sleep: pollSleep(clockRef) });
   assert.equal(answer.engineRepro.status, "timeout");
   assert.equal(answer.engineRepro.waitedMs, 3000);
-  assert.match(answer.shortAnswer, /^主回答\n\n【引擎复现（实验性）】未完成\n\n引擎复现在等待上限内未完成（复现已耗时 3\.0 秒，主回答完成后已等待 3\.0 秒）/u);
+  assert.match(answer.shortAnswer, /^主回答\n\n【ygopro 引擎复现（实验性）】未完成\n\nygopro 引擎复现在等待上限内未完成（复现已耗时 3\.0 秒，主回答完成后已等待 3\.0 秒）/u);
   release();
   await Promise.all(pending);
   const audit = JSON.parse(redis.data.get("audit:audit-t"));
@@ -152,9 +153,9 @@ test("a reproduction that never started is not waited for", async () => {
   assert.equal(engineReproSectionText(null), "");
 });
 
-test("not an administrator: nothing runs and nothing is attached", async () => {
+test("switch off (ENGINE_REPRO_ENABLED not on): nothing runs and nothing is attached", async () => {
   const redis = fakeRedis();
-  const { session, pending } = makeSession({ delayMs: 1, clockRef: { t: 0 }, redis, isAdmin: false });
+  const { session, pending } = makeSession({ delayMs: 1, clockRef: { t: 0 }, redis, env: { ENGINE_REPRO_ENABLED: "false" } });
   assert.equal(session.enabled, false);
   session.onCardTextsReady({ question: "q", cardResolution, cards });
   assert.equal(pending.length, 0);
@@ -169,7 +170,7 @@ test("own daily budget bucket: refusal fails the reproduction closed", async () 
   const clockRef = { t: 0 };
   const limits = createEngineReproLimits({ env: { ENGINE_REPRO_DAILY_LIMIT_USD: "0.001" }, command: redis.command, now: () => 0 });
   const session = createEngineReproSession({
-    env: { ENGINE_REPRO_ENABLED: "true", ENGINE_REPRO_OPENAI_API_KEY: "k" }, isAdmin: true, requestStartedAt: 0,
+    env: { ENGINE_REPRO_ENABLED: "true", ENGINE_REPRO_OPENAI_API_KEY: "k" }, requestStartedAt: 0,
     auditIdPromise: Promise.resolve("a2"), now: () => clockRef.t, waitUntil: () => {}, engine, cidMap: { 12950: 14558127 },
     limits, command: redis.command, saveAudit: async () => {},
     fetchImpl: async () => { throw new Error("must not reach the model"); },
@@ -178,6 +179,30 @@ test("own daily budget bucket: refusal fails the reproduction closed", async () 
   const record = await session.promise;
   assert.equal(record.summary.status, "未复现");
   assert.deepEqual(record.summary.reasonCodes, ["budget_exceeded"]);
+  // the user-visible notice is one line that names ygopro
+  assert.equal(engineReproSectionText({ status: "done", digest: engineReproDigest(record) }),
+    "【ygopro 引擎复现（实验性）】今日额度已用完，本题没有完成 ygopro 复现。");
+});
+
+test("own per-minute limit: refusal fails the reproduction closed with a one-line notice", async () => {
+  const redis = fakeRedis();
+  const limits = createEngineReproLimits({ env: { ENGINE_REPRO_MAX_PER_MINUTE: "1" }, command: redis.command, now: () => 0 });
+  const run = async () => {
+    const session = createEngineReproSession({
+      env: { ENGINE_REPRO_ENABLED: "true" }, requestStartedAt: 0, auditIdPromise: Promise.resolve(null), now: () => 0,
+      waitUntil: () => {}, engine, cidMap: { 12950: 14558127 }, limits, command: redis.command, saveAudit: async () => {},
+      modelCall: async () => ({ status: "completed", outputText: JSON.stringify(plan), usage: {}, costUsd: 0, ms: 1 }),
+    });
+    session.onCardTextsReady({ question: "q", cardResolution, cards });
+    return session.promise;
+  };
+  assert.equal((await run()).summary.status, "已复现");
+  const refused = await run();
+  assert.equal(refused.summary.status, "未复现");
+  assert.deepEqual(refused.summary.reasonCodes, ["budget_exceeded"]);
+  const text = engineReproSectionText({ status: "done", digest: engineReproDigest(refused) });
+  assert.equal(text, "【ygopro 引擎复现（实验性）】每分钟次数已达上限，本题没有运行 ygopro 复现。");
+  assert.doesNotMatch(text, /\n/u);
 });
 
 test("answer service wiring: the pipeline gets the observer and the finished section follows the answer", async () => {
@@ -189,7 +214,6 @@ test("answer service wiring: the pipeline gets the observer and the finished sec
     payload: { question: "Synthetic question" },
     env: { MODEL_PROVIDER: "mock", UPSTASH_REDIS_REST_URL: "https://redis.example.test", UPSTASH_REDIS_REST_TOKEN: "t",
       ENGINE_REPRO_ENABLED: "true" },
-    engineReproAdmin: true,
     appendAudit: async () => ({ entry: { id: "audit-w" } }),
     updateAudit: async () => ({ updated: true }),
     assetsResident: () => true,
@@ -213,31 +237,103 @@ test("answer service wiring: the pipeline gets the observer and the finished sec
       return { shortAnswer: "Synthetic ruling" };
     },
   });
-  assert.equal(observed.options.isAdmin, true);
-  assert.match(result.answer.shortAnswer, /^Synthetic ruling\n\n【引擎复现/u);
+  assert.equal("isAdmin" in observed.options, false, "the session is gated by ENGINE_REPRO_ENABLED only");
+  assert.match(result.answer.shortAnswer, /^Synthetic ruling\n\n【ygopro 引擎复现/u);
   assert.equal(result.answer.engineRepro.status, "done");
 });
 
-test("answer service wiring: without an admin session the pipeline gets no observer", async () => {
-  const { answerPublicRulingQuestion } = await import("../backend/publicAnswerService.mjs");
-  const result = await answerPublicRulingQuestion({
-    payload: { question: "Synthetic question" },
-    env: { MODEL_PROVIDER: "mock", ENGINE_REPRO_ENABLED: "true" },
-    appendAudit: async () => null, assetsResident: () => true, preloadAssets: () => ({}),
+// Public since 2026-10-16 (stage 4): no administrator session is involved; only the switch decides.
+function publicServiceDoubles({ redis, clockRef, auditId, sessions }) {
+  return {
+    appendAudit: async () => ({ entry: { id: auditId } }), updateAudit: async () => ({ updated: true }),
+    assetsResident: () => true, preloadAssets: () => ({}),
     classifyScope: async () => ({ scope: "in_scope", confidence: "high" }),
     readRiskControl: async () => ({ ok: true, active: false }),
-    answerRuling: async (options) => {
-      assert.equal(options.onCardTextsReady, undefined);
-      return { shortAnswer: "Synthetic ruling" };
+    // the real session factory with test doubles; the gate sees the request's own env
+    createEngineRepro: (options) => {
+      const made = makeSession({ delayMs: 1, clockRef, redis, auditId, env: options.env });
+      sessions.push(made);
+      return made.session;
     },
+  };
+}
+const publicRuling = (sessions, answer) => async (options) => {
+  options.onCardTextsReady?.({ question: "Synthetic question", cardResolution, cards });
+  await Promise.all(sessions.flatMap((made) => made.pending));
+  return answer;
+};
+const mainCounts = { officialQaDirectCandidates: 0, officialQaRelated: 1 };
+
+for (const switchOn of [true, false]) {
+  test(`single request, public (no admin session): switch ${switchOn ? "on -> engine section" : "off -> no engine section"}`, async () => {
+    const { answerPublicRulingQuestion } = await import("../backend/publicAnswerService.mjs");
+    const redis = fakeRedis();
+    const clockRef = { t: 0 };
+    const sessions = [];
+    let observer = null;
+    const ruling = publicRuling(sessions, { shortAnswer: "Synthetic ruling", debug: { retrievalCounts: mainCounts } });
+    const result = await answerPublicRulingQuestion({
+      payload: { question: "Synthetic question" },
+      env: { MODEL_PROVIDER: "mock", ...(switchOn ? { ENGINE_REPRO_ENABLED: "true" } : {}) },
+      ...publicServiceDoubles({ redis, clockRef, auditId: "audit-s", sessions }),
+      attachEngineRepro: (answer, options) => attachEngineReproWhenReady(answer, { ...options, requestStartedAt: 0,
+        now: () => clockRef.t, command: redis.command }),
+      answerRuling: async (options) => { observer = options.onCardTextsReady; return ruling(options); },
+    });
+    if (switchOn) {
+      assert.equal(typeof observer, "function");
+      assert.match(result.answer.shortAnswer, /^Synthetic ruling\n\n【ygopro 引擎复现（实验性）】已复现/u);
+      assert.equal(result.answer.engineRepro.status, "done");
+      assert.equal(result.answer.engineRepro.officialQaState, "related");
+    } else {
+      assert.equal(observer, undefined);
+      assert.equal(result.answer.shortAnswer, "Synthetic ruling");
+      assert.equal(result.answer.engineRepro, undefined);
+    }
   });
-  assert.equal(result.answer.shortAnswer, "Synthetic ruling");
-  assert.equal(result.answer.engineRepro, undefined);
-});
+
+  test(`two requests (prepare + finalize), public: switch ${switchOn ? "on -> engine section" : "off -> no engine section"}`, async () => {
+    const { answerPublicRulingQuestion } = await import("../backend/publicAnswerService.mjs");
+    const { preparePublicAnswer, finalizePublicAnswer } = await import("../backend/publicPreparedAnswerService.mjs");
+    const redis = fakeRedis();
+    const clockRef = { t: 0 };
+    const sessions = [];
+    const env = { MODEL_PROVIDER: "mock", ...(switchOn ? { ENGINE_REPRO_ENABLED: "true" } : {}) };
+    let stored = null;
+    const prepared = await preparePublicAnswer({
+      payload: { question: "Synthetic question", action: "prepare" }, env,
+      progress: { complete: () => ({ totalMs: 0 }) },
+      store: { create: async (value) => { stored = value; return "prep-1"; } },
+      updateAudit: async () => ({ updated: true }),
+      answerPublic: (input) => answerPublicRulingQuestion({ ...input,
+        ...publicServiceDoubles({ redis, clockRef, auditId: "audit-p", sessions }),
+        answerRuling: publicRuling(sessions, { status: "evidence_prepared", rulingVersion: "latest",
+          continuation: { promptBundle: { prompt: "Synthetic saved prompt" } } }) }),
+    });
+    assert.equal(prepared.preparationId, "prep-1");
+    if (switchOn) assert.equal(stored.engineRepro.enabled, true);
+    else assert.equal(stored.engineRepro, null);
+    const finalized = await finalizePublicAnswer({
+      preparation: stored, env,
+      selectProfile: async () => ({ profile: { id: "official-astra-low", provider: "openai" } }),
+      finalize: async () => ({ shortAnswer: "主回答", debug: { retrievalCounts: mainCounts } }),
+      addGeneration: async (answer) => answer, updateAudit: async () => ({ updated: true }),
+      attachEngineRepro: (answer, options) => attachEngineReproWhenReady(answer, { ...options, requestStartedAt: 0,
+        now: () => clockRef.t, command: redis.command }),
+    });
+    if (switchOn) {
+      assert.match(finalized.answer.shortAnswer, /^主回答\n\n【ygopro 引擎复现（实验性）】已复现/u);
+      assert.equal(finalized.answer.engineRepro.status, "done");
+    } else {
+      assert.equal(finalized.answer.shortAnswer, "主回答");
+      assert.equal(finalized.answer.engineRepro, undefined);
+    }
+  });
+}
 
 test("both request shapes give the same short section; the official Q&A line follows the evidence-pack count", async () => {
   const { finalizePublicAnswer } = await import("../backend/publicPreparedAnswerService.mjs");
-  const { OFFICIAL_QA_ABSENT_LINE, OFFICIAL_QA_PRESENT_LINE } = await import("../backend/engineRepro/concise.mjs");
+  const { OFFICIAL_QA_DIRECT_LINE, OFFICIAL_QA_NONE_LINE, OFFICIAL_QA_RELATED_LINE } = await import("../backend/engineRepro/concise.mjs");
   const redis = fakeRedis();
   const clockRef = { t: 1000 };
   const { session, pending } = makeSession({ delayMs: 1, clockRef, redis });
@@ -245,7 +341,8 @@ test("both request shapes give the same short section; the official Q&A line fol
   await Promise.all(pending);
   const options = { env: {}, auditId: "audit-1", requestStartedAt: 0, waitDeadlineAt: 280000, now: () => clockRef.t,
     command: redis.command };
-  const mainAnswer = (count) => ({ shortAnswer: "主回答", debug: { retrievalCounts: { officialQaDirectCandidates: count } } });
+  const mainAnswer = (count, related = 0) => ({ shortAnswer: "主回答",
+    debug: { retrievalCounts: { officialQaDirectCandidates: count, officialQaRelated: related } } });
 
   const single = await attachEngineReproWhenReady(mainAnswer(0), options);
   const prepared = await finalizePublicAnswer({
@@ -260,8 +357,11 @@ test("both request shapes give the same short section; the official Q&A line fol
   });
   assert.equal(prepared.answer.shortAnswer, single.shortAnswer);
   assert.equal(prepared.answer.engineRepro.rendered, single.engineRepro.rendered);
-  assert.ok(single.shortAnswer.includes(OFFICIAL_QA_ABSENT_LINE));
+  assert.ok(single.shortAnswer.includes(OFFICIAL_QA_NONE_LINE));
   const withDirect = await attachEngineReproWhenReady(mainAnswer(1), options);
-  assert.ok(withDirect.shortAnswer.includes(OFFICIAL_QA_PRESENT_LINE));
-  assert.ok(!withDirect.shortAnswer.includes(OFFICIAL_QA_ABSENT_LINE));
+  assert.ok(withDirect.shortAnswer.includes(OFFICIAL_QA_DIRECT_LINE));
+  assert.ok(!withDirect.shortAnswer.includes(OFFICIAL_QA_NONE_LINE));
+  const withRelated = await attachEngineReproWhenReady(mainAnswer(0, 2), options);
+  assert.ok(withRelated.shortAnswer.includes(OFFICIAL_QA_RELATED_LINE));
+  assert.ok(!withRelated.shortAnswer.includes(OFFICIAL_QA_NONE_LINE) && !withRelated.shortAnswer.includes(OFFICIAL_QA_DIRECT_LINE));
 });

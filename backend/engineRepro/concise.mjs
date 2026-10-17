@@ -1,15 +1,34 @@
 // User-facing short engine-reproduction section (the full step-by-step replay stays in
 // `rendered`). Mechanical only: it restates structured fields of the reproduction record
 // (question-level status and reason codes, the plan's assumptions, probe results, the planned
-// starting board) plus one count from the evidence pack. It never reads the question text,
+// starting board) plus two counts from the evidence pack. It never reads the question text,
 // never compares the engine result with the main answer and never judges whether either is right.
+// The engine is named (ygopro, MyCard core) so readers know which program produced the result.
 import { STATUS, branchOutcome } from "./aggregate.mjs";
 import { FILLER_CARDS } from "./plannerPrompt.mjs";
 
-export const CONCISE_HEADER = "【引擎复现（实验性）】";
-export const CONCISE_DISCLAIMER = "引擎只显示它运行的结果，卡片脚本可能有 bug，不代表官方裁定。";
-export const OFFICIAL_QA_ABSENT_LINE = "本题没有找到直接对应的官方 Q&A：主回答是依据规则资料的分析，引擎结果是另一个独立来源，两者都可能有错。";
-export const OFFICIAL_QA_PRESENT_LINE = "本题有官方 Q&A 可对照，以官方裁定为准；引擎结果只作参考。";
+export const CONCISE_HEADER = "【ygopro 引擎复现（实验性）】";
+export const CONCISE_LEAD_WITH_BOARD = "ygopro（MyCard 版核心）在下面的局面里：";
+export const CONCISE_LEAD_WITHOUT_BOARD = "ygopro（MyCard 版核心）的运行结果：";
+export const CONCISE_DISCLAIMER = "ygopro 只显示它运行的结果，卡片脚本可能有 bug，不代表官方裁定。";
+
+// The official-Q&A line, chosen by officialQaStateFromAnswer (evidence-pack counts only).
+export const OFFICIAL_QA_STATE = Object.freeze({ DIRECT: "direct", RELATED: "related", NONE: "none" });
+export const OFFICIAL_QA_DIRECT_LINE = "本题有直接对应的官方 Q&A，以官方裁定为准；ygopro 的结果只作参考。";
+export const OFFICIAL_QA_RELATED_LINE = "本题没有完全对应的官方 Q&A；主回答参考了相关官方 Q&A 和规则资料，ygopro 的结果是另一个独立来源，两者都可能有错。";
+export const OFFICIAL_QA_NONE_LINE = "本题没有找到官方 Q&A；主回答是依据规则资料的分析，ygopro 的结果是另一个独立来源，两者都可能有错。";
+const OFFICIAL_QA_LINES = Object.freeze({
+  [OFFICIAL_QA_STATE.DIRECT]: OFFICIAL_QA_DIRECT_LINE,
+  [OFFICIAL_QA_STATE.RELATED]: OFFICIAL_QA_RELATED_LINE,
+  [OFFICIAL_QA_STATE.NONE]: OFFICIAL_QA_NONE_LINE,
+});
+
+// The reproduction's own admission limits (limits.mjs), by the error code they throw. When one of
+// them refused the run, the section is this single line instead of a status and a reason.
+export const ADMISSION_LIMIT_LINES = Object.freeze({
+  engine_repro_daily_budget_exceeded: `${CONCISE_HEADER}今日额度已用完，本题没有完成 ygopro 复现。`,
+  engine_repro_rate_limited: `${CONCISE_HEADER}每分钟次数已达上限，本题没有运行 ygopro 复现。`,
+});
 
 // Reason codes (planner, engine, pre-planner and batch scope) in plain words.
 export const REASON_PLAIN = Object.freeze({
@@ -57,9 +76,11 @@ const FILLER_CODES = new Set(FILLER_CARDS.map((card) => card.code));
 export function engineReproDigest(record = {}) {
   const names = cardNameIndex(record);
   const namedCodes = new Set((record.cards || []).map((card) => Number(card?.code)).filter(Number.isSafeInteger));
+  const errorCode = typeof record.error?.code === "string" ? record.error.code : "";
   return {
     status: record.summary?.status || null,
     reasonCodes: (record.summary?.reasonCodes || []).filter((code) => typeof code === "string" && code),
+    admissionLimit: Object.hasOwn(ADMISSION_LIMIT_LINES, errorCode) ? errorCode : null,
     assumptions: cleanTexts(record.plan?.assumptions),
     subQuestions: (record.subQuestions || []).map((sq) => ({
       unrepresentable: Boolean(sq?.unrepresentable),
@@ -69,13 +90,15 @@ export function engineReproDigest(record = {}) {
 }
 
 /**
- * The short section text. `officialQaDirect` is the mechanical evidence-pack signal
- * (see officialQaDirectFromAnswer): true / false choose the official-Q&A line; null omits it.
+ * The short section text. `officialQaState` is the mechanical evidence-pack signal
+ * (see officialQaStateFromAnswer): "direct" / "related" / "none" choose the official-Q&A line;
+ * null (counts not readable) omits it.
  * Lines are separated by blank lines so every Markdown renderer keeps them apart.
  */
-export function engineReproConciseText(digest, { officialQaDirect = null } = {}) {
+export function engineReproConciseText(digest, { officialQaState = null } = {}) {
   if (!digest || typeof digest !== "object") return "";
   const status = SHOWN_STATUS[digest.status] || STATUS.FAIL;
+  if (status === STATUS.FAIL && ADMISSION_LIMIT_LINES[digest.admissionLimit]) return ADMISSION_LIMIT_LINES[digest.admissionLimit];
   const head = `${CONCISE_HEADER}${status}`;
   if (status === STATUS.FAIL || status === STATUS.NA) {
     return [head, `原因：${reasonText(digest.reasonCodes)}。`].join("\n\n");
@@ -111,7 +134,7 @@ export function engineReproConciseText(digest, { officialQaDirect = null } = {})
   });
 
   const lines = [head];
-  const lead = boards.length ? "引擎在下面的局面里：" : "引擎的运行结果：";
+  const lead = boards.length ? CONCISE_LEAD_WITH_BOARD : CONCISE_LEAD_WITHOUT_BOARD;
   if (results.length === 1) lines.push(`${lead}${results[0]}`);
   else if (results.length) lines.push(lead, ...results);
   const distinctBoards = [...new Map(boards.map((board) => [board.text, board])).values()];
@@ -121,21 +144,31 @@ export function engineReproConciseText(digest, { officialQaDirect = null } = {})
   if (shownAssumptions.length) {
     lines.push(`假设：${shownAssumptions.slice(0, 3).join("；")}${shownAssumptions.length > 3 ? "等" : ""}。`);
   }
-  if (officialQaDirect === true) lines.push(OFFICIAL_QA_PRESENT_LINE);
-  else if (officialQaDirect === false) lines.push(OFFICIAL_QA_ABSENT_LINE);
+  if (OFFICIAL_QA_LINES[officialQaState]) lines.push(OFFICIAL_QA_LINES[officialQaState]);
   lines.push(CONCISE_DISCLAIMER);
   return lines.join("\n\n");
 }
 
 /**
- * Whether the evidence pack had direct official Q&A candidates. The count is
- * continuation.evidence.officialQaDirectCandidates, fixed when the request was prepared and copied
- * into debug.retrievalCounts by the finalizer for both request shapes; it never depends on the
- * final model's output. null when the answer carries no such count (the line is then omitted).
+ * Which official-Q&A line applies, from two evidence-pack counts only:
+ * continuation.evidence.officialQaDirectCandidates and .officialQaRelated, fixed when the request
+ * was prepared and copied into debug.retrievalCounts by the finalizer
+ * (finalizePreparedRagRulingQuestionCore, the same code for both request shapes); they never
+ * depend on the final model's output.
+ *   direct candidates > 0                    -> "direct"
+ *   direct = 0, related official Q&A > 0     -> "related"
+ *   direct = 0, related = 0                  -> "none"
+ *   a needed count is missing or not a count -> null (the line is omitted)
  */
-export function officialQaDirectFromAnswer(answer) {
-  const count = answer?.debug?.retrievalCounts?.officialQaDirectCandidates;
-  return Number.isSafeInteger(count) && count >= 0 ? count > 0 : null;
+export function officialQaStateFromAnswer(answer) {
+  const counts = answer?.debug?.retrievalCounts;
+  const count = (value) => (Number.isSafeInteger(value) && value >= 0 ? value : null);
+  const direct = count(counts?.officialQaDirectCandidates);
+  if (direct === null) return null;
+  if (direct > 0) return OFFICIAL_QA_STATE.DIRECT;
+  const related = count(counts?.officialQaRelated);
+  if (related === null) return null;
+  return related > 0 ? OFFICIAL_QA_STATE.RELATED : OFFICIAL_QA_STATE.NONE;
 }
 
 function branchDigest(branch, names, namedCodes) {

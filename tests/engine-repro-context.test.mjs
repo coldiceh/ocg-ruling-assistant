@@ -124,7 +124,7 @@ test("trimming is retained in stored results and the delivered API section", asy
   const store = new Map();
   const command = async (_env, _fetch, [op, key, value]) => { if (op === "SET") { store.set(key, value); return "OK"; } return store.get(key) ?? null; };
   const { attachEngineReproWhenReady } = await import("../backend/engineRepro/session.mjs");
-  const session = createEngineReproSession({ env: { ENGINE_REPRO_ENABLED: "true", ENGINE_REPRO_PLANNER_MAX_INPUT: "1" }, isAdmin: true,
+  const session = createEngineReproSession({ env: { ENGINE_REPRO_ENABLED: "true", ENGINE_REPRO_PLANNER_MAX_INPUT: "1" },
     requestStartedAt: 0, auditIdPromise: Promise.resolve("test"), now: () => 10, waitUntil: () => {}, engine, cidMap: { 12950: 14558127 },
     limits: { admit: async () => {} }, command,
     modelCall: async () => ({ status: "completed", outputText: JSON.stringify(naPlan), usage: {} }) });
@@ -136,11 +136,11 @@ test("trimming is retained in stored results and the delivered API section", asy
   // a debugging detail: kept in the full replay field, not in the short section of the answer text
   assert.match(delivered.engineRepro.rendered, /上下文已裁剪/u);
   assert.doesNotMatch(delivered.shortAnswer, /上下文已裁剪/u);
-  assert.match(delivered.shortAnswer, /^主回答\n\n【引擎复现（实验性）】不适用\n\n原因：/u);
+  assert.match(delivered.shortAnswer, /^主回答\n\n【ygopro 引擎复现（实验性）】不适用\n\n原因：/u);
 });
 
 test("a financial failure after trimming retains the context marker and removal details", async () => {
-  const session = createEngineReproSession({ env: { ENGINE_REPRO_ENABLED: "true", ENGINE_REPRO_PLANNER_MAX_INPUT: "1" }, isAdmin: true,
+  const session = createEngineReproSession({ env: { ENGINE_REPRO_ENABLED: "true", ENGINE_REPRO_PLANNER_MAX_INPUT: "1" },
     auditIdPromise: Promise.resolve(null), waitUntil: () => {}, engine, cidMap: { 12950: 14558127 }, limits: { admit: async () => {} },
     modelCall: async () => { throw Object.assign(new Error("engine_repro_daily_budget_exceeded"), { code: "engine_repro_daily_budget_exceeded" }); } });
   session.onCardTextsReady({ question: base.question, cardResolution: { resolvedCards: [{ id: "12950", input: "灰流丽" }] }, cards: [{ id: "12950", ...cardsById.get("12950") }] });

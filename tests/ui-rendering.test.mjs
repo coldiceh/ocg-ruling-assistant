@@ -299,6 +299,8 @@ test("b.ai Astra low survives startup and unavailable capability recovery", asyn
     function updateRulingModelSelectionStatus() {}
     function syncRulingVersionButtons() {}
     function setQueryPending() {}
+    const lastPublicBudgetStatus = null;
+    function renderBudgetBucketViews() {}
     function formatModelInfo() { return "test"; }
     function normalizeRulingVersionCapabilities() { return ["latest"]; }
     return {
@@ -2085,9 +2087,9 @@ test("engine reproduction: short section in the answer text, full replay collaps
     ${source}
     return renderBackendAnswer;
   `)(ui, document, clearTestElement, appendTestText);
-  const replay = "【引擎复现（实验性，未经评测）】\n状态：已复现\n  · 此时 P1 本可发动：灰流丽（未发动）\n  窗口（决策#7，主要阶段1）";
-  const shortAnswer = ["主回答。", "【引擎复现（实验性）】已复现", "引擎在下面的局面里：我方在主要阶段1可以选择「发动超融合」。",
-    "引擎只显示它运行的结果，卡片脚本可能有 bug，不代表官方裁定。"].join("\n\n");
+  const replay = "【ygopro 引擎复现（实验性，未经评测）】\n状态：已复现\n  · 此时 P1 本可发动：灰流丽（未发动）\n  窗口（决策#7，主要阶段1）";
+  const shortAnswer = ["主回答。", "【ygopro 引擎复现（实验性）】已复现", "ygopro（MyCard 版核心）在下面的局面里：我方在主要阶段1可以选择「发动超融合」。",
+    "ygopro 只显示它运行的结果，卡片脚本可能有 bug，不代表官方裁定。"].join("\n\n");
   render({ answerLevel: "rule_analysis", mode: "rag_baseline", shortAnswer, usedEvidence: [], debug: {},
     engineRepro: { status: "done", rendered: replay, concise: "" } });
   const children = ui.verdictBody.childNodes;
@@ -2100,7 +2102,7 @@ test("engine reproduction: short section in the answer text, full replay collaps
   assert.equal(details.className, "engine-repro-replay");
   assert.notEqual(details.open, true, "collapsed by default");
   assert.equal(details.childNodes[0].tagName, "summary");
-  assert.equal(details.childNodes[0].textContent, "展开完整回放");
+  assert.equal(details.childNodes[0].textContent, "展开 ygopro 完整回放");
   assert.equal(details.childNodes[1].tagName, "pre");
   assert.equal(details.childNodes[1].textContent, replay, "line breaks of the full replay are kept");
 
@@ -2111,14 +2113,85 @@ test("engine reproduction: short section in the answer text, full replay collaps
   assert.equal(ui.verdictBody.childNodes.some((node) => node.tagName === "details"), false);
 });
 
-test("budget labels show current final ruling providers and omit the retired relay", async () => {
+test("budget widget shows the final-ruling bucket of the current ruling profile's provider, labelled by the bucket", async () => {
   const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
-  assert.match(app, /bucket\?\.provider === "bai" \? "GPT最终裁定"/u);
-  assert.match(app, /bucket\?\.provider !== "relay"/u);
+  const source = sourceBetween(app, "function renderBudgetBucketViews", "function renderFastJudgeAnswer");
+  const element = (tagName) => ({
+    tagName, textContent: "", className: "", hidden: false, childNodes: [],
+    appendChild(child) { this.childNodes.push(child); return child; },
+    append(...children) { this.childNodes.push(...children); },
+    replaceChildren() { this.childNodes.length = 0; },
+    get childElementCount() { return this.childNodes.length; },
+  });
+  const ui = { budgetBucketList: element("div"), adminBudgetPools: element("div") };
+  const widget = new Function("ui", "document", "appendText", "clearElement", `
+    const tr = (value) => value, lt = (zh) => zh;
+    let rulingModelCapabilitiesAvailable = false, selectedRulingModelProfile = "", adminUiEnabled = false;
+    let appConfig = { rulingModelProfiles: [] };
+    ${source}
+    return {
+      render: renderBudgetBucketViews,
+      profile(available, profiles, selected) {
+        rulingModelCapabilitiesAvailable = available;
+        appConfig = { rulingModelProfiles: profiles };
+        selectedRulingModelProfile = selected;
+      },
+    };
+  `)(ui, { createElement: element }, appendTestText, clearTestElement);
+  // the shape /api/budget returns on the production site (official OpenAI public answers)
+  const status = { buckets: [
+    { id: "final_ruling:openai", stage: "final_ruling", provider: "openai", label: "官方 GPT（本站每日额度）", currency: "USD",
+      dailyBudget: 3, dailyBudgetUsd: 3, spentToday: 1.62, spentTodayUsd: 1.62 },
+    { id: "evidence_preparation:deepseek", stage: "evidence_preparation", provider: "deepseek", label: "DeepSeek 资料准备",
+      currency: "CNY", dailyBudgetCny: 5, spentTodayCny: 0.3 },
+    { id: "final_ruling:glm", stage: "final_ruling", provider: "glm", label: "GLM 最终裁定", currency: "CNY", dailyBudgetCny: 2, spentTodayCny: 0 },
+    { id: "final_ruling:deepseek", stage: "final_ruling", provider: "deepseek", label: "DeepSeek 最终裁定", currency: "CNY",
+      dailyBudgetCny: 3, spentTodayCny: 0.1 },
+    { id: "final_ruling:relay", stage: "final_ruling", provider: "relay", label: "ChatGPT 最终裁定", currency: "USD",
+      dailyBudgetUsd: 1, spentTodayUsd: 0 },
+    { id: "final_ruling:bai", stage: "final_ruling", provider: "bai", label: "GPT最终裁定", currency: "USD", dailyBudgetUsd: 10, spentTodayUsd: 0 },
+  ] };
+  const profiles = [
+    { id: "official-astra-low", provider: "openai", available: true },
+    { id: "deepseek-v4.1-flash-high", provider: "deepseek", available: true },
+    { id: "bai-astra-low", provider: "bai", available: true },
+  ];
+  const rows = () => ui.budgetBucketList.childNodes.map((row) => row.childNodes.map((node) => node.textContent));
+  const pools = () => ui.adminBudgetPools.childNodes.map((card) => (card.tagName === "article"
+    ? card.childNodes.map((node) => node.textContent) : card.textContent));
+
+  widget.profile(true, profiles, "official-astra-low");
+  widget.render(status);
+  assert.deepEqual(rows(), [["官方 GPT（本站每日额度）", "$1.62 / $3"]]);
+  assert.equal(ui.budgetBucketList.hidden, false);
+  assert.deepEqual(pools(), [["官方 GPT（本站每日额度）", "$1.62 / $3"]]);
+
+  widget.profile(true, profiles, "deepseek-v4.1-flash-high");
+  widget.render(status);
+  assert.deepEqual(rows(), [["DeepSeek 最终裁定", "0.1 / 3 元"]]);
+
+  // the b.ai bucket appears only when b.ai is the current provider
+  widget.profile(true, profiles, "bai-astra-low");
+  widget.render(status);
+  assert.deepEqual(rows(), [["GPT最终裁定", "$0 / $10"]]);
+
+  // provider known but no matching bucket: nothing shown, never another provider's bucket
+  widget.profile(true, profiles, "official-astra-low");
+  widget.render({ buckets: status.buckets.filter((bucket) => bucket.provider !== "openai") });
+  assert.deepEqual(rows(), []);
+  assert.equal(ui.budgetBucketList.hidden, true);
+  assert.deepEqual(pools(), ["今日额度暂未读取或未配置。"]);
+
+  // capabilities not read: the old filter (final-ruling buckets except official and relay)
+  widget.profile(false, profiles, "official-astra-low");
+  widget.render(status);
+  assert.deepEqual(rows().map(([label]) => label), ["GLM 最终裁定", "DeepSeek 最终裁定", "GPT最终裁定"]);
+
+  assert.doesNotMatch(app, /bucket\?\.provider === "bai" \? (?:tr\()?"GPT最终裁定"/u, "no hard-coded label");
   assert.doesNotMatch(app, /中转 GPT 最终裁定/u);
-  assert.doesNotMatch(app, /bucket\?\.provider === "bai" \? "GPT"/u);
   assert.match(app, /bucket\?\.manuallyClosed \? "（已封顶）"/u);
-  assert.doesNotMatch(app, /label\.textContent \+= "（共享额度）"/u);
+  assert.match(app, /if \(lastPublicBudgetStatus\) renderBudgetBucketViews\(lastPublicBudgetStatus\);/u,
+    "a new ruling-model choice re-renders the widget");
 });
 
 test("an empty reason list keeps the timing panel titled as ruling flow", async () => {

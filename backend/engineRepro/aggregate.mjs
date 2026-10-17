@@ -69,7 +69,7 @@ export function aggregateQuestion(record) {
 }
 
 export function renderQuestion(record, summary) {
-  const lines = ["【引擎复现（实验性，未经评测）】"];
+  const lines = ["【ygopro 引擎复现（实验性，未经评测）】"];
   const reasons = summary.reasonCodes.filter(Boolean).map((c) => `${REASON_ZH[c] || c}（${c}）`).join("；");
   const flags = summary.flags.map((f) => FLAG_ZH[f] || f).join("、");
   lines.push(`状态：${summary.status}${reasons ? ` —— ${reasons}` : ""}${flags ? `　标记：${flags}` : ""}`);
@@ -88,7 +88,7 @@ export function renderQuestion(record, summary) {
   if (plan?.quoted_span) lines.push(`题面依据：「${plan.quoted_span}」`);
   if (summary.status === STATUS.NA) {
     const name = plan?.reason_code === "archetype_level" && record.archetypeVerified ? `（字段：${plan.archetype_name}）` : "";
-    lines.push(`本题不适用引擎复现：${REASON_ZH[summary.reasonCodes[0]] || summary.reasonCodes[0]}${name}。`);
+    lines.push(`本题不适用 ygopro 引擎复现：${REASON_ZH[summary.reasonCodes[0]] || summary.reasonCodes[0]}${name}。`);
   }
   if (summary.flags.includes("what_not_why")) lines.push("注：引擎只显示发生了什么，不解释原因。");
   if (plan?.assumptions?.length) {
