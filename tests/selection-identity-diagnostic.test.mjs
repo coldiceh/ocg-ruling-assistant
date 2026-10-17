@@ -6,7 +6,8 @@ import { answerPublicRulingQuestion, publicAnswerHttpError } from '../backend/pu
 const env = { UPSTASH_REDIS_REST_URL: 'https://redis.example.test', UPSTASH_REDIS_REST_TOKEN: 'fixture-secret' };
 const event = { type: 'selection_identity_failure', attempt: 1, retryAvailable: true,
   model: 'gpt-5.6-luna', providerId: 'bai', reasoningEffort: 'high', requestSha256: 'a'.repeat(64),
-  responseId: 'fixture-response', rawSelectedIds: [' Q999 '], selectedIds: ['Q999'], unknownIds: ['Q999'],
+  responseId: 'fixture-response', rawSelectedIds: [' Q999 ', 'Q22877'], selectedIds: ['Q999', 'Q1'], unknownIds: ['Q999'],
+  remappedSelectedIds: [{ raw: 'Q22877', alias: 'Q1', matchedBy: 'record.sourceId', body: 'must-not-store-remap-extra' }],
   offered: [{ alias: 'Q1', id: 'canonical-1', kind: 'qa', bodySha256: 'b'.repeat(64), body: 'must-not-store-body' }],
   revisions: { dataRevision: 'fixture-revision', unwanted: 'must-not-store-extra' },
   raw: 'must-not-store-response', note: 'must-not-store-note' };
@@ -23,9 +24,10 @@ test('identity diagnostics persist privately with exact field projection and ind
   assert.equal(expiry, 'EX');
   assert.equal(seconds, '2592000');
   const saved = JSON.parse(json);
-  assert.deepEqual(saved.rawSelectedIds, [' Q999 ']);
-  assert.deepEqual(saved.selectedIds, ['Q999']);
+  assert.deepEqual(saved.rawSelectedIds, [' Q999 ', 'Q22877']);
+  assert.deepEqual(saved.selectedIds, ['Q999', 'Q1']);
   assert.deepEqual(saved.unknownIds, ['Q999']);
+  assert.deepEqual(saved.remappedSelectedIds, [{ raw: 'Q22877', alias: 'Q1', matchedBy: 'record.sourceId' }]);
   assert.equal(saved.offered[0].id, 'canonical-1');
   assert.equal(saved.requestId, 'fixture-request');
   assert.equal(saved.responseId, 'fixture-response');

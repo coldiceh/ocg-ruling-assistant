@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createGeminiBoundedEvidenceProvider, boundedPlanBody } from '../backend/geminiBoundedEvidenceProvider.mjs';
+import { createGeminiBoundedEvidenceProvider, boundedPlanBody, remapSelectedSourceIds } from '../backend/geminiBoundedEvidenceProvider.mjs';
 import { buildRuleStructureMapping, sourceSha256, stableJson } from '../backend/evidenceSourceStructure.mjs';
 import { createQaTools } from '../backend/geminiQaTools.mjs';
 import { loadEvidenceGenerationContract } from '../backend/evidenceGenerationContract.mjs';
@@ -28,9 +28,29 @@ function assets() {
 const input = { userQuery:'complete synthetic original question', dataRevision:'d', env:{ GEMINI_API_KEY:'fixture' },
   cardResolution:{resolvedCards:[],unresolvedMentions:[],ambiguousMentions:[]},
   retrievedEvidence:{cardTexts:[{id:'fixture-card',text:'entire confirmed card text'}]} };
+// Synthetic Q&A records offered through the Q&A dense lane. Handles are opaque
+// 64-hex values, as in the release assets; the source number lives in the record.
+function qaRecord(id, sourceId) {
+  return { id, recordType:'qa', title:`synthetic question ${id}`, question:`synthetic question ${id}`,
+    conclusion:`synthetic answer for ${id}`, cards:[], cardIds:[],
+    ...(sourceId === undefined ? {} : { sourceId }), sourceName:'YGOResources DB' };
+}
+function qaAssets(records) {
+  return { ...assets(), qaUnits: records.map((record, index) => {
+    const handle = String(index + 1).repeat(64), unitKey = `qa:${record.recordType}:${record.id}`;
+    return { unitKey, sourceKind:'qa', sourceId:`${record.recordType}:${record.id}`, recordId:record.id,
+      recordType:record.recordType, titlePath:[record.title], contextRefs:[], explicitRefs:[],
+      handle, parentHandle:handle, item:{ handle, unitKey, record } };
+  }) };
+}
+// The fake model may look up an offered Q&A alias by the fixture record id.
+const qaAliasFor = (payload, id) => (payload.groups || []).flatMap(group => group.items || [])
+  .find(item => item.record?.id === id)?.handle;
 function fixture({unknown=false, planTokens=500, selectionTokens, selectionInputLimit,
-  offlineEvaluationLimits, loadAssets=async()=>assets(), generationContract}={}) {
-  const requests=[], reservations=[], counts=[];
+  offlineEvaluationLimits, loadAssets=async()=>assets(), generationContract, qaRecords, select}={}) {
+  const requests=[], reservations=[], counts=[], events=[];
+  let selectionAttempt=0;
+  if(qaRecords) loadAssets=async()=>qaAssets(qaRecords);
   const provider=createGeminiBoundedEvidenceProvider({loadAssets, offlineEvaluationLimits,
     loadGenerationContract:stage=>{
       const contract=structuredClone(loadEvidenceGenerationContract(stage));
@@ -38,7 +58,8 @@ function fixture({unknown=false, planTokens=500, selectionTokens, selectionInput
       return generationContract ? generationContract(stage, contract) : contract;
     },
     loadDenseSearch:async({rules})=>({search:()=>[...rules.units.values()]}),
-    loadQaSearch:async()=>({search:()=>[]}),
+    loadQaSearch:async()=>({search:()=>(qaRecords||[]).map((_, index)=>({handle:String(index + 1).repeat(64)}))}),
+    onEvent:async event=>{events.push(event);},
     budgetedRequest:async request=>{reservations.push(request);return request.invoke();},
     fetchImpl:async(url,init)=>{
       const body=JSON.parse(init.body);
@@ -53,13 +74,14 @@ function fixture({unknown=false, planTokens=500, selectionTokens, selectionInput
       requests.push(body);
       const payload=fixtureInput(body.contents[0].parts[1].text);
       const selectedIds=payload.selectedIds;
-      const output=payload.queryPlan?{selectedIds:unknown?['unoffered']:selectedIds,unableToSelect:false,note:''}
+      const output=payload.queryPlan?{selectedIds:select?select(payload,++selectionAttempt)
+        :unknown?['unoffered']:selectedIds,unableToSelect:false,note:''}
         :{needs:[{id:'n1',question:'synthetic relation',ruleQuery:'synthetic rule query',qaQuery:'synthetic QA query'}]};
       const tokens=payload.queryPlan?500:planTokens;
       return Response.json({candidates:[{content:{parts:[{text:JSON.stringify(output)}]}}],
         usageMetadata:{promptTokenCount:tokens,candidatesTokenCount:60,thoughtsTokenCount:10,totalTokenCount:tokens+70}});
     }});
-  return {provider,requests,reservations,counts};
+  return {provider,requests,reservations,counts,events};
 }
 
 test('short plan preserves exact input and never carries source directories',()=>{
@@ -89,10 +111,122 @@ test('old cumulative 32000 input rule does not reject an otherwise affordable re
   assert.equal(requests.length,2);
   assert.ok(result.telemetry.estimatedCostCny<=0.30);
 });
-test('unknown selected ID stops before packing and does not trigger protocol retry',async()=>{
-  const {provider,requests}=fixture({unknown:true});
+// Since 2026-09-22 an unoffered selection ID gets exactly one identity retry
+// that lists the valid IDs; a second unknown ID stops before packing.
+test('unknown selected ID gets one identity retry and stops before packing',async()=>{
+  const {provider,requests,events}=fixture({unknown:true});
   await assert.rejects(provider.retrieve(input),/selected_identity_not_offered/);
+  assert.equal(requests.length,3);
+  assert.deepEqual(JSON.parse(requests[2].contents.at(-1).parts[0].text).unknownIds,['unoffered']);
+  assert.deepEqual(events.filter(event=>event.type==='selection_identity_failure').map(event=>event.attempt),[1,2]);
+  assert.equal(events.some(event=>event.type==='packed'),false);
+});
+
+test('source numbers map to an offered alias only by exact, prefix-bounded, unique identity',()=>{
+  const qa=(alias,record)=>[alias,{alias,kind:'qa',id:alias.charCodeAt(1).toString(16).repeat(32),
+    body:{handle:'h',unitKey:`qa:qa:${record.id}`,record}}];
+  const entries=new Map([
+    ['A1',{alias:'A1',kind:'rule',id:'doc-1:atom:1',body:{id:'doc-1:atom:1',sourceId:'doc-1',parentSourceId:'doc-1'}}],
+    qa('Q3',{id:'ygoresources-qa-22877',sourceId:'22877'}),
+    qa('Q4',{id:'ygoresources-qa-23000'}),
+    qa('Q5',{id:'ygoresources-qa-2',sourceId:'2'}),
+    qa('Q6',{id:'ygoresources-qa-30000',sourceId:'30000'}),
+    qa('Q7',{id:'fixture-copy',sourceId:'30000'}),
+  ]);
+  const remap=(ids,issuedAliasCount=7)=>remapSelectedSourceIds(ids,entries,{issuedAliasCount});
+  for(const raw of ['Q22877','q22877','A22877','#22877','QA-22877','qa#22877','Q#22877','22877','ygoresources-qa-22877']) {
+    assert.deepEqual(remap([raw]),{selectedIds:['Q3'],remapped:[{raw,alias:'Q3',
+      matchedBy:raw==='ygoresources-qa-22877'?'record.id':'record.sourceId'}]},raw);
+  }
+  assert.deepEqual(remap(['Q23000']).remapped,[{raw:'Q23000',alias:'Q4',matchedBy:'record.id:number'}]);
+  for(const raw of ['Q 22877','Z22877','Q022877','QQ22877','Q30000','doc-1','Adoc-1','Q2','Q9']) {
+    assert.deepEqual(remap([raw]),{selectedIds:[raw],remapped:[]},raw);
+  }
+  assert.deepEqual(remap(['Q2'],1).remapped,[{raw:'Q2',alias:'Q5',matchedBy:'record.sourceId'}]);
+  assert.deepEqual(remap(['Q3','A1','Q22877']),{selectedIds:['Q3','A1'],
+    remapped:[{raw:'Q22877',alias:'Q3',matchedBy:'record.sourceId'}]});
+});
+
+test('a prefixed offered source number is mapped to its alias without an identity retry',async()=>{
+  let qaAlias;
+  const {provider,requests,events}=fixture({qaRecords:[qaRecord('ygoresources-qa-22877','22877')],
+    select:payload=>{qaAlias=qaAliasFor(payload,'ygoresources-qa-22877');return ['Q22877',...payload.selectedIds];}});
+  const result=await provider.retrieve(input);
+  assert.match(qaAlias,/^Q\d+$/u);
+  assert.notEqual(qaAlias,'Q22877');
   assert.equal(requests.length,2);
+  assert.equal(events.some(event=>event.type==='selection_identity_failure'),false);
+  const remapped=[{raw:'Q22877',alias:qaAlias,matchedBy:'record.sourceId'}];
+  assert.deepEqual(result.telemetry.bounded.remappedSelectedIds,remapped);
+  assert.equal(result.telemetry.bounded.selectedIds[0],qaAlias);
+  assert.equal(result.telemetry.bounded.selectedIds.includes('Q22877'),false);
+  const rows=result.telemetry.bounded.calls.filter(row=>row.stage==='selection');
+  assert.equal(rows.length,1);
+  assert.deepEqual(rows[0].remappedSelectedIds,remapped);
+  assert.ok(result.packing.prompt.includes('synthetic answer for ygoresources-qa-22877'));
+});
+
+test('a source number shared by two offered entries stays unknown and takes the identity retry',async()=>{
+  let qaAlias;
+  const {provider,requests,events}=fixture({
+    qaRecords:[qaRecord('ygoresources-qa-22877','22877'),qaRecord('fixture-qa-copy','22877')],
+    select:(payload,attempt)=>{qaAlias=qaAliasFor(payload,'ygoresources-qa-22877');return attempt===1?['Q22877']:[qaAlias];}});
+  const result=await provider.retrieve(input);
+  assert.ok(qaAliasFor(fixtureInput(requests[1].contents[0].parts[1].text),'fixture-qa-copy'));
+  assert.equal(requests.length,3);
+  const failures=events.filter(event=>event.type==='selection_identity_failure');
+  assert.equal(failures.length,1);
+  assert.deepEqual(failures[0].unknownIds,['Q22877']);
+  assert.deepEqual(failures[0].remappedSelectedIds,[]);
+  assert.deepEqual(JSON.parse(requests[2].contents.at(-1).parts[0].text).unknownIds,['Q22877']);
+  const rows=result.telemetry.bounded.calls.filter(row=>row.stage==='selection');
+  assert.deepEqual(rows.map(row=>[row.status,row.retry,row.remappedSelectedIds]),[['failed',false,undefined],['success',true,undefined]]);
+  assert.deepEqual(result.telemetry.bounded.selectedIds,[qaAlias]);
+  assert.deepEqual(result.telemetry.bounded.remappedSelectedIds,[]);
+});
+
+test('a number that matches no offered source stays unknown and takes the identity retry',async()=>{
+  let qaAlias;
+  const {provider,requests,events}=fixture({qaRecords:[qaRecord('ygoresources-qa-22877','22877')],
+    select:(payload,attempt)=>{qaAlias=qaAliasFor(payload,'ygoresources-qa-22877');return attempt===1?['Q99999']:[qaAlias];}});
+  const result=await provider.retrieve(input);
+  assert.equal(requests.length,3);
+  const failures=events.filter(event=>event.type==='selection_identity_failure');
+  assert.deepEqual(failures.map(event=>[event.unknownIds,event.remappedSelectedIds]),[[['Q99999'],[]]]);
+  assert.deepEqual(result.telemetry.bounded.selectedIds,[qaAlias]);
+  assert.deepEqual(result.telemetry.bounded.remappedSelectedIds,[]);
+});
+
+test('a partial remap is kept in the failed row and identity diagnostic when another ID is still unknown',async()=>{
+  let qaAlias;
+  const {provider,requests,events}=fixture({qaRecords:[qaRecord('ygoresources-qa-22877','22877')],
+    select:(payload,attempt)=>{qaAlias=qaAliasFor(payload,'ygoresources-qa-22877');return attempt===1?['Q22877','Q99999']:[qaAlias];}});
+  const result=await provider.retrieve(input);
+  assert.equal(requests.length,3);
+  const remapped=[{raw:'Q22877',alias:qaAlias,matchedBy:'record.sourceId'}];
+  const [failure]=events.filter(event=>event.type==='selection_identity_failure');
+  assert.deepEqual(failure.rawSelectedIds,['Q22877','Q99999']);
+  assert.deepEqual(failure.selectedIds,[qaAlias,'Q99999']);
+  assert.deepEqual(failure.unknownIds,['Q99999']);
+  assert.deepEqual(failure.remappedSelectedIds,remapped);
+  const retry=JSON.parse(requests[2].contents.at(-1).parts[0].text);
+  assert.deepEqual([retry.previousSelectedIds,retry.unknownIds],[[qaAlias,'Q99999'],['Q99999']]);
+  const rows=result.telemetry.bounded.calls.filter(row=>row.stage==='selection');
+  assert.deepEqual(rows[0].remappedSelectedIds,remapped);
+  assert.equal(rows[1].remappedSelectedIds,undefined);
+  assert.deepEqual(result.telemetry.bounded.remappedSelectedIds,[]);
+});
+
+test('offered aliases pass through unchanged when Q&A source numbers are present',async()=>{
+  let selected;
+  const {provider,requests,events}=fixture({qaRecords:[qaRecord('ygoresources-qa-22877','22877')],
+    select:payload=>(selected=[qaAliasFor(payload,'ygoresources-qa-22877'),...payload.selectedIds])});
+  const result=await provider.retrieve(input);
+  assert.equal(requests.length,2);
+  assert.equal(events.some(event=>event.type==='selection_identity_failure'),false);
+  assert.deepEqual(result.telemetry.bounded.selectedIds,selected);
+  assert.deepEqual(result.telemetry.bounded.remappedSelectedIds,[]);
+  assert.equal(result.telemetry.bounded.calls.find(row=>row.stage==='selection').remappedSelectedIds,undefined);
 });
 
 test('default deadline keeps the existing online cap when the environment asks for an offline-sized limit', async () => {

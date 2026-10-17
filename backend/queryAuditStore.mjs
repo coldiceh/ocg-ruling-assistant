@@ -125,6 +125,8 @@ export async function saveSelectionIdentityDiagnostic({ event, requestId,
       ...Object.fromEntries(scalarFields.filter(key => ['string', 'number', 'boolean'].includes(typeof event[key]))
         .map(key => [key, event[key]])),
       rawSelectedIds: event.rawSelectedIds, selectedIds: event.selectedIds, unknownIds: event.unknownIds,
+      remappedSelectedIds: (Array.isArray(event.remappedSelectedIds) ? event.remappedSelectedIds : []).map(item => Object.fromEntries(
+        ['raw', 'alias', 'matchedBy'].filter(key => typeof item?.[key] === 'string').map(key => [key, item[key]]))),
       offered: (event.offered || []).map(entry => Object.fromEntries(
         ['alias', 'id', 'kind', 'bodySha256'].filter(key => typeof entry[key] === 'string').map(key => [key, entry[key]]))),
       revisions: Object.fromEntries(['dataRevision', 'bundleRevision', 'ruleRevision', 'qaRevision',

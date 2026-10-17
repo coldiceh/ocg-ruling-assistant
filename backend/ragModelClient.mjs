@@ -6212,12 +6212,20 @@ function identitySelectionHandle(value) {
   return handle || "";
 }
 
+// Players often write only part of a card name, and the question rarely
+// restates card text. Requiring the description to match before selecting made
+// the selector return null even when exactly one candidate's text contained the
+// treatment the question asked about (2026-10-16, docs/OCG-card-identity.md).
+// The rules stay generic: no card names or effect examples appear here.
 function buildCardIdentitySelectionPrompt(userQuery, candidateSets) {
   return [
     "你只负责在给定候选中选择玩家提及所指的单张卡，不回答裁定。",
     "每个 mentionId 只能返回该组提供的 candidateId，或返回 null 表示无法确定。不得创造候选、不得使用别组候选、不得依据编号以外的信息改写候选身份。",
     "候选中给出了稳定身份、完整名称、别名、类型行和完整卡文；请依据玩家问题与这些候选选择。",
-    "只有当候选的类型行和卡文与玩家对这张卡的描述相符时才选择它；名称相近不足以选择。若题面描述的卡片种类、效果、数值或处理与每个候选都不符，或无法在候选间区分，该 mentionId 必须返回 null。",
+    "玩家写的常常只是卡名的一部分（省略前缀、后缀或系列名）或俗称，题面也通常不会复述卡文。判断时把题面对这张卡的描述——它在题里做了什么、被问到什么处理、属于什么种类——与每个候选的类型行和卡文逐一对照。",
+    "若恰有一个候选的卡文含有题面所问的那类处理，而其余候选的卡文与该处理无关，就选择该候选，即使题面没有写出完整卡名、也没有复述卡文。",
+    "若题面描述与每个候选都不符，或有两个以上候选都符合且无法区分，该 mentionId 必须返回 null。",
+    "名称相近本身不足以选择，但也不是返回 null 的理由；不得依据名称以外的猜测改写候选身份。",
     "只输出 JSON，例如：{\"selections\":[{\"mentionId\":\"M1\",\"candidateId\":\"C1\"},{\"mentionId\":\"M2\",\"candidateId\":null}]}。无法确定时 candidateId 必须是 JSON null，不是字符串。",
     "玩家问题：",
     String(userQuery || ""),

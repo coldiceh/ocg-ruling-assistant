@@ -55,6 +55,65 @@ async function emitIdentityDiagnostic(onEvent, event) {
   finally { clearTimeout(timer); }
 }
 
+// A selection sometimes copies a source number that the prompt says is not a
+// selection number, with an alias-like prefix added (a live selection returned
+// "Q22877" for the offered Q&A 22877). This is an identity lookup, not
+// a judgement of relevance: after removing at most one prefix from this fixed
+// list, the string must equal one of an offered entry's own source identifiers,
+// and exactly one offered entry may match.
+const SOURCE_ID_PREFIXES = Object.freeze(['QA#', 'QA-', 'QA', 'Q#', 'Q-', 'Q', 'A#', 'A-', 'A', '#']);
+
+// Only identifiers that name this entry's own source record are listed. Shared
+// ones (a rule's document sourceId/parentSourceId, an FAQ excerpt's
+// parentRecordId) name several entries and are left out. A Q&A entry's id is
+// its 64-hex handle, so its source number is read from the record.
+function entrySourceIdentities(entry) {
+  const body = entry.body || {}, record = body.record || {};
+  const identities = new Map();
+  const add = (value, matchedBy) => {
+    const key = typeof value === 'string' ? value.trim() : Number.isSafeInteger(value) ? String(value) : '';
+    if (key && !identities.has(key)) identities.set(key, matchedBy);
+  };
+  add(entry.id, 'id');
+  add(body.id, 'body.id');
+  add(record.id, 'record.id');
+  add(record.sourceId, 'record.sourceId');
+  add(body.unitKey, 'unitKey');
+  for (const [matchedBy, value] of [['record.id', record.id], ['unitKey', body.unitKey]]) {
+    const number = typeof value === 'string' ? /(?:^|:)ygoresources-qa-(\d+)$/u.exec(value)?.[1] : undefined;
+    if (number) add(number, `${matchedBy}:number`);
+  }
+  return identities;
+}
+
+// Aliases are numbered 1..issuedAliasCount across rules and Q&A, so "Q51" can
+// also be an unoffered alias. A number inside that range is never treated as a
+// source number. Returned selectedIds remain aliases.
+export function remapSelectedSourceIds(selectedIds, entries, { issuedAliasCount = 0 } = {}) {
+  const index = new Map();
+  for (const entry of entries.values()) for (const [value, matchedBy] of entrySourceIdentities(entry)) {
+    if (!index.has(value)) index.set(value, new Map());
+    if (!index.get(value).has(entry.alias)) index.get(value).set(entry.alias, matchedBy);
+  }
+  const remapped = [];
+  const ids = selectedIds.map(raw => {
+    if (entries.has(raw)) return raw;
+    const candidates = [raw, ...SOURCE_ID_PREFIXES
+      .filter(prefix => raw.length > prefix.length && raw.slice(0, prefix.length).toUpperCase() === prefix)
+      .map(prefix => raw.slice(prefix.length))]
+      .filter(value => !(/^[1-9]\d*$/u.test(value) && Number(value) <= issuedAliasCount));
+    const matches = new Map();
+    for (const value of candidates) for (const [alias, matchedBy] of index.get(value) || []) {
+      if (!matches.has(alias)) matches.set(alias, matchedBy);
+    }
+    if (matches.size !== 1) return raw;
+    const [[alias, matchedBy]] = matches;
+    remapped.push({ raw, alias, matchedBy });
+    return alias;
+  });
+  return { selectedIds: uniq(ids), remapped };
+}
+
 const RULE_READING_SOURCE_FIELDS = Object.freeze([
   'recordType', 'title', 'sourceUrl', 'source', 'sourceAuthority', 'official', 'parentSourceId', 'sourceSection',
 ]);
@@ -631,7 +690,7 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
             : typeof raw?.responseId === 'string' ? raw.responseId : null,
           model: contract.modelId, providerId: contract.providerId,
           reasoningEffort: generationReasoningEffort(contract),
-        });
+        }, row);
       } catch (error) {
         if (!submitted) { spentUsd -= row.accountedUsd; row.accountedUsd = 0; row.submitted = false; }
         row.elapsedMs = performance.now() - at; row.status = 'failed'; row.error = error.message;
@@ -1020,10 +1079,16 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
         decisionsResult = flow.pack(decisionsState.selectedIds);
         return { selectedIds: decisionsResult.ids, unableToSelect: false,
           note: '', modelReportedStatus: decisionsState.finalStatus };
-      })() : await generate(body, measurement, 'selection', async (raw, context) => {
+      })() : await generate(body, measurement, 'selection', async (raw, context, row) => {
         const value = raw?.result ?? raw;
         if (value?.selectedIds === undefined || (value.unableToSelect !== undefined && typeof value.unableToSelect !== 'boolean')) throw new Error('evidence_selection_fields_absent');
         const selection = { selectedIds: strings(value.selectedIds, 'selected_ids'), unableToSelect: value.unableToSelect ?? false, note: value.note ?? '' };
+        if (!selection.unableToSelect) {
+          const remap = remapSelectedSourceIds(selection.selectedIds, visibleEntries, { issuedAliasCount: aliases.size });
+          selection.selectedIds = remap.selectedIds;
+          selection.remappedSelectedIds = remap.remapped;
+          if (remap.remapped.length) row.remappedSelectedIds = remap.remapped;
+        }
         const unknownIds = selection.unableToSelect ? [] : selection.selectedIds.filter(id => !visibleEntries.has(id));
         if (unknownIds.length) {
           const code = 'gemini_bounded_selected_identity_not_offered';
@@ -1033,6 +1098,7 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
           await emitIdentityDiagnostic(onEvent, { type: 'selection_identity_failure', ...context,
             createdAt: new Date().toISOString(), revisions,
             rawSelectedIds: value.selectedIds, selectedIds: selection.selectedIds, unknownIds,
+            remappedSelectedIds: selection.remappedSelectedIds,
             offered: [...visibleEntries.values()].map(entry => ({ alias: entry.alias, id: entry.id,
               kind: entry.kind, bodySha256: hash(JSON.stringify(entry.body)) })),
           });
@@ -1077,6 +1143,7 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
           ...(decisionsState ? { decisions: { acquisitionStop: decisionsState.acquisitionStop,
             modelReportedStatus: decisionsState.finalStatus, events: decisionsState.events } } : {}),
           readGroupIds: admitted.offered.map(bundle => bundle.unitKey), selectedIds: selection.selectedIds,
+          ...(selection.remappedSelectedIds ? { remappedSelectedIds: selection.remappedSelectedIds } : {}),
           omittedGroupIds: admitted.omitted.map(unit => unit.unitKey), estimatedCostUsd: spentUsd,
           maxPromptChars, deadlineMs, readTargetChars: readChars,
           perQuestionMaxUsd: Number.isFinite(perQuestionMaxUsd) ? perQuestionMaxUsd : null, maxUsd,
