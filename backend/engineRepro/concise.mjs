@@ -106,6 +106,12 @@ export function engineReproDigest(record = {}) {
   };
 }
 
+/** Whether a section with this digest can carry the official-Q&A line (已复现 / 部分复现 only). */
+export function officialQaLineApplies(digest) {
+  const status = SHOWN_STATUS[digest?.status];
+  return status === STATUS.OK || status === STATUS.PARTIAL;
+}
+
 /**
  * The short section text. `officialQaMatches` are the official Q&A the judge called EXACT
  * ([{ title }]); they add the official-Q&A line to a completed reproduction (已复现 / 部分复现).
@@ -160,7 +166,7 @@ export function engineReproConciseText(digest, { officialQaMatches = [] } = {}) 
   if (shownAssumptions.length) {
     lines.push(`假设：${shownAssumptions.slice(0, 3).join("；")}${shownAssumptions.length > 3 ? "等" : ""}。`);
   }
-  const officialQaLine = officialQaExactLine(officialQaMatches);
+  const officialQaLine = officialQaLineApplies(digest) ? officialQaExactLine(officialQaMatches) : "";
   if (officialQaLine) lines.push(officialQaLine);
   lines.push(CONCISE_DISCLAIMER);
   return lines.join("\n\n");

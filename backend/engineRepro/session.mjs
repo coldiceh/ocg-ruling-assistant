@@ -17,7 +17,7 @@ import { createEngineReproLimits, redisCommand } from "./limits.mjs";
 import { createOfficialModelCall } from "./modelCalls.mjs";
 import { DEFAULT_PLANNER, identityFromCardResolution, runEngineReproduction } from "./reproduce.mjs";
 import { STATUS, renderQuestion } from "./aggregate.mjs";
-import { CONCISE_HEADER, engineReproConciseText, engineReproDigest } from "./concise.mjs";
+import { CONCISE_HEADER, engineReproConciseText, engineReproDigest, officialQaLineApplies } from "./concise.mjs";
 import { officialQaJudgeSummary } from "./officialQaJudge.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -227,12 +227,34 @@ export async function awaitEngineReproAtMainCompletion({ env, auditId, requestSt
     elapsedMs: gaveUpAtMs - startedAtMs, waitedMs: gaveUpAtMs - mainCompletedAtMs };
 }
 
-// `officialQaJudge` is the judge's pending result (startOfficialQaJudge), started alongside the
-// final answer; it is bounded by its own timeout and never rejects.
+// `officialQaJudge` is the judge's pending result (startOfficialQaJudge), started alongside the final
+// answer. The section comes first. Only a completed or partly completed reproduction can show the
+// official-Q&A line, so only then does the response wait for the judge, and never past the same wait
+// deadline; otherwise a result already in hand is kept for the response field and nothing waits.
 export async function attachEngineReproWhenReady(answer, { officialQaJudge = null, ...options } = {}) {
-  const [section, judge] = await Promise.all([
-    awaitEngineReproAtMainCompletion(options).catch(() => null),
-    Promise.resolve(officialQaJudge).catch(() => null),
-  ]);
+  const section = await awaitEngineReproAtMainCompletion(options).catch(() => null);
+  if (!section) return answer;
+  const judge = await judgeForSection(officialQaJudge, section, options);
   return appendEngineReproSection(answer, section, { officialQaJudge: judge });
+}
+
+// Without a deadline (callers always pass one) the judge's own bounds apply: two 3 s budget-store
+// calls, a 30 s request and a 3 s settlement.
+const JUDGE_WAIT_WITHOUT_DEADLINE_MS = 40_000;
+async function judgeForSection(pending, section, { waitDeadlineAt, now = Date.now } = {}) {
+  if (!pending) return null;
+  let settled = false;
+  let value = null;
+  const tracked = Promise.resolve(pending).then((result) => { settled = true; value = result; },
+    () => { settled = true; value = null; });
+  if (!(section.status === "done" && officialQaLineApplies(section.digest))) {
+    // The line cannot be shown: take a result that is already there (after pending callbacks run).
+    await new Promise((resolve) => setImmediate(resolve));
+    return settled ? value : null;
+  }
+  const limitMs = Number.isFinite(waitDeadlineAt) ? Math.max(0, waitDeadlineAt - now()) : JUDGE_WAIT_WITHOUT_DEADLINE_MS;
+  let timer;
+  await Promise.race([tracked, new Promise((resolve) => { timer = setTimeout(resolve, limitMs); })]);
+  clearTimeout(timer);
+  return settled ? value : { status: "failed", error: "judge_wait_deadline" };
 }
