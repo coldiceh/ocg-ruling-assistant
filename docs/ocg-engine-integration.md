@@ -65,23 +65,24 @@ OCG_ENGINE_TIMEOUT_MS=20000
 ygopro（MyCard 版核心）在下面的局面里：我方在主要阶段1可以选择「发动超融合」。
 局面：我方手卡 超融合，额外卡组 埃翁；对方场上 对极英雄 混沌侠、毁灭凤凰人（表侧攻击）。
 假设：双方无其他适用效果；我方有填充卡可供舍弃。
-本题没有找到官方 Q&A；主回答是依据规则资料的分析，ygopro 的结果是另一个独立来源，两者都可能有错。
+判断模型认为官方 Q&A【「超融合」の効果は…】与本题条件一致，以该官方 Q&A 为准；ygopro 的结果只作参考。
 ygopro 只显示它运行的结果，卡片脚本可能有 bug，不代表官方裁定。
 ```
 
-- 短段由 `backend/engineRepro/concise.mjs` 生成：`engineReproDigest(record)` 从复现记录的结构化字段（`summary.status` / `reasonCodes`、`plan.assumptions`、各分支的 `assumption`、引擎结果的 `probes` / `decisions`、分支的起始 `scenario`、`cards`、准入失败时的 `error.code`）取出要显示的内容，`engineReproConciseText(digest, { officialQaState })` 排成文字。只做机械转述，不读题面文字，不判断主回答与引擎是否一致，也不判断谁对。
+- 短段由 `backend/engineRepro/concise.mjs` 生成：`engineReproDigest(record)` 从复现记录的结构化字段（`summary.status` / `reasonCodes`、`plan.assumptions`、各分支的 `assumption`、引擎结果的 `probes` / `decisions`、分支的起始 `scenario`、`cards`、准入失败时的 `error.code`）取出要显示的内容，`engineReproConciseText(digest, { officialQaMatches })` 排成文字。只做机械转述，不读题面文字，不判断主回答与引擎是否一致，也不判断谁对。
 - 状态只有四类：已复现、部分复现、未复现、不适用，标题行都是“【ygopro 引擎复现（实验性）】”加状态。未复现和不适用只给状态和一句原因（原因码翻成人话）。等待超时显示“未完成”，说明“ygopro 引擎复现在等待上限内未完成……”。
 - 复现自己的每日预算桶（`ENGINE_REPRO_DAILY_LIMIT_USD`）或每分钟限频（`ENGINE_REPRO_MAX_PER_MINUTE`）拒绝时（`error.code` 为 `engine_repro_daily_budget_exceeded` / `engine_repro_rate_limited`），短段只有一行：“【ygopro 引擎复现（实验性）】今日额度已用完，本题没有完成 ygopro 复现。”或“【ygopro 引擎复现（实验性）】每分钟次数已达上限，本题没有运行 ygopro 复现。”原因码仍记为 `budget_exceeded`。
 - 每个探测点一句话：出现、未出现、未到达、核心自动发动；只能确认到卡时注明。时点取自引擎窗口的阶段和回合玩家。多个子问题、同题两种假设的对照分支各占一行。
 - 局面只列题目点名的卡（主回答识别出的卡）及其区域和表示形式；填充卡和其他辅助卡只写“（另有填充卡）”或“（另有其他辅助卡）”。不写区域编号、基本分、卡组张数、先攻。假设最多列 3 条，多出的写“等”。
-- 官方 Q&A 那一行是机械判断，`officialQaStateFromAnswer(answer)` 只看准备阶段证据包（`continuation.evidence`）的两个数：`officialQaDirectCandidates` 和 `officialQaRelated` 的条数。最终生成步骤（`finalizePreparedRagRulingQuestionCore`，两种请求形态共用）把它们原样写进回答的 `debug.retrievalCounts.officialQaDirectCandidates` / `debug.retrievalCounts.officialQaRelated`，与最终模型的措辞无关。三态：
-  - 直接候选 > 0：“本题有直接对应的官方 Q&A，以官方裁定为准；ygopro 的结果只作参考。”
-  - 直接候选 = 0、相关官方 Q&A > 0：“本题没有完全对应的官方 Q&A；主回答参考了相关官方 Q&A 和规则资料，ygopro 的结果是另一个独立来源，两者都可能有错。”
-  - 两者都为 0：“本题没有找到官方 Q&A；主回答是依据规则资料的分析，ygopro 的结果是另一个独立来源，两者都可能有错。”
-  - 需要的计数读不到时省略这一行。
+- 官方 Q&A 那一行（2026-10-18 起）只在“对应判断”说某条官方 Q&A 与本题正好对应时显示，否则整行不显示。原来按证据包计数分三态的写法（其中“本题没有找到官方 Q&A”在线上总是出现，因为 Gemini 证据包不填那两个计数）已删除。
+  - 候选：最终模型实际拿到的证据（`selectedPromptEvidenceRefs`）里的官方 Q&A（`recordType`/`type` 为 `qa` 或 `official_qa`），只取题面字段（标题、问题、详细场景），官方答案不发；卡号占位符按离线实验的写法渲染成“日文名／中文名”。材料在准备阶段由 `buildOfficialQaJudgeInput`（`backend/officialQaCorrespondence.mjs`）生成，存在 `continuation.officialQaJudgeInput`，不进最终提示词，也不进回答对象。
+  - 调用：`backend/engineRepro/officialQaJudge.mjs`，GPT-6 Luna、推理 low、输出上限 6000、30 秒超时，走引擎复现自己的官方 API 调用和每日预算桶（不占每分钟次数）。单次请求形态在证据准备好后、最终模型调用前启动；两步请求在 finalize 开始时启动，都与最终模型调用并行，引擎段拼接时等它结果。请求体与离线实验（ocg-sim-core `experiments/official-qa-correspondence`，run-v1.1，low：判为找到 20/20 正确、应找到 21 处找到 20 处）逐字节相同。
+  - 只认完成状态、且每个候选恰好一个 EXACT / PARTIAL / NOT 的输出；只有 EXACT 显示（用户口径：部分对应算没找到）。行文：“判断模型认为官方 Q&A【标题】与本题条件一致，以该官方 Q&A 为准；ygopro 的结果只作参考。”最多列两个标题，更多写“等 N 条”。没有候选、开关关闭（`ENGINE_REPRO_OFFICIAL_QA_JUDGE=off`）、预算拒绝、超时、HTTP 错误、输出不合格都不显示。
+  - 只加在已复现 / 部分复现的短段里；未复现、不适用、额度/限频、未完成的短段不加。
+  - 实验每题只有 2–3 条候选；线上候选可能更多，精确率不能直接外推。
 - 各行之间用空行分隔，网页和按 Markdown 显示的 Bot 都会分行。
 - 完整逐步回放（引擎服务渲染的全文，含每个窗口“本可发动”、区域编号、基本分、版本号、跳过的窗口数等调试信息，标题为“【ygopro 引擎复现（实验性，未经评测）】”）保留在响应的 `engineRepro.rendered` 和历史记录的 `engineRepro.rendered` 里。网页端在短段下面放一个默认折叠的“展开 ygopro 完整回放”区域，用等宽预格式化显示，保留原有换行；管理员历史记录另有“ygopro 引擎复现完整回放”一栏。API/Bot 渠道的 `shortAnswer` 只含短段。
-- 响应的 `engineRepro` 另带 `concise`（短段原文）、`officialQaState`（`direct` / `related` / `none` / null）、`officialQaDirect`（true / false / null，兼容旧读者，由 `officialQaState` 推出）和 `digest`（短段用到的结构化数据）。
+- 响应的 `engineRepro` 另带 `concise`（短段原文）、`officialQaJudge`（判断结果摘要：状态、候选数、各判定的条数、EXACT 的条目、逐条判定与理由、耗时、费用；不含请求文本；没有判断时为 null）和 `digest`（短段用到的结构化数据）。原来的 `officialQaState` / `officialQaDirect` 已删除。
 
 ### 公开显示（阶段 4，2026-10-16 起）
 

@@ -1,8 +1,9 @@
 // User-facing short engine-reproduction section (the full step-by-step replay stays in
 // `rendered`). Mechanical only: it restates structured fields of the reproduction record
 // (question-level status and reason codes, the plan's assumptions, probe results, the planned
-// starting board) plus two counts from the evidence pack. It never reads the question text,
-// never compares the engine result with the main answer and never judges whether either is right.
+// starting board) plus, when the official-Q&A judge (officialQaJudge.mjs) said so, the titles of
+// the official Q&A it found to correspond exactly. It never reads the question text, never
+// compares the engine result with the main answer and never judges whether either is right.
 // The engine is named (ygopro, MyCard core) so readers know which program produced the result.
 import { STATUS, branchOutcome } from "./aggregate.mjs";
 import { FILLER_CARDS } from "./plannerPrompt.mjs";
@@ -12,16 +13,26 @@ export const CONCISE_LEAD_WITH_BOARD = "ygopro（MyCard 版核心）在下面的
 export const CONCISE_LEAD_WITHOUT_BOARD = "ygopro（MyCard 版核心）的运行结果：";
 export const CONCISE_DISCLAIMER = "ygopro 只显示它运行的结果，卡片脚本可能有 bug，不代表官方裁定。";
 
-// The official-Q&A line, chosen by officialQaStateFromAnswer (evidence-pack counts only).
-export const OFFICIAL_QA_STATE = Object.freeze({ DIRECT: "direct", RELATED: "related", NONE: "none" });
-export const OFFICIAL_QA_DIRECT_LINE = "本题有直接对应的官方 Q&A，以官方裁定为准；ygopro 的结果只作参考。";
-export const OFFICIAL_QA_RELATED_LINE = "本题没有完全对应的官方 Q&A；主回答参考了相关官方 Q&A 和规则资料，ygopro 的结果是另一个独立来源，两者都可能有错。";
-export const OFFICIAL_QA_NONE_LINE = "本题没有找到官方 Q&A；主回答是依据规则资料的分析，ygopro 的结果是另一个独立来源，两者都可能有错。";
-const OFFICIAL_QA_LINES = Object.freeze({
-  [OFFICIAL_QA_STATE.DIRECT]: OFFICIAL_QA_DIRECT_LINE,
-  [OFFICIAL_QA_STATE.RELATED]: OFFICIAL_QA_RELATED_LINE,
-  [OFFICIAL_QA_STATE.NONE]: OFFICIAL_QA_NONE_LINE,
-});
+// The official-Q&A line. Shown only for official Q&A the judge called EXACT (officialQaJudge.mjs);
+// with no such Q&A (none given to the answer, only partial or no correspondence, or the judge
+// failed) there is no line. The line names at most two titles.
+const OFFICIAL_QA_TITLE_MAX_CHARS = 120;
+export function officialQaExactLine(matches = []) {
+  const titles = [...new Set((Array.isArray(matches) ? matches : [])
+    .map((match) => shortTitle(match?.title)).filter(Boolean))];
+  if (!titles.length) return "";
+  const shown = titles.slice(0, 2).map((title) => `【${title}】`).join("");
+  const more = titles.length > 2 ? `等 ${titles.length} 条` : "";
+  const which = titles.length > 1 ? "这些" : "该";
+  return `判断模型认为官方 Q&A${shown}${more}与本题条件一致，以${which}官方 Q&A 为准；ygopro 的结果只作参考。`;
+}
+
+function shortTitle(value) {
+  // 【】 delimit the title in the line, so brackets inside a title are written as ［］.
+  const text = String(value || "").replace(/\s+/gu, " ").replace(/【/gu, "［").replace(/】/gu, "］").trim();
+  const chars = Array.from(text);
+  return chars.length > OFFICIAL_QA_TITLE_MAX_CHARS ? `${chars.slice(0, OFFICIAL_QA_TITLE_MAX_CHARS).join("")}…` : text;
+}
 
 // The reproduction's own admission limits (limits.mjs), by the error code they throw. When one of
 // them refused the run, the section is this single line instead of a status and a reason.
@@ -90,12 +101,11 @@ export function engineReproDigest(record = {}) {
 }
 
 /**
- * The short section text. `officialQaState` is the mechanical evidence-pack signal
- * (see officialQaStateFromAnswer): "direct" / "related" / "none" choose the official-Q&A line;
- * null (counts not readable) omits it.
+ * The short section text. `officialQaMatches` are the official Q&A the judge called EXACT
+ * ([{ title }]); they add the official-Q&A line to a completed reproduction (已复现 / 部分复现).
  * Lines are separated by blank lines so every Markdown renderer keeps them apart.
  */
-export function engineReproConciseText(digest, { officialQaState = null } = {}) {
+export function engineReproConciseText(digest, { officialQaMatches = [] } = {}) {
   if (!digest || typeof digest !== "object") return "";
   const status = SHOWN_STATUS[digest.status] || STATUS.FAIL;
   if (status === STATUS.FAIL && ADMISSION_LIMIT_LINES[digest.admissionLimit]) return ADMISSION_LIMIT_LINES[digest.admissionLimit];
@@ -144,31 +154,10 @@ export function engineReproConciseText(digest, { officialQaState = null } = {}) 
   if (shownAssumptions.length) {
     lines.push(`假设：${shownAssumptions.slice(0, 3).join("；")}${shownAssumptions.length > 3 ? "等" : ""}。`);
   }
-  if (OFFICIAL_QA_LINES[officialQaState]) lines.push(OFFICIAL_QA_LINES[officialQaState]);
+  const officialQaLine = officialQaExactLine(officialQaMatches);
+  if (officialQaLine) lines.push(officialQaLine);
   lines.push(CONCISE_DISCLAIMER);
   return lines.join("\n\n");
-}
-
-/**
- * Which official-Q&A line applies, from two evidence-pack counts only:
- * continuation.evidence.officialQaDirectCandidates and .officialQaRelated, fixed when the request
- * was prepared and copied into debug.retrievalCounts by the finalizer
- * (finalizePreparedRagRulingQuestionCore, the same code for both request shapes); they never
- * depend on the final model's output.
- *   direct candidates > 0                    -> "direct"
- *   direct = 0, related official Q&A > 0     -> "related"
- *   direct = 0, related = 0                  -> "none"
- *   a needed count is missing or not a count -> null (the line is omitted)
- */
-export function officialQaStateFromAnswer(answer) {
-  const counts = answer?.debug?.retrievalCounts;
-  const count = (value) => (Number.isSafeInteger(value) && value >= 0 ? value : null);
-  const direct = count(counts?.officialQaDirectCandidates);
-  if (direct === null) return null;
-  if (direct > 0) return OFFICIAL_QA_STATE.DIRECT;
-  const related = count(counts?.officialQaRelated);
-  if (related === null) return null;
-  return related > 0 ? OFFICIAL_QA_STATE.RELATED : OFFICIAL_QA_STATE.NONE;
 }
 
 function branchDigest(branch, names, namedCodes) {

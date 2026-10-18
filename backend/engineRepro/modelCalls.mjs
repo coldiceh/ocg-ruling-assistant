@@ -149,7 +149,9 @@ export function engineReproApiKey(env = {}) {
 
 export function createOfficialModelCall({ env, limits, fetchImpl = globalThis.fetch }) {
   const apiKey = engineReproApiKey(env);
-  return async function modelCall({ model, instructions = null, input, reasoningEffort, maxOutputTokens, maxInputTokens = null }) {
+  // timeoutMs bounds one call (default 120 s); the official-Q&A judge passes a shorter one.
+  return async function modelCall({ model, instructions = null, input, reasoningEffort, maxOutputTokens, maxInputTokens = null,
+    timeoutMs = 120000 }) {
     if (!apiKey) throw Object.assign(new Error("engine_repro_api_key_missing"), { code: "engine_repro_not_configured" });
     const body = { model, ...(instructions ? { instructions } : {}), input, reasoning: { effort: reasoningEffort },
       text: { format: { type: "json_object" } }, max_output_tokens: maxOutputTokens, stream: false };
@@ -163,7 +165,7 @@ export function createOfficialModelCall({ env, limits, fetchImpl = globalThis.fe
       const response = await fetchImpl(OFFICIAL_RESPONSES_URL, {
         method: "POST", redirect: "error",
         headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
-        body: JSON.stringify(body), signal: AbortSignal.timeout(120000),
+        body: JSON.stringify(body), signal: AbortSignal.timeout(timeoutMs),
       });
       const text = await response.text();
       if (!response.ok) {

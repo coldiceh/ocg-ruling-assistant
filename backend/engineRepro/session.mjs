@@ -17,7 +17,8 @@ import { createEngineReproLimits, redisCommand } from "./limits.mjs";
 import { createOfficialModelCall } from "./modelCalls.mjs";
 import { DEFAULT_PLANNER, identityFromCardResolution, runEngineReproduction } from "./reproduce.mjs";
 import { STATUS, renderQuestion } from "./aggregate.mjs";
-import { CONCISE_HEADER, OFFICIAL_QA_STATE, engineReproConciseText, engineReproDigest, officialQaStateFromAnswer } from "./concise.mjs";
+import { CONCISE_HEADER, engineReproConciseText, engineReproDigest } from "./concise.mjs";
+import { officialQaJudgeSummary } from "./officialQaJudge.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 let cidMapCache = null;
@@ -61,23 +62,24 @@ function storedRecord(record) {
 // The short, user-facing section (concise.mjs). The full step-by-step replay is not part of the
 // answer text: it stays in section.rendered (response field engineRepro.rendered and the history
 // record), and the website shows it in a collapsed block under the short section.
-export function engineReproSectionText(section, { officialQaState = null } = {}) {
+export function engineReproSectionText(section, { officialQaMatches = [] } = {}) {
   if (!section) return "";
   if (section.status === "timeout") {
     return `${CONCISE_HEADER}未完成\n\nygopro 引擎复现在等待上限内未完成（复现已耗时 ${(section.elapsedMs / 1000).toFixed(1)} 秒，`
       + `主回答完成后已等待 ${(section.waitedMs / 1000).toFixed(1)} 秒）。结果仍会写入历史记录。`;
   }
-  return section.digest ? engineReproConciseText(section.digest, { officialQaState }) : "";
+  return section.digest ? engineReproConciseText(section.digest, { officialQaMatches }) : "";
 }
 
-/** Insert the short section after the answer text (before an embedded generation footer, if any). */
-export function appendEngineReproSection(answer, section) {
+/**
+ * Insert the short section after the answer text (before an embedded generation footer, if any).
+ * `officialQaJudge` is the judge's result for this answer (officialQaJudge.mjs) or null.
+ */
+export function appendEngineReproSection(answer, section, { officialQaJudge = null } = {}) {
   if (!section || !answer || typeof answer !== "object") return answer;
-  const officialQaState = officialQaStateFromAnswer(answer);
-  const text = engineReproSectionText(section, { officialQaState });
-  // officialQaDirect (true / false / null) is kept for existing readers of the response.
-  const officialQaDirect = officialQaState === null ? null : officialQaState === OFFICIAL_QA_STATE.DIRECT;
-  const engineRepro = { ...section, concise: text, officialQaState, officialQaDirect };
+  const officialQaMatches = officialQaJudge?.status === "done" && Array.isArray(officialQaJudge.exact) ? officialQaJudge.exact : [];
+  const text = engineReproSectionText(section, { officialQaMatches });
+  const engineRepro = { ...section, concise: text, officialQaJudge: officialQaJudgeSummary(officialQaJudge) };
   if (!text) return { ...answer, engineRepro };
   const shortAnswer = typeof answer.shortAnswer === "string" ? answer.shortAnswer : "";
   const footer = answer.generation?.embeddedInAnswerText === true ? String(answer.generation.answerTextFooter || "") : "";
@@ -225,7 +227,12 @@ export async function awaitEngineReproAtMainCompletion({ env, auditId, requestSt
     elapsedMs: gaveUpAtMs - startedAtMs, waitedMs: gaveUpAtMs - mainCompletedAtMs };
 }
 
-export async function attachEngineReproWhenReady(answer, options) {
-  const section = await awaitEngineReproAtMainCompletion(options).catch(() => null);
-  return appendEngineReproSection(answer, section);
+// `officialQaJudge` is the judge's pending result (startOfficialQaJudge), started alongside the
+// final answer; it is bounded by its own timeout and never rejects.
+export async function attachEngineReproWhenReady(answer, { officialQaJudge = null, ...options } = {}) {
+  const [section, judge] = await Promise.all([
+    awaitEngineReproAtMainCompletion(options).catch(() => null),
+    Promise.resolve(officialQaJudge).catch(() => null),
+  ]);
+  return appendEngineReproSection(answer, section, { officialQaJudge: judge });
 }

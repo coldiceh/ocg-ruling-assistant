@@ -6,7 +6,10 @@
 // addressed by short aliases, every alias must come back exactly once with a known verdict, and any
 // other output fails closed (the caller shows nothing). Nothing here changes evidence or the answer.
 //
-// Not wired into the public pipeline yet; scripts/official-qa-correspondence-eval.mjs evaluates it.
+// scripts/official-qa-correspondence-eval.mjs evaluated it offline (2026-10-18, ocg-sim-core
+// experiments/official-qa-correspondence). The public answer uses it only for one line of the
+// engine-reproduction section: buildOfficialQaJudgeInput (below) prepares the candidates while the
+// evidence is prepared, and engineRepro/officialQaJudge.mjs sends the call.
 import { createHash } from "node:crypto";
 
 export const OFFICIAL_QA_CORRESPONDENCE_PROMPT_VERSION = "official-qa-correspondence-v1";
@@ -93,4 +96,103 @@ export function parseOfficialQaCorrespondenceOutput(outputText, aliases = {}) {
   const missing = expected.filter((alias) => !seen.has(alias));
   if (missing.length) return { ok: false, error: `missing_alias:${missing.join(",")}` };
   return { ok: true, assessments: expected.map((alias) => seen.get(alias)) };
+}
+
+// ---------------------------------------------------------------------------------------------
+// Production material. Built once while the evidence is prepared (the card data is loaded there,
+// not in the separate finalize request) and stored JSON-safe in the continuation. Mechanical only:
+// it selects the official Q&A among the evidence the final answer is given, copies their question
+// fields and writes card names into the card-number placeholders. It never judges relevance.
+// ---------------------------------------------------------------------------------------------
+
+export const OFFICIAL_QA_JUDGE_INPUT_SCHEMA = "official-qa-judge-input/v1";
+const OFFICIAL_QA_TYPES = new Set(["qa", "official_qa"]);
+const CARD_PLACEHOLDER = /<<(\d{1,10})>>/gu;
+
+/**
+ * `<<cid>>` -> card name. style "judge" is the form the offline evaluation sent ("日文名／中文名",
+ * one name when they are equal or one is missing); style "display" is the Chinese name for the
+ * engine section. Unknown card numbers stay as they are.
+ */
+export function renderCardPlaceholders(text, cardsById, { style = "judge" } = {}) {
+  return String(text || "").replace(CARD_PLACEHOLDER, (whole, cid) => {
+    const card = cardsById?.get?.(cid);
+    if (!card) return whole;
+    const ja = String(card.jaName || "").trim();
+    const cn = String(card.cnName || card.name || "").trim();
+    if (style === "display") return cn || ja || whole;
+    if (!cn || cn === ja) return ja || whole;
+    return ja ? `${ja}／${cn}` : cn;
+  });
+}
+
+/**
+ * The question fields of one prompt-visible evidence item when it is an official Q&A, else null.
+ * The Gemini pack carries the complete source record as JSON in `text`; other packs carry the
+ * fields on the item. Answer fields are never copied.
+ */
+export function officialQaQuestionFields(item = {}) {
+  if (!item || typeof item !== "object" || !OFFICIAL_QA_TYPES.has(String(item.type || item.recordType || ""))) return null;
+  let record = item;
+  if (!String(item.rawQuestion || item.question || "").trim() && typeof item.text === "string") {
+    try { record = JSON.parse(item.text); } catch { return null; }
+    if (!record || typeof record !== "object" || Array.isArray(record)) return null;
+    if (record.recordType !== undefined && record.recordType !== "qa") return null;
+  }
+  const field = (name) => (typeof record[name] === "string" ? record[name] : "");
+  const fields = {
+    id: String(record.id || item.id || "").trim(),
+    title: field("title") || (typeof item.title === "string" ? item.title : ""),
+    rawQuestion: field("rawQuestion"),
+    question: field("question"),
+    rawDetailedQuestion: field("rawDetailedQuestion"),
+    sourceUrl: field("sourceUrl") || (typeof item.sourceUrl === "string" ? item.sourceUrl : ""),
+  };
+  return fields.id && isJudgeableOfficialQa(fields) ? fields : null;
+}
+
+/**
+ * Judge material for one answer, or null when no official Q&A is among `evidenceItems` (the
+ * prompt-visible evidence refs). `cards` is the loaded card data; `resolvedCards` are the cards
+ * confirmed for the question.
+ */
+export function buildOfficialQaJudgeInput({ userQuery, evidenceItems = [], cards = [], resolvedCards = [] } = {}) {
+  const found = [];
+  const seen = new Set();
+  for (const item of Array.isArray(evidenceItems) ? evidenceItems : []) {
+    const fields = officialQaQuestionFields(item);
+    if (!fields || seen.has(fields.id)) continue;
+    seen.add(fields.id);
+    found.push({ fields, handle: String(item.id || "") });
+  }
+  if (!found.length) return null;
+  const wanted = new Set();
+  const want = (text) => { for (const match of String(text || "").matchAll(CARD_PLACEHOLDER)) wanted.add(match[1]); };
+  for (const { fields } of found) for (const key of ["title", "rawQuestion", "question", "rawDetailedQuestion"]) want(fields[key]);
+  const userCardIds = (Array.isArray(resolvedCards) ? resolvedCards : [])
+    .map((card) => String(card?.id || card?.cardId || "").trim()).filter(Boolean);
+  for (const id of userCardIds) wanted.add(id);
+  const cardsById = new Map();
+  for (const card of Array.isArray(cards) ? cards : []) {
+    const id = String(card?.id ?? "");
+    if (wanted.has(id) && !cardsById.has(id)) cardsById.set(id, card);
+  }
+  const judge = (text) => renderCardPlaceholders(text, cardsById);
+  const candidates = found.map(({ fields, handle }) => ({
+    id: fields.id,
+    ...(fields.title ? { title: judge(fields.title) } : {}),
+    ...(fields.rawQuestion ? { rawQuestion: judge(fields.rawQuestion) } : {}),
+    ...(fields.question ? { question: judge(fields.question) } : {}),
+    ...(fields.rawDetailedQuestion ? { rawDetailedQuestion: judge(fields.rawDetailedQuestion) } : {}),
+    handle,
+    displayTitle: renderCardPlaceholders(fields.title || fields.rawQuestion || fields.question, cardsById, { style: "display" }),
+    ...(fields.sourceUrl ? { sourceUrl: fields.sourceUrl } : {}),
+  }));
+  const userCards = [...new Set(userCardIds)].map((id) => {
+    const card = cardsById.get(id) || resolvedCards.find((value) => String(value?.id || value?.cardId || "") === id) || {};
+    return { id, cnName: String(card.cnName || card.name || ""), jaName: String(card.jaName || ""),
+      effectText: String(card.effectText || card.text || "") };
+  });
+  return { schema: OFFICIAL_QA_JUDGE_INPUT_SCHEMA, promptVersion: OFFICIAL_QA_CORRESPONDENCE_PROMPT_VERSION,
+    userQuery: String(userQuery || ""), userCards, candidates };
 }

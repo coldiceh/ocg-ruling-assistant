@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { aggregateQuestion, renderQuestion } from "../backend/engineRepro/aggregate.mjs";
-import { ADMISSION_LIMIT_LINES, CONCISE_DISCLAIMER, engineReproConciseText, engineReproDigest, OFFICIAL_QA_DIRECT_LINE,
-  OFFICIAL_QA_NONE_LINE, OFFICIAL_QA_RELATED_LINE, officialQaStateFromAnswer, REASON_PLAIN } from "../backend/engineRepro/concise.mjs";
+import { ADMISSION_LIMIT_LINES, CONCISE_DISCLAIMER, engineReproConciseText, engineReproDigest, officialQaExactLine,
+  REASON_PLAIN } from "../backend/engineRepro/concise.mjs";
 import { appendEngineReproSection, engineReproSectionText } from "../backend/engineRepro/session.mjs";
 import { finalizePreparedRagRulingQuestion } from "../backend/ragRulingPipeline.mjs";
 
@@ -21,6 +21,9 @@ const board = () => ({ schema: "ocg-repro-scenario/v1", seed: 2026, first_player
 const DEBUG_REPLAY = ["【引擎复现】", "状态：已按步骤回放完成", "版本：核心 abc1234 · 脚本 def5678 · 卡库 0123456 · Lua 5.4",
   "  · 此时 P1 本可发动：测试手坑（未发动）", "  （另有 3 个响应窗口无可发动效果，已跳过）", "结束时基本分：P0 8000，P1 8000",
   "  窗口（决策#4，主要阶段1，连锁/发动窗口）：无可发动效果【不含目标】"].join("\n");
+
+// A judge EXACT match: a 未复现 / 不适用 / admission-limit section still shows no official-Q&A line.
+const EXACT_MATCH = [{ id: "qa-1", title: "测试官方问答" }];
 
 const decision = (index, kind, player, options = [], turnPlayer = 0) => ({ index, kind, player, phase: "main1", turn: 1,
   turn_player: turnPlayer, passable: kind === "chain", options });
@@ -67,7 +70,7 @@ test("已复现: two sub-questions, one core auto-activation; board, assumptions
   });
   assert.equal(record.summary.status, "已复现");
   assert.match(record.rendered, /本可发动/u, "the full replay keeps the debugging detail");
-  const text = engineReproConciseText(engineReproDigest(record), { officialQaState: "none" });
+  const text = engineReproConciseText(engineReproDigest(record));
   assert.deepEqual(text.split("\n\n"), [
     "【ygopro 引擎复现（实验性）】已复现",
     "ygopro（MyCard 版核心）在下面的局面里：",
@@ -75,7 +78,6 @@ test("已复现: two sub-questions, one core auto-activation; board, assumptions
     "子问题 2：「测试怪兽B」作为必发效果由引擎自动发动（只能确认到卡，不能确认是哪个效果）；对方在我方主要阶段1没有出现「测试手坑」的发动机会。",
     "局面：我方手卡 测试融合魔法，额外卡组 测试融合怪兽；对方场上 测试怪兽A（表侧攻击）、测试怪兽B（里侧守备），手卡 测试手坑（另有填充卡）。",
     "假设：双方无其他适用效果；我方有填充卡可供舍弃。",
-    OFFICIAL_QA_NONE_LINE,
     CONCISE_DISCLAIMER,
   ]);
   assertConcise(text);
@@ -94,7 +96,8 @@ test("对照分支: one line per assumption; differing boards are labelled the s
       { id: "b2", assumption: null, scenario: without, engine: replayed([], []) },
     ] }],
   });
-  const lines = engineReproConciseText(engineReproDigest(record), { officialQaState: "direct" }).split("\n\n");
+  const lines = engineReproConciseText(engineReproDigest(record),
+    { officialQaMatches: [{ id: "qa-1", title: "测试手坑能否在对方回合发动？" }] }).split("\n\n");
   assert.deepEqual(lines, [
     "【ygopro 引擎复现（实验性）】已复现",
     "ygopro（MyCard 版核心）在下面的局面里：",
@@ -102,7 +105,7 @@ test("对照分支: one line per assumption; differing boards are labelled the s
     "无额外假设：引擎按计划走完了操作，这一问没有设置检查点（过程见完整回放）。",
     "局面（假设「对方手卡有测试手坑」）：我方手卡 测试融合魔法，额外卡组 测试融合怪兽；对方场上 测试怪兽A（表侧攻击）、测试怪兽B（里侧守备），手卡 测试手坑（另有填充卡）。",
     "局面（无额外假设）：我方手卡 测试融合魔法，额外卡组 测试融合怪兽；对方场上 测试怪兽A（表侧攻击）、测试怪兽B（里侧守备）（另有填充卡）。",
-    OFFICIAL_QA_DIRECT_LINE,
+    "判断模型认为官方 Q&A【测试手坑能否在对方回合发动？】与本题条件一致，以该官方 Q&A 为准；ygopro 的结果只作参考。",
     CONCISE_DISCLAIMER,
   ]);
 });
@@ -124,7 +127,7 @@ test("部分复现: an unreached check point and an unrepresentable sub-question
     ],
   });
   assert.equal(record.summary.status, "部分复现");
-  const text = engineReproConciseText(engineReproDigest(record), { officialQaState: "none" });
+  const text = engineReproConciseText(engineReproDigest(record));
   assert.deepEqual(text.split("\n\n").slice(0, 6), [
     "【ygopro 引擎复现（实验性）】部分复现",
     "ygopro（MyCard 版核心）在下面的局面里：",
@@ -151,14 +154,14 @@ test("未复现: only the first line and one plain reason, for every reason code
       plan: { applicability: "applicable", assumptions: ["不应出现的假设"] },
       subQuestions: [{ id: "q1", branches: [{ id: "b1", scenario: board(), engine: { status: "not_reproduced", reason_code: code,
         failure: { reason: "not_found", step: 0 }, rendered_zh: DEBUG_REPLAY } }] }] };
-    const text = engineReproConciseText(engineReproDigest(record), { officialQaState: "none" });
+    const text = engineReproConciseText(engineReproDigest(record), { officialQaMatches: EXACT_MATCH });
     assert.equal(text, `【ygopro 引擎复现（实验性）】未复现\n\n原因：${reason}。`, code);
     assertConcise(text);
   }
   // the same through the mechanical aggregation: the only sub-question cannot be built
   const record = finished({ cards, plan: { applicability: "applicable", assumptions: [] },
     subQuestions: [{ id: "q1", unrepresentable: "伤害步骤中", branches: [] }] });
-  assert.equal(engineReproConciseText(engineReproDigest(record), { officialQaState: "direct" }),
+  assert.equal(engineReproConciseText(engineReproDigest(record), { officialQaMatches: EXACT_MATCH }),
     "【ygopro 引擎复现（实验性）】未复现\n\n原因：引擎搭不出题目描述的局面。");
 });
 
@@ -167,7 +170,7 @@ test("不适用: one plain sentence per planner reason; no steps, no assumptions
     const record = finished({ cards, plan: { applicability: "not_applicable", reason_code: code, archetype_name: null,
       assumptions: ["不应出现"], sub_questions: [] }, subQuestions: [] });
     assert.equal(record.summary.status, "不适用");
-    const text = engineReproConciseText(engineReproDigest(record), { officialQaState: "direct" });
+    const text = engineReproConciseText(engineReproDigest(record), { officialQaMatches: EXACT_MATCH });
     assert.equal(text, `【ygopro 引擎复现（实验性）】不适用\n\n原因：${REASON_PLAIN[code]}。`, code);
   }
   const noCard = finished({ preStatus: { status: "不适用", reason: "no_card_mentioned", detail: "没有抽取到卡名" } });
@@ -188,56 +191,44 @@ test("the section names ygopro: header, lead line and disclaimer", () => {
   }
 });
 
-test("official Q&A line has three states from the evidence-pack counts; unknown counts omit it", () => {
-  assert.equal(OFFICIAL_QA_DIRECT_LINE, "本题有直接对应的官方 Q&A，以官方裁定为准；ygopro 的结果只作参考。");
-  assert.equal(OFFICIAL_QA_RELATED_LINE,
-    "本题没有完全对应的官方 Q&A；主回答参考了相关官方 Q&A 和规则资料，ygopro 的结果是另一个独立来源，两者都可能有错。");
-  assert.equal(OFFICIAL_QA_NONE_LINE, "本题没有找到官方 Q&A；主回答是依据规则资料的分析，ygopro 的结果是另一个独立来源，两者都可能有错。");
+test("official Q&A line: only for the judge's EXACT matches; wording, two titles at most, brackets, long titles", () => {
   const record = finished({ cards, plan: { applicability: "applicable", assumptions: [] },
     subQuestions: [{ id: "q1", branches: [{ id: "b1", scenario: board(), engine: replayed([], []) }] }] });
   const digest = engineReproDigest(record);
-  const withLine = (value) => engineReproConciseText(digest, { officialQaState: value }).split("\n\n");
-  assert.equal(withLine("direct").at(-2), OFFICIAL_QA_DIRECT_LINE);
-  assert.equal(withLine("related").at(-2), OFFICIAL_QA_RELATED_LINE);
-  assert.equal(withLine("none").at(-2), OFFICIAL_QA_NONE_LINE);
-  for (const missing of [null, undefined, "other"]) {
-    const lines = withLine(missing);
-    assert.ok(![OFFICIAL_QA_DIRECT_LINE, OFFICIAL_QA_RELATED_LINE, OFFICIAL_QA_NONE_LINE].some((line) => lines.includes(line)));
-    assert.equal(lines.at(-1), CONCISE_DISCLAIMER);
+  const lines = (matches) => engineReproConciseText(digest, { officialQaMatches: matches }).split("\n\n");
+  assert.equal(officialQaExactLine([{ title: "题A" }]),
+    "判断模型认为官方 Q&A【题A】与本题条件一致，以该官方 Q&A 为准；ygopro 的结果只作参考。");
+  assert.equal(lines([{ title: "题A" }]).at(-2), officialQaExactLine([{ title: "题A" }]));
+  assert.equal(lines([{ title: "题A" }]).at(-1), CONCISE_DISCLAIMER);
+  assert.equal(officialQaExactLine([{ title: "题A" }, { title: "题B" }]),
+    "判断模型认为官方 Q&A【题A】【题B】与本题条件一致，以这些官方 Q&A 为准；ygopro 的结果只作参考。");
+  assert.equal(officialQaExactLine([{ title: "题A" }, { title: "题B" }, { title: "题C" }, { title: "题A" }]),
+    "判断模型认为官方 Q&A【题A】【题B】等 3 条与本题条件一致，以这些官方 Q&A 为准；ygopro 的结果只作参考。");
+  assert.equal(officialQaExactLine([{ title: "「卡」的【1】效果\n能否发动？" }]),
+    "判断模型认为官方 Q&A【「卡」的［1］效果 能否发动？】与本题条件一致，以该官方 Q&A 为准；ygopro 的结果只作参考。");
+  const long = officialQaExactLine([{ title: "长".repeat(200) }]);
+  assert.ok(long.includes(`【${"长".repeat(120)}…】`));
+  // no EXACT match, no line: the old "not found" sentence is gone in every case
+  for (const none of [undefined, null, [], [{ title: "" }], [{}], "EXACT"]) {
+    const shown = lines(none);
+    assert.equal(shown.at(-1), CONCISE_DISCLAIMER);
+    assert.ok(!shown.some((line) => line.includes("官方 Q&A")), String(none));
   }
-  const state = (retrievalCounts) => officialQaStateFromAnswer({ debug: { retrievalCounts } });
-  assert.equal(state({ officialQaDirectCandidates: 2, officialQaRelated: 0 }), "direct");
-  assert.equal(state({ officialQaDirectCandidates: 1 }), "direct", "a direct candidate needs no related count");
-  assert.equal(state({ officialQaDirectCandidates: 0, officialQaRelated: 3 }), "related");
-  assert.equal(state({ officialQaDirectCandidates: 0, officialQaRelated: 0 }), "none");
-  assert.equal(state({ officialQaDirectCandidates: 0 }), null, "related count missing");
-  assert.equal(state({ officialQaRelated: 3 }), null, "direct count missing");
-  assert.equal(state({ officialQaDirectCandidates: "1", officialQaRelated: 0 }), null);
-  assert.equal(state({ officialQaDirectCandidates: 0, officialQaRelated: -1 }), null);
-  assert.equal(officialQaStateFromAnswer({ debug: {} }), null);
-  assert.equal(officialQaStateFromAnswer(null), null);
 });
 
-test("the official Q&A state is the prepared evidence pack's counts, not the model's wording", async () => {
-  const finalize = (evidence, modelText) => finalizePreparedRagRulingQuestion({
-    continuation: { schemaVersion: 1, mode: "rag_baseline", evidence,
+test("the final answer object never carries the judge material from the continuation", async () => {
+  const marker = "SYNTHETIC-JUDGE-MATERIAL";
+  const answer = await finalizePreparedRagRulingQuestion({
+    continuation: { schemaVersion: 1, mode: "rag_baseline", evidence: { officialQaRelated: [] },
       promptBundle: { prompt: "Synthetic saved prompt", modelEvidence: {}, allowedEvidenceIds: [] },
-      cardResolution: { resolvedCards: [] } },
+      cardResolution: { resolvedCards: [] },
+      officialQaJudgeInput: { schema: "official-qa-judge-input/v1", userQuery: marker, userCards: [],
+        candidates: [{ id: "qa-1", rawQuestion: marker }] } },
     env: { RAG_MODEL_PROVIDER: "mock" },
-    modelInvoker: async () => modelText,
+    modelInvoker: async () => "主回答",
     fetchImpl: async () => { throw new Error("network is not allowed in this test"); },
   });
-  const direct = { id: "qa-direct", type: "official_qa", title: "Synthetic official Q&A" };
-  const related = { id: "qa-related", type: "official_qa", title: "Synthetic related official Q&A" };
-  const none = await finalize({ officialQaDirectCandidates: [], officialQaRelated: [] }, "本题有官方 Q&A 直接对应。");
-  assert.equal(none.debug.retrievalCounts.officialQaRelated, 0);
-  assert.equal(officialQaStateFromAnswer(none), "none");
-  const withRelated = await finalize({ officialQaDirectCandidates: [], officialQaRelated: [related] }, "没有找到官方 Q&A。");
-  assert.equal(withRelated.debug.retrievalCounts.officialQaRelated, 1);
-  assert.equal(officialQaStateFromAnswer(withRelated), "related");
-  assert.equal(officialQaStateFromAnswer(await finalize({ officialQaDirectCandidates: [direct], officialQaRelated: [related] },
-    "没有找到官方 Q&A。")), "direct");
-  assert.equal(officialQaStateFromAnswer(await finalize({ officialQaDirectCandidates: [direct] }, "没有找到官方 Q&A。")), "direct");
+  assert.ok(!JSON.stringify(answer).includes(marker));
 });
 
 test("the reproduction's own daily budget or per-minute limit: one line that names ygopro", () => {
@@ -246,7 +237,7 @@ test("the reproduction's own daily budget or per-minute limit: one line that nam
   for (const code of ["engine_repro_daily_budget_exceeded", "engine_repro_rate_limited"]) {
     const digest = engineReproDigest(refused(code));
     assert.equal(digest.admissionLimit, code);
-    const text = engineReproConciseText(digest, { officialQaState: "none" });
+    const text = engineReproConciseText(digest, { officialQaMatches: EXACT_MATCH });
     assert.equal(text, ADMISSION_LIMIT_LINES[code]);
     assert.doesNotMatch(text, /\n/u, "a single line");
     assert.match(text, /^【ygopro 引擎复现（实验性）】.*ygopro/u);
@@ -265,15 +256,27 @@ test("append: the answer text gets the short section only; the full replay stays
   const section = { status: "done", questionStatus: record.summary.status, rendered: record.rendered, digest: engineReproDigest(record) };
   const footer = "\n\n实际最终模型：m；请求推理强度：low";
   const answer = { shortAnswer: `主回答${footer}`, generation: { embeddedInAnswerText: true, answerTextFooter: footer },
-    debug: { retrievalCounts: { officialQaDirectCandidates: 0, officialQaRelated: 2 } } };
-  const out = appendEngineReproSection(answer, section);
-  const concise = engineReproSectionText(section, { officialQaState: "related" });
-  assert.ok(concise.includes(OFFICIAL_QA_RELATED_LINE));
+    debug: { retrievalCounts: { officialQaDirectCandidates: 1, officialQaRelated: 2 } } };
+  const judge = { status: "done", promptVersion: "official-qa-correspondence-v1", model: "gpt-6-luna", effort: "low",
+    candidateCount: 2, exact: [{ id: "qa-1", title: "题A", handle: "h1" }], ms: 4000, costUsd: 0.0003,
+    assessments: [{ id: "qa-1", verdict: "EXACT", differences: [], reason: "r1" },
+      { id: "qa-2", verdict: "PARTIAL", differences: ["时点"], reason: "r2" }] };
+  const out = appendEngineReproSection(answer, section, { officialQaJudge: judge });
+  const concise = engineReproSectionText(section, { officialQaMatches: judge.exact });
+  assert.ok(concise.includes(officialQaExactLine(judge.exact)));
   assert.equal(out.shortAnswer, `主回答\n\n${concise}${footer}`);
   assert.equal(out.engineRepro.concise, concise);
-  assert.equal(out.engineRepro.officialQaState, "related");
-  assert.equal(out.engineRepro.officialQaDirect, false);
+  assert.deepEqual(out.engineRepro.officialQaJudge.verdicts, { EXACT: 1, PARTIAL: 1, NOT: 0 });
+  assert.deepEqual(out.engineRepro.officialQaJudge.exact, [{ id: "qa-1", title: "题A" }]);
+  assert.equal(Object.hasOwn(out.engineRepro, "officialQaState"), false);
   assert.equal(out.engineRepro.rendered, record.rendered);
+  // without a judge result, or with any result that is not "done", there is no line
+  for (const other of [null, { status: "failed", error: "output_not_json", exact: [{ id: "qa-1", title: "题A" }] },
+    { status: "skipped", reason: "no_candidates" }]) {
+    const plain = appendEngineReproSection(answer, section, { officialQaJudge: other });
+    assert.ok(!plain.engineRepro.concise.includes("官方 Q&A"), JSON.stringify(other));
+  }
+  assert.equal(appendEngineReproSection(answer, section).engineRepro.officialQaJudge, null);
   assert.ok(!out.shortAnswer.includes(record.rendered.split("\n")[0]), "the full replay header is not in the answer text");
   assertConcise(out.shortAnswer);
 

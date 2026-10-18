@@ -17,6 +17,7 @@ import {
   isServerOwnedPrivateEvaluationEnv,
 } from "./ragModelClient.mjs";
 import { buildRagRulingPromptBundle } from "./ragRulingPrompt.mjs";
+import { buildOfficialQaJudgeInput } from "./officialQaCorrespondence.mjs";
 import { createCloudEvidenceProvider } from './cloudEvidenceProvider.mjs';
 import { generateCloudEvidencePlan } from './cloudEvidencePlan.mjs';
 import { createGeminiBoundedEvidenceProvider as createGeminiRuleQaEvidenceProvider,
@@ -730,6 +731,7 @@ function buildPreparedContinuation({
   cardNameModel,
   ruleQueryModel,
   timingsMs,
+  officialQaJudgeInput = null,
   jsonSafe = false,
 } = {}) {
   const continuation = {
@@ -758,6 +760,9 @@ function buildPreparedContinuation({
       "elapsedBeforeRetrievalMs", "elapsedMs", "timingsMs", "queryPlan", "bounded",
     ]),
     timingsMs: { ...(timingsMs || {}) },
+    // Material for the experimental official-Q&A line of the engine-reproduction section
+    // (engineRepro/officialQaJudge.mjs). Never part of the final prompt.
+    ...(officialQaJudgeInput ? { officialQaJudgeInput } : {}),
   };
   if (!jsonSafe) return continuation;
   try {
@@ -843,6 +848,7 @@ async function answerRagRulingQuestionInternal({
   nonCardElapsedBeforePipelineMs = 0,
   progress,
   onCardTextsReady,
+  onEvidencePrepared,
 } = {}) {
   const pipelineStartedAt = Date.now();
   const timingsMs = {};
@@ -1208,6 +1214,19 @@ async function answerRagRulingQuestionInternal({
     promptStage.fail(error);
     throw error;
   }
+  // The official Q&A among the evidence the final model is given, with their question fields and
+  // card names (the card data is loaded only here). Mechanical; it never affects the answer.
+  let officialQaJudgeInput = null;
+  try {
+    officialQaJudgeInput = buildOfficialQaJudgeInput({
+      userQuery: query,
+      evidenceItems: selectedPromptEvidenceRefs(promptBundle.modelEvidence, promptBundle.allowedEvidenceIds),
+      cards: data.cards || [],
+      resolvedCards: effectiveCardResolution.resolvedCards || [],
+    });
+  } catch {
+    officialQaJudgeInput = null;
+  }
 
   // Server-owned admin capture exits at the exact final-model boundary.
   // Public request payloads never forward this option.
@@ -1243,6 +1262,7 @@ async function answerRagRulingQuestionInternal({
     cardNameModel,
     ruleQueryModel,
     timingsMs,
+    officialQaJudgeInput,
     jsonSafe: prepareForContinuation === true,
   });
   if (prepareForContinuation === true) {
@@ -1254,6 +1274,13 @@ async function answerRagRulingQuestionInternal({
     // Keep the progress stream in retrieve_rulings. The caller's second
     // request invokes the finalizer, which owns generate_ruling.
     return { status: "evidence_prepared", continuation };
+  }
+  // Optional observer (experimental engine reproduction): the single-request shape starts the
+  // official-Q&A judge here, alongside the final model call. It must not block or change the answer.
+  if (typeof onEvidencePrepared === "function") {
+    try {
+      onEvidencePrepared({ officialQaJudgeInput: continuation.officialQaJudgeInput || null });
+    } catch { /* an observer failure never affects the answer */ }
   }
   return finalizePreparedRagRulingQuestion({
     continuation,

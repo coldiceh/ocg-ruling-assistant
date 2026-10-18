@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { attachEngineReproWhenReady, createEngineReproSession, engineReproWaitDeadline } from "./engineRepro/session.mjs";
+import { startOfficialQaJudge } from "./engineRepro/officialQaJudge.mjs";
 import { getPublicReleaseInfo } from './publicReleaseInfo.mjs';
 import {
   createPublicAnswerModelEnv,
@@ -246,6 +247,7 @@ export async function answerPublicRulingQuestion({
   prepareForContinuation = false,
   createEngineRepro = createEngineReproSession,
   attachEngineRepro = attachEngineReproWhenReady,
+  startJudge = startOfficialQaJudge,
 } = {}) {
   const publicRequestStartedAt = Date.now();
   const requestDiagnostics = { requestId: randomUUID(), startedAt: new Date(publicRequestStartedAt).toISOString() };
@@ -413,6 +415,9 @@ export async function answerPublicRulingQuestion({
     }
   }
 
+    // The section's official-Q&A judge (single-request shape): started by the pipeline when the
+    // evidence is prepared, so it runs alongside the final model call.
+    let officialQaJudge = null;
     let answer = await answerRuling({
       rulingVersion: normalizedPayload.rulingVersion,
       question: normalizedPayload.question,
@@ -428,7 +433,12 @@ export async function answerPublicRulingQuestion({
         ? saveSelectionDiagnostic({ event, requestId: requestDiagnostics.requestId, env }) : undefined,
       nonCardElapsedBeforePipelineMs: Math.max(0, Date.now() - publicRequestStartedAt),
       ...(prepareForContinuation === true ? { prepareForContinuation: true } : {}),
-      ...(engineRepro.enabled ? { onCardTextsReady: engineRepro.onCardTextsReady } : {}),
+      ...(engineRepro.enabled ? {
+        onCardTextsReady: engineRepro.onCardTextsReady,
+        onEvidencePrepared: ({ officialQaJudgeInput }) => {
+          officialQaJudge = startJudge({ input: officialQaJudgeInput, env });
+        },
+      } : {}),
     });
     requestDiagnostics.completedAt = new Date().toISOString();
     requestDiagnostics.durationMs = Math.max(0, Date.now() - publicRequestStartedAt);
@@ -442,7 +452,7 @@ export async function answerPublicRulingQuestion({
     if (!prepareForContinuation && engineRepro.enabled && engineRepro.state.started) {
       answer = await attachEngineRepro(answer, { env,
         auditId: (await auditPromise)?.entry?.id || null, requestStartedAt: publicRequestStartedAt,
-        waitDeadlineAt: engineReproWaitDeadline(publicRequestStartedAt, env) });
+        waitDeadlineAt: engineReproWaitDeadline(publicRequestStartedAt, env), officialQaJudge });
     }
     const audit = await auditPromise;
     if (answer.status !== "evidence_prepared") {

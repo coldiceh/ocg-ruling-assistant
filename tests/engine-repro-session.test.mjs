@@ -263,6 +263,12 @@ const publicRuling = (sessions, answer) => async (options) => {
   return answer;
 };
 const mainCounts = { officialQaDirectCandidates: 0, officialQaRelated: 1 };
+// Judge material and an EXACT result (the judge itself is tested in official-qa-correspondence.test.mjs).
+const judgeMaterial = { schema: "official-qa-judge-input/v1", userQuery: "Synthetic question", userCards: [],
+  candidates: [{ id: "ygoresources-qa-1", rawQuestion: "合成题面", handle: "h1", displayTitle: "合成官方问答" }] };
+const exactJudge = { status: "done", exact: [{ id: "ygoresources-qa-1", title: "合成官方问答", handle: "h1" }],
+  assessments: [{ id: "ygoresources-qa-1", verdict: "EXACT", differences: [], reason: "同" }] };
+const EXACT_LINE = "判断模型认为官方 Q&A【合成官方问答】与本题条件一致，以该官方 Q&A 为准；ygopro 的结果只作参考。";
 
 for (const switchOn of [true, false]) {
   test(`single request, public (no admin session): switch ${switchOn ? "on -> engine section" : "off -> no engine section"}`, async () => {
@@ -271,22 +277,38 @@ for (const switchOn of [true, false]) {
     const clockRef = { t: 0 };
     const sessions = [];
     let observer = null;
+    let evidenceObserver = null;
+    const judgeStarts = [];
     const ruling = publicRuling(sessions, { shortAnswer: "Synthetic ruling", debug: { retrievalCounts: mainCounts } });
+    const env = { MODEL_PROVIDER: "mock", ...(switchOn ? { ENGINE_REPRO_ENABLED: "true" } : {}) };
     const result = await answerPublicRulingQuestion({
-      payload: { question: "Synthetic question" },
-      env: { MODEL_PROVIDER: "mock", ...(switchOn ? { ENGINE_REPRO_ENABLED: "true" } : {}) },
+      payload: { question: "Synthetic question" }, env,
       ...publicServiceDoubles({ redis, clockRef, auditId: "audit-s", sessions }),
       attachEngineRepro: (answer, options) => attachEngineReproWhenReady(answer, { ...options, requestStartedAt: 0,
         now: () => clockRef.t, command: redis.command }),
-      answerRuling: async (options) => { observer = options.onCardTextsReady; return ruling(options); },
+      startJudge: (options) => { judgeStarts.push(options); return Promise.resolve(exactJudge); },
+      answerRuling: async (options) => {
+        observer = options.onCardTextsReady;
+        evidenceObserver = options.onEvidencePrepared;
+        // the pipeline calls the evidence observer before its final model call
+        options.onEvidencePrepared?.({ officialQaJudgeInput: judgeMaterial });
+        return ruling(options);
+      },
     });
     if (switchOn) {
       assert.equal(typeof observer, "function");
+      assert.equal(typeof evidenceObserver, "function");
+      assert.equal(judgeStarts.length, 1);
+      assert.equal(judgeStarts[0].input, judgeMaterial);
+      assert.equal(judgeStarts[0].env, env, "the judge gets the request's own env, like the reproduction session");
       assert.match(result.answer.shortAnswer, /^Synthetic ruling\n\n【ygopro 引擎复现（实验性）】已复现/u);
+      assert.ok(result.answer.shortAnswer.includes(EXACT_LINE));
       assert.equal(result.answer.engineRepro.status, "done");
-      assert.equal(result.answer.engineRepro.officialQaState, "related");
+      assert.equal(result.answer.engineRepro.officialQaJudge.status, "done");
     } else {
       assert.equal(observer, undefined);
+      assert.equal(evidenceObserver, undefined);
+      assert.equal(judgeStarts.length, 0);
       assert.equal(result.answer.shortAnswer, "Synthetic ruling");
       assert.equal(result.answer.engineRepro, undefined);
     }
@@ -308,32 +330,38 @@ for (const switchOn of [true, false]) {
       answerPublic: (input) => answerPublicRulingQuestion({ ...input,
         ...publicServiceDoubles({ redis, clockRef, auditId: "audit-p", sessions }),
         answerRuling: publicRuling(sessions, { status: "evidence_prepared", rulingVersion: "latest",
-          continuation: { promptBundle: { prompt: "Synthetic saved prompt" } } }) }),
+          continuation: { promptBundle: { prompt: "Synthetic saved prompt" }, officialQaJudgeInput: judgeMaterial } }) }),
     });
     assert.equal(prepared.preparationId, "prep-1");
     if (switchOn) assert.equal(stored.engineRepro.enabled, true);
     else assert.equal(stored.engineRepro, null);
+    const order = [];
+    const judgeStarts = [];
     const finalized = await finalizePublicAnswer({
       preparation: stored, env,
       selectProfile: async () => ({ profile: { id: "official-astra-low", provider: "openai" } }),
-      finalize: async () => ({ shortAnswer: "主回答", debug: { retrievalCounts: mainCounts } }),
+      finalize: async () => { order.push("final model"); return { shortAnswer: "主回答", debug: { retrievalCounts: mainCounts } }; },
       addGeneration: async (answer) => answer, updateAudit: async () => ({ updated: true }),
+      startJudge: (options) => { order.push("judge started"); judgeStarts.push(options); return Promise.resolve(exactJudge); },
       attachEngineRepro: (answer, options) => attachEngineReproWhenReady(answer, { ...options, requestStartedAt: 0,
         now: () => clockRef.t, command: redis.command }),
     });
     if (switchOn) {
+      assert.deepEqual(order, ["judge started", "final model"], "the judge runs alongside the final model call");
+      assert.deepEqual(judgeStarts[0].input, judgeMaterial, "the material fixed when the evidence was prepared");
       assert.match(finalized.answer.shortAnswer, /^主回答\n\n【ygopro 引擎复现（实验性）】已复现/u);
+      assert.ok(finalized.answer.shortAnswer.includes(EXACT_LINE));
       assert.equal(finalized.answer.engineRepro.status, "done");
     } else {
+      assert.deepEqual(order, ["final model"]);
       assert.equal(finalized.answer.shortAnswer, "主回答");
       assert.equal(finalized.answer.engineRepro, undefined);
     }
   });
 }
 
-test("both request shapes give the same short section; the official Q&A line follows the evidence-pack count", async () => {
+test("both request shapes give the same short section; the official Q&A line follows the judge only", async () => {
   const { finalizePublicAnswer } = await import("../backend/publicPreparedAnswerService.mjs");
-  const { OFFICIAL_QA_DIRECT_LINE, OFFICIAL_QA_NONE_LINE, OFFICIAL_QA_RELATED_LINE } = await import("../backend/engineRepro/concise.mjs");
   const redis = fakeRedis();
   const clockRef = { t: 1000 };
   const { session, pending } = makeSession({ delayMs: 1, clockRef, redis });
@@ -341,27 +369,55 @@ test("both request shapes give the same short section; the official Q&A line fol
   await Promise.all(pending);
   const options = { env: {}, auditId: "audit-1", requestStartedAt: 0, waitDeadlineAt: 280000, now: () => clockRef.t,
     command: redis.command };
-  const mainAnswer = (count, related = 0) => ({ shortAnswer: "主回答",
-    debug: { retrievalCounts: { officialQaDirectCandidates: count, officialQaRelated: related } } });
+  // The evidence-pack counts no longer choose any line.
+  const mainAnswer = () => ({ shortAnswer: "主回答",
+    debug: { retrievalCounts: { officialQaDirectCandidates: 3, officialQaRelated: 4 } } });
 
-  const single = await attachEngineReproWhenReady(mainAnswer(0), options);
+  const single = await attachEngineReproWhenReady(mainAnswer(), { ...options, officialQaJudge: Promise.resolve(exactJudge) });
   const prepared = await finalizePublicAnswer({
-    preparation: { profileId: "official-astra-low", pipeline: "rag_baseline", continuation: { promptBundle: { prompt: "x" } },
+    preparation: { profileId: "official-astra-low", pipeline: "rag_baseline",
+      continuation: { promptBundle: { prompt: "x" }, officialQaJudgeInput: judgeMaterial },
       rulingVersion: "latest", startedAt: 0, auditId: "audit-1", requestDiagnostics: { scope: { scope: "in_scope" } },
       progress: { totalMs: 0 }, engineRepro: { enabled: true, requestStartedAt: 0 } },
     env: { MODEL_PROVIDER: "mock" },
     selectProfile: async () => ({ profile: { id: "official-astra-low", provider: "openai" } }),
-    finalize: async () => mainAnswer(0), addGeneration: async (answer) => answer, updateAudit: async () => ({ updated: true }),
+    finalize: async () => mainAnswer(), addGeneration: async (answer) => answer, updateAudit: async () => ({ updated: true }),
+    startJudge: async () => exactJudge,
     attachEngineRepro: (answer, attachOptions) => attachEngineReproWhenReady(answer, { ...attachOptions, now: () => clockRef.t,
       command: redis.command }),
   });
   assert.equal(prepared.answer.shortAnswer, single.shortAnswer);
   assert.equal(prepared.answer.engineRepro.rendered, single.engineRepro.rendered);
-  assert.ok(single.shortAnswer.includes(OFFICIAL_QA_NONE_LINE));
-  const withDirect = await attachEngineReproWhenReady(mainAnswer(1), options);
-  assert.ok(withDirect.shortAnswer.includes(OFFICIAL_QA_DIRECT_LINE));
-  assert.ok(!withDirect.shortAnswer.includes(OFFICIAL_QA_NONE_LINE));
-  const withRelated = await attachEngineReproWhenReady(mainAnswer(0, 2), options);
-  assert.ok(withRelated.shortAnswer.includes(OFFICIAL_QA_RELATED_LINE));
-  assert.ok(!withRelated.shortAnswer.includes(OFFICIAL_QA_NONE_LINE) && !withRelated.shortAnswer.includes(OFFICIAL_QA_DIRECT_LINE));
+  assert.ok(single.shortAnswer.includes(EXACT_LINE));
+  const lines = single.engineRepro.concise.split("\n\n");
+  assert.equal(lines.at(-2), EXACT_LINE, "the line sits right before the disclaimer");
+
+  const noJudge = await attachEngineReproWhenReady(mainAnswer(), options);
+  assert.ok(!noJudge.shortAnswer.includes("官方 Q&A"), "no judge result, no official-Q&A line (counts are ignored)");
+  assert.equal(noJudge.engineRepro.officialQaJudge, null);
+  const partialOnly = await attachEngineReproWhenReady(mainAnswer(), { ...options, officialQaJudge: Promise.resolve({ status: "done",
+    exact: [], assessments: [{ id: "ygoresources-qa-1", verdict: "PARTIAL", differences: ["时点"], reason: "r" }] }) });
+  assert.ok(!partialOnly.shortAnswer.includes("官方 Q&A"));
+  assert.deepEqual(partialOnly.engineRepro.officialQaJudge.verdicts, { EXACT: 0, PARTIAL: 1, NOT: 0 });
+  const rejected = await attachEngineReproWhenReady(mainAnswer(), { ...options, officialQaJudge: Promise.reject(new Error("boom")) });
+  assert.ok(!rejected.shortAnswer.includes("官方 Q&A"));
+  assert.match(rejected.shortAnswer, /【ygopro 引擎复现（实验性）】已复现/u);
+});
+
+test("the section waits for a judge that finishes after the reproduction's result is stored", async () => {
+  const redis = fakeRedis();
+  const clockRef = { t: 1000 };
+  const { session, pending } = makeSession({ delayMs: 1, clockRef, redis });
+  session.onCardTextsReady({ question: "q", cardResolution, cards });
+  await Promise.all(pending);
+  let release;
+  const late = new Promise((resolve) => { release = resolve; });
+  const attached = attachEngineReproWhenReady({ shortAnswer: "主回答" }, { env: {}, auditId: "audit-1", requestStartedAt: 0,
+    waitDeadlineAt: 280000, now: () => clockRef.t, command: redis.command, officialQaJudge: late });
+  setTimeout(() => release(exactJudge), 20);
+  const answer = await attached;
+  assert.ok(answer.shortAnswer.includes(EXACT_LINE));
+  // a section that never started is not waited for and gets no line, whatever the judge says
+  assert.equal((await attachEngineReproWhenReady({ shortAnswer: "a" }, { env: {}, auditId: "audit-none", requestStartedAt: 0,
+    waitDeadlineAt: 280000, now: () => clockRef.t, command: redis.command, officialQaJudge: Promise.resolve(exactJudge) })).shortAnswer, "a");
 });

@@ -7,6 +7,7 @@ import { PUBLIC_EXHAUSTED_FALLBACK_PROFILE, selectAvailablePublicProfile, withPu
 import { updateQueryAudit, safeQueryAuditRetrievalTimings } from './queryAuditStore.mjs';
 import { queryAuditAnswerPatch, queryAuditFailurePatch, saveQueryAuditUpdate } from './publicQueryAudit.mjs';
 import { attachEngineReproWhenReady, engineReproWaitDeadline } from './engineRepro/session.mjs';
+import { startOfficialQaJudge } from './engineRepro/officialQaJudge.mjs';
 
 export async function preparePublicAnswer({
   payload, env, signal, progress, store,
@@ -73,6 +74,7 @@ export async function finalizePublicAnswer({
   finalize = finalizePreparedRagRulingQuestionForVersion, now = Date.now,
   selectProfile = selectAvailablePublicProfile, addGeneration = withPublicGenerationInfo,
   updateAudit = updateQueryAudit, attachEngineRepro = attachEngineReproWhenReady,
+  startJudge = startOfficialQaJudge,
 } = {}) {
   try {
   signal?.throwIfAborted();
@@ -90,6 +92,10 @@ export async function finalizePublicAnswer({
   // The original public profile is server-owned. A finalize payload cannot
   // replace it, the question, the prompt, evidence, or any provider parameter.
   let publicEnv = createPublicAnswerModelEnv(env, profile.id);
+  // The section's official-Q&A judge runs alongside the final model call, on the material fixed
+  // when the evidence was prepared. It never affects the answer.
+  const officialQaJudge = preparation.engineRepro?.enabled === true
+    ? startJudge({ input: preparation.continuation?.officialQaJudgeInput || null, env }) : null;
   let answer;
   try {
     const invokeFinal = () => finalize({
@@ -127,7 +133,7 @@ export async function finalizePublicAnswer({
   if (preparation.engineRepro?.enabled === true) {
     answer = await attachEngineRepro(answer, { env, auditId: preparation.auditId,
       requestStartedAt: preparation.engineRepro.requestStartedAt,
-      waitDeadlineAt: engineReproWaitDeadline(finalizeStartedAt, env) });
+      waitDeadlineAt: engineReproWaitDeadline(finalizeStartedAt, env), officialQaJudge });
   }
   answer = { ...answer, debug: { ...answer.debug,
     requestDiagnostics: { ...preparation.requestDiagnostics,
