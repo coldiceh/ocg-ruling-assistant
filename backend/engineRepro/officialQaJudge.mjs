@@ -7,8 +7,11 @@
 // experiments/official-qa-correspondence run-v1.1) and is charged to the reproduction's own daily
 // budget bucket (limits.mjs). It is not a reproduction attempt, so it takes no per-minute slot.
 //
-// The call starts when the final answer's model call starts and runs alongside it; the section
-// waits for it when the answer is complete. Fail closed: only a completed response whose output
+// The call starts when the final answer's model call starts and runs alongside it. When the answer is
+// complete, the section waits for it only if the reproduction completed or partly completed (the only
+// sections that can show the line), and never past the section's own wait deadline (session.mjs).
+// Worst case on its own: two 3 s budget-store calls, the 30 s request, a 3 s settlement.
+// Fail closed: only a completed response whose output
 // names every candidate exactly once with a known verdict counts, and only EXACT ("正好对应",
 // the user's two-way rule: PARTIAL and NOT both mean "not found") shows the line. A disabled
 // switch, no candidate, a budget refusal, a timeout, an HTTP error or any invalid output shows

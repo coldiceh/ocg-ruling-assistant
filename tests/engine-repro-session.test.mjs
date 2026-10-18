@@ -421,3 +421,45 @@ test("the section waits for a judge that finishes after the reproduction's resul
   assert.equal((await attachEngineReproWhenReady({ shortAnswer: "a" }, { env: {}, auditId: "audit-none", requestStartedAt: 0,
     waitDeadlineAt: 280000, now: () => clockRef.t, command: redis.command, officialQaJudge: Promise.resolve(exactJudge) })).shortAnswer, "a");
 });
+
+test("the response waits for the judge only when the section can show the line, and never past the deadline", async () => {
+  const redis = fakeRedis();
+  const stored = (auditId, status, reasonCodes = []) => redis.data.set(`engine-repro:v1:default:result:${auditId}`,
+    JSON.stringify({ summary: { status, reasonCodes, flags: [] }, rendered: "【引擎复现】", plan: { assumptions: [] },
+      subQuestions: [], timings: { startedAtMs: 0, finishedAtMs: 1 } }));
+  const never = new Promise(() => {});
+  const options = (auditId, extra = {}) => ({ env: {}, auditId, requestStartedAt: 0, waitDeadlineAt: Date.now() + 60_000,
+    command: redis.command, ...extra });
+
+  // 不适用 / 未复现: nothing waits for a pending judge; a result already in hand is still reported
+  for (const [auditId, status, codes] of [["a-na", "不适用", ["pure_rule"]], ["a-fail", "未复现", ["unrepresentable"]]]) {
+    stored(auditId, status, codes);
+    const startedAt = Date.now();
+    const out = await attachEngineReproWhenReady({ shortAnswer: "主回答" }, options(auditId, { officialQaJudge: never }));
+    assert.ok(Date.now() - startedAt < 1000, `${status}: no wait`);
+    assert.equal(out.engineRepro.officialQaJudge, null);
+    assert.ok(!out.shortAnswer.includes("官方 Q&A"));
+    const ready = await attachEngineReproWhenReady({ shortAnswer: "主回答" },
+      options(auditId, { officialQaJudge: Promise.resolve(exactJudge) }));
+    assert.equal(ready.engineRepro.officialQaJudge.status, "done", `${status}: a finished result is kept`);
+    assert.ok(!ready.shortAnswer.includes("官方 Q&A"), `${status}: never the line`);
+  }
+
+  // 已复现: waits, but only until the same wait deadline
+  const clockRef = { t: 1000 };
+  const { session, pending } = makeSession({ delayMs: 1, clockRef, redis, auditId: "a-ok" });
+  session.onCardTextsReady({ question: "q", cardResolution, cards });
+  await Promise.all(pending);
+  const startedAt = Date.now();
+  const late = await attachEngineReproWhenReady({ shortAnswer: "主回答" },
+    options("a-ok", { officialQaJudge: never, waitDeadlineAt: Date.now() + 50 }));
+  const waited = Date.now() - startedAt;
+  assert.ok(waited >= 40 && waited < 2000, `waited ${waited} ms`);
+  assert.match(late.shortAnswer, /【ygopro 引擎复现（实验性）】已复现/u);
+  assert.ok(!late.shortAnswer.includes("官方 Q&A"));
+  assert.deepEqual([late.engineRepro.officialQaJudge.status, late.engineRepro.officialQaJudge.error],
+    ["failed", "judge_wait_deadline"]);
+  const past = await attachEngineReproWhenReady({ shortAnswer: "主回答" },
+    options("a-ok", { officialQaJudge: never, waitDeadlineAt: Date.now() - 1 }));
+  assert.equal(past.engineRepro.officialQaJudge.error, "judge_wait_deadline", "a deadline already passed: no wait at all");
+});

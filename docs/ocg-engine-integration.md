@@ -76,7 +76,8 @@ ygopro 只显示它运行的结果，卡片脚本可能有 bug，不代表官方
 - 局面只列题目点名的卡（主回答识别出的卡）及其区域和表示形式；填充卡和其他辅助卡只写“（另有填充卡）”或“（另有其他辅助卡）”。不写区域编号、基本分、卡组张数、先攻。假设最多列 3 条，多出的写“等”。
 - 官方 Q&A 那一行（2026-10-18 起）只在“对应判断”说某条官方 Q&A 与本题正好对应时显示，否则整行不显示。原来按证据包计数分三态的写法（其中“本题没有找到官方 Q&A”在线上总是出现，因为 Gemini 证据包不填那两个计数）已删除。
   - 候选：最终模型实际拿到的证据（`selectedPromptEvidenceRefs`）里的官方 Q&A（`recordType`/`type` 为 `qa` 或 `official_qa`），只取题面字段（标题、问题、详细场景），官方答案不发；卡号占位符按离线实验的写法渲染成“日文名／中文名”。材料在准备阶段由 `buildOfficialQaJudgeInput`（`backend/officialQaCorrespondence.mjs`）生成，存在 `continuation.officialQaJudgeInput`，不进最终提示词，也不进回答对象。
-  - 调用：`backend/engineRepro/officialQaJudge.mjs`，GPT-6 Luna、推理 low、输出上限 6000、30 秒超时，走引擎复现自己的官方 API 调用和每日预算桶（不占每分钟次数）。单次请求形态在证据准备好后、最终模型调用前启动；两步请求在 finalize 开始时启动，都与最终模型调用并行，引擎段拼接时等它结果。请求体与离线实验（ocg-sim-core `experiments/official-qa-correspondence`，run-v1.1，low：判为找到 20/20 正确、应找到 21 处找到 20 处）逐字节相同。
+  - 调用：`backend/engineRepro/officialQaJudge.mjs`，GPT-6 Luna、推理 low、输出上限 6000，请求 30 秒超时（加上预算预约 / 结算的存储调用，最坏约 39 秒），走引擎复现自己的官方 API 调用和每日预算桶（不占每分钟次数）。单次请求形态在证据准备好后、最终模型调用前启动；两步请求在 finalize 开始时启动，都与最终模型调用并行。
+  - 等待：引擎段先就绪；只有已复现 / 部分复现（能显示这一行）时才等判断结果，而且最多等到原来的等待截止时间（`waitDeadlineAt`，同 `ENGINE_REPRO_WAIT_BUDGET_MS`），到点不显示（`officialQaJudge.error = judge_wait_deadline`）。未复现、不适用、额度/限频、未完成和没有复现段时不等，只记录已经拿到的结果。请求体与离线实验（ocg-sim-core `experiments/official-qa-correspondence`，run-v1.1，low：判为找到 20/20 正确、应找到 21 处找到 20 处）逐字节相同。
   - 只认完成状态、且每个候选恰好一个 EXACT / PARTIAL / NOT 的输出；只有 EXACT 显示（用户口径：部分对应算没找到）。行文：“判断模型认为官方 Q&A【标题】与本题条件一致，以该官方 Q&A 为准；ygopro 的结果只作参考。”最多列两个标题，更多写“等 N 条”。没有候选、开关关闭（`ENGINE_REPRO_OFFICIAL_QA_JUDGE=off`）、预算拒绝、超时、HTTP 错误、输出不合格都不显示。
   - 只加在已复现 / 部分复现的短段里；未复现、不适用、额度/限频、未完成的短段不加。
   - 实验每题只有 2–3 条候选；线上候选可能更多，精确率不能直接外推。
