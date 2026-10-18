@@ -68,6 +68,12 @@ const PHASE_ZH = Object.freeze({
   draw: "抽卡阶段", standby: "准备阶段", main1: "主要阶段1", battle_start: "战斗阶段开始", battle_step: "战斗步骤",
   damage: "伤害步骤", damage_calc: "伤害计算", battle: "战斗阶段", main2: "主要阶段2", end: "结束阶段",
 });
+// Battle timings reported by the engine (decision / window `timing.at`, ocg-sim-core harness "at"):
+// during the battle and damage steps the decision's phase stays at the last announced phase.
+const BATTLE_TIMING_ZH = Object.freeze({
+  attack_declaration: "攻击宣言时", damage_step_start: "伤害步骤开始时", before_damage_calc: "伤害计算前",
+  damage_calc: "伤害计算时", after_damage_calc: "伤害计算后", damage_step_end: "伤害步骤结束时",
+});
 const KIND_ZH = Object.freeze({
   idle: "主要阶段的行动选择", battle: "战斗阶段的行动选择", chain: "连锁/发动窗口",
   effect_yn: "是否发动效果的询问", yesno: "是/否的选择",
@@ -177,7 +183,7 @@ function branchDigest(branch, names, namedCodes) {
 
 function probeDigest(probe, names, turnPlayers) {
   const windows = Array.isArray(probe?.windows) ? probe.windows : [];
-  const when = (window) => timeLabel(window?.phase, turnPlayers.get(window?.decision), probe?.player);
+  const when = (window) => timeLabel(window?.phase, turnPlayers.get(window?.decision), probe?.player, window?.timing?.at);
   const hit = windows.find((window) => window?.contains_target);
   return {
     player: probe?.player,
@@ -191,7 +197,11 @@ function probeDigest(probe, names, turnPlayers) {
 }
 
 // "主要阶段1" in the acting player's own turn, "我方主要阶段1" / "对方主要阶段1" otherwise.
-function timeLabel(phase, turnPlayer, actor) {
+// A battle timing, when the engine reports one, replaces the phase: "伤害计算前" in the acting
+// player's own turn, "对方回合的伤害计算前" otherwise.
+function timeLabel(phase, turnPlayer, actor, at = null) {
+  const timingText = BATTLE_TIMING_ZH[at];
+  if (timingText) return turnPlayer === actor || !SIDE[turnPlayer] ? timingText : `${SIDE[turnPlayer]}回合的${timingText}`;
   const phaseText = PHASE_ZH[phase];
   if (!phaseText) return null;
   return `${turnPlayer === actor ? "" : SIDE[turnPlayer] || ""}${phaseText}`;

@@ -231,6 +231,34 @@ test("the final answer object never carries the judge material from the continua
   assert.ok(!JSON.stringify(answer).includes(marker));
 });
 
+test("battle timings reported by the engine replace the stale phase in time labels", () => {
+  // During the battle and damage steps the engine's decision phase stays at battle_start; newer engine
+  // builds add timing.at (ocg-sim-core harness "at"). Windows without it keep the phase label.
+  const option = { id: 0, cmd: "chain", card: HAND_TRAP, name: "测试手坑", controller: 1, from: "hand" };
+  const at = (d, id, text, value) => ({ ...d, phase: "battle_start", timing: { id, text, at: value } });
+  const start = at(decision(9, "chain", 1, [option]), 40, "伤害步骤开始时", "damage_step_start");
+  const before = at(decision(12, "chain", 1, [option]), 41, "伤害计算前", "before_damage_calc");
+  const own = at(decision(14, "chain", 0, [{ ...option, controller: 0, card: SPELL, name: "测试融合魔法" }]), 41, "伤害计算前",
+    "before_damage_calc");
+  const stale = { ...decision(16, "chain", 1, []), phase: "battle_start" };
+  const win = (d, hit) => ({ ...window(d, hit), timing: d.timing });
+  const record = finished({ cards, plan: { applicability: "applicable", assumptions: [], extra_cards: [] },
+    subQuestions: [{ id: "q1", unrepresentable: null, branches: [{ id: "b1", assumption: null, scenario: board(),
+      engine: replayed([
+        { index: 0, after: 4, player: 1, decision_kind: "chain", target: { card: HAND_TRAP }, result: "present",
+          windows: [win(before, true)], ambiguous: false },
+        { index: 1, after: 4, player: 0, decision_kind: "chain", target: { card: SPELL }, result: "present",
+          windows: [win(own, true)], ambiguous: false },
+        { index: 2, after: 3, player: 1, decision_kind: "chain", target: { card: HAND_TRAP }, result: "absent",
+          windows: [win(stale, false)], ambiguous: false },
+      ], [start, before, own, stale]) }] }] });
+  const text = engineReproConciseText(engineReproDigest(record));
+  assert.ok(text.includes("对方在我方回合的伤害计算前可以选择「发动测试手坑」"), text);
+  assert.ok(text.includes("我方在伤害计算前可以选择「发动测试融合魔法」"), text);
+  assert.ok(text.includes("对方在我方战斗阶段开始没有出现「测试手坑」的发动机会"), "no timing: the phase label stays");
+  assertConcise(text);
+});
+
 test("the reproduction's own daily budget or per-minute limit: one line that names ygopro", () => {
   const refused = (code) => ({ cards, error: { code, message: code }, summary: { status: "未复现", reasonCodes: ["budget_exceeded"], flags: [] },
     plan: { applicability: "applicable", assumptions: ["不应出现"] }, subQuestions: [] });
