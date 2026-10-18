@@ -27,6 +27,8 @@ test("planner prompt documents battle timings for steps and probes", () => {
   assert.match(PLANNER_INSTRUCTIONS, /"at":"可选：战斗时点","note"/u);
   assert.match(PLANNER_INSTRUCTIONS, /"target":\{"card":卡号,"cmd":"可选","desc":可选\},"at":"可选：战斗时点"\}/u);
   assert.match(PLANNER_INSTRUCTIONS, /不写 at 就在第一个出现它的窗口匹配/u);
+  // the attack declaration window itself (MSG_ATTACK, before HINT_EVENT 24) is attack_declaration (engine P09)
+  assert.match(PLANNER_INSTRUCTIONS, /attack_declaration（攻击宣言时：攻击宣言之后、进入伤害步骤之前的窗口/u);
   assert.doesNotMatch(PLANNER_INSTRUCTIONS, /前置状态搭不出来（处于伤害步骤中/u);
 });
 
