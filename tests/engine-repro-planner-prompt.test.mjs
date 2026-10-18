@@ -40,3 +40,41 @@ test("a declared card is checked like every other card number; declared numbers 
   ] };
   assert.deepEqual(collectCodes({ players: [] }, actions), [65681983, 22702055]);
 });
+
+test("the repair round sees the battle timing and the engine's detail of a failed decision", async () => {
+  const { runEngineReproduction } = await import("../backend/engineRepro/reproduce.mjs");
+  const plan = { applicability: "applicable", reason_code: null, archetype_name: null, quoted_span: "q", what_not_why: false,
+    assumptions: [], extra_cards: [], sub_questions: [{ id: "q1", quoted_span: "q", unrepresentable: null, branches: [{
+      id: "b1", assumption: null, observe: "x", scenario: { first_player: 0, players: [{ hand: [14558127] }, {}] },
+      actions: { setup: [{ player: 0, decision: "chain", choose: { card: 14558127 }, at: "damage_calc" }] } }] }] };
+  const detail = "step restricted to at=damage_calc; battle timings of the decisions seen while it was pending: damage_step_start";
+  const engine = async (op, body) => {
+    if (op === "cards") return { cards: (body.codes || []).map((code) => ({ code, exists: true, name: "灰流丽", types: ["怪兽"] })) };
+    if (op === "related") return { related: [] };
+    if (op === "reproduce") return { result: { status: "not_reproduced", reason_code: "action_mismatch", scenario: body.scenario,
+      failure: { reason: "not_found", step: 0, step_spec: body.actions.setup[0], detail,
+        decision: { kind: "battle", player: 0, phase: "battle_start", timing: null, turn: 1, options: [] } },
+      decisions: [{ decision: { kind: "chain", player: 0, phase: "battle_start", timing: { id: 40, at: "damage_step_start" } } }] } };
+    throw new Error(op);
+  };
+  const inputs = [];
+  const modelCall = async ({ input }) => { inputs.push(input); return { status: "completed", outputText: JSON.stringify(plan), usage: {} }; };
+  await runEngineReproduction({ question: "q", identity: { resolved: [{ cid: "12950", mentionedAs: ["灰流丽"], resolutionSources: [] }],
+    unresolved: [], groupMentions: [] }, cardsById: new Map([["12950", { id: "12950", name: "灰流丽", effectText: "t" }]]),
+    cidMap: { 12950: 14558127 }, engine, modelCall, clock: () => 0 });
+  assert.ok(inputs.length >= 2, "a repair round ran");
+  assert.ok(inputs[1].includes(detail), "the engine's detail reaches the repair round");
+  // a failed decision with a battle timing carries it; this one (the battle command) has none
+  const engineWithTiming = async (op, body) => {
+    const result = await engine(op, body);
+    if (op === "reproduce") result.result.failure.decision.timing = { id: 41, text: "伤害计算前", at: "before_damage_calc" };
+    return result;
+  };
+  const withTiming = [];
+  await runEngineReproduction({ question: "q", identity: { resolved: [{ cid: "12950", mentionedAs: ["灰流丽"], resolutionSources: [] }],
+    unresolved: [], groupMentions: [] }, cardsById: new Map([["12950", { id: "12950", name: "灰流丽", effectText: "t" }]]),
+    cidMap: { 12950: 14558127 }, engine: engineWithTiming, clock: () => 0,
+    modelCall: async ({ input }) => { withTiming.push(input); return { status: "completed", outputText: JSON.stringify(plan), usage: {} }; } });
+  assert.match(withTiming[1], /"timing":"before_damage_calc"/u);
+  assert.doesNotMatch(inputs[1], /"timing":/u);
+});

@@ -145,7 +145,8 @@ function compactFailure(sq, b) {
     failure.failure = { reason: f.reason, step: f.step, step_spec: f.step_spec, detail: f.detail };
     const d = f.decision;
     if (d) {
-      failure.decision = { kind: d.kind, player: d.player, phase: d.phase, turn: d.turn, hint: d.hint?.text || null,
+      failure.decision = { kind: d.kind, player: d.player, phase: d.phase, timing: d.timing?.at || undefined, turn: d.turn,
+        hint: d.hint?.text || null,
         card: d.card || undefined, desc_text: d.desc_text || undefined,
         options: (d.options || []).slice(0, 40).map((o) => ({ cmd: o.cmd, card: o.card, name: o.name, controller: o.controller,
           from: o.from, seq: o.seq, desc: o.desc, desc_text: o.desc_text, forced: o.forced, position: o.position,
