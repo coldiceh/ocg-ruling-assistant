@@ -84,6 +84,8 @@ export function collectCodes(scenario, actions) {
   for (const step of actions?.setup || []) {
     if (step?.choose?.card !== undefined) codes.push(step.choose.card);
     for (const c of step?.choose?.cards || []) codes.push(c?.card);
+    // A declared card name is a card number too, checked like every other card in the plan.
+    if (step?.decision === "announce_card" && step?.choose?.value !== undefined) codes.push(step.choose.value);
   }
   for (const probe of actions?.probes || []) if (probe?.target?.card !== undefined) codes.push(probe.target.card);
   return codes;

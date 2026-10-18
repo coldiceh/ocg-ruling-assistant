@@ -26,6 +26,14 @@ export const TOOL_CARD_CODES = Object.freeze([83764718, 81439173, 5318639, 82671
 
 const REASON_CODES = ["pure_rule", "archetype_level", "tournament_policy", "ruleset_version"];
 
+// Declaration values (ocg-sim-core ocgrepro/service.py ATTRIBUTE / RACE; the core's bit flags).
+export const ATTRIBUTE_BITS = Object.freeze([["地", 0x1], ["水", 0x2], ["炎", 0x4], ["风", 0x8], ["光", 0x10], ["暗", 0x20], ["神", 0x40]]);
+export const RACE_BITS = Object.freeze([["战士", 0x1], ["魔法师", 0x2], ["天使", 0x4], ["恶魔", 0x8], ["不死", 0x10], ["机械", 0x20],
+  ["水", 0x40], ["炎", 0x80], ["岩石", 0x100], ["鸟兽", 0x200], ["植物", 0x400], ["昆虫", 0x800], ["雷", 0x1000], ["龙", 0x2000],
+  ["兽", 0x4000], ["兽战士", 0x8000], ["恐龙", 0x10000], ["鱼", 0x20000], ["海龙", 0x40000], ["爬虫类", 0x80000],
+  ["念动力", 0x100000], ["幻神兽", 0x200000], ["创造神", 0x400000], ["幻龙", 0x800000], ["电子界", 0x1000000], ["幻想魔", 0x2000000]]);
+const bitList = (bits) => bits.map(([name, value]) => `${name}${value}`).join(" ");
+
 export const PLANNER_INSTRUCTIONS = [
   "你是游戏王 OCG 裁定题的“引擎复现计划器”。你的任务：把题目翻译成 ygopro 引擎（MyCard 核心，大师规则2020）能执行的局面和操作，让引擎跑一遍、展示发生了什么。你不回答裁定、不写结论、不推测引擎结果。",
   "",
@@ -53,6 +61,7 @@ export const PLANNER_INSTRUCTIONS = [
   "- tournament_policy：比赛规程、裁判处理、判罚。",
   "- ruleset_version：题面明确提到 TCG、历史时点、旧卡文或禁限表时才用。用英文或日文提问不等于问 TCG。",
   "涉及具体卡、但前置状态搭不出来（处于伤害步骤中、本回合已通常召唤、本回合刚盖放、已用过每回合一次、连锁进行中、“之前曾经……”）不是 not_applicable：判 applicable。",
+  "宣言卡名、数字、属性、种族都有对应的步骤（announce_*，见下文），需要宣言不是搭不出局面的理由。",
   "题目结论依赖的前置条件（例如“刚盖放”“本回合已召唤”“某效果已发动并处理完”“处于某个连锁或时点”）要用 setup 动作打出来；与结论无关的来历（怪兽怎么上的场、卡是哪个回合盖的）可以直接预置，并写进 assumptions。缺少辅助卡时先从“相关卡”“通用工具卡”里找，再考虑 extra_cards。确实无法打出时才在该子问题 unrepresentable 写明是哪个前置条件、branches 为空。不得用会改变结论的近似局面冒充。",
   "一题多问：拆成多个 sub_questions，各自搭局面。某个假设会改变结论时，最多 2 个分支（同一子问题下），各分支写清 assumption；不要选优或合并。",
   "",
@@ -77,11 +86,14 @@ export const PLANNER_INSTRUCTIONS = [
   "- select_place：{\"place\":{\"player\":0或1,\"zone\":\"mzone|szone\",\"seq\":n}}（必须选一个空位）",
   "- select_position：{\"position\":\"faceup_attack|faceup_defense|facedown_defense\"}",
   "- select_option：{\"option\":描述编号}；sort_card：{\"order\":[...]}",
+  "- announce_card（宣言卡名）：{\"value\":卡号}。宣言的卡同样只能用上面“卡号”一节允许的卡；宣言题目里的卡时就用它的卡号。",
+  "- announce_number（宣言数字，例如等级）：{\"value\":数字}，必须是引擎给出的可选数字之一。",
+  `- announce_attrib / announce_race（宣言属性 / 种族）：{"value":位值}，一次宣言多个时把位值相加。属性：${bitList(ATTRIBUTE_BITS)}。种族：${bitList(RACE_BITS)}。`,
   "区域取值：hand, deck, grave, removed, extra, mzone, szone, fzone, pzone, overlay。卡的过滤只写需要的字段。",
   "回放规则（引擎逐个决策点检查）：",
   "1. 用下一个 setup 步骤匹配当前决策（玩家与决策类型都要一致）：唯一匹配就执行；匹配到多个就失败（选项不唯一）。",
   "2. 不匹配、且该决策可以放弃（没有必发项的连锁窗口；核心发出的“是否发动诱发效果”询问）→ 自动放弃，记录“此时本可发动”。所以 setup 里不要写“放弃/pass”，只写你要做的选择。",
-  "3. 不匹配、且不可放弃（行动选择、选区域、选卡、选表示形式、选选项、其他是否询问）→ setup 还没用完就失败并列出合法选项；setup 用完则回放正常结束。",
+  "3. 不匹配、且不可放弃（行动选择、选区域、选卡、选表示形式、选选项、宣言、其他是否询问）→ setup 还没用完就失败并列出合法选项；setup 用完则回放正常结束。",
   "4. 引擎不会替任何人默认选择。凡是需要玩家做的选择都要写成步骤，包括选区域。",
   "已实测的决策顺序（P 为操作者）：",
   "- 通常召唤：idle summon → select_place(自己 mzone 空位) → 之后的连锁窗口自动处理。上级召唤在 select_place 前有 select_tribute。",
@@ -91,6 +103,7 @@ export const PLANNER_INSTRUCTIONS = [
   "- 攻击：idle to_bp → battle attack → select_card(攻击对象；直接攻击时没有这一步)。",
   "- 特殊召唤到场上（效果处理时）：通常会有 select_place，有时还有 select_position。",
   "- 两个以上必发效果同时触发时要选处理顺序（chain 窗口里依次选）。",
+  "- 发动时宣言卡名的魔法（如抹杀之指名者）：idle activate → select_place(自己 szone 空位) → announce_card → 双方连锁窗口 → 处理时的选择（如 select_card 选卡组里宣言的那张）。",
   "probes（探测，题目问“能不能发动/选择”时用）：{\"after\":k,\"player\":0或1,\"decision_kind\":\"idle|battle|chain|effect_yn|yesno\",\"target\":{\"card\":卡号,\"cmd\":\"可选\",\"desc\":可选}}。观察区间 = setup 第 k 步执行之后到第 k+1 步执行之前（k 等于 setup 长度时到回放结束）。结果：出现 / 出现（核心自动发动） / 未出现 / 未到达。题目问“处理结果如何”时可以不设探测，靠日志展示。",
 ].join("\n");
 
