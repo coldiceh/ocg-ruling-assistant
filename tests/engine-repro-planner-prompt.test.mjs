@@ -19,6 +19,17 @@ test("planner prompt documents the declaration steps and their values", () => {
   assert.match(PLANNER_INSTRUCTIONS, /种族：战士1 魔法师2 .* 电子界16777216 幻想魔33554432。/u);
 });
 
+// ocg-sim-core "at" (harness step / probe filter, schema enum; frozen test P08). Needs an engine
+// build with battle timings: this prompt must not ship before that engine is deployed.
+test("planner prompt documents battle timings for steps and probes", () => {
+  for (const at of ["attack_declaration", "damage_step_start", "before_damage_calc", "damage_calc", "after_damage_calc",
+    "damage_step_end"]) assert.ok(PLANNER_INSTRUCTIONS.includes(at), at);
+  assert.match(PLANNER_INSTRUCTIONS, /"at":"可选：战斗时点","note"/u);
+  assert.match(PLANNER_INSTRUCTIONS, /"target":\{"card":卡号,"cmd":"可选","desc":可选\},"at":"可选：战斗时点"\}/u);
+  assert.match(PLANNER_INSTRUCTIONS, /不写 at 就在第一个出现它的窗口匹配/u);
+  assert.doesNotMatch(PLANNER_INSTRUCTIONS, /前置状态搭不出来（处于伤害步骤中/u);
+});
+
 test("declaration bit values are the engine's ATTRIBUTE / RACE flags", () => {
   // Copied from ocg-sim-core ocgrepro/service.py (ATTRIBUTE, RACE).
   const attribute = { 0x1: "地", 0x2: "水", 0x4: "炎", 0x8: "风", 0x10: "光", 0x20: "暗", 0x40: "神" };

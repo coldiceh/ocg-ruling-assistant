@@ -60,7 +60,7 @@ export const PLANNER_INSTRUCTIONS = [
   "- archetype_level：问一整个字段的卡（例如“斩机怪兽”），而不是具体某张卡；archetype_name 填字段名。不要挑一张卡代表整个字段。",
   "- tournament_policy：比赛规程、裁判处理、判罚。",
   "- ruleset_version：题面明确提到 TCG、历史时点、旧卡文或禁限表时才用。用英文或日文提问不等于问 TCG。",
-  "涉及具体卡、但前置状态搭不出来（处于伤害步骤中、本回合已通常召唤、本回合刚盖放、已用过每回合一次、连锁进行中、“之前曾经……”）不是 not_applicable：判 applicable。",
+  "涉及具体卡、但前置状态搭不出来（本回合已通常召唤、本回合刚盖放、已用过每回合一次、连锁进行中、“之前曾经……”）不是 not_applicable：判 applicable。伤害步骤里的各个时点可以用攻击后的窗口加 at 走到（见下文），不算搭不出来。",
   "宣言卡名、数字、属性、种族都有对应的步骤（announce_*，见下文），需要宣言不是搭不出局面的理由。",
   "题目结论依赖的前置条件（例如“刚盖放”“本回合已召唤”“某效果已发动并处理完”“处于某个连锁或时点”）要用 setup 动作打出来；与结论无关的来历（怪兽怎么上的场、卡是哪个回合盖的）可以直接预置，并写进 assumptions。缺少辅助卡时先从“相关卡”“通用工具卡”里找，再考虑 extra_cards。确实无法打出时才在该子问题 unrepresentable 写明是哪个前置条件、branches 为空。不得用会改变结论的近似局面冒充。",
   "一题多问：拆成多个 sub_questions，各自搭局面。某个假设会改变结论时，最多 2 个分支（同一子问题下），各分支写清 assumption；不要选优或合并。",
@@ -76,7 +76,7 @@ export const PLANNER_INSTRUCTIONS = [
   "",
   "## actions（操作）",
   "格式：{\"setup\":[步骤],\"probes\":[探测]}（schema 由系统补全；没有探测时 probes 可省略）。",
-  "步骤：{\"player\":0或1,\"decision\":决策类型,\"choose\":{...},\"note\":\"可选说明\"}。决策类型与 choose：",
+  "步骤：{\"player\":0或1,\"decision\":决策类型,\"choose\":{...},\"at\":\"可选：战斗时点\",\"note\":\"可选说明\"}。决策类型与 choose：",
   "- idle（主要阶段行动）：{\"cmd\":\"activate|summon|spsummon|repos|mset|sset|to_bp|to_ep\",\"card\":卡号,\"from\":区域}",
   "- battle（战斗阶段行动）：{\"cmd\":\"activate|attack|to_m2|to_ep\",\"card\":卡号}",
   "- chain（连锁/发动窗口）：{\"card\":卡号,\"from\":区域}（同卡多个效果时加 \"desc\"）",
@@ -104,7 +104,8 @@ export const PLANNER_INSTRUCTIONS = [
   "- 特殊召唤到场上（效果处理时）：通常会有 select_place，有时还有 select_position。",
   "- 两个以上必发效果同时触发时要选处理顺序（chain 窗口里依次选）。",
   "- 发动时宣言卡名的魔法（如抹杀之指名者）：idle activate → select_place(自己 szone 空位) → announce_card → 双方连锁窗口 → 处理时的选择（如 select_card 选卡组里宣言的那张）。",
-  "probes（探测，题目问“能不能发动/选择”时用）：{\"after\":k,\"player\":0或1,\"decision_kind\":\"idle|battle|chain|effect_yn|yesno\",\"target\":{\"card\":卡号,\"cmd\":\"可选\",\"desc\":可选}}。观察区间 = setup 第 k 步执行之后到第 k+1 步执行之前（k 等于 setup 长度时到回放结束）。结果：出现 / 出现（核心自动发动） / 未出现 / 未到达。题目问“处理结果如何”时可以不设探测，靠日志展示。",
+  "- 战斗时点（at）：战斗步骤和伤害步骤里的窗口依次是 attack_declaration（攻击宣言后）、damage_step_start（伤害步骤开始时）、before_damage_calc（伤害计算前）、damage_calc（伤害计算时）、after_damage_calc（伤害计算后）、damage_step_end（伤害步骤结束时）。同一张卡在几个时点都能发动时（如欧尼斯特在伤害步骤开始时和伤害计算前都能发动），步骤写 \"at\" 指定时点，其他时点的发动机会自动放弃；不写 at 就在第一个出现它的窗口匹配。探测也可以写 at，只看该时点的窗口。",
+  "probes（探测，题目问“能不能发动/选择”时用）：{\"after\":k,\"player\":0或1,\"decision_kind\":\"idle|battle|chain|effect_yn|yesno\",\"target\":{\"card\":卡号,\"cmd\":\"可选\",\"desc\":可选},\"at\":\"可选：战斗时点\"}。观察区间 = setup 第 k 步执行之后到第 k+1 步执行之前（k 等于 setup 长度时到回放结束）。结果：出现 / 出现（核心自动发动） / 未出现 / 未到达。题目问“处理结果如何”时可以不设探测，靠日志展示。",
 ].join("\n");
 
 export const PROMPT_VERSION = createHash("sha256").update(PLANNER_INSTRUCTIONS).digest("hex").slice(0, 12);
