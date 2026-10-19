@@ -25,7 +25,7 @@ const uiTranslations = {
     "分析完成": "Analysis complete", "资料来源": "Sources", "查看本次引用原文": "Read cited source",
     "问题": "Question", "回答": "Answer", "详细情境": "Detailed situation", "正文": "Text", "卡片文本": "Card text",
     "来源语言": "Source language", "机器译文": "Machine translation", "查看原文": "Show original", "查看译文": "Show translation",
-    "翻译中…": "Translating…", "翻译暂不可用，显示原文。": "Translation unavailable. Showing the original.",
+    "翻译": "Translate", "翻译中…": "Translating…", "翻译暂不可用，显示原文。": "Translation unavailable. Showing the original.",
     "打开出处": "Open source", "回答语言": "Answer language", "规则分析": "Rule analysis", "裁定分析": "Ruling analysis",
     "官方依据": "Official source", "官方直接裁定": "Official ruling", "需要核对": "Needs review", "条件性规则分析": "Conditional analysis",
     "需要补充": "More information needed", "需要补充信息": "More information needed", "预算限制": "Budget limit",
@@ -49,7 +49,7 @@ const uiTranslations = {
     "分析完成": "分析完了", "查看本次引用原文": "引用した原文を読む",
     "问题": "質問", "回答": "回答", "详细情境": "詳しい状況", "正文": "本文", "卡片文本": "カードテキスト",
     "来源语言": "原文の言語", "机器译文": "機械翻訳", "查看原文": "原文を表示", "查看译文": "翻訳を表示",
-    "翻译中…": "翻訳中…", "翻译暂不可用，显示原文。": "翻訳できません。原文を表示しています。",
+    "翻译": "翻訳", "翻译中…": "翻訳中…", "翻译暂不可用，显示原文。": "翻訳できません。原文を表示しています。",
     "打开出处": "出典を開く", "回答语言": "回答の言語", "规则分析": "ルール分析", "裁定分析": "裁定分析",
     "官方依据": "公式資料", "官方直接裁定": "公式裁定", "需要核对": "確認が必要", "条件性规则分析": "条件付き分析",
     "需要补充": "情報が必要", "需要补充信息": "情報が必要", "预算限制": "利用枠の制限",
@@ -6746,11 +6746,18 @@ function renderSources(sources, { title = "" } = {}) {
         entry.sourceDate,
       ].filter(Boolean).join(" · ");
       if (meta) appendText(details, "small", meta).className = "source-meta";
+      // Expanding shows the original. A machine translation (a model call on the server) is
+      // requested only with the button, and only for a source not known to be in the page language.
       const snapshotId = lastRenderedBackendAnswer?.sourceSnapshotId;
-      if (snapshotId && entry.id && entry.sourceHash) {
-        details.addEventListener("toggle", () => {
-          if (details.open) void translateExpandedSource({ details, body, fields, source: entry, snapshotId });
+      if (snapshotId && entry.id && entry.sourceHash && entry.sourceLanguage !== selectedUiLocale) {
+        const actions = document.createElement("div");
+        actions.className = "source-language-actions";
+        const button = appendText(actions, "button", tr("翻译"));
+        button.type = "button";
+        button.addEventListener("click", () => {
+          void translateExpandedSource({ details, body, fields, source: entry, snapshotId });
         });
+        details.appendChild(actions);
       }
       node.appendChild(details);
     }
@@ -6846,7 +6853,7 @@ async function translateExpandedSource({ details, body, fields, source, snapshot
   }
   try {
     const translated = await pendingSourceTranslations.get(cacheKey);
-    if (!details.isConnected || selectedUiLocale !== targetLocale || !details.open) return;
+    if (!details.isConnected || selectedUiLocale !== targetLocale) return;
     if (!translated) { actions.textContent = tr("翻译暂不可用，显示原文。"); return; }
     visibleSourceTranslations.set(cacheKey, translated);
     showSourceTranslation({ body, fields, actions, translated, targetLocale });
