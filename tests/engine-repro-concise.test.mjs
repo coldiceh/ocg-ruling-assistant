@@ -261,49 +261,49 @@ test("battle timings reported by the engine replace the stale phase in time labe
 
 test("windows at one time are told apart by the chain state; every window that offered the target counts", () => {
   // The Honest pattern: our activation at 伤害计算前 (chain link 1), the opponent's window while it waits on
-  // the chain, then the windows again after the chain resolved. The chain state comes from the engine log.
+  // the chain, then the window again after the chain resolved. The chain state is the engine's own
+  // (window chain_links / after_chain_end / in_activation / in_resolution, ocg-sim-core 2026-10-18).
   const option = { id: 0, cmd: "chain", card: HAND_TRAP, name: "测试手坑", controller: 1, from: "hand" };
   const at = (d, value) => ({ ...d, phase: "battle_start", timing: { id: 0, text: "", at: value } });
+  const win = (d, hit, chain) => ({ ...window(d, hit), timing: d.timing, in_activation: false, in_resolution: false,
+    after_chain_end: false, ...chain });
   const start = at(decision(9, "chain", 1, [option]), "damage_step_start");
-  const ours = at(decision(11, "chain", 0, []), "before_damage_calc");
   const during = at(decision(12, "chain", 1, [option]), "before_damage_calc");
   const after = at(decision(15, "chain", 1, [option]), "before_damage_calc");
   const main = decision(20, "chain", 1, [option]);
-  const idle = decision(21, "idle", 0, []);
   const summonWindow = decision(22, "chain", 1, [option]);
-  const log = [{ type: "attack" }, { type: "damage_step_start" }, { type: "chaining", card: SPELL, player: 0, link: 1 },
-    { type: "chained", link: 1 }, { type: "chain_solving", link: 1 }, { type: "chain_solved", link: 1 }, { type: "chain_end" },
-    { type: "battle" }, { type: "chaining", card: SPELL, player: 0, link: 1 }, { type: "chained", link: 1 },
-    { type: "chain_solving", link: 1 }, { type: "chain_end" }, { type: "summoning" }];
-  const at_ = (d, logPos) => ({ decision: d, by: "pass", choice: "pass", log_pos: logPos });
-  const win = (d, hit) => ({ ...window(d, hit), timing: d.timing });
-  const engine = { ...replayed([
-    { index: 0, after: 3, player: 1, decision_kind: "chain", target: { card: HAND_TRAP }, result: "present",
-      windows: [win(start, true), win(during, true), win(after, true)], ambiguous: false },
-    { index: 1, after: 5, player: 1, decision_kind: "chain", target: { card: HAND_TRAP }, result: "present",
-      windows: [win(main, true), win(summonWindow, true)], ambiguous: false },
-  ], []), decisions: [at_(start, 2), at_(ours, 2), at_(during, 4), at_(after, 7), at_(main, 10), at_(idle, 12), at_(summonWindow, 13)],
-  log };
+  const resolving = { ...decision(30, "yesno", 1, []), kind: "yesno" };
   const record = finished({ cards, plan: { applicability: "applicable", assumptions: [], extra_cards: [] },
-    subQuestions: [{ id: "q1", unrepresentable: null, branches: [{ id: "b1", assumption: null, scenario: board(), engine }] }] });
+    subQuestions: [{ id: "q1", unrepresentable: null, branches: [{ id: "b1", assumption: null, scenario: board(),
+      engine: replayed([
+        { index: 0, after: 3, player: 1, decision_kind: "chain", target: { card: HAND_TRAP }, result: "present", ambiguous: false,
+          windows: [win(start, true, { chain_links: 0 }), win(during, true, { chain_links: 1 }),
+            win(after, true, { chain_links: 0, after_chain_end: true })] },
+        { index: 1, after: 5, player: 1, decision_kind: "chain", target: { card: HAND_TRAP }, result: "present", ambiguous: false,
+          windows: [win(main, true, { chain_links: 1 }), win(summonWindow, true, { chain_links: 0 })] },
+        { index: 2, after: 6, player: 1, decision_kind: "yesno", target: { card: HAND_TRAP }, result: "present", ambiguous: false,
+          windows: [win(resolving, true, { chain_links: 0, in_resolution: true })] },
+      ], [start, during, after, main, summonWindow, resolving]) }] }] });
   const digest = engineReproDigest(record);
   assert.deepEqual(digest.subQuestions[0].branches[0].probes.map((probe) => probe.when), [
     ["我方回合的伤害步骤开始时", "我方回合的伤害计算前（连锁 1 处理前、连锁处理完毕后）"],
     ["我方主要阶段1（连锁 1 处理前、没有连锁时）"],
+    ["我方主要阶段1（连锁 1 处理中）"],
   ]);
   const text = engineReproConciseText(digest);
   assert.ok(text.includes("对方在我方回合的伤害步骤开始时、我方回合的伤害计算前（连锁 1 处理前、连锁处理完毕后）可以选择「发动测试手坑」"), text);
   assertConcise(text);
 });
 
-test("without log positions the times read as before (no chain state)", () => {
+test("older engine results without chain fields read as before (no chain state)", () => {
   const option = { id: 0, cmd: "chain", card: HAND_TRAP, name: "测试手坑", controller: 1, from: "hand" };
   const d = { ...decision(12, "chain", 1, [option]), phase: "battle_start", timing: { id: 41, text: "伤害计算前", at: "before_damage_calc" } };
-  const engine = { ...replayed([{ index: 0, after: 4, player: 1, decision_kind: "chain", target: { card: HAND_TRAP },
-    result: "present", windows: [{ ...window(d, true), timing: d.timing }], ambiguous: false }], []),
-  decisions: [{ decision: d, by: "pass", choice: "pass" }], log: undefined };
+  const later = { ...d, index: 15 };
   const record = finished({ cards, plan: { applicability: "applicable", assumptions: [], extra_cards: [] },
-    subQuestions: [{ id: "q1", unrepresentable: null, branches: [{ id: "b1", assumption: null, scenario: board(), engine }] }] });
+    subQuestions: [{ id: "q1", unrepresentable: null, branches: [{ id: "b1", assumption: null, scenario: board(),
+      engine: replayed([{ index: 0, after: 4, player: 1, decision_kind: "chain", target: { card: HAND_TRAP }, result: "present",
+        windows: [{ ...window(d, true), timing: d.timing }, { ...window(later, true), timing: later.timing, chain_links: "1" }],
+        ambiguous: false }], [d, later]) }] }] });
   assert.deepEqual(engineReproDigest(record).subQuestions[0].branches[0].probes[0].when, ["我方回合的伤害计算前"]);
 });
 

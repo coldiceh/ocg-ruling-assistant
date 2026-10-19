@@ -90,4 +90,24 @@ test("the repair round sees the battle timing and the engine's detail of a faile
     modelCall: async ({ input }) => { withTiming.push(input); return { status: "completed", outputText: JSON.stringify(plan), usage: {} }; } });
   assert.match(withTiming[1], /"timing":"before_damage_calc"/u);
   assert.doesNotMatch(inputs[1], /"timing":/u);
+  // a failed declaration carries what could be declared
+  const declaring = (decision) => async (op, body) => {
+    const result = await engine(op, body);
+    if (op === "reproduce") result.result.failure.decision = decision;
+    return result;
+  };
+  const repairInputs = async (decision) => {
+    const seen = [];
+    await runEngineReproduction({ question: "q", identity: { resolved: [{ cid: "12950", mentionedAs: ["灰流丽"], resolutionSources: [] }],
+      unresolved: [], groupMentions: [] }, cardsById: new Map([["12950", { id: "12950", name: "灰流丽", effectText: "t" }]]),
+      cidMap: { 12950: 14558127 }, engine: declaring(decision), clock: () => 0,
+      modelCall: async ({ input }) => { seen.push(input); return { status: "completed", outputText: JSON.stringify(plan), usage: {} }; } });
+    return seen[1];
+  };
+  assert.match(await repairInputs({ kind: "announce_number", player: 0, phase: "main1", turn: 1, options: [], values: [3, 2, 1] }),
+    /"values":\[3,2,1\]/u);
+  const race = await repairInputs({ kind: "announce_race", player: 0, phase: "main1", turn: 1, options: [], available: 0x3, count: 1 });
+  assert.match(race, /"available":3,"count":1/u);
+  assert.doesNotMatch(await repairInputs({ kind: "announce_card", player: 0, phase: "main1", turn: 1, options: [], values: [1073741826] }),
+    /"values":/u, "announce_card values are filter opcodes, not candidates");
 });

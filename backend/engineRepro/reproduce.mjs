@@ -145,9 +145,14 @@ function compactFailure(sq, b) {
     failure.failure = { reason: f.reason, step: f.step, step_spec: f.step_spec, detail: f.detail };
     const d = f.decision;
     if (d) {
+      // What could be declared (announce_number: the offered numbers; announce_race / announce_attrib:
+      // the available bits and how many to declare). announce_card's `values` are the core's filter
+      // opcodes, not candidates, so they are left out.
+      const declarable = d.kind === "announce_number" ? { values: d.values }
+        : d.kind === "announce_race" || d.kind === "announce_attrib" ? { available: d.available, count: d.count } : {};
       failure.decision = { kind: d.kind, player: d.player, phase: d.phase, timing: d.timing?.at || undefined, turn: d.turn,
         hint: d.hint?.text || null,
-        card: d.card || undefined, desc_text: d.desc_text || undefined,
+        card: d.card || undefined, desc_text: d.desc_text || undefined, ...declarable,
         options: (d.options || []).slice(0, 40).map((o) => ({ cmd: o.cmd, card: o.card, name: o.name, controller: o.controller,
           from: o.from, seq: o.seq, desc: o.desc, desc_text: o.desc_text, forced: o.forced, position: o.position,
           place: o.place, selected: o.selected })) };
