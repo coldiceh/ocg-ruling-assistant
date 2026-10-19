@@ -202,7 +202,24 @@ function probeDigest(probe, names, turnPlayers) {
     decisionKind: probe?.decision_kind || null,
     cardLevelOnly: probe?.card_level_only === true,
     when: whenLabels(hits.length ? hits : items, time),
+    prompts: [...new Set(hits.map(({ window }) => promptText(window)).filter(Boolean))],
   };
+}
+
+// What a yes/no prompt (effect_yn / yesno window) asked, from the engine's description string (the
+// card name goes into [%ls]). null for the core's generic activation offer (desc 0 / 221), which the
+// sentence calls an activation, and for windows of other kinds. A yes/no prompt that names the card is
+// not necessarily an activation (a destruction replacement, a card's own string asked of the opponent),
+// so it is quoted instead.
+const GENERIC_PROMPTS = new Set([0, 221]);
+function promptText(window) {
+  if (window?.kind !== "effect_yn" && window?.kind !== "yesno") return null;
+  const desc = Number(window.desc) || 0;
+  if (window.kind === "effect_yn" && GENERIC_PROMPTS.has(desc)) return null;
+  const text = typeof window.desc_text === "string" ? window.desc_text.trim() : "";
+  if (!text) return null;
+  const name = typeof window.card?.name === "string" ? window.card.name : "";
+  return text.replaceAll("[%ls]", name).replaceAll("%ls", name);
 }
 
 // Times in order of first appearance. Windows at one time that differ in chain state are listed under it:
@@ -348,10 +365,16 @@ function probeSentence(probe) {
   const activation = !probe.cmd || probe.cmd === "activate" || probe.cmd === "chain";
   const action = activation ? `发动${name}` : probe.cmd === "attack" ? `以${name}攻击` : `${CMD_ZH[probe.cmd] || ""}${name}`;
   const cardOnly = probe.cardLevelOnly ? "（只能确认到卡，不能确认是哪个效果）" : "";
+  const yesNo = probe.decisionKind === "effect_yn" || probe.decisionKind === "yesno";
   switch (probe.result) {
-    case "present": return `${who}${at}可以选择「${action}」${cardOnly}`;
+    case "present":
+      if (yesNo && probe.prompts?.length) return `${who}${at}被询问${listText(probe.prompts.map((text) => `「${text}」`))}`;
+      if (probe.decisionKind === "yesno") return `${who}${at}出现了与「${name}」有关的是/否询问`;
+      return `${who}${at}可以选择「${action}」${cardOnly}`;
     case "present_auto": return `「${name}」作为必发效果由引擎自动发动${cardOnly}`;
-    case "absent": return activation ? `${who}${at}没有出现「${name}」的发动机会` : `${who}${at}没有出现「${action}」的选项`;
+    case "absent":
+      if (yesNo) return `${who}${at}没有出现与「${name}」有关的询问`;
+      return activation ? `${who}${at}没有出现「${name}」的发动机会` : `${who}${at}没有出现「${action}」的选项`;
     case "not_reached": return `没有到达要看的时点（${who}的${KIND_ZH[probe.decisionKind] || "选择"}）`;
     default: return `回放提前中止，没有看完${who}的${KIND_ZH[probe.decisionKind] || "选择"}`;
   }

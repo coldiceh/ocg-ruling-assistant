@@ -295,6 +295,34 @@ test("windows at one time are told apart by the chain state; every window that o
   assertConcise(text);
 });
 
+test("yes/no probes: a prompt that names the card is quoted; only the generic offer is called an activation", () => {
+  const prompt = (index, kind, extra) => ({ decision: index, kind, phase: "main1", hint: null, options: [], contains_target: true,
+    chain_links: 0, in_activation: false, in_resolution: true, after_chain_end: false, ...extra });
+  const replacement = prompt(31, "effect_yn", { desc: 96, desc_text: "是否使用[%ls]的效果代替破坏？",
+    card: { card: MONSTER_A, name: "测试怪兽A", from: "mzone" } });
+  const generic = prompt(32, "effect_yn", { desc: 221, desc_text: "是否发动效果？", in_resolution: false,
+    card: { card: MONSTER_B, name: "测试怪兽B", from: "grave" } });
+  const opponentAsked = prompt(33, "yesno", { desc: HAND_TRAP * 16 + 1, desc_text: "是否把怪兽从手卡特殊召唤？" });
+  const quiet = { ...prompt(34, "yesno", { desc: 30, desc_text: "是否继续攻击？", in_resolution: false }), contains_target: false };
+  const d = (index, player) => decision(index, "effect_yn", player);
+  const record = finished({ cards, plan: { applicability: "applicable", assumptions: [], extra_cards: [] },
+    subQuestions: [{ id: "q1", unrepresentable: null, branches: [{ id: "b1", assumption: null, scenario: board(),
+      engine: replayed([
+        { index: 0, after: 1, player: 0, decision_kind: "effect_yn", target: { card: MONSTER_A }, result: "present", windows: [replacement] },
+        { index: 1, after: 1, player: 0, decision_kind: "effect_yn", target: { card: MONSTER_B }, result: "present", windows: [generic],
+          card_level_only: true },
+        { index: 2, after: 1, player: 1, decision_kind: "yesno", target: { card: HAND_TRAP }, result: "present", windows: [opponentAsked] },
+        { index: 3, after: 1, player: 1, decision_kind: "yesno", target: { card: SPELL }, result: "absent", windows: [quiet] },
+      ], [d(31, 0), d(32, 0), d(33, 1), d(34, 1)]) }] }] });
+  const text = engineReproConciseText(engineReproDigest(record));
+  assert.ok(text.includes("我方在主要阶段1（连锁 1 处理中）被询问「是否使用测试怪兽A的效果代替破坏？」"), text);
+  assert.ok(text.includes("我方在主要阶段1可以选择「发动测试怪兽B」（只能确认到卡，不能确认是哪个效果）"), text);
+  assert.ok(text.includes("对方在我方主要阶段1（连锁 1 处理中）被询问「是否把怪兽从手卡特殊召唤？」"), text);
+  assert.ok(text.includes("对方在我方主要阶段1没有出现与「测试融合魔法」有关的询问"), text);
+  assert.doesNotMatch(text, /发动测试怪兽A|发动测试手坑/u);
+  assertConcise(text);
+});
+
 test("older engine results without chain fields read as before (no chain state)", () => {
   const option = { id: 0, cmd: "chain", card: HAND_TRAP, name: "测试手坑", controller: 1, from: "hand" };
   const d = { ...decision(12, "chain", 1, [option]), phase: "battle_start", timing: { id: 41, text: "伤害计算前", at: "before_damage_calc" } };
