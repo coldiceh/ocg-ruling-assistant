@@ -31,6 +31,15 @@ test("生成答案 finalizes the stored preparation only while the question is u
   assert.match(schedule, /preparedOnlyResult = null;/u, "editing the question forgets it too (the result area is reset)");
 });
 
+test("生成答案 after the preparation expired asks for a new 查询 instead of a generic failure", () => {
+  const presentation = between("function publicRequestFailurePresentation", "function relayPreparationFailurePresentation");
+  assert.match(presentation, /code === "answer_preparation_expired" \|\| code === "answer_preparation_deployment_changed"/u);
+  assert.match(presentation, /lt\("准备好的证据已失效"/u);
+  assert.match(presentation, /本次没有调用最终裁定模型/u);
+  assert.match(presentation, /lt\("请重新点“查询”。"/u);
+  assert.match(continueAnswer, /renderBackendVersionError\(error, prepared\.requestedRulingVersion\)/u, "the failure goes through the shared presentation");
+});
+
 test("the prepare-only button is secondary to 查询", () => {
   assert.match(css, /\.prepare-only-button \{\n  min-height: 36px;\n  padding: 6px 10px;\n  font-size: 13px;\n  font-weight: 600;/u);
   assert.doesNotMatch(css, /\.primary-button,\n  \.prepare-only-button \{\n    width: 100%;/u, "not a full-width twin of 查询 on phones");

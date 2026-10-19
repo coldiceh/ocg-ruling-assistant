@@ -1863,6 +1863,20 @@ function publicRequestFailurePresentation(error) {
       step: lt("请重新提交原问题以准备资料。", "Resubmit the original question to prepare evidence.", "元の質問を再送信して資料を準備してください。"),
     };
   }
+  // 生成答案 pressed after the prepared evidence expired (15 minutes) or after a deployment: the
+  // preparation is refused before the final model is called.
+  if (code === "answer_preparation_expired" || code === "answer_preparation_deployment_changed") {
+    const expired = code === "answer_preparation_expired";
+    return {
+      title: lt("准备好的证据已失效", "The prepared evidence is no longer available", "準備した証拠は使えなくなりました"),
+      status: lt("需要重新查询", "Ask again", "再検索が必要です"),
+      basis: expired
+        ? lt("准备好的证据只保留 15 分钟", "Prepared evidence is kept for 15 minutes", "準備した証拠の保持は 15 分間です")
+        : lt("准备证据之后网站已更新", "The site was updated after the evidence was prepared", "証拠の準備後にサイトが更新されました"),
+      message: lt("这份证据不能再用于生成答案，本次没有调用最终裁定模型。", "This evidence can no longer be used for an answer. The final ruling model was not called.", "この証拠では回答を生成できません。最終裁定モデルは呼び出していません。"),
+      step: lt("请重新点“查询”。", "Press “Ask” again.", "もう一度「質問する」を押してください。"),
+    };
+  }
   if (/^decisions_http_(?:502|503|504|52[0-4])$/u.test(code)
       || code === "decisions_service_unavailable"
       || (code === "decisions_http_error" && Number(error?.status) >= 500)) {
