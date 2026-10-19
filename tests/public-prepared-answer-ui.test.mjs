@@ -463,3 +463,50 @@ test("editing the question does not abort or invalidate a dispatched final reque
   assert.equal(cleared, 0);
   assert.equal(reset, 0);
 });
+
+test("the prepared evidence reaches the page before the finalize request; a failing display changes nothing", async () => {
+  const preview = [
+    { id: "ocg-rule:c03:atom:58", type: "rule-doc", title: "战斗阶段流程 ¶", sourceUrl: "https://example.invalid/rule", text: "正文" },
+    { id: "faq-7574-2", type: "card-faq", title: "奥尼斯特 FAQ 2", sourceUrl: "https://example.invalid/faq" },
+    { title: "no id: dropped" },
+    "not an object",
+  ];
+  const order = [];
+  const respond = (url, options) => {
+    const { action } = JSON.parse(options.body);
+    order.push(action);
+    if (action === "prepare") {
+      const event = preparedEvent("c".repeat(64));
+      event.data.evidencePreview = preview;
+      return sse(event, endEvent());
+    }
+    return sse(answerEvent(), endEvent());
+  };
+  const shown = [];
+  const result = await createClient(async (url, options) => respond(url, options)).request("Synthetic question", "latest", {
+    requestId: 0,
+    onEvidencePrepared: (prepared) => { order.push("shown"); shown.push(prepared.evidencePreview); },
+  });
+  assert.equal(result.verdict, "synthetic");
+  assert.deepEqual(order, ["prepare", "shown", "finalize"]);
+  assert.deepEqual(shown, [preview.slice(0, 2)], "only plain objects with an id are kept, unchanged");
+
+  order.length = 0;
+  const unaffected = await createClient(async (url, options) => respond(url, options)).request("Synthetic question", "latest", {
+    requestId: 0,
+    onEvidencePrepared: () => { order.push("shown"); throw new Error("display failure"); },
+  });
+  assert.equal(unaffected.verdict, "synthetic");
+  assert.deepEqual(order, ["prepare", "shown", "finalize"]);
+});
+
+test("a prepare-only request does not show the evidence list", async () => {
+  let shown = 0;
+  const result = await createClient(async () => {
+    const event = preparedEvent("d".repeat(64));
+    event.data.evidencePreview = [{ id: "x", title: "X" }];
+    return sse(event, endEvent());
+  }).request("Synthetic question", "latest", { requestId: 0, prepareOnly: true, onEvidencePrepared: () => { shown += 1; } });
+  assert.equal(result.kind, "prepared");
+  assert.equal(shown, 0);
+});

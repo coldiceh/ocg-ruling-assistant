@@ -244,11 +244,13 @@ async function answerInSeparateRequest({ request, response, requestAbort, reques
     if (requestAbort.signal.aborted) return;
     if (result.preparationId) {
       if (streaming) {
-        sendPublicAnswerEvent(response, "prepared", { preparationId: result.preparationId, progress: measured, evidencePackage: result.evidencePackage });
+        sendPublicAnswerEvent(response, "prepared", { preparationId: result.preparationId, progress: measured,
+          evidencePreview: result.evidencePreview || [], evidencePackage: result.evidencePackage });
         sendPublicAnswerEvent(response, "end", measured);
         response.end();
       } else {
-        response.status(200).json({ status: "evidence_prepared", preparationId: result.preparationId, progress: measured, evidencePackage: result.evidencePackage });
+        response.status(200).json({ status: "evidence_prepared", preparationId: result.preparationId, progress: measured,
+          evidencePreview: result.evidencePreview || [], evidencePackage: result.evidencePackage });
       }
       return;
     }

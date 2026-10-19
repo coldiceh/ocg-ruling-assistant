@@ -401,3 +401,28 @@ test("storage failures do not leak credentials or retry, and configuration absen
   const res = response(); await handler(request(body), res);
   assert.equal(res.statusCode, 503); assert.equal(prepares, 0);
 });
+
+test("the prepared event lists the evidence the final model will be given, without a model call", async () => {
+  const visible = [
+    { id: "rule-1", recordType: "rule-doc", title: "规则资料一", sourceUrl: "https://example.invalid/rule-1", text: "正文一" },
+    { id: "faq-1", recordType: "card-faq", title: "FAQ 一", sourceUrl: "https://example.invalid/faq-1", conclusion: "回答一" },
+  ];
+  const hidden = { id: "rule-hidden", recordType: "rule-doc", title: "未交给最终模型", text: "不显示" };
+  const original = continuation.promptBundle;
+  continuation.promptBundle = { ...original, modelEvidence: { rawRelatedEvidence: [visible[0], hidden], faqRelated: [visible[1]] },
+    allowedEvidenceIds: ["faq-1", "rule-1"] };
+  try {
+    const f = fixture();
+    const first = await prepare(f);
+    const prepared = first.output.find((x) => x.type === "prepared").data;
+    assert.deepEqual(prepared.evidencePreview.map((item) => [item.id, item.type, item.title, item.sourceUrl]), [
+      ["faq-1", "card-faq", "FAQ 一", "https://example.invalid/faq-1"],
+      ["rule-1", "rule-doc", "规则资料一", "https://example.invalid/rule-1"],
+    ], "allowed order, prompt-visible items only");
+    assert.equal(prepared.evidencePreview[0].conclusion, "回答一");
+    assert.ok(!JSON.stringify(prepared.evidencePreview).includes("不显示"));
+    assert.deepEqual(f.counts, { prepare: 1, final: 0 }, "listing the evidence calls no model");
+  } finally {
+    continuation.promptBundle = original;
+  }
+});

@@ -230,6 +230,7 @@ const ui = {
   questionsList: document.querySelector("#questionsList"),
   riskBlock: document.querySelector(".risk-block"),
   sourcesList: document.querySelector("#sourcesList"),
+  sourcesTitle: document.querySelector("#sourcesTitle"),
   sourceTrace: document.querySelector(".source-trace"),
   simulationPanel: document.querySelector("#simulationPanel"),
   simulationStatus: document.querySelector("#simulationStatus"),
@@ -871,6 +872,9 @@ async function analyzeQuestion({ prepareOnly = false } = {}) {
         signal: abortController.signal,
         requestId,
         prepareOnly,
+        onEvidencePrepared: (prepared) => {
+          if (requestId === analysisRequestId) renderPreparedEvidence(prepared?.evidencePreview);
+        },
       });
       if (requestId !== analysisRequestId) return;
       if (answer?.kind === "prepared") {
@@ -903,6 +907,7 @@ async function requestBackendAnswer(text, requestedRulingVersion, {
   signal,
   requestId = null,
   prepareOnly = false,
+  onEvidencePrepared = null,
 } = {}) {
   const backendMode = "rag";
   // Capture the model choice once so the first wire payload remains stable
@@ -945,6 +950,14 @@ async function requestBackendAnswer(text, requestedRulingVersion, {
   }
   if (requestId !== null && requestId !== analysisRequestId) {
     throw createBackendRequestError({ code: "answer_request_stale" });
+  }
+  // The evidence is final once preparation ends; the caller can show it while the final model writes.
+  if (typeof onEvidencePrepared === "function") {
+    try {
+      onEvidencePrepared(prepareResult);
+    } catch (error) {
+      console.error("Showing the prepared evidence failed.", error);
+    }
   }
 
   activeAnalysisPhase = "finalize";
@@ -1416,11 +1429,21 @@ function publicPreparationFromSseEvent(event) {
     kind: "prepared",
     preparationId,
     evidencePackage: normalizePreparedEvidencePackage(payload.evidencePackage),
+    evidencePreview: normalizePreparedEvidencePreview(payload.evidencePreview),
     progress: {
       totalMs,
       stageDurationsMs,
     },
   };
+}
+
+// The evidence the final model will be given (server: selectedPromptEvidenceRefs over the prepared
+// prompt, the same list the answer's usedEvidence carries). Plain objects with an id only.
+function normalizePreparedEvidencePreview(value) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((item) => item && typeof item === "object" && !Array.isArray(item) && typeof item.id === "string" && item.id)
+    .slice(0, 60);
 }
 
 function normalizePreparedEvidencePackage(value) {
@@ -1936,13 +1959,7 @@ function renderRagAnswer(answer) {
     ...publicRiskLines(answer.riskFlags || []),
     ...(debugUiEnabled ? ragBudgetLines(answer.debug?.budgetStatus) : []),
   ]);
-  renderSources((answer.usedEvidence || []).map((item) => ({
-    ...item,
-    label: tr(ragEvidenceLabel(item.type)),
-    detail: item.title || item.id || "",
-    id: item.id || "",
-    url: item.sourceUrl || item.url || "",
-  })));
+  renderSources(ragEvidenceSources(answer.usedEvidence));
   renderParserDebug(answer.debug || null);
   renderFeedbackPanel(answer);
 }
@@ -1962,6 +1979,28 @@ function renderEngineReproReplay(container, engineRepro) {
   details.appendChild(summary);
   details.appendChild(pre);
   container.appendChild(details);
+}
+
+function ragEvidenceSources(items) {
+  return (Array.isArray(items) ? items : []).map((item) => ({
+    ...item,
+    label: tr(ragEvidenceLabel(item.type)),
+    detail: item.title || item.id || "",
+    id: item.id || "",
+    url: item.sourceUrl || item.url || "",
+  }));
+}
+
+// Shown when preparation ends and before the final answer: the evidence the final model is given.
+// The final answer replaces it with its own usedEvidence (the same list) and the usual title.
+function renderPreparedEvidence(items) {
+  const sources = ragEvidenceSources(items);
+  if (!sources.length) return;
+  renderSources(sources, {
+    title: lt(`已找到的资料（${sources.length} 条）· 正在生成答案`,
+      `Evidence found (${sources.length}) · writing the answer`,
+      `見つかった資料（${sources.length} 件）・回答を生成中`),
+  });
 }
 
 function ragEvidenceLabel(type) {
@@ -6653,7 +6692,8 @@ function enginePromptSummary(simulation) {
   return `当前等待：${label}${Number.isInteger(count) ? `（${count} 个可选项）` : ""}。`;
 }
 
-function renderSources(sources) {
+function renderSources(sources, { title = "" } = {}) {
+  if (ui.sourcesTitle) ui.sourcesTitle.textContent = title || tr("资料来源");
   clearElement(ui.sourcesList);
   if (!sources.length) {
     ui.sourcesList.hidden = true;

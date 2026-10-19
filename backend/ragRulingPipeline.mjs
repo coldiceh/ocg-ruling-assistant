@@ -1856,7 +1856,7 @@ function sameCanonicalCardId(left = {}, right = {}) {
   return [...values(right)].some((id) => leftIds.has(id));
 }
 
-function selectedPromptEvidenceRefs(evidence = {}, allowedEvidenceIds = []) {
+export function selectedPromptEvidenceRefs(evidence = {}, allowedEvidenceIds = []) {
   const allowed = new Set((allowedEvidenceIds || [])
     .map((id) => String(id || "").trim())
     .filter(Boolean));

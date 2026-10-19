@@ -8,6 +8,7 @@ import { updateQueryAudit, safeQueryAuditRetrievalTimings } from './queryAuditSt
 import { queryAuditAnswerPatch, queryAuditFailurePatch, saveQueryAuditUpdate } from './publicQueryAudit.mjs';
 import { attachEngineReproWhenReady, engineReproWaitDeadline } from './engineRepro/session.mjs';
 import { startOfficialQaJudge } from './engineRepro/officialQaJudge.mjs';
+import { selectedPromptEvidenceRefs } from './ragRulingPipeline.mjs';
 
 export async function preparePublicAnswer({
   payload, env, signal, progress, store,
@@ -40,8 +41,13 @@ export async function preparePublicAnswer({
     status: "prepared", profileId: result.latency.profileId, latencyMs: measuredProgress.totalMs,
     ...safeQueryAuditRetrievalTimings(result.answer.continuation.ruleQueryModel?.timingsMs),
   }, env, updateAudit);
-  return { preparationId, progress: measuredProgress,
-    evidencePackage: { text: result.answer.continuation.promptBundle.prompt, filename: 'ocg-evidence.txt',
+  // The evidence the final model will be given, in the same shape the answer's usedEvidence will
+  // have (finalize rebuilds that list from this same prompt bundle): the web page shows it while
+  // the final model writes. No extra model call.
+  const promptBundle = result.answer.continuation.promptBundle;
+  const evidencePreview = selectedPromptEvidenceRefs(promptBundle.modelEvidence, promptBundle.allowedEvidenceIds);
+  return { preparationId, progress: measuredProgress, evidencePreview,
+    evidencePackage: { text: promptBundle.prompt, filename: 'ocg-evidence.txt',
       diagnostics: {
         request: result.answer.debug?.requestDiagnostics || null,
         cloudCosts: result.answer.debug?.cloudCosts || null,
