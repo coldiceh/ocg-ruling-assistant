@@ -175,22 +175,28 @@ export function engineReproConciseText(digest, { officialQaMatches = [] } = {}) 
 function branchDigest(branch, names, namedCodes) {
   const engine = branch?.engine || null;
   const outcome = branchOutcome(branch || {});
-  const turnPlayers = new Map((engine?.decisions || [])
-    .map((entry) => [entry?.decision?.index, entry?.decision?.turn_player]));
+  const decisions = Array.isArray(engine?.decisions) ? engine.decisions : [];
+  const turnPlayers = new Map(decisions.map((entry) => [entry?.decision?.index, entry?.decision?.turn_player]));
+  const links = chainLinksByLogPosition(engine?.log);
+  const chainTexts = (windows) => windowChainTexts(windows, decisions, links);
   return {
     assumption: typeof branch?.assumption === "string" && branch.assumption.trim() ? branch.assumption.trim() : null,
     ok: outcome.ok,
     reason: outcome.reason,
     probeNotReached: engine?.failure?.reason === "probe_not_reached",
-    probes: (engine?.probes || []).map((probe) => probeDigest(probe, names, turnPlayers)),
+    probes: (engine?.probes || []).map((probe) => probeDigest(probe, names, turnPlayers, chainTexts)),
     board: boardDigest(branch?.scenario, names, namedCodes),
   };
 }
 
-function probeDigest(probe, names, turnPlayers) {
+// The times of the windows that offered the target (of every window when none did), each with the chain
+// state at that window when it differs between windows at the same time.
+function probeDigest(probe, names, turnPlayers, chainTexts) {
   const windows = Array.isArray(probe?.windows) ? probe.windows : [];
-  const when = (window) => timeLabel(window?.phase, turnPlayers.get(window?.decision), probe?.player, window?.timing?.at);
-  const hit = windows.find((window) => window?.contains_target);
+  const time = (window) => timeLabel(window?.phase, turnPlayers.get(window?.decision), probe?.player, window?.timing?.at);
+  const chains = chainTexts(windows);
+  const items = windows.map((window, i) => ({ window, chain: chains[i] || "" }));
+  const hits = items.filter(({ window }) => window?.contains_target);
   return {
     player: probe?.player,
     result: probe?.result || null,
@@ -198,8 +204,64 @@ function probeDigest(probe, names, turnPlayers) {
     cmd: typeof probe?.target?.cmd === "string" ? probe.target.cmd : null,
     decisionKind: probe?.decision_kind || null,
     cardLevelOnly: probe?.card_level_only === true,
-    when: [...new Set((hit ? [when(hit)] : windows.map(when)).filter(Boolean))],
+    when: whenLabels(hits.length ? hits : items, time),
   };
+}
+
+// Times in order of first appearance. Windows at one time that differ in chain state are listed under it:
+// "伤害计算前（连锁 1 处理前、连锁处理完毕后）"; an empty chain with nothing to tell reads "没有连锁时".
+function whenLabels(items, time) {
+  const groups = new Map();
+  for (const { window, chain } of items) {
+    const label = time(window);
+    if (!label) continue;
+    if (!groups.has(label)) groups.set(label, []);
+    const chains = groups.get(label);
+    if (!chains.includes(chain)) chains.push(chain);
+  }
+  return [...groups].map(([label, chains]) => (chains.some(Boolean)
+    ? `${label}（${chains.map((chain) => chain || "没有连锁时").join("、")}）` : label));
+}
+
+// Links waiting on the chain before each engine log position (one entry per position, plus one after the
+// end), from the chaining / chain_solving / chain_end events. A decision at log_pos p was asked after the
+// events before p.
+function chainLinksByLogPosition(log) {
+  const sizes = [];
+  let links = 0;
+  for (const event of Array.isArray(log) ? log : []) {
+    sizes.push(links);
+    if (event?.type === "chaining" && Number.isSafeInteger(event.link)) links = event.link;
+    else if (event?.type === "chain_solving" && Number.isSafeInteger(event.link)) links = Math.max(0, event.link - 1);
+    else if (event?.type === "chain_end") links = 0;
+  }
+  sizes.push(links);
+  return sizes;
+}
+
+// The chain state of each probe window, read the same way as the engine's Chinese replay (ocg-sim-core
+// render_zh.py): "连锁 n 处理前" while n links wait on the chain; "连锁处理完毕后" for an empty chain when an
+// earlier window of the same probe, at the same turn, phase and battle timing with no action choice
+// (idle / battle) in between, had links on the chain; otherwise "".
+function windowChainTexts(windows, decisions, sizes) {
+  const entries = new Map(decisions.map((entry) => [entry?.decision?.index, entry]));
+  const actions = decisions.filter((entry) => entry?.decision?.kind === "idle" || entry?.decision?.kind === "battle")
+    .map((entry) => entry.decision.index);
+  const chained = [];
+  return windows.map((window) => {
+    const entry = entries.get(window?.decision);
+    if (!entry || !Number.isSafeInteger(entry.log_pos)) return "";
+    const d = entry.decision;
+    const links = sizes[Math.min(Math.max(entry.log_pos, 0), sizes.length - 1)];
+    const key = `${d.turn}|${d.phase}|${d.timing?.at ?? ""}`;
+    if (links > 0) {
+      chained.push({ index: d.index, key });
+      return `连锁 ${links} 处理前`;
+    }
+    const afterChain = chained.some((earlier) => earlier.key === key
+      && !actions.some((action) => action > earlier.index && action < d.index));
+    return afterChain ? "连锁处理完毕后" : "";
+  });
 }
 
 // "主要阶段1" in the acting player's own turn, "我方主要阶段1" / "对方主要阶段1" otherwise.
