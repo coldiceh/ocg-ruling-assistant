@@ -111,3 +111,56 @@ test("the repair round sees the battle timing and the engine's detail of a faile
   assert.doesNotMatch(await repairInputs({ kind: "announce_card", player: 0, phase: "main1", turn: 1, options: [], values: [1073741826] }),
     /"values":/u, "announce_card values are filter opcodes, not candidates");
 });
+
+test("planner prompt: the asked action is probed, not a step; responses come before resolution prompts", () => {
+  assert.match(PLANNER_INSTRUCTIONS, /题目问的动作（能不能发动 \/ 攻击 \/ 选择，还能做几次）用探测观察，不要写成步骤/u);
+  assert.match(PLANNER_INSTRUCTIONS, /不确定能不能做的那一次只用探测/u);
+  assert.match(PLANNER_INSTRUCTIONS, /- 连锁：一张卡发动后，先轮流出现双方的连锁窗口，要回应它的卡就在这时发动（步骤紧接在那次发动之后）/u);
+  assert.match(PLANNER_INSTRUCTIONS, /处理时出现的询问和选择（是否改变效果、是否适用、选卡等）都排在所有连锁窗口之后/u);
+});
+
+test("the repair round reads the engine's replay of the failed branch in its own section", async () => {
+  const { runEngineReproduction, replayExcerpt } = await import("../backend/engineRepro/reproduce.mjs");
+  const plan = { applicability: "applicable", reason_code: null, archetype_name: null, quoted_span: "q", what_not_why: false,
+    assumptions: [], extra_cards: [], sub_questions: [{ id: "q1", quoted_span: "q", unrepresentable: null, branches: [{
+      id: "b1", assumption: null, observe: "x", scenario: { first_player: 1, players: [{ hand: [14558127] }, {}] },
+      actions: { setup: [{ player: 0, decision: "chain", choose: { card: 14558127 } }] } }] }] };
+  const rendered = ["【引擎复现】", "状态：未复现（action_mismatch：该步骤在当前合法选项中找不到）",
+    "版本：核心 3209cd8 · 脚本 b83db1c · 卡库 09bf7de · Lua 5.4.8", "过程：", "  P1 发动 测试魔法（连锁1，从魔法与陷阱区）",
+    "    · 此时 P0 本可发动：发动灰流丽（未发动）", "    连锁1 开始处理", "    ▶ 步骤3：P0 询问「是否改变效果？」 → 是",
+    "中止位置：P1 的行动选择（主要阶段1）", "实验性功能，未经评测。引擎局面可能与题意有偏差。"].join("\n");
+  const engine = async (op, body) => {
+    if (op === "cards") return { cards: (body.codes || []).map((code) => ({ code, exists: true, name: "灰流丽", types: ["怪兽"] })) };
+    if (op === "related") return { related: [] };
+    if (op === "reproduce") return { result: { status: "not_reproduced", reason_code: "action_mismatch", scenario: body.scenario,
+      failure: { reason: "not_found", step: 3, step_spec: body.actions.setup[0],
+        decision: { kind: "idle", player: 1, phase: "main1", timing: null, turn: 1, options: [] } },
+      decisions: [], rendered_zh: rendered } };
+    throw new Error(op);
+  };
+  const inputs = [];
+  await runEngineReproduction({ question: "q", identity: { resolved: [{ cid: "12950", mentionedAs: ["灰流丽"], resolutionSources: [] }],
+    unresolved: [], groupMentions: [] }, cardsById: new Map([["12950", { id: "12950", name: "灰流丽", effectText: "t" }]]),
+    cidMap: { 12950: 14558127 }, engine, clock: () => 0,
+    modelCall: async ({ input }) => { inputs.push(input); return { status: "completed", outputText: JSON.stringify(plan), usage: {} }; } });
+  const repair = inputs[1];
+  assert.ok(repair, "a repair round ran");
+  const section = repair.slice(repair.indexOf("## 引擎实际过程"));
+  assert.ok(section.startsWith("## 引擎实际过程"), "the replay has its own section");
+  assert.match(section, /### q1\/b1\n状态：未复现/u);
+  assert.match(section, /此时 P0 本可发动：发动灰流丽（未发动）/u);
+  assert.match(section, /▶ 步骤3：P0 询问「是否改变效果？」 → 是/u);
+  assert.doesNotMatch(section, /版本：|实验性功能/u);
+  const failureLine = repair.split("\n").find((line) => line.startsWith("{\"sub_question\":\"q1\""));
+  assert.ok(failureLine && !failureLine.includes("\"replay\""), "the failure JSON does not repeat the replay");
+  assert.match(repair, /要在某个被自动放弃的窗口发动，就把那一步移到那个窗口的位置/u);
+
+  // a long replay keeps its beginning and its end
+  const long = ["过程：", ...Array.from({ length: 1200 }, (_, i) => `  第${i}行`)].join("\n");
+  const excerpt = replayExcerpt(long);
+  assert.ok(excerpt.startsWith("过程：\n  第0行"));
+  assert.ok(excerpt.endsWith("第1199行"));
+  assert.ok(Array.from(excerpt).length < 4100);
+  assert.match(excerpt, /…（中间省略 \d+ 字）…/u);
+  assert.equal(replayExcerpt(""), "");
+});

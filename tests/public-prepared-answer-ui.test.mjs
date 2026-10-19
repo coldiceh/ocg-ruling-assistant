@@ -46,6 +46,7 @@ function createClient(fetchImpl, {
     ${client}
     return {
       request: requestBackendAnswer,
+      requestPrepared: requestPreparedAnswer,
       preparedProgress,
       setAnalysisRequestId(value) { analysisRequestId = value; },
       getAnalysisRequestId() { return analysisRequestId; },
@@ -509,4 +510,15 @@ test("a prepare-only request does not show the evidence list", async () => {
   }).request("Synthetic question", "latest", { requestId: 0, prepareOnly: true, onEvidencePrepared: () => { shown += 1; } });
   assert.equal(result.kind, "prepared");
   assert.equal(shown, 0);
+});
+
+test("a prepare-only result is finalized later with one finalize request for the same preparation", async () => {
+  const requests = [];
+  const clientInstance = createClient(async (_url, options) => {
+    requests.push(JSON.parse(options.body));
+    return sse({ type: "stage_start", data: { stageId: "generate_ruling" } }, answerEvent(), endEvent());
+  });
+  const answer = await clientInstance.requestPrepared("b".repeat(64), "latest", { requestId: 0 });
+  assert.equal(answer.verdict, "synthetic");
+  assert.deepEqual(requests, [{ action: "finalize", preparationId: "b".repeat(64) }], "the evidence is not prepared again");
 });

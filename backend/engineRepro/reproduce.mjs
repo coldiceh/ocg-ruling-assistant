@@ -159,7 +159,25 @@ function compactFailure(sq, b) {
     }
   }
   if (r?.probes) failure.probes = r.probes.map((p) => ({ result: p.result, card_level_only: p.card_level_only || undefined }));
+  const replay = replayExcerpt(r?.rendered_zh);
+  if (replay) failure.replay = replay;
   return failure;
+}
+
+// The engine's own Chinese replay of a failed branch for the repair round (plannerPrompt.mjs puts it in
+// its own section): which steps matched which decisions and which windows were passed. The header,
+// version line and disclaimer are dropped; a long replay keeps its beginning and its end.
+const REPLAY_HEAD_CHARS = 1500;
+const REPLAY_TAIL_CHARS = 2500;
+export function replayExcerpt(rendered) {
+  if (typeof rendered !== "string" || !rendered.trim()) return "";
+  const text = rendered.replace(/\r\n?/gu, "\n").split("\n")
+    .filter((line) => !/^(【引擎复现】|版本：|实验性功能，未经评测)/u.test(line.trim()))
+    .join("\n").trim();
+  const chars = Array.from(text);
+  if (chars.length <= REPLAY_HEAD_CHARS + REPLAY_TAIL_CHARS) return text;
+  const omitted = chars.length - REPLAY_HEAD_CHARS - REPLAY_TAIL_CHARS;
+  return `${chars.slice(0, REPLAY_HEAD_CHARS).join("")}\n…（中间省略 ${omitted} 字）…\n${chars.slice(-REPLAY_TAIL_CHARS).join("")}`;
 }
 
 function summarizeEngine(r) {

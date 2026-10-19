@@ -333,6 +333,8 @@ let selectedRulingModelProfile = DEFAULT_RULING_MODEL_PROFILE;
 let rulingModelCapabilitiesAvailable = false;
 let rulingModelSelectionWasManual = false;
 let preparedEvidencePackage = null;
+// A prepare-only result the page can still finalize ({ preparationId, question, requestedRulingVersion, progress }).
+let preparedOnlyResult = null;
 let selectedRulingVersion = "latest";
 const pendingStages = [
   { id: "understand", label: "理解问题", body: "正在判断是否为裁定相关问题，并检查当前服务状态。" },
@@ -853,6 +855,7 @@ async function analyzeQuestion({ prepareOnly = false } = {}) {
   clearStoredPublicAnswerPreparationId();
   const requestId = ++analysisRequestId;
   clearPreparedEvidencePackage();
+  preparedOnlyResult = null;
   if (!text) {
     resetAnalysis();
     return;
@@ -878,8 +881,9 @@ async function analyzeQuestion({ prepareOnly = false } = {}) {
       });
       if (requestId !== analysisRequestId) return;
       if (answer?.kind === "prepared") {
-        renderPreparedOnly(answer);
-        downloadPreparedEvidencePackage();
+        // The package stays downloadable with its button; a mistaken prepare-only click is continued
+        // with 生成答案 (the final model only, on the same preparation).
+        renderPreparedOnly(answer, { question: text, requestedRulingVersion });
         return;
       }
       renderBackendAnswer(answer);
@@ -960,11 +964,16 @@ async function requestBackendAnswer(text, requestedRulingVersion, {
     }
   }
 
+  return requestPreparedAnswer(prepareResult.preparationId, requestedRulingVersion, { signal, requestId });
+}
+
+// The final model's answer for a preparation (the evidence is not gathered again).
+async function requestPreparedAnswer(preparationId, requestedRulingVersion, { signal, requestId = null } = {}) {
   activeAnalysisPhase = "finalize";
   const finalResult = await postPublicAnswerProgressRequest({
     body: {
       action: "finalize",
-      preparationId: prepareResult.preparationId,
+      preparationId,
     },
     signal,
     requestedRulingVersion,
@@ -978,7 +987,7 @@ async function requestBackendAnswer(text, requestedRulingVersion, {
     });
   }
   const answer = validatePublicAnswerRulingVersion(finalResult, requestedRulingVersion);
-  clearStoredPublicAnswerPreparationId(prepareResult.preparationId);
+  clearStoredPublicAnswerPreparationId(preparationId);
   return answer;
 }
 
@@ -1533,7 +1542,7 @@ function downloadPreparedEvidencePackage() {
   return true;
 }
 
-function renderPreparedOnly(prepared) {
+function renderPreparedOnly(prepared, { question = "", requestedRulingVersion = selectedRulingVersion } = {}) {
   clearPendingStages();
   lastRenderedBackendAnswer = null;
   ui.resultGrid.hidden = false;
@@ -1544,17 +1553,67 @@ function renderPreparedOnly(prepared) {
   updateModelStatus("证据包已准备");
   ui.verdictBlock.className = "result-block verdict-block is-confirmed";
   ui.confidenceText.textContent = "准备完成";
-  ui.verdictTitle.textContent = "证据包已生成";
-  ui.rulingBasisText.textContent = "尚未请求最终裁定";
-  ui.verdictBody.textContent = prepared?.evidencePackage
-    ? "证据包已下载，也可以使用上方按钮再次下载。"
-    : "证据准备已完成，但后端没有返回可下载的证据包。";
+  ui.verdictTitle.textContent = lt("证据已准备好", "Evidence ready", "証拠を準備しました");
+  ui.rulingBasisText.textContent = lt("尚未生成答案", "No answer generated yet", "回答はまだ生成していません");
+  const evidenceCount = Array.isArray(prepared?.evidencePreview) ? prepared.evidencePreview.length : 0;
+  clearElement(ui.verdictBody);
+  appendText(ui.verdictBody, "p", lt(
+    `本题的证据已准备好${evidenceCount ? `（${evidenceCount} 条资料，见下方）` : ""}。需要答案时点“生成答案”：只调用最终裁定模型，不会重新检索；准备好的证据保留 15 分钟。证据包可以用上方按钮下载。`,
+    `The evidence for this question is ready${evidenceCount ? ` (${evidenceCount} sources, listed below)` : ""}. Press “Generate the answer” to call only the final ruling model; nothing is retrieved again. The prepared evidence is kept for 15 minutes. The evidence package can be downloaded with the button above.`,
+    `この問題の証拠を準備しました${evidenceCount ? `（資料 ${evidenceCount} 件、下に表示）` : ""}。回答が必要なら「回答を生成」を押してください。最終裁定モデルだけを呼び出し、再検索はしません。準備した証拠は 15 分間保持されます。証拠パッケージは上のボタンでダウンロードできます。`,
+  ));
+  if (prepared?.preparationId) {
+    preparedOnlyResult = { preparationId: prepared.preparationId, question: String(question || "").trim(),
+      requestedRulingVersion, progress: prepared.progress || null, evidencePreview: prepared.evidencePreview || [] };
+    const button = appendText(ui.verdictBody, "button", lt("生成答案", "Generate the answer", "回答を生成"));
+    button.type = "button";
+    button.className = "primary-button prepared-continue-button";
+    button.addEventListener("click", () => { void continuePreparedAnswer(); });
+  }
   renderSubAnswers([]);
   ui.stepsTitle.textContent = "处理结果";
   ui.stepsList.hidden = false;
   renderList(ui.stepsList, ["本次只准备材料，未调用最终裁定模型。"]);
   renderList(ui.questionsList, []);
-  renderSources([]);
+  if (evidenceCount) renderPreparedEvidence(prepared.evidencePreview, { writing: false });
+  else renderSources([]);
+}
+
+// 生成答案 after a prepare-only run: the final model's answer for that same preparation.
+async function continuePreparedAnswer() {
+  const prepared = preparedOnlyResult;
+  if (!prepared || !appConfig.answerApiUrl) return;
+  if (ui.questionInput.value.trim() !== prepared.question) {
+    appendText(ui.verdictBody, "p", lt("问题已经修改过，请重新查询。", "The question has changed since the evidence was prepared. Please ask again.",
+      "証拠を準備した後に質問が変更されました。もう一度検索してください。")).className = "prepared-continue-note";
+    return;
+  }
+  cancelActiveAnalysisRequest();
+  const requestId = ++analysisRequestId;
+  preparedOnlyResult = null;
+  const abortController = new AbortController();
+  activeAnalysisAbortController = abortController;
+  activeAnalysisPhase = "finalize";
+  setQueryPending(true);
+  renderPending();
+  if (prepared.progress) applyPreparedProgress(prepared.progress);
+  renderPreparedEvidence(prepared.evidencePreview);
+  try {
+    const answer = await requestPreparedAnswer(prepared.preparationId, prepared.requestedRulingVersion, {
+      signal: abortController.signal, requestId });
+    if (requestId !== analysisRequestId) return;
+    renderBackendAnswer(answer);
+  } catch (error) {
+    if (requestId !== analysisRequestId) return;
+    console.error("Generating the answer for the prepared evidence failed.", error);
+    renderBackendVersionError(error, prepared.requestedRulingVersion);
+  } finally {
+    if (activeAnalysisAbortController === abortController) {
+      activeAnalysisAbortController = null;
+      activeAnalysisPhase = null;
+    }
+    if (requestId === analysisRequestId) setQueryPending(false);
+  }
 }
 
 function renderPending() {
@@ -1993,13 +2052,15 @@ function ragEvidenceSources(items) {
 
 // Shown when preparation ends and before the final answer: the evidence the final model is given.
 // The final answer replaces it with its own usedEvidence (the same list) and the usual title.
-function renderPreparedEvidence(items) {
+function renderPreparedEvidence(items, { writing = true } = {}) {
   const sources = ragEvidenceSources(items);
   if (!sources.length) return;
   renderSources(sources, {
-    title: lt(`已找到的资料（${sources.length} 条）· 正在生成答案`,
-      `Evidence found (${sources.length}) · writing the answer`,
-      `見つかった資料（${sources.length} 件）・回答を生成中`),
+    title: writing
+      ? lt(`已找到的资料（${sources.length} 条）· 正在生成答案`,
+        `Evidence found (${sources.length}) · writing the answer`,
+        `見つかった資料（${sources.length} 件）・回答を生成中`)
+      : lt(`已找到的资料（${sources.length} 条）`, `Evidence found (${sources.length})`, `見つかった資料（${sources.length} 件）`),
   });
 }
 
@@ -7045,6 +7106,7 @@ function scheduleAnalysis() {
   clearTimeout(analysisTimer);
   if (appConfig.answerApiUrl && activeAnalysisPhase === "finalize") return;
   clearPreparedEvidencePackage();
+  preparedOnlyResult = null;   // the edited question no longer matches the prepared evidence
   if (!ui.questionInput.value.trim()) {
     analyzeQuestion();
     return;

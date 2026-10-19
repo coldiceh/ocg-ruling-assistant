@@ -95,7 +95,9 @@ export const PLANNER_INSTRUCTIONS = [
   "2. 不匹配、且该决策可以放弃（没有必发项的连锁窗口；核心发出的“是否发动诱发效果”询问）→ 自动放弃，记录“此时本可发动”。所以 setup 里不要写“放弃/pass”，只写你要做的选择。",
   "3. 不匹配、且不可放弃（行动选择、选区域、选卡、选表示形式、选选项、宣言、其他是否询问）→ setup 还没用完就失败并列出合法选项；setup 用完则回放正常结束。",
   "4. 引擎不会替任何人默认选择。凡是需要玩家做的选择都要写成步骤，包括选区域。",
+  "5. setup 只写题面前提里已经发生的动作，以及走到要看的时点必须做的动作。题目问的动作（能不能发动 / 攻击 / 选择，还能做几次）用探测观察，不要写成步骤：写成步骤时引擎做不到就整题判失败，看不到结果。问还能做几次时，按卡文能确定的次数写步骤，再放一个探测看还有没有下一次；不确定能不能做的那一次只用探测。",
   "已实测的决策顺序（P 为操作者）：",
+  "- 连锁：一张卡发动后，先轮流出现双方的连锁窗口，要回应它的卡就在这时发动（步骤紧接在那次发动之后）；双方都不再发动后才开始处理。处理时出现的询问和选择（是否改变效果、是否适用、选卡等）都排在所有连锁窗口之后，按连锁从后往前的处理顺序出现。",
   "- 通常召唤：idle summon → select_place(自己 mzone 空位) → 之后的连锁窗口自动处理。上级召唤在 select_place 前有 select_tribute。",
   "- 从手卡发动魔法：idle activate → select_place(自己 szone 空位) → [发动时要选的对象：select_card] → 对方/自己的连锁窗口 → 处理时的选择（如检索：select_card 选卡组的卡）。",
   "- 发动场上已盖放的卡：在对应的 chain 窗口（或自己主要阶段的 idle activate）选它，不需要 select_place。",
@@ -137,6 +139,8 @@ function compactCard(card) {
 }
 
 export function buildRepairInput({ plannerInput, previousPlan, failures, planLevel = false }) {
+  // The engine's own replay of each failed branch (compactFailure.replay) goes in its own section.
+  const replays = failures.filter((failure) => typeof failure?.replay === "string" && failure.replay);
   const tail = planLevel
     ? ["上一次的输出不是有效计划：按 problems 改正，输出完整计划（同样格式，单行紧凑 JSON）。"]
     : [
@@ -150,9 +154,13 @@ export function buildRepairInput({ plannerInput, previousPlan, failures, planLev
     typeof previousPlan === "string" ? previousPlan : JSON.stringify(previousPlan),
     "",
     "## 引擎执行失败的分支（只允许修复这一次）",
-    ...failures.map((failure) => JSON.stringify(failure)),
+    ...failures.map(({ replay, ...failure }) => JSON.stringify(failure)),
+    ...(replays.length ? ["",
+      "## 引擎实际过程（失败分支的逐决策回放：“▶ 步骤n”是你的第 n 步匹配到的决策；“此时…本可发动…（未发动）”是没有步骤匹配、被自动放弃的连锁窗口）",
+      ...replays.flatMap((failure) => [`### ${failure.sub_question}/${failure.branch}`, failure.replay])] : []),
     "",
     ...tail,
     "失败是“找不到选项/选项不唯一”时，按列出的合法选项改写 setup（补上缺少的选择步骤，或用 from/seq/desc 区分）；是格式或局面错误时按 problems 改正。不要改变题意，不要换成题面没有的情形。",
+    "对照“引擎实际过程”：步骤要按引擎出现决策的先后排列；要在某个被自动放弃的窗口发动，就把那一步移到那个窗口的位置。题目问的动作被写成步骤而引擎做不到时，改成探测。",
   ].join("\n");
 }
