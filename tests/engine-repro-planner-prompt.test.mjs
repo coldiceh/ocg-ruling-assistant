@@ -119,6 +119,10 @@ test("planner prompt: the asked action is probed, not a step; responses come bef
   assert.match(PLANNER_INSTRUCTIONS, /处理时出现的询问和选择（是否改变效果、是否适用、选卡等）都排在所有连锁窗口之后/u);
   // checked on the pinned engine (苦纹样的土像: select_place, then select_position for the trap monster)
   assert.match(PLANNER_INSTRUCTIONS, /卡文没有指定表示形式时（例如陷阱卡发动后变成效果怪兽特殊召唤），select_place 之后还有 select_position/u);
+  // checked on the pinned engine: a lone optional trigger with no chain is asked by effect_yn; a chain step
+  // does not match the prompt, which is then passed (苦纹样的土像 ③; ocg-sim-core frozen probe P02)
+  assert.match(PLANNER_INSTRUCTIONS, /只有它一个触发、且当时没有连锁时，引擎用 effect_yn 询问是否发动/u);
+  assert.match(PLANNER_INSTRUCTIONS, /写成 chain 步骤对不上这个询问，询问会被自动放弃（不发动）/u);
   // a question about the processing result: the short section shows the board when the replay ends
   assert.match(PLANNER_INSTRUCTIONS, /setup 写到那次处理结束为止，短说明会列出回放结束时的场面/u);
 });
