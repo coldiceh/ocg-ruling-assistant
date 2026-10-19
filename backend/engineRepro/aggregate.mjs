@@ -20,13 +20,20 @@ const FLAG_ZH = Object.freeze({
   context_trimmed: "上下文已裁剪",
 });
 
-// One branch result -> {ok, reason}
+// Probe results the engine decided (the target was or was not offered); "not_reached" decides nothing.
+const DEFINITE_PROBE_RESULTS = new Set(["present", "present_auto", "absent"]);
+
+// One branch result -> {ok, reason, observed}. A replay that took every setup step but left a check point
+// unreached is not ok (the engine reports action_mismatch / probe_not_reached); it still counts as observed
+// when another check point got a result, so the question reads 部分复现 with that result, not 未复现.
 export function branchOutcome(branch) {
   const r = branch.engine;
-  if (!r) return { ok: false, reason: branch.planReason || "invalid_input" };
-  if (r.status === "replayed") return { ok: true, reason: null };
-  if (r.status === "invalid_input") return { ok: false, reason: "invalid_input" };
-  return { ok: false, reason: r.reason_code || "engine_error" };
+  if (!r) return { ok: false, reason: branch.planReason || "invalid_input", observed: false };
+  if (r.status === "replayed") return { ok: true, reason: null, observed: true };
+  if (r.status === "invalid_input") return { ok: false, reason: "invalid_input", observed: false };
+  const observed = r.failure?.reason === "probe_not_reached"
+    && (Array.isArray(r.probes) ? r.probes : []).some((probe) => DEFINITE_PROBE_RESULTS.has(probe?.result));
+  return { ok: false, reason: r.reason_code || "engine_error", observed };
 }
 
 export function aggregateQuestion(record) {
@@ -57,7 +64,7 @@ export function aggregateQuestion(record) {
     const allOk = outcomes.length > 0 && outcomes.every((o) => o.ok);
     for (const o of outcomes) if (!o.ok) reasons.add(o.reason);
     if (!outcomes.length) reasons.add("invalid_input");
-    sq.outcome = { ok: allOk, partial: !allOk && outcomes.some((o) => o.ok) };
+    sq.outcome = { ok: allOk, partial: !allOk && outcomes.some((o) => o.ok || o.observed) };
     if (allOk) okCount += 1;
   }
   const anyPartial = (record.subQuestions || []).some((sq) => sq.outcome?.partial);

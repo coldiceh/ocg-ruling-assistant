@@ -143,11 +143,13 @@ export function engineReproConciseText(digest, { officialQaMatches = [] } = {}) 
   const head = `${CONCISE_HEADER}${status}`;
   if (status === STATUS.NA) return [head, `原因：${reasonText(digest.reasonCodes)}。`].join("\n\n");
   if (status === STATUS.FAIL) {
-    // Where each failed branch stopped, when the engine reported the step (the plain reason alone otherwise).
+    // Where each failed branch stopped, when the engine reported the step, or what its check points saw when
+    // the setup finished but a check point was not reached (the plain reason alone otherwise).
     const failedBranches = (Array.isArray(digest.subQuestions) ? digest.subQuestions : [])
       .flatMap((sq, index, all) => (sq.branches || []).map((branch, _i, branches) => ({ branch,
         label: [all.length > 1 ? `子问题 ${index + 1}` : "", branches.length > 1 ? branchLabel(branch) : ""].filter(Boolean).join("，") })))
-      .map(({ branch, label }) => ({ label, text: failureText(branch.failure) }))
+      .map(({ branch, label }) => ({ label, text: branch.probeNotReached && branch.probes?.length
+        ? branch.probes.map(probeSentence).join("；") : failureText(branch.failure) }))
       .filter(({ text }) => text);
     const stops = [...new Map(failedBranches.map((item) => [`${item.label}|${item.text}`, item])).values()].slice(0, 3);
     return [head, `原因：${reasonText(digest.reasonCodes)}。`,
@@ -211,7 +213,7 @@ function branchDigest(branch, names, namedCodes) {
     reason: outcome.reason,
     probeNotReached: engine?.failure?.reason === "probe_not_reached",
     probes,
-    failure: outcome.ok ? null : failureDigest(engine, names),
+    failure: outcome.ok ? null : failureDigest(engine, names, branch?.actions?.setup),
     end: outcome.ok && !probes.length ? endStateDigest(engine, branch?.scenario, names) : null,
     board: boardDigest(branch?.scenario, names, namedCodes),
   };
@@ -225,9 +227,17 @@ function branchLabel(branch) {
 // engine was at), plus what the replay passed in between for a step that waits for a window (a chain or
 // effect_yn step is matched against every window of its player and kind; the ones that do not match are
 // passed): how many such windows came after the last executed step and whether one listed the step's card.
-function failureDigest(engine, names) {
+function failureDigest(engine, names, setup = []) {
   const failure = engine?.failure;
   if (!failure || typeof failure !== "object" || failure.reason === "probe_not_reached") return null;
+  if (failure.reason === "engine_rejected_response") {
+    // The core answered MSG_RETRY to the response of the last executed step (harness RetryError); the
+    // failure names that decision record but not the step, which the branch's own setup has.
+    const last = failure.last_decision && typeof failure.last_decision === "object" ? failure.last_decision : null;
+    const spec = Number.isSafeInteger(last?.step) && Array.isArray(setup) ? setup[last.step] : null;
+    if (!spec || typeof spec !== "object") return null;
+    return { reason: failure.reason, stepNumber: last.step + 1, step: stepText(spec, names), at: null };
+  }
   const spec = failure.step_spec && typeof failure.step_spec === "object" ? failure.step_spec : null;
   if (!Number.isSafeInteger(failure.step) || !spec) return null;
   const decision = failure.decision && typeof failure.decision === "object" ? failure.decision : null;
@@ -319,7 +329,7 @@ function failureText(failure) {
   let detail;
   if (failure.reason === "not_unique") detail = "引擎里有不止一个选项都符合这一步，没法确定是哪一个";
   else if (failure.reason === "setup_not_consumed") detail = "对局在这一步之前就结束了";
-  else if (failure.reason === "engine_rejected_response") detail = "引擎拒绝了这个选择";
+  else if (failure.reason === "engine_rejected_response") detail = "引擎不接受这个选择（例如选的卡不符合条件或张数不对）";
   else if (failure.waitsForWindow) {
     const side = SIDE[failure.stepPlayer] || "";
     const kind = DECISION_ZH[failure.stepKind] || "窗口";
@@ -566,7 +576,15 @@ function probeSentence(probe) {
     case "absent":
       if (yesNo) return `${who}${at}没有出现与「${name}」有关的询问`;
       return activation ? `${who}${at}没有出现「${name}」的发动机会` : `${who}${at}没有出现「${action}」的选项`;
-    case "not_reached": return `没有到达要看的时点（${who}的${KIND_ZH[probe.decisionKind] || "选择"}）`;
+    case "not_reached": {
+      // No decision of that kind for that player in the interval (the core asks nothing when nothing can be
+      // activated), so this check point decides nothing.
+      const missing = probe.decisionKind === "effect_yn" ? `${who}一次也没有被询问是否发动效果`
+        : probe.decisionKind === "yesno" ? `${who}没有遇到是/否的选择` : `没有出现${who}的${KIND_ZH[probe.decisionKind] || "选择"}`;
+      const open = probe.decisionKind === "yesno" ? `会不会被问到与「${name}」有关的问题`
+        : activation || probe.decisionKind === "effect_yn" ? `「${name}」能否发动` : `能否「${action}」`;
+      return `要看的这段过程里${missing}，所以看不出${open}`;
+    }
     default: return `回放提前中止，没有看完${who}的${KIND_ZH[probe.decisionKind] || "选择"}`;
   }
 }

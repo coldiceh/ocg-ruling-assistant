@@ -134,7 +134,7 @@ test("部分复现: an unreached check point and an unrepresentable sub-question
     "【ygopro 引擎复现（实验性）】部分复现",
     "ygopro（MyCard 版核心）在下面的局面里：",
     "子问题 1：我方在主要阶段1可以选择「发动测试融合魔法」（只能确认到卡，不能确认是哪个效果）。",
-    "子问题 2：没有到达要看的时点（对方的连锁/发动窗口）。",
+    "子问题 2：要看的这段过程里没有出现对方的连锁/发动窗口，所以看不出「测试手坑」能否发动。",
     `子问题 3：${REASON_PLAIN.unrepresentable}。`,
     "局面：我方手卡 测试融合魔法，额外卡组 测试融合怪兽；对方场上 测试怪兽A（表侧攻击）、测试怪兽B（里侧守备），手卡 测试手坑（另有填充卡）。",
   ]);
@@ -222,6 +222,48 @@ test("未复现: where the replay stopped, in words, from the engine's failure r
   const lines = engineReproConciseText(engineReproDigest(partial)).split("\n\n");
   assert.ok(lines.includes("假设「写成步骤」：未复现，卡在第 3 步（对方发动「测试手坑」）：之后对方的连锁/发动窗口里都没有出现这张卡，回放走到了我方的行动选择。"),
     lines.join("\n"));
+});
+
+test("a check point not reached: its result is told; another check point's result makes it 部分复现, not 未复现", () => {
+  // The setup finished but an effect_yn probe saw no prompt at all (the trigger was not triggered), while a
+  // chain probe of the same card saw an empty window: the engine reports action_mismatch / probe_not_reached.
+  const effectYn = { index: 1, after: 3, player: 0, decision_kind: "effect_yn", target: { card: FUSION }, result: "not_reached", windows: [] };
+  const chainWindow = { ...decision(9, "chain", 0, []), chain_links: 0, after_chain_end: true };
+  const chain = { index: 0, after: 3, player: 0, decision_kind: "chain", target: { card: FUSION, from: "grave" }, result: "absent",
+    windows: [{ ...window(chainWindow, false), chain_links: 0, in_activation: false, in_resolution: false, after_chain_end: true }] };
+  const unreached = (probes) => ({ status: "not_reproduced", reason_code: "action_mismatch",
+    failure: { reason: "probe_not_reached", probes: probes.map((p) => p.index).filter((_, i) => probes[i].result === "not_reached") },
+    probes, decisions: [{ decision: chainWindow, by: "pass", choice: "pass", log_pos: 0 }], log: [], rendered_zh: DEBUG_REPLAY });
+  const record = (probes) => finished({ cards, plan: { applicability: "applicable", assumptions: [], extra_cards: [] },
+    subQuestions: [{ id: "q1", unrepresentable: null, branches: [{ id: "b1", assumption: null, scenario: board(), engine: unreached(probes) }] }] });
+
+  const onlyPrompt = record([effectYn]);
+  assert.equal(onlyPrompt.summary.status, "未复现", "nothing was decided");
+  const failed = engineReproConciseText(engineReproDigest(onlyPrompt));
+  assert.equal(failed, "【ygopro 引擎复现（实验性）】未复现\n\n原因：计划里有一步在引擎里做不到，没能走到题目要看的时点。\n\n"
+    + "要看的这段过程里我方一次也没有被询问是否发动效果，所以看不出「测试融合怪兽」能否发动。");
+  assertConcise(failed);
+
+  const both = record([chain, effectYn]);
+  assert.equal(both.summary.status, "部分复现", "the chain probe decided");
+  assert.equal(engineReproConciseText(engineReproDigest(both)).split("\n\n")[1],
+    "ygopro（MyCard 版核心）在下面的局面里：我方在主要阶段1（连锁处理完毕后）没有出现「测试融合怪兽」的发动机会；"
+    + "要看的这段过程里我方一次也没有被询问是否发动效果，所以看不出「测试融合怪兽」能否发动。");
+});
+
+test("the engine refused a response: the step comes from the branch's own setup", () => {
+  const setup = [{ player: 0, decision: "idle", choose: { cmd: "activate", card: SPELL } },
+    { player: 0, decision: "select_card", choose: { cards: [{ card: MONSTER_A, controller: 1 }, { card: MONSTER_B, controller: 1 }] } }];
+  const record = finished({ cards, plan: { applicability: "applicable", assumptions: [], extra_cards: [] },
+    subQuestions: [{ id: "q1", unrepresentable: null, branches: [{ id: "b1", assumption: null, scenario: board(),
+      actions: { schema: "ocg-repro-actions/v1", setup, probes: [] },
+      engine: { status: "not_reproduced", reason_code: "action_mismatch", probes: [], log: [], rendered_zh: DEBUG_REPLAY,
+        decisions: [{ decision: decision(2, "idle", 0), by: "setup", step: 0, choice: [0], log_pos: 0 }],
+        failure: { reason: "engine_rejected_response", message: "MSG_RETRY",
+          last_decision: { decision: decision(3, "select_card", 0), by: "setup", step: 1, choice: [0, 1], log_pos: 0 },
+          last_response: null } } }] }] });
+  assert.equal(engineReproConciseText(engineReproDigest(record)).split("\n\n")[2],
+    "卡在第 2 步（我方选择「测试怪兽A」、「测试怪兽B」）：引擎不接受这个选择（例如选的卡不符合条件或张数不对）。");
 });
 
 test("no check point: what the board shows when the replay ends", () => {

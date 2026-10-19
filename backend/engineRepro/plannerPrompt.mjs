@@ -108,7 +108,7 @@ export const PLANNER_INSTRUCTIONS = [
   "- 任意发动的诱发效果（“……的场合才能发动”）只有它一个触发、且当时没有连锁时，引擎用 effect_yn 询问是否发动：步骤写 {\"decision\":\"effect_yn\",\"choose\":{\"answer\":true}}，紧接着写它发动时要选的对象。写成 chain 步骤对不上这个询问，询问会被自动放弃（不发动）。",
   "- 发动时宣言卡名的魔法（如抹杀之指名者）：idle activate → select_place(自己 szone 空位) → announce_card → 双方连锁窗口 → 处理时的选择（如 select_card 选卡组里宣言的那张）。",
   "- 战斗时点（at）：战斗步骤和伤害步骤里的窗口依次是 attack_declaration（攻击宣言时：攻击宣言之后、进入伤害步骤之前的窗口，攻击宣言时才能发动的卡就在这里）、damage_step_start（伤害步骤开始时）、before_damage_calc（伤害计算前）、damage_calc（伤害计算时）、after_damage_calc（伤害计算后）、damage_step_end（伤害步骤结束时）。同一张卡在几个时点都能发动时（如欧尼斯特在伤害步骤开始时和伤害计算前都能发动），步骤写 \"at\" 指定时点，其他时点的发动机会自动放弃；不写 at 就在第一个出现它的窗口匹配。探测也可以写 at，只看该时点的窗口。",
-  "probes（探测，题目问“能不能发动/选择”时用）：{\"after\":k,\"player\":0或1,\"decision_kind\":\"idle|battle|chain|effect_yn|yesno\",\"target\":{\"card\":卡号,\"cmd\":\"可选\",\"desc\":可选},\"at\":\"可选：战斗时点\"}。观察区间 = setup 第 k 步执行之后到第 k+1 步执行之前（k 等于 setup 长度时到回放结束）。结果：出现 / 出现（核心自动发动） / 未出现 / 未到达。题目问“处理结果如何”时可以不设探测：setup 写到那次处理结束为止，短说明会列出回放结束时的场面（双方场上怪兽的攻守、变化了的基本分、离场的卡）。",
+  "probes（探测，题目问“能不能发动/选择”时用）：{\"after\":k,\"player\":0或1,\"decision_kind\":\"idle|battle|chain|effect_yn|yesno\",\"target\":{\"card\":卡号,\"cmd\":\"可选\",\"desc\":可选},\"at\":\"可选：战斗时点\"}。观察区间 = setup 第 k 步执行之后到第 k+1 步执行之前（k 等于 setup 长度时到回放结束）。结果：出现 / 出现（核心自动发动） / 未出现 / 未到达。问一个效果（包括诱发效果）能不能发动时，decision_kind 用 chain：它也算核心的“是否发动”询问；效果没有被诱发时核心根本不询问，用 effect_yn 探测只会得到“未到达”，看不出结果。只有题目问的就是某个是/否询问本身（如是否代替破坏）时才用 effect_yn / yesno。题目问“处理结果如何”时可以不设探测：setup 写到那次处理结束为止，短说明会列出回放结束时的场面（双方场上怪兽的攻守、变化了的基本分、离场的卡）。",
 ].join("\n");
 
 export const PROMPT_VERSION = createHash("sha256").update(PLANNER_INSTRUCTIONS).digest("hex").slice(0, 12);

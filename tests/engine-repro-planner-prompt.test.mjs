@@ -123,6 +123,10 @@ test("planner prompt: the asked action is probed, not a step; responses come bef
   // does not match the prompt, which is then passed (苦纹样的土像 ③; ocg-sim-core frozen probe P02)
   assert.match(PLANNER_INSTRUCTIONS, /只有它一个触发、且当时没有连锁时，引擎用 effect_yn 询问是否发动/u);
   assert.match(PLANNER_INSTRUCTIONS, /写成 chain 步骤对不上这个询问，询问会被自动放弃（不发动）/u);
+  // "can it be activated" probes use chain (it also counts the core's activation prompt); an effect_yn probe
+  // of a trigger that did not trigger is never reached (赐炎之咎姬 ③, checked on the pinned engine)
+  assert.match(PLANNER_INSTRUCTIONS, /问一个效果（包括诱发效果）能不能发动时，decision_kind 用 chain/u);
+  assert.match(PLANNER_INSTRUCTIONS, /用 effect_yn 探测只会得到“未到达”/u);
   // a question about the processing result: the short section shows the board when the replay ends
   assert.match(PLANNER_INSTRUCTIONS, /setup 写到那次处理结束为止，短说明会列出回放结束时的场面/u);
 });
