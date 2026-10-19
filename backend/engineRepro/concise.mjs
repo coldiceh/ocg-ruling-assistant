@@ -1,7 +1,8 @@
 // User-facing short engine-reproduction section (the full step-by-step replay stays in
 // `rendered`). Mechanical only: it restates structured fields of the reproduction record
 // (question-level status and reason codes, the plan's assumptions, probe results, the planned
-// starting board) plus, when the official-Q&A judge (officialQaJudge.mjs) said so, the titles of
+// starting board, where a failed replay stopped, the board when a replay without check points
+// ended) plus, when the official-Q&A judge (officialQaJudge.mjs) said so, the titles of
 // the official Q&A it found to correspond exactly. It never reads the question text, never
 // compares the engine result with the main answer and never judges whether either is right.
 // The engine is named (ygopro, MyCard core) so readers know which program produced the result.
@@ -45,7 +46,7 @@ export const ADMISSION_LIMIT_LINES = Object.freeze({
 export const REASON_PLAIN = Object.freeze({
   identity: "题目里的卡名没有解析出来",
   unrepresentable: "引擎搭不出题目描述的局面",
-  action_mismatch: "引擎实际的操作流程和计划不一致，没能走到要看的时点",
+  action_mismatch: "计划里有一步在引擎里做不到，没能走到题目要看的时点",
   engine_error: "引擎运行出错",
   budget_exceeded: "超出引擎运行限制",
   invalid_input: "没能生成引擎可以执行的计划",
@@ -81,6 +82,24 @@ const KIND_ZH = Object.freeze({
 const CMD_ZH = Object.freeze({
   summon: "通常召唤", spsummon: "特殊召唤", mset: "盖放", sset: "盖放", repos: "改变表示形式",
 });
+// Every decision kind, for the step a failed replay stopped at (ocg-sim-core render_zh KIND, shortened).
+const DECISION_ZH = Object.freeze({
+  idle: "行动选择", battle: "战斗阶段的行动选择", chain: "连锁/发动窗口", effect_yn: "是否发动效果的询问",
+  yesno: "是/否的选择", select_option: "选择选项", select_card: "选择卡", select_tribute: "选择解放的卡",
+  select_unselect: "选择卡", select_sum: "选择卡", select_place: "选择区域", select_disfield: "选择区域",
+  select_position: "选择表示形式", select_counter: "选择指示物", sort_card: "排列卡的顺序", announce_race: "宣言种族",
+  announce_attrib: "宣言属性", announce_card: "宣言卡名", announce_number: "宣言数字", rps: "猜拳",
+});
+const PHASE_CMD_ZH = Object.freeze({ to_bp: "进入战斗阶段", to_m2: "进入主要阶段2", to_ep: "进入结束阶段", shuffle: "洗切手卡" });
+// Why a card left the field (engine move reasons) and where it went; a card that just finished
+// resolving (reason "rule" only) is not listed.
+const MOVE_REASON_ZH = Object.freeze({
+  destroy: "破坏", battle: "战斗", release: "解放", cost: "代价", material: "素材", discard: "丢弃", return: "回到",
+});
+const DESTINATION_ZH = Object.freeze({
+  grave: "送去墓地", removed: "除外", hand: "回到手卡", deck: "回到卡组", extra: "回到额外卡组", overlay: "成为超量素材",
+});
+const ON_FIELD = new Set(["mzone", "szone", "fzone", "pzone"]);
 const MONSTER_POSITION = Object.freeze({
   faceup_attack: "表侧攻击", faceup_defense: "表侧守备", facedown_defense: "里侧守备", facedown_attack: "里侧攻击",
 });
@@ -122,8 +141,17 @@ export function engineReproConciseText(digest, { officialQaMatches = [] } = {}) 
   const status = SHOWN_STATUS[digest.status] || STATUS.FAIL;
   if (status === STATUS.FAIL && ADMISSION_LIMIT_LINES[digest.admissionLimit]) return ADMISSION_LIMIT_LINES[digest.admissionLimit];
   const head = `${CONCISE_HEADER}${status}`;
-  if (status === STATUS.FAIL || status === STATUS.NA) {
-    return [head, `原因：${reasonText(digest.reasonCodes)}。`].join("\n\n");
+  if (status === STATUS.NA) return [head, `原因：${reasonText(digest.reasonCodes)}。`].join("\n\n");
+  if (status === STATUS.FAIL) {
+    // Where each failed branch stopped, when the engine reported the step (the plain reason alone otherwise).
+    const failedBranches = (Array.isArray(digest.subQuestions) ? digest.subQuestions : [])
+      .flatMap((sq, index, all) => (sq.branches || []).map((branch, _i, branches) => ({ branch,
+        label: [all.length > 1 ? `子问题 ${index + 1}` : "", branches.length > 1 ? branchLabel(branch) : ""].filter(Boolean).join("，") })))
+      .map(({ branch, label }) => ({ label, text: failureText(branch.failure) }))
+      .filter(({ text }) => text);
+    const stops = [...new Map(failedBranches.map((item) => [`${item.label}|${item.text}`, item])).values()].slice(0, 3);
+    return [head, `原因：${reasonText(digest.reasonCodes)}。`,
+      ...stops.map(({ label, text }) => withLabel(label, text))].join("\n\n");
   }
 
   const subQuestions = Array.isArray(digest.subQuestions) ? digest.subQuestions : [];
@@ -138,14 +166,13 @@ export function engineReproConciseText(digest, { officialQaMatches = [] } = {}) 
     }
     const branches = sq.branches || [];
     for (const branch of branches) {
-      const branchLabel = branches.length > 1
-        ? (branch.assumption ? `假设「${trimEndPunctuation(branch.assumption)}」` : "无额外假设") : "";
       if (branches.length === 1 && branch.assumption) assumptions.push(branch.assumption);
-      const label = [sqLabel, branchLabel].filter(Boolean).join("，");
+      const label = [sqLabel, branches.length > 1 ? branchLabel(branch) : ""].filter(Boolean).join("，");
       const observed = branch.ok || branch.probeNotReached;
       let sentence;
-      if (!observed) sentence = `未复现：${reasonText([branch.reason])}`;
-      else if (!branch.probes?.length) sentence = "引擎按计划走完了操作，这一问没有设置检查点（过程见完整回放）";
+      if (!observed) sentence = `未复现，${failureText(branch.failure) || reasonText([branch.reason])}`;
+      // No check point (a question about what the processing does): what the board shows when the replay ends.
+      else if (!branch.probes?.length) sentence = endStateText(branch.end) || "引擎按计划走完了操作，结果见完整回放";
       else sentence = branch.probes.map(probeSentence).join("；");
       results.push(withLabel(label, sentence));
       if (observed) {
@@ -177,14 +204,178 @@ function branchDigest(branch, names, namedCodes) {
   const outcome = branchOutcome(branch || {});
   const turnPlayers = new Map((Array.isArray(engine?.decisions) ? engine.decisions : [])
     .map((entry) => [entry?.decision?.index, entry?.decision?.turn_player]));
+  const probes = (engine?.probes || []).map((probe) => probeDigest(probe, names, turnPlayers));
   return {
     assumption: typeof branch?.assumption === "string" && branch.assumption.trim() ? branch.assumption.trim() : null,
     ok: outcome.ok,
     reason: outcome.reason,
     probeNotReached: engine?.failure?.reason === "probe_not_reached",
-    probes: (engine?.probes || []).map((probe) => probeDigest(probe, names, turnPlayers)),
+    probes,
+    failure: outcome.ok ? null : failureDigest(engine, names),
+    end: outcome.ok && !probes.length ? endStateDigest(engine, branch?.scenario, names) : null,
     board: boardDigest(branch?.scenario, names, namedCodes),
   };
+}
+
+function branchLabel(branch) {
+  return branch?.assumption ? `假设「${trimEndPunctuation(branch.assumption)}」` : "无额外假设";
+}
+
+// Where a failed replay stopped (engine failure: the 0-based step, the step itself and the decision the
+// engine was at), plus what the replay passed in between for a step that waits for a window (a chain or
+// effect_yn step is matched against every window of its player and kind; the ones that do not match are
+// passed): how many such windows came after the last executed step and whether one listed the step's card.
+function failureDigest(engine, names) {
+  const failure = engine?.failure;
+  if (!failure || typeof failure !== "object" || failure.reason === "probe_not_reached") return null;
+  const spec = failure.step_spec && typeof failure.step_spec === "object" ? failure.step_spec : null;
+  if (!Number.isSafeInteger(failure.step) || !spec) return null;
+  const decision = failure.decision && typeof failure.decision === "object" ? failure.decision : null;
+  const entries = Array.isArray(engine.decisions) ? engine.decisions : [];
+  const lastStepIndex = Math.max(-1, ...entries.filter((entry) => entry?.by === "setup")
+    .map((entry) => (Number.isSafeInteger(entry?.decision?.index) ? entry.decision.index : -1)));
+  const waitsForWindow = spec.decision === "chain" || spec.decision === "effect_yn";
+  const stepCard = Number(spec.choose?.card);
+  const passed = waitsForWindow ? entries.filter((entry) => entry?.by === "pass" && entry?.decision?.index > lastStepIndex
+    && entry.decision.player === spec.player && (entry.decision.kind === "chain" || entry.decision.kind === "effect_yn")) : [];
+  const listsCard = (d) => Number(d?.card?.card) === stepCard
+    || (Array.isArray(d?.options) ? d.options : []).some((option) => Number(option?.card) === stepCard);
+  const options = Array.isArray(decision?.options) ? decision.options : [];
+  return {
+    reason: typeof failure.reason === "string" ? failure.reason : null,
+    stepNumber: failure.step + 1,
+    step: stepText(spec, names),
+    waitsForWindow,
+    stepPlayer: spec.player,
+    stepKind: spec.decision,
+    hasCard: Number.isSafeInteger(stepCard),
+    passedWindows: passed.length,
+    passedListedCard: Number.isSafeInteger(stepCard) && passed.some((entry) => listsCard(entry.decision)),
+    at: decision ? {
+      player: decision.player,
+      kind: decision.kind,
+      card: names.get(Number(decision.card?.card)) || (typeof decision.card?.name === "string" ? decision.card.name : null),
+      options: [...new Set(options.map((option) => optionLabel(option, names)).filter(Boolean))],
+      sameAsStep: decision.player === spec.player && decision.kind === spec.decision,
+    } : null,
+  };
+}
+
+// The step in words: "对方发动「强制脱出装置」", "我方选择表示形式（表侧守备）".
+function stepText(spec, names) {
+  const who = SIDE[spec.player] || "";
+  const choose = spec.choose && typeof spec.choose === "object" ? spec.choose : {};
+  const name = (code) => `「${names.get(Number(code)) || "卡"}」`;
+  switch (spec.decision) {
+    case "idle": case "battle": case "chain":
+      if (PHASE_CMD_ZH[choose.cmd]) return `${who}${PHASE_CMD_ZH[choose.cmd]}`;
+      if (!choose.card) return `${who}的${DECISION_ZH[spec.decision]}`;
+      if (choose.cmd === "attack") return `${who}以${name(choose.card)}攻击`;
+      if (choose.cmd === "repos") return `${who}改变${name(choose.card)}的表示形式`;
+      if (CMD_ZH[choose.cmd]) return `${who}${CMD_ZH[choose.cmd]}${name(choose.card)}`;
+      return `${who}发动${name(choose.card)}`;
+    case "effect_yn": case "yesno":
+      return `${who}在${DECISION_ZH[spec.decision]}里选“${choose.answer === false ? "否" : "是"}”`;
+    case "select_card": case "select_tribute": case "select_unselect": case "select_sum": {
+      const picked = (Array.isArray(choose.cards) ? choose.cards : []).map((card) => name(card?.card));
+      if (picked.length) return `${who}选择${listText(picked)}`;
+      return choose.finish ? `${who}结束选择` : `${who}${DECISION_ZH[spec.decision]}`;
+    }
+    case "select_position":
+      return `${who}选择表示形式${MONSTER_POSITION[choose.position] ? `（${MONSTER_POSITION[choose.position]}）` : ""}`;
+    case "announce_card": return `${who}宣言卡名${choose.value ? name(choose.value) : ""}`;
+    case "announce_number": return `${who}宣言数字${Number.isSafeInteger(choose.value) ? ` ${choose.value}` : ""}`;
+    default: return `${who}${DECISION_ZH[spec.decision] || "的选择"}`;
+  }
+}
+
+// One option of the decision a replay stopped at, without zone numbers.
+function optionLabel(option, names) {
+  if (!option || typeof option !== "object") return null;
+  if (PHASE_CMD_ZH[option.cmd]) return PHASE_CMD_ZH[option.cmd];
+  if (option.cmd === "yes") return "是";
+  if (option.cmd === "no") return "否";
+  if (option.cmd === "position") return MONSTER_POSITION[option.position] || null;
+  if (option.cmd === "place") {
+    const place = option.place || {};
+    return place.zone ? `${SIDE[place.player] || ""}${place.zone === "mzone" ? "怪兽区域" : "魔法与陷阱区域"}` : null;
+  }
+  if (option.cmd === "option") return typeof option.desc_text === "string" && option.desc_text ? option.desc_text : "选项";
+  const card = names.get(Number(option.card)) || (typeof option.name === "string" ? option.name : null);
+  if (!card) return null;
+  if (option.cmd === "attack") return `以${card}攻击`;
+  if (option.cmd === "repos") return `改变${card}的表示形式`;
+  if (CMD_ZH[option.cmd]) return `${CMD_ZH[option.cmd]}${card}`;
+  if (option.cmd === "activate" || option.cmd === "chain") return `发动${card}`;
+  return card;
+}
+
+// "卡在第 10 步（对方发动「强制脱出装置」）：之后对方的连锁/发动窗口里都没有出现这张卡". null without the step.
+function failureText(failure) {
+  if (!failure?.step) return null;
+  const head = `卡在第 ${failure.stepNumber} 步（${failure.step}）`;
+  const at = failure.at;
+  const choices = at?.options?.length ? `（可选：${listText(at.options)}）` : "";
+  let detail;
+  if (failure.reason === "not_unique") detail = "引擎里有不止一个选项都符合这一步，没法确定是哪一个";
+  else if (failure.reason === "setup_not_consumed") detail = "对局在这一步之前就结束了";
+  else if (failure.reason === "engine_rejected_response") detail = "引擎拒绝了这个选择";
+  else if (failure.waitsForWindow) {
+    const side = SIDE[failure.stepPlayer] || "";
+    const kind = DECISION_ZH[failure.stepKind] || "窗口";
+    if (failure.passedListedCard) detail = "这张卡在之后的发动机会里出现过，但这一步没有对上它（写的决策类型、区域或效果不同）";
+    else if (failure.hasCard && failure.passedWindows) detail = `之后${side}的${kind}里都没有出现这张卡`;
+    else detail = `之后没有出现${side}的${kind}`;
+    if (at && !at.sameAsStep) detail += `，回放走到了${SIDE[at.player] || ""}的${DECISION_ZH[at.kind] || "选择"}`;
+  } else if (at?.sameAsStep) detail = `引擎给出的选项里没有这一项${choices}`;
+  else if (at) {
+    const what = at.card && (at.kind === "select_position" || at.kind === "select_place")
+      ? `为「${at.card}」${DECISION_ZH[at.kind]}` : DECISION_ZH[at.kind] || "做别的选择";
+    detail = `引擎这时要${SIDE[at.player] || ""}先${what}${choices}，计划里没有写这一步`;
+  } else detail = REASON_PLAIN.action_mismatch;
+  return `${head}：${detail}`;
+}
+
+// The board when a replay without check points ends: the face-up monsters with their current ATK (DEF in
+// defense position), face-down monsters by name, life points that changed, and the cards that left the
+// field during the replay for a reason other than finishing their own resolution.
+function endStateDigest(engine, scenario, names) {
+  const players = engine?.state?.players;
+  if (!players || typeof players !== "object") return null;
+  const sides = [0, 1].map((player) => {
+    const state = players[player] || players[String(player)] || {};
+    const monsters = (Array.isArray(state.mzone) ? state.mzone : []).filter((m) => m && typeof m === "object").map((m) => ({
+      name: names.get(Number(m.card)) || (typeof m.name === "string" ? m.name : "怪兽"),
+      position: m.position, attack: m.attack, defense: m.defense,
+    }));
+    const startLp = Number(scenario?.players?.[player]?.lp);
+    const lp = Number(state.lp);
+    return { monsters, lpFrom: Number.isFinite(startLp) && Number.isFinite(lp) && lp !== startLp ? startLp : null, lp };
+  });
+  const left = (Array.isArray(engine.log) ? engine.log : []).filter((event) => event?.type === "move"
+    && ON_FIELD.has(event.from?.location) && !ON_FIELD.has(event.to?.location)
+    && Array.isArray(event.reason) && event.reason.some((reason) => reason !== "rule"))
+    .map((event) => ({ name: names.get(Number(event.card)) || (typeof event.name === "string" ? event.name : "卡"),
+      reasons: event.reason.map((reason) => MOVE_REASON_ZH[reason]).filter(Boolean), to: DESTINATION_ZH[event.to?.location] || null }));
+  return { sides, left };
+}
+
+function endStateText(end) {
+  if (!end) return null;
+  const parts = [];
+  for (const [player, side] of (end.sides || []).entries()) {
+    const shown = (side.monsters || []).slice(0, 5).map((m) => {
+      if (m.position === "facedown_defense" || m.position === "facedown_attack") return `${m.name}（里侧表示）`;
+      if (m.position === "faceup_defense") return `${m.name}（守备表示，守备力 ${m.defense}）`;
+      return `${m.name}（攻击力 ${m.attack}）`;
+    });
+    if (shown.length) parts.push(`${SIDE[player]}场上 ${shown.join("、")}${side.monsters.length > 5 ? "等" : ""}`);
+  }
+  const lp = (end.sides || []).map((side, player) => (side.lpFrom === null ? null : `${SIDE[player]} ${side.lpFrom}→${side.lp}`)).filter(Boolean);
+  if (lp.length) parts.push(`基本分 ${lp.join("，")}`);
+  const left = (end.left || []).slice(0, 4).map((card) => `${card.name}（${[card.reasons.join("、"), card.to].filter(Boolean).join("，")}）`);
+  if (left.length) parts.push(`离场的卡 ${left.join("、")}${end.left.length > 4 ? "等" : ""}`);
+  return parts.length ? `回放结束时，${parts.join("；")}` : null;
 }
 
 // The times of the windows that offered the target (of every window when none did), each with the chain

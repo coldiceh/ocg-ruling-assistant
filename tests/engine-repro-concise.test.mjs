@@ -43,7 +43,9 @@ function finished(record) {
   return record;
 }
 
-const FORBIDDEN = [/本可发动/u, /决策#/u, /版本：/u, /基本分/u, /个响应窗口/u, /\bLP\b/u, /\[\d\]/u, /卡组：?\s*\d+\s*张/u, /先攻/u];
+// Life points appear only as a change at the end of a replay without check points ("基本分 对方 8000→7200"),
+// never as the replay's own "结束时基本分：" line.
+const FORBIDDEN = [/本可发动/u, /决策#/u, /版本：/u, /基本分：/u, /个响应窗口/u, /\bLP\b/u, /\[\d\]/u, /卡组：?\s*\d+\s*张/u, /先攻/u];
 function assertConcise(text) {
   for (const pattern of FORBIDDEN) assert.doesNotMatch(text, pattern);
   for (const line of text.split("\n\n")) assert.doesNotMatch(line, /\n/u, "one sentence per Markdown paragraph");
@@ -102,7 +104,7 @@ test("对照分支: one line per assumption; differing boards are labelled the s
     "【ygopro 引擎复现（实验性）】已复现",
     "ygopro（MyCard 版核心）在下面的局面里：",
     "假设「对方手卡有测试手坑」：对方在我方主要阶段1可以选择「发动测试手坑」。",
-    "无额外假设：引擎按计划走完了操作，这一问没有设置检查点（过程见完整回放）。",
+    "无额外假设：引擎按计划走完了操作，结果见完整回放。",
     "局面（假设「对方手卡有测试手坑」）：我方手卡 测试融合魔法，额外卡组 测试融合怪兽；对方场上 测试怪兽A（表侧攻击）、测试怪兽B（里侧守备），手卡 测试手坑（另有填充卡）。",
     "局面（无额外假设）：我方手卡 测试融合魔法，额外卡组 测试融合怪兽；对方场上 测试怪兽A（表侧攻击）、测试怪兽B（里侧守备）（另有填充卡）。",
     "判断模型认为官方 Q&A【测试手坑能否在对方回合发动？】与本题条件一致，以该官方 Q&A 为准；ygopro 的结果只作参考。",
@@ -144,7 +146,7 @@ test("未复现: only the first line and one plain reason, for every reason code
   const expected = {
     identity: "题目里的卡名没有解析出来",
     unrepresentable: "引擎搭不出题目描述的局面",
-    action_mismatch: "引擎实际的操作流程和计划不一致，没能走到要看的时点",
+    action_mismatch: "计划里有一步在引擎里做不到，没能走到题目要看的时点",
     engine_error: "引擎运行出错",
     budget_exceeded: "超出引擎运行限制",
     invalid_input: REASON_PLAIN.invalid_input,
@@ -163,6 +165,89 @@ test("未复现: only the first line and one plain reason, for every reason code
     subQuestions: [{ id: "q1", unrepresentable: "伤害步骤中", branches: [] }] });
   assert.equal(engineReproConciseText(engineReproDigest(record), { officialQaMatches: EXACT_MATCH }),
     "【ygopro 引擎复现（实验性）】未复现\n\n原因：引擎搭不出题目描述的局面。");
+});
+
+test("未复现: where the replay stopped, in words, from the engine's failure record", () => {
+  // The step the replay could not take (failure.step is 0-based), the decision the engine was at, and for a
+  // step that waits for a window the windows of its player the replay passed after the last executed step.
+  const executed = (index, kind, player, step) => ({ decision: { ...decision(index, kind, player), turn_player: 0 }, by: "setup", step, log_pos: 0 });
+  const passed = (index, kind, player, options = []) => ({ decision: { ...decision(index, kind, player, options), turn_player: 0 },
+    by: "pass", choice: "pass", log_pos: 0 });
+  const failedRun = (failure, decisions) => ({ status: "not_reproduced", reason_code: "action_mismatch", failure, probes: [],
+    decisions, log: [], rendered_zh: DEBUG_REPLAY });
+  const idleAt = { kind: "idle", player: 0, phase: "main1", options: [{ id: 0, cmd: "to_bp" }, { id: 1, cmd: "to_ep" }] };
+  const handTrapChain = { player: 1, decision: "chain", choose: { card: HAND_TRAP } };
+  const text = (engine, assumption = null) => engineReproConciseText(engineReproDigest(finished({ cards,
+    plan: { applicability: "applicable", assumptions: [], extra_cards: [] },
+    subQuestions: [{ id: "q1", unrepresentable: null, branches: [{ id: "b1", assumption, scenario: board(), engine }] }] })));
+  const head = "【ygopro 引擎复现（实验性）】未复现\n\n原因：计划里有一步在引擎里做不到，没能走到题目要看的时点。\n\n";
+
+  // the question's own action written as a step: the opponent's windows came, none offered the card
+  const neverOffered = failedRun({ reason: "not_found", step: 2, step_spec: handTrapChain, decision: idleAt },
+    [executed(1, "idle", 0, 0), executed(2, "select_card", 0, 1), passed(3, "chain", 1), passed(4, "chain", 0)]);
+  const shown = text(neverOffered);
+  assert.equal(shown, `${head}卡在第 3 步（对方发动「测试手坑」）：之后对方的连锁/发动窗口里都没有出现这张卡，回放走到了我方的行动选择。`);
+  assertConcise(shown);
+  // offered, but the step's filter did not match it
+  const offered = failedRun({ reason: "not_found", step: 2, step_spec: { ...handTrapChain, choose: { card: HAND_TRAP, from: "grave" } },
+    decision: idleAt }, [executed(1, "idle", 0, 0), executed(2, "select_card", 0, 1),
+    passed(3, "chain", 1, [{ id: 0, cmd: "chain", card: HAND_TRAP, name: "测试手坑", controller: 1, from: "hand" }])]);
+  assert.equal(text(offered), `${head}卡在第 3 步（对方发动「测试手坑」）：这张卡在之后的发动机会里出现过，但这一步没有对上它（写的决策类型、区域或效果不同），回放走到了我方的行动选择。`);
+  // no window of that player at all after the last executed step
+  const noWindow = failedRun({ reason: "not_found", step: 1, step_spec: handTrapChain, decision: idleAt }, [executed(1, "idle", 0, 0)]);
+  assert.equal(text(noWindow), `${head}卡在第 2 步（对方发动「测试手坑」）：之后没有出现对方的连锁/发动窗口，回放走到了我方的行动选择。`);
+  // a choice the plan left out (the position of a special summon during resolution)
+  const position = failedRun({ reason: "not_found", step: 1, step_spec: { player: 0, decision: "idle", choose: { cmd: "summon", card: MONSTER_A } },
+    decision: { kind: "select_position", player: 0, phase: "main1", card: { card: MONSTER_B, name: "测试怪兽B" },
+      options: [{ id: 0, cmd: "position", position: "faceup_attack" }, { id: 1, cmd: "position", position: "faceup_defense" }] } },
+  [executed(1, "idle", 0, 0)]);
+  assert.equal(text(position), `${head}卡在第 2 步（我方通常召唤「测试怪兽A」）：引擎这时要我方先为「测试怪兽B」选择表示形式（可选：表侧攻击、表侧守备），计划里没有写这一步。`);
+  // the right decision, an option it does not offer; and a step that matches more than one option
+  const picked = { player: 0, decision: "select_card", choose: { cards: [{ card: MONSTER_A, controller: 1 }] } };
+  const notOffered = failedRun({ reason: "not_found", step: 3, step_spec: picked, decision: { kind: "select_card", player: 0, phase: "main1",
+    options: [{ id: 0, cmd: "card", card: MONSTER_B, name: "测试怪兽B" }, { id: 1, cmd: "card", card: FUSION, name: "测试融合怪兽" }] } },
+  [executed(1, "idle", 0, 0)]);
+  assert.equal(text(notOffered), `${head}卡在第 4 步（我方选择「测试怪兽A」）：引擎给出的选项里没有这一项（可选：测试怪兽B、测试融合怪兽）。`);
+  const twice = failedRun({ reason: "not_unique", step: 3, step_spec: picked, decision: { kind: "select_card", player: 0, phase: "main1",
+    options: [] } }, [executed(1, "idle", 0, 0)]);
+  assert.equal(text(twice), `${head}卡在第 4 步（我方选择「测试怪兽A」）：引擎里有不止一个选项都符合这一步，没法确定是哪一个。`);
+
+  // 部分复现: the failed branch's line says the same after 未复现
+  const ok = replayed([{ index: 0, after: 1, player: 1, decision_kind: "chain", target: { card: HAND_TRAP }, result: "absent",
+    windows: [window(decision(5, "chain", 1, []), false)] }], [decision(5, "chain", 1, [])]);
+  const partial = finished({ cards, plan: { applicability: "applicable", assumptions: [], extra_cards: [] },
+    subQuestions: [{ id: "q1", unrepresentable: null, branches: [{ id: "b1", assumption: "写成探测", scenario: board(), engine: ok },
+      { id: "b2", assumption: "写成步骤", scenario: board(), engine: neverOffered }] }] });
+  assert.equal(partial.summary.status, "部分复现");
+  const lines = engineReproConciseText(engineReproDigest(partial)).split("\n\n");
+  assert.ok(lines.includes("假设「写成步骤」：未复现，卡在第 3 步（对方发动「测试手坑」）：之后对方的连锁/发动窗口里都没有出现这张卡，回放走到了我方的行动选择。"),
+    lines.join("\n"));
+});
+
+test("no check point: what the board shows when the replay ends", () => {
+  // A question about what the processing does has no probe; the line is the end of the replay: face-up
+  // monsters with ATK (DEF in defense position), face-down ones by name, life points that changed and the
+  // cards that left the field (a card that only finished resolving, reason "rule", is not listed).
+  const end = replayed([], []);
+  end.state = { players: {
+    0: { lp: 8000, mzone: [{ card: MONSTER_A, name: "测试怪兽A", seq: 0, position: "faceup_attack", attack: 1600, defense: 1000 }, null] },
+    1: { lp: 7200, mzone: [{ card: MONSTER_B, name: "测试怪兽B", seq: 0, position: "faceup_defense", attack: 0, defense: 2000 },
+      { card: FUSION, name: "测试融合怪兽", seq: 1, position: "facedown_defense", attack: 3000, defense: 2500 }] } } };
+  end.log = [
+    { type: "move", card: SPELL, name: "测试融合魔法", from: { player: 0, location: "szone", seq: 0 }, to: { player: 0, location: "grave" }, reason: ["rule"] },
+    { type: "move", card: HAND_TRAP, name: "测试手坑", from: { player: 1, location: "mzone", seq: 2 }, to: { player: 1, location: "grave" },
+      reason: ["destroy", "battle"] },
+  ];
+  const record = finished({ cards, plan: { applicability: "applicable", assumptions: [], extra_cards: [] },
+    subQuestions: [{ id: "q1", unrepresentable: null, branches: [{ id: "b1", assumption: null, scenario: board(), engine: end }] }] });
+  const text = engineReproConciseText(engineReproDigest(record));
+  assert.equal(text.split("\n\n")[1], "ygopro（MyCard 版核心）在下面的局面里：回放结束时，我方场上 测试怪兽A（攻击力 1600）；"
+    + "对方场上 测试怪兽B（守备表示，守备力 2000）、测试融合怪兽（里侧表示）；基本分 对方 8000→7200；离场的卡 测试手坑（破坏、战斗，送去墓地）。");
+  assertConcise(text);
+  // nothing to show: the plain fallback
+  const empty = finished({ cards, plan: { applicability: "applicable", assumptions: [], extra_cards: [] },
+    subQuestions: [{ id: "q1", unrepresentable: null, branches: [{ id: "b1", assumption: null, scenario: board(), engine: replayed([], []) }] }] });
+  assert.equal(engineReproConciseText(engineReproDigest(empty)).split("\n\n")[1], "ygopro（MyCard 版核心）在下面的局面里：引擎按计划走完了操作，结果见完整回放。");
 });
 
 test("不适用: one plain sentence per planner reason; no steps, no assumptions, no Q&A line", () => {

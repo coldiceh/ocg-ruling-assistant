@@ -103,11 +103,11 @@ export const PLANNER_INSTRUCTIONS = [
   "- 发动场上已盖放的卡：在对应的 chain 窗口（或自己主要阶段的 idle activate）选它，不需要 select_place。",
   "- 盖放魔陷：idle sset → select_place。盖放怪兽：idle mset → select_place。",
   "- 攻击：idle to_bp → battle attack → select_card(攻击对象；直接攻击时没有这一步)。",
-  "- 特殊召唤到场上（效果处理时）：通常会有 select_place，有时还有 select_position。",
+  "- 特殊召唤到场上（效果处理时）：通常会有 select_place；卡文没有指定表示形式时（例如陷阱卡发动后变成效果怪兽特殊召唤），select_place 之后还有 select_position。",
   "- 两个以上必发效果同时触发时要选处理顺序（chain 窗口里依次选）。",
   "- 发动时宣言卡名的魔法（如抹杀之指名者）：idle activate → select_place(自己 szone 空位) → announce_card → 双方连锁窗口 → 处理时的选择（如 select_card 选卡组里宣言的那张）。",
   "- 战斗时点（at）：战斗步骤和伤害步骤里的窗口依次是 attack_declaration（攻击宣言时：攻击宣言之后、进入伤害步骤之前的窗口，攻击宣言时才能发动的卡就在这里）、damage_step_start（伤害步骤开始时）、before_damage_calc（伤害计算前）、damage_calc（伤害计算时）、after_damage_calc（伤害计算后）、damage_step_end（伤害步骤结束时）。同一张卡在几个时点都能发动时（如欧尼斯特在伤害步骤开始时和伤害计算前都能发动），步骤写 \"at\" 指定时点，其他时点的发动机会自动放弃；不写 at 就在第一个出现它的窗口匹配。探测也可以写 at，只看该时点的窗口。",
-  "probes（探测，题目问“能不能发动/选择”时用）：{\"after\":k,\"player\":0或1,\"decision_kind\":\"idle|battle|chain|effect_yn|yesno\",\"target\":{\"card\":卡号,\"cmd\":\"可选\",\"desc\":可选},\"at\":\"可选：战斗时点\"}。观察区间 = setup 第 k 步执行之后到第 k+1 步执行之前（k 等于 setup 长度时到回放结束）。结果：出现 / 出现（核心自动发动） / 未出现 / 未到达。题目问“处理结果如何”时可以不设探测，靠日志展示。",
+  "probes（探测，题目问“能不能发动/选择”时用）：{\"after\":k,\"player\":0或1,\"decision_kind\":\"idle|battle|chain|effect_yn|yesno\",\"target\":{\"card\":卡号,\"cmd\":\"可选\",\"desc\":可选},\"at\":\"可选：战斗时点\"}。观察区间 = setup 第 k 步执行之后到第 k+1 步执行之前（k 等于 setup 长度时到回放结束）。结果：出现 / 出现（核心自动发动） / 未出现 / 未到达。题目问“处理结果如何”时可以不设探测：setup 写到那次处理结束为止，短说明会列出回放结束时的场面（双方场上怪兽的攻守、变化了的基本分、离场的卡）。",
 ].join("\n");
 
 export const PROMPT_VERSION = createHash("sha256").update(PLANNER_INSTRUCTIONS).digest("hex").slice(0, 12);

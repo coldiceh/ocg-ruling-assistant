@@ -117,6 +117,10 @@ test("planner prompt: the asked action is probed, not a step; responses come bef
   assert.match(PLANNER_INSTRUCTIONS, /不确定能不能做的那一次只用探测/u);
   assert.match(PLANNER_INSTRUCTIONS, /- 连锁：一张卡发动后，先轮流出现双方的连锁窗口，要回应它的卡就在这时发动（步骤紧接在那次发动之后）/u);
   assert.match(PLANNER_INSTRUCTIONS, /处理时出现的询问和选择（是否改变效果、是否适用、选卡等）都排在所有连锁窗口之后/u);
+  // checked on the pinned engine (苦纹样的土像: select_place, then select_position for the trap monster)
+  assert.match(PLANNER_INSTRUCTIONS, /卡文没有指定表示形式时（例如陷阱卡发动后变成效果怪兽特殊召唤），select_place 之后还有 select_position/u);
+  // a question about the processing result: the short section shows the board when the replay ends
+  assert.match(PLANNER_INSTRUCTIONS, /setup 写到那次处理结束为止，短说明会列出回放结束时的场面/u);
 });
 
 test("the repair round reads the engine's replay of the failed branch in its own section", async () => {
