@@ -76,8 +76,8 @@ test("已复现: two sub-questions, one core auto-activation; board, assumptions
   assert.deepEqual(text.split("\n\n"), [
     "【ygopro 引擎复现（实验性）】已复现",
     "ygopro（MyCard 版核心）在下面的局面里：",
-    "子问题 1：我方在主要阶段1可以选择「发动测试融合魔法」。",
-    "子问题 2：「测试怪兽B」作为必发效果由引擎自动发动（只能确认到卡，不能确认是哪个效果）；对方在我方主要阶段1没有出现「测试手坑」的发动机会。",
+    "子问题 1「能发动吗」：我方在主要阶段1可以选择「发动测试融合魔法」。",
+    "子问题 2「会怎样」：「测试怪兽B」作为必发效果由引擎自动发动（只能确认到卡，不能确认是哪个效果）；对方在我方主要阶段1没有出现「测试手坑」的发动机会。",
     "局面：我方手卡 测试融合魔法，额外卡组 测试融合怪兽；对方场上 测试怪兽A（表侧攻击）、测试怪兽B（里侧守备），手卡 测试手坑（另有填充卡）。",
     "假设：双方无其他适用效果；我方有填充卡可供舍弃。",
     CONCISE_DISCLAIMER,
@@ -290,6 +290,43 @@ test("no check point: what the board shows when the replay ends", () => {
   const empty = finished({ cards, plan: { applicability: "applicable", assumptions: [], extra_cards: [] },
     subQuestions: [{ id: "q1", unrepresentable: null, branches: [{ id: "b1", assumption: null, scenario: board(), engine: replayed([], []) }] }] });
   assert.equal(engineReproConciseText(engineReproDigest(empty)).split("\n\n")[1], "ygopro（MyCard 版核心）在下面的局面里：引擎按计划走完了操作，结果见完整回放。");
+});
+
+test("a result question: the plan's result cards at the moment the replay stopped, with negation", () => {
+  // 虹之衣 pattern (checked on the pinned engine): the attack is cancelled on replay; the replay stops at our
+  // battle command; the attacked monster is still negated. The engine state carries `disabled` (2026-10-20).
+  const stopAt = { ...decision(31, "battle", 0, [{ id: 0, cmd: "to_m2" }, { id: 1, cmd: "to_ep" }]), phase: "battle_start" };
+  const end = replayed([], []);
+  end.decisions = [{ decision: stopAt, by: "end", choice: null, log_pos: 0 }];
+  end.state = { phase: "battle_start", players: {
+    0: { lp: 8000, mzone: [{ card: FILLER, name: "魔物狩人", seq: 0, position: "faceup_attack", attack: 1500, defense: 1200, disabled: false }],
+      szone: [{ card: SPELL, name: "测试融合魔法", seq: 0, position: "faceup", disabled: false }], grave: [], hand: [] },
+    1: { lp: 8000, mzone: [{ card: MONSTER_B, name: "测试怪兽B", seq: 0, position: "faceup_defense", attack: 3000, defense: 2000, disabled: true },
+      { card: MONSTER_A, name: "测试怪兽A", seq: 1, position: "faceup_attack", attack: 100, defense: 2100, disabled: false }],
+      grave: [{ card: HAND_TRAP, name: "测试手坑", seq: 0 }] } } };
+  const equipped = board();
+  equipped.players[0].mzone = [{ seq: 0, code: FILLER, position: "faceup_attack" }];
+  equipped.players[0].szone = [{ seq: 0, code: SPELL, position: "faceup", equip_to: { player: 0, zone: "mzone", seq: 0 } }];
+  const record = (resultCards, observe = null) => finished({ cards, plan: { applicability: "applicable", assumptions: [], extra_cards: [] },
+    subQuestions: [{ id: "q1", unrepresentable: null, branches: [{ id: "b1", assumption: null, scenario: equipped, engine: end,
+      resultCards, observe }] }] });
+
+  const focused = engineReproConciseText(engineReproDigest(record([{ card: MONSTER_B, controller: 1 },
+    { card: HAND_TRAP, controller: 1 }, { card: FUSION, controller: 0 }], "取消攻击后测试怪兽B是否仍被无效"))).split("\n\n");
+  assert.equal(focused[1], "ygopro（MyCard 版核心）在下面的局面里：取消攻击后测试怪兽B是否仍被无效——回放停在我方战斗阶段的行动选择时，"
+    + "对方场上的「测试怪兽B」：守备表示，守备力 2000，效果被无效；对方的「测试手坑」在墓地；"
+    + "我方「测试融合怪兽」不在场上，也不在手卡、墓地、除外区、卡组和额外卡组里。");
+  // the field cards are all on the board line (the attacker is a filler card), an equip card names its monster
+  assert.equal(focused[2], "局面：我方场上 魔物狩人（表侧攻击）、测试融合魔法（装备给魔物狩人），手卡 测试融合魔法，额外卡组 测试融合怪兽；"
+    + "对方场上 测试怪兽A（表侧攻击）、测试怪兽B（里侧守备），手卡 测试手坑（另有填充卡）。");
+  // a focus monster that is not negated says so
+  const enabled = engineReproConciseText(engineReproDigest(record([{ card: MONSTER_A, controller: 1 }]))).split("\n\n")[1];
+  assert.match(enabled, /对方场上的「测试怪兽A」：攻击力 100，效果没有被无效。$/u);
+  // without result cards: the whole field, negated monsters marked
+  const all = engineReproConciseText(engineReproDigest(record(null))).split("\n\n")[1];
+  assert.equal(all, "ygopro（MyCard 版核心）在下面的局面里：回放停在我方战斗阶段的行动选择时，我方场上 魔物狩人（攻击力 1500）；"
+    + "对方场上 测试怪兽B（守备表示，守备力 2000，效果被无效）、测试怪兽A（攻击力 100）。");
+  for (const text of [focused.join("\n\n"), enabled, all]) assertConcise(text);
 });
 
 test("不适用: one plain sentence per planner reason; no steps, no assumptions, no Q&A line", () => {

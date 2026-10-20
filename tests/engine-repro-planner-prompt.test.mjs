@@ -128,7 +128,9 @@ test("planner prompt: the asked action is probed, not a step; responses come bef
   assert.match(PLANNER_INSTRUCTIONS, /问一个效果（包括诱发效果）能不能发动时，decision_kind 用 chain/u);
   assert.match(PLANNER_INSTRUCTIONS, /用 effect_yn 探测只会得到“未到达”/u);
   // a question about the processing result: the short section shows the board when the replay ends
-  assert.match(PLANNER_INSTRUCTIONS, /setup 写到那次处理结束为止，短说明会列出回放结束时的场面/u);
+  assert.match(PLANNER_INSTRUCTIONS, /题目问“处理结果如何”时可以不设探测，改写 result_cards：回放停在 setup 用完之后的下一个需要选择的地方/u);
+  assert.match(PLANNER_INSTRUCTIONS, /branches\[\]\.result_cards：题目问处理结果/u);
+  assert.match(PLANNER_INSTRUCTIONS, /"result_cards":\[\]/u, "the output example carries the field");
 });
 
 test("the repair round reads the engine's replay of the failed branch in its own section", async () => {
@@ -175,4 +177,30 @@ test("the repair round reads the engine's replay of the failed branch in its own
   assert.ok(Array.from(excerpt).length < 4100);
   assert.match(excerpt, /…（中间省略 \d+ 字）…/u);
   assert.equal(replayExcerpt(""), "");
+});
+
+test("result_cards: checked like every other card number and carried into the record", async () => {
+  const { runEngineReproduction } = await import("../backend/engineRepro/reproduce.mjs");
+  const branch = (id, resultCards) => ({ id, assumption: null, observe: "x", result_cards: resultCards,
+    scenario: { first_player: 0, players: [{ hand: [14558127] }, {}] }, actions: { setup: [] } });
+  const plan = { applicability: "applicable", reason_code: null, archetype_name: null, quoted_span: "q", what_not_why: false,
+    assumptions: [], extra_cards: [], sub_questions: [
+      { id: "q1", quoted_span: "q", unrepresentable: null, branches: [branch("b1", [{ card: 14558127, controller: 1 }])] },
+      { id: "q2", quoted_span: "q", unrepresentable: null, branches: [branch("b1", [{ card: 99999999 }])] },
+      { id: "q3", quoted_span: "q", unrepresentable: null, branches: [branch("b1", [{ card: 14558127, controller: 2 }])] }] };
+  const engine = async (op, body) => {
+    if (op === "cards") return { cards: (body.codes || []).map((code) => ({ code, exists: true, name: "灰流丽", types: ["怪兽"] })) };
+    if (op === "related") return { related: [] };
+    if (op === "reproduce") return { result: { status: "replayed", reason_code: null, scenario: body.scenario, failure: null,
+      decisions: [], probes: [], log: [], state: { players: { 0: { lp: 8000 }, 1: { lp: 8000 } } }, rendered_zh: "" } };
+    throw new Error(op);
+  };
+  const record = await runEngineReproduction({ question: "q", identity: { resolved: [{ cid: "12950", mentionedAs: ["灰流丽"], resolutionSources: [] }],
+    unresolved: [], groupMentions: [] }, cardsById: new Map([["12950", { id: "12950", name: "灰流丽", effectText: "t" }]]),
+    cidMap: { 12950: 14558127 }, engine, clock: () => 0,
+    modelCall: async () => ({ status: "completed", outputText: JSON.stringify(plan), usage: {} }) });
+  const [q1, q2, q3] = record.subQuestions;
+  assert.deepEqual(q1.branches[0].resultCards, [{ card: 14558127, controller: 1 }]);
+  assert.match(q2.branches[0].firstPlanProblems?.join("；") || q2.branches[0].planProblems?.join("；") || "", /result_cards\[0\] 的卡号 99999999 不在允许的卡号列表中/u);
+  assert.match(q3.branches[0].firstPlanProblems?.join("；") || q3.branches[0].planProblems?.join("；") || "", /result_cards\[0\]\.controller 只能是 0 或 1/u);
 });

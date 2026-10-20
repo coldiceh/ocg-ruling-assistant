@@ -119,6 +119,7 @@ export function engineReproDigest(record = {}) {
     admissionLimit: Object.hasOwn(ADMISSION_LIMIT_LINES, errorCode) ? errorCode : null,
     assumptions: cleanTexts(record.plan?.assumptions),
     subQuestions: (record.subQuestions || []).map((sq) => ({
+      quotedSpan: shortSpan(sq?.quoted_span),
       unrepresentable: Boolean(sq?.unrepresentable),
       branches: (sq?.unrepresentable ? [] : sq?.branches || []).map((branch) => branchDigest(branch, names, namedCodes)),
     })),
@@ -147,10 +148,12 @@ export function engineReproConciseText(digest, { officialQaMatches = [] } = {}) 
     // the setup finished but a check point was not reached (the plain reason alone otherwise).
     const failedBranches = (Array.isArray(digest.subQuestions) ? digest.subQuestions : [])
       .flatMap((sq, index, all) => (sq.branches || []).map((branch, _i, branches) => ({ branch,
-        label: [all.length > 1 ? `子问题 ${index + 1}` : "", branches.length > 1 ? branchLabel(branch) : ""].filter(Boolean).join("，") })))
-      .map(({ branch, label }) => ({ label, text: branch.probeNotReached && branch.probes?.length
+        label: [all.length > 1 ? `子问题 ${index + 1}${sq.quotedSpan ? `「${sq.quotedSpan}」` : ""}` : "",
+          branches.length > 1 ? branchLabel(branch) : ""].filter(Boolean).join("，") })))
+      .map(({ branch, label }) => ({ label, observe: branch.observe, text: branch.probeNotReached && branch.probes?.length
         ? branch.probes.map(probeSentence).join("；") : failureText(branch.failure) }))
-      .filter(({ text }) => text);
+      .filter(({ text }) => text)
+      .map(({ label, observe, text }) => ({ label, text: observe ? `${trimEndPunctuation(observe)}——${text}` : text }));
     const stops = [...new Map(failedBranches.map((item) => [`${item.label}|${item.text}`, item])).values()].slice(0, 3);
     return [head, `原因：${reasonText(digest.reasonCodes)}。`,
       ...stops.map(({ label, text }) => withLabel(label, text))].join("\n\n");
@@ -161,7 +164,7 @@ export function engineReproConciseText(digest, { officialQaMatches = [] } = {}) 
   const boards = [];
   const assumptions = cleanTexts(digest.assumptions);
   subQuestions.forEach((sq, index) => {
-    const sqLabel = subQuestions.length > 1 ? `子问题 ${index + 1}` : "";
+    const sqLabel = subQuestions.length > 1 ? `子问题 ${index + 1}${sq.quotedSpan ? `「${sq.quotedSpan}」` : ""}` : "";
     if (sq.unrepresentable) {
       results.push(withLabel(sqLabel, `${REASON_PLAIN.unrepresentable}`));
       return;
@@ -176,6 +179,7 @@ export function engineReproConciseText(digest, { officialQaMatches = [] } = {}) 
       // No check point (a question about what the processing does): what the board shows when the replay ends.
       else if (!branch.probes?.length) sentence = endStateText(branch.end) || "引擎按计划走完了操作，结果见完整回放";
       else sentence = branch.probes.map(probeSentence).join("；");
+      if (branch.observe) sentence = `${trimEndPunctuation(branch.observe)}——${sentence}`;
       results.push(withLabel(label, sentence));
       if (observed) {
         const text = boardText(branch.board);
@@ -209,12 +213,14 @@ function branchDigest(branch, names, namedCodes) {
   const probes = (engine?.probes || []).map((probe) => probeDigest(probe, names, turnPlayers));
   return {
     assumption: typeof branch?.assumption === "string" && branch.assumption.trim() ? branch.assumption.trim() : null,
+    // what the planner said this branch looks at (plan observe, at most 30 characters), shown before the result
+    observe: clipText(branch?.observe, OBSERVE_MAX_CHARS),
     ok: outcome.ok,
     reason: outcome.reason,
     probeNotReached: engine?.failure?.reason === "probe_not_reached",
     probes,
     failure: outcome.ok ? null : failureDigest(engine, names, branch?.actions?.setup),
-    end: outcome.ok && !probes.length ? endStateDigest(engine, branch?.scenario, names) : null,
+    end: outcome.ok && !probes.length ? endStateDigest(engine, branch?.scenario, names, branch?.resultCards) : null,
     board: boardDigest(branch?.scenario, names, namedCodes),
   };
 }
@@ -346,18 +352,45 @@ function failureText(failure) {
   return `${head}：${detail}`;
 }
 
-// The board when a replay without check points ends: the face-up monsters with their current ATK (DEF in
-// defense position), face-down monsters by name, life points that changed, and the cards that left the
-// field during the replay for a reason other than finishing their own resolution.
-function endStateDigest(engine, scenario, names) {
+// The board when a replay without check points ends. The moment is the decision the replay stopped at
+// (the harness records it with by "end": the next choice the plan had no step for). With the plan's
+// result_cards (the cards that answer the question) only those are reported: where each one is, its
+// position, ATK / DEF on the field and whether its effects are negated (engine state `disabled`, ocg-sim-core
+// 2026-10-20; older engines leave it out and nothing is said). Without them: the monsters on both fields
+// (negated ones marked), life points that changed, and the cards that left the field during the replay for
+// a reason other than finishing their own resolution.
+function endStateDigest(engine, scenario, names, resultCards = null) {
   const players = engine?.state?.players;
   if (!players || typeof players !== "object") return null;
+  const stateOf = (player) => players[player] || players[String(player)] || {};
+  const cardView = (card, location) => ({
+    name: names.get(Number(card.card)) || (typeof card.name === "string" ? card.name : "卡"),
+    location, position: card.position,
+    attack: Number.isFinite(card.attack) ? card.attack : null, defense: Number.isFinite(card.defense) ? card.defense : null,
+    disabled: typeof card.disabled === "boolean" ? card.disabled : null,
+  });
+  const entries = (Array.isArray(engine.decisions) ? engine.decisions : []);
+  const last = entries.length && entries.at(-1)?.by === "end" ? entries.at(-1).decision : null;
+  const stop = last ? { kind: last.kind, player: last.player, phase: last.phase, turnPlayer: last.turn_player,
+    at: last.timing?.at || null } : null;
+  if (Array.isArray(resultCards) && resultCards.length) {
+    const focus = resultCards.map(({ card, controller }) => {
+      const sides = controller === 0 || controller === 1 ? [controller] : [0, 1];
+      for (const side of sides) {
+        for (const location of ["mzone", "szone", "hand", "grave", "removed", "extra", "deck"]) {
+          const found = (Array.isArray(stateOf(side)[location]) ? stateOf(side)[location] : [])
+            .find((item) => item && Number(item.card) === card);
+          if (found) return { side, ...cardView(found, location) };
+        }
+      }
+      return { side: controller, name: names.get(card) || "卡", location: null };
+    });
+    return { stop, focus };
+  }
   const sides = [0, 1].map((player) => {
-    const state = players[player] || players[String(player)] || {};
-    const monsters = (Array.isArray(state.mzone) ? state.mzone : []).filter((m) => m && typeof m === "object").map((m) => ({
-      name: names.get(Number(m.card)) || (typeof m.name === "string" ? m.name : "怪兽"),
-      position: m.position, attack: m.attack, defense: m.defense,
-    }));
+    const state = stateOf(player);
+    const monsters = (Array.isArray(state.mzone) ? state.mzone : []).filter((m) => m && typeof m === "object")
+      .map((m) => cardView(m, "mzone"));
     const startLp = Number(scenario?.players?.[player]?.lp);
     const lp = Number(state.lp);
     return { monsters, lpFrom: Number.isFinite(startLp) && Number.isFinite(lp) && lp !== startLp ? startLp : null, lp };
@@ -367,25 +400,60 @@ function endStateDigest(engine, scenario, names) {
     && Array.isArray(event.reason) && event.reason.some((reason) => reason !== "rule"))
     .map((event) => ({ name: names.get(Number(event.card)) || (typeof event.name === "string" ? event.name : "卡"),
       reasons: event.reason.map((reason) => MOVE_REASON_ZH[reason]).filter(Boolean), to: DESTINATION_ZH[event.to?.location] || null }));
-  return { sides, left };
+  return { stop, sides, left };
+}
+
+const LOCATION_ZH = Object.freeze({ hand: "在手卡", grave: "在墓地", removed: "被除外", extra: "在额外卡组", deck: "在卡组" });
+
+// "回放停在我方战斗阶段的行动选择时" / "回放结束时" (the duel ended, or an older record without the end decision).
+function stopText(stop) {
+  if (!stop) return "回放结束时";
+  const who = SIDE[stop.player] || "";
+  if (stop.kind === "idle") return `回放停在${who}${PHASE_ZH[stop.phase] || ""}的行动选择时`;
+  if (stop.kind === "battle") return `回放停在${who}战斗阶段的行动选择时`;
+  const when = timeLabel(stop.phase, stop.turnPlayer, stop.player, stop.at);
+  return `回放停在${who}的${DECISION_ZH[stop.kind] || "选择"}时${when ? `（${when}）` : ""}`;
+}
+
+function monsterText(m, { sayEnabled = false } = {}) {
+  const parts = [];
+  if (m.position === "facedown_defense" || m.position === "facedown_attack") parts.push("里侧表示");
+  else if (m.position === "faceup_defense") parts.push(`守备表示，守备力 ${m.defense}`);
+  else if (m.attack !== null) parts.push(`攻击力 ${m.attack}`);
+  if (m.disabled === true) parts.push("效果被无效");
+  else if (sayEnabled && m.disabled === false) parts.push("效果没有被无效");
+  return parts.length ? `${m.name}（${parts.join("，")}）` : m.name;
 }
 
 function endStateText(end) {
   if (!end) return null;
+  if (Array.isArray(end.focus)) {
+    const shown = end.focus.map((card) => {
+      const who = SIDE[card.side] || "";
+      if (!card.location) return `${who}「${card.name}」不在场上，也不在手卡、墓地、除外区、卡组和额外卡组里`;
+      if (card.location === "mzone") {
+        const view = monsterText({ ...card, name: "" }, { sayEnabled: true }).replace(/^（|）$/gu, "");
+        return `${who}场上的「${card.name}」${view ? `：${view}` : ""}`;
+      }
+      if (card.location === "szone") {
+        const state = card.position === "facedown" ? "盖放" : "表侧表示";
+        const negated = card.disabled === true ? "，效果被无效" : card.disabled === false ? "，效果没有被无效" : "";
+        return `${who}场上的「${card.name}」：${state}${negated}`;
+      }
+      return `${who}的「${card.name}」${LOCATION_ZH[card.location] || "不在场上"}`;
+    });
+    return `${stopText(end.stop)}，${shown.join("；")}`;
+  }
   const parts = [];
   for (const [player, side] of (end.sides || []).entries()) {
-    const shown = (side.monsters || []).slice(0, 5).map((m) => {
-      if (m.position === "facedown_defense" || m.position === "facedown_attack") return `${m.name}（里侧表示）`;
-      if (m.position === "faceup_defense") return `${m.name}（守备表示，守备力 ${m.defense}）`;
-      return `${m.name}（攻击力 ${m.attack}）`;
-    });
+    const shown = (side.monsters || []).slice(0, 5).map((m) => monsterText(m));
     if (shown.length) parts.push(`${SIDE[player]}场上 ${shown.join("、")}${side.monsters.length > 5 ? "等" : ""}`);
   }
   const lp = (end.sides || []).map((side, player) => (side.lpFrom === null ? null : `${SIDE[player]} ${side.lpFrom}→${side.lp}`)).filter(Boolean);
   if (lp.length) parts.push(`基本分 ${lp.join("，")}`);
   const left = (end.left || []).slice(0, 4).map((card) => `${card.name}（${[card.reasons.join("、"), card.to].filter(Boolean).join("，")}）`);
   if (left.length) parts.push(`离场的卡 ${left.join("、")}${end.left.length > 4 ? "等" : ""}`);
-  return parts.length ? `回放结束时，${parts.join("；")}` : null;
+  return parts.length ? `${stopText(end.stop)}，${parts.join("；")}` : null;
 }
 
 // The times of the windows that offered the target (of every window when none did), each with the chain
@@ -505,12 +573,14 @@ function boardDigest(scenario, names, namedCodes) {
   players.forEach((player, index) => {
     if (!player || typeof player !== "object") return;
     const zones = [];
-    const zone = (title, entries, { countOthers = true } = {}) => {
+    // Cards on the field are all listed (the attacker, the monster attacked, an equipped monster are part of
+    // the situation even when the question did not name them); elsewhere only the question's own cards are.
+    const zone = (title, entries, { countOthers = true, all = false } = {}) => {
       const cards = [];
       for (const entry of entries) {
         const code = Number(entry?.code);
         if (!Number.isSafeInteger(code)) continue;
-        if (namedCodes.has(code)) cards.push({ name: names.get(code) || "题目中的卡", label: entry.label || null });
+        if (namedCodes.has(code) || (all && names.has(code))) cards.push({ name: names.get(code) || "题目中的卡", label: entry.label || null });
         else if (countOthers) {
           if (FILLER_CODES.has(code)) filler = true;
           else auxiliary = true;
@@ -523,10 +593,16 @@ function boardDigest(scenario, names, namedCodes) {
       field.push({ code: monster?.code, label: MONSTER_POSITION[monster?.position] || null });
       for (const material of monster?.overlay || []) field.push({ code: material, label: "超量素材" });
     }
-    for (const card of player.szone || []) field.push({ code: card?.code, label: card?.position === "facedown" ? "盖放" : "表侧" });
+    for (const card of player.szone || []) {
+      // an equip card names the monster it is equipped to (scenario equip_to: player, zone, seq)
+      const target = card?.equip_to && card.equip_to.zone === "mzone"
+        ? (players[card.equip_to.player]?.mzone || []).find((m) => m?.seq === card.equip_to.seq) : null;
+      const equipped = target && names.has(Number(target.code)) ? `装备给${names.get(Number(target.code))}` : null;
+      field.push({ code: card?.code, label: equipped || (card?.position === "facedown" ? "盖放" : "表侧") });
+    }
     if (player.fzone) field.push({ code: player.fzone.code, label: player.fzone.position === "facedown" ? "场地区，盖放" : "场地区，表侧" });
     for (const card of player.pzone || []) if (card) field.push({ code: card.code, label: "灵摆区" });
-    zone("场上", field);
+    zone("场上", field, { all: true });
     zone("手卡", (player.hand || []).map((code) => ({ code })));
     zone("墓地", (player.grave || []).map((code) => ({ code })));
     zone("除外", (player.removed || []).map((card) => ({ code: card?.code, label: card?.position === "facedown" ? "里侧" : null })));
@@ -604,6 +680,23 @@ function listText(items) {
 
 function cleanTexts(values) {
   return (Array.isArray(values) ? values : []).filter((value) => typeof value === "string" && value.trim()).map((value) => value.trim());
+}
+
+const OBSERVE_MAX_CHARS = 30;
+function clipText(value, max) {
+  const text = typeof value === "string" ? value.replace(/\s+/gu, " ").trim() : "";
+  if (!text) return null;
+  const chars = Array.from(text);
+  return chars.length > max ? `${chars.slice(0, max).join("")}…` : text;
+}
+
+// The sub-question's own words from the question (planner quoted_span), cut to 20 characters.
+const SPAN_MAX_CHARS = 20;
+function shortSpan(value) {
+  const text = String(value || "").replace(/\s+/gu, " ").replace(/[「」]/gu, "").trim();
+  if (!text || text === "…") return "";
+  const chars = Array.from(text);
+  return chars.length > SPAN_MAX_CHARS ? `${chars.slice(0, SPAN_MAX_CHARS).join("")}…` : text;
 }
 
 function trimEndPunctuation(value) {

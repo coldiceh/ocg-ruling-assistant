@@ -91,6 +91,17 @@ export function collectCodes(scenario, actions) {
   return codes;
 }
 
+// The cards whose state at the end of the replay answers a "what happens" question (plan branch
+// result_cards): at most three, each {card, controller?}. The short section reports exactly these.
+export const MAX_RESULT_CARDS = 3;
+export function normalizeResultCards(value) {
+  if (!Array.isArray(value)) return null;
+  const cards = value.map((item) => ({ card: Number(item?.card),
+    controller: item?.controller === 0 || item?.controller === 1 ? item.controller : null }))
+    .filter((item) => Number.isSafeInteger(item.card) && item.card > 0).slice(0, MAX_RESULT_CARDS);
+  return cards.length ? cards : null;
+}
+
 async function checkPlan(plan, allowedCodes, engine) {
   const problems = [];
   if (!["applicable", "not_applicable"].includes(plan.applicability)) problems.push("applicability 取值无效");
@@ -127,6 +138,17 @@ async function checkPlan(plan, allowedCodes, engine) {
       if (!b.actions || typeof b.actions !== "object") bp.push("缺少 actions");
       for (const code of collectCodes(b.scenario, b.actions)) {
         if (!allowed.has(code)) bp.push(`卡号 ${code} 不在允许的卡号列表中（题目中的卡、填充卡、相关卡、通用工具卡、extra_cards）`);
+      }
+      if (b.result_cards !== undefined && b.result_cards !== null) {
+        if (!Array.isArray(b.result_cards) || b.result_cards.length > MAX_RESULT_CARDS) {
+          bp.push(`result_cards 应为最多 ${MAX_RESULT_CARDS} 项的数组`);
+        } else {
+          for (const [i, item] of b.result_cards.entries()) {
+            const code = Number(item?.card);
+            if (!Number.isSafeInteger(code) || !allowed.has(code)) bp.push(`result_cards[${i}] 的卡号 ${item?.card} 不在允许的卡号列表中`);
+            if (item?.controller !== undefined && item.controller !== 0 && item.controller !== 1) bp.push(`result_cards[${i}].controller 只能是 0 或 1`);
+          }
+        }
       }
       if (bp.length) branchProblems.set(`${sq.id}/${b.id}`, [...new Set(bp)]);
     }
@@ -285,7 +307,7 @@ export async function runEngineReproduction({ question, identity, cardsById, cid
     record.subQuestions = (plan.sub_questions || []).map((sq) => ({ id: sq.id, quoted_span: sq.quoted_span,
       unrepresentable: sq.unrepresentable || null,
       branches: (sq.unrepresentable ? [] : (sq.branches || [])).map((b) => ({ id: b.id, assumption: b.assumption || null,
-        observe: b.observe || null, ...expandPlanDefaults(b.scenario, b.actions),
+        observe: b.observe || null, resultCards: normalizeResultCards(b.result_cards), ...expandPlanDefaults(b.scenario, b.actions),
         planProblems: check.branchProblems.get(`${sq.id}/${b.id}`) || null })) }));
     return check;
   };
@@ -348,6 +370,7 @@ export async function runEngineReproduction({ question, identity, cardsById, cid
       const b = sq.branches.find((x) => x.id === fb.id);
       if (!b || (b.engine && b.engine.status === "replayed")) continue;
       Object.assign(b, { ...expandPlanDefaults(fb.scenario, fb.actions), observe: fb.observe || b.observe,
+        resultCards: fb.result_cards !== undefined ? normalizeResultCards(fb.result_cards) : b.resultCards,
         assumption: fb.assumption ?? b.assumption, repaired: true, firstEngine: b.engine ? summarizeEngine(b.engine) : null,
         firstPlanProblems: b.planProblems, planProblems: extraCheck.branchProblems.get(`${sq.id}/${b.id}`) || null });
       fixed.add(`${sq.id}/${b.id}`);
