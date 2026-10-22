@@ -33,7 +33,9 @@ export function classifyPublicRequestChannel(rawBody) {
   if (keys.length === 1 && keys[0] === "question") {
     return PUBLIC_REQUEST_CHANNELS.EXTERNAL_API;
   }
-  const webKeys = keys.filter((key) => key !== "evidenceSelector");
+  // evidenceSelector is optional on the web page; so is engineOnly (仅引擎复现) on a prepare request.
+  const webKeys = keys.filter((key) => key !== "evidenceSelector"
+    && !(key === "engineOnly" && body.action === "prepare" && body.engineOnly === true));
   if (
     (sameStringList(webKeys, WEB_REQUEST_KEYS)
       || sameStringList(webKeys, [...WEB_REQUEST_KEYS, "answerLocale"].sort())

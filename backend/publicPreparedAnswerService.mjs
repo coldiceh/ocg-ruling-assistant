@@ -46,7 +46,11 @@ export async function preparePublicAnswer({
   // the final model writes. No extra model call.
   const promptBundle = result.answer.continuation.promptBundle;
   const evidencePreview = selectedPromptEvidenceRefs(promptBundle.modelEvidence, promptBundle.allowedEvidenceIds);
-  return { preparationId, progress: measuredProgress, evidencePreview,
+  // Where the engine reproduction started during this preparation stores its result (history record id
+  // and this invocation's start): a 仅引擎复现 request waits for it after preparing (api/answer.js).
+  const engineReproWait = result.engineRepro?.enabled && result.auditId
+    ? { auditId: result.auditId, requestStartedAt: result.engineRepro.requestStartedAt } : null;
+  return { preparationId, progress: measuredProgress, evidencePreview, engineReproWait,
     evidencePackage: { text: promptBundle.prompt, filename: 'ocg-evidence.txt',
       diagnostics: {
         request: result.answer.debug?.requestDiagnostics || null,

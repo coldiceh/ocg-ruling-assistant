@@ -123,9 +123,14 @@ export function parsePublicAnswerPayload(body, {
   if (payload.action !== undefined && payload.action !== "prepare") {
     throw publicAnswerRequestError("Unsupported answer action", "invalid_answer_action");
   }
-  const allowedFields = ["action", "question", "mode", "rulingModelProfile", "rulingVersion", "answerLocale", "evidenceSelector"];
+  const allowedFields = ["action", "question", "mode", "rulingModelProfile", "rulingVersion", "answerLocale", "evidenceSelector",
+    "engineOnly"];
   if (Object.keys(payload).some(key => !allowedFields.includes(key))) {
     throw publicAnswerRequestError("Unsupported public request field", "unsupported_request_field");
+  }
+  // 仅引擎复现: a prepare request that also waits for the engine reproduction (no final model call).
+  if (payload.engineOnly !== undefined && (payload.engineOnly !== true || payload.action !== "prepare")) {
+    throw publicAnswerRequestError("engineOnly is only true on a prepare request", "invalid_engine_only_request");
   }
   if (payload.mode !== undefined && String(payload.mode).toLowerCase() !== 'rag') {
     throw publicAnswerRequestError("Only the evidence-grounded RAG answer mode is public", "unsupported_answer_mode");

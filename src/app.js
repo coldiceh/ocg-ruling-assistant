@@ -15,7 +15,7 @@ const uiTranslations = {
     "觉得好用？欢迎分享给朋友，也欢迎在 GitHub 点个 Star。": "Finding it useful? Share it with friends or give the project a star on GitHub.",
     "给项目 Star": "Star on GitHub",
     "输入问题": "Ask a question", "输入卡片、场面、连锁和需要判断的处理节点。": "Describe the cards, game state, Chain, and decision point.",
-    "裁定模型": "Ruling model", "裁定流程": "Ruling process", "准备就绪": "Ready", "仅准备证据包": "Prepare evidence only",
+    "裁定模型": "Ruling model", "裁定流程": "Ruling process", "准备就绪": "Ready", "仅准备证据包": "Prepare evidence only", "仅引擎复现": "Engine replay only",
     "准备证据": "Evidence preparation", "Luna（默认）": "Luna (default)",
     "查询": "Ask", "查询中…": "Working…", "证据包已准备": "Evidence prepared", "下载证据包": "Download evidence",
     "裁定结论": "Ruling", "未分析": "Not analyzed", "理由": "Reasoning", "相关卡片": "Related cards",
@@ -39,7 +39,7 @@ const uiTranslations = {
     "觉得好用？欢迎分享给朋友，也欢迎在 GitHub 点个 Star。": "役に立ったら、友達へのシェアや GitHub での Star をお願いします。",
     "给项目 Star": "GitHub で Star",
     "输入问题": "質問を入力", "输入卡片、场面、连锁和需要判断的处理节点。": "カード、盤面、チェーン、判断したい処理を入力してください。",
-    "裁定模型": "裁定モデル", "裁定流程": "裁定の進行", "准备就绪": "準備完了", "仅准备证据包": "根拠資料のみ準備",
+    "裁定模型": "裁定モデル", "裁定流程": "裁定の進行", "准备就绪": "準備完了", "仅准备证据包": "根拠資料のみ準備", "仅引擎复现": "エンジン再現のみ",
     "准备证据": "根拠資料の準備", "Luna（默认）": "Luna（既定）",
     "查询": "質問する", "查询中…": "処理中…", "证据包已准备": "根拠資料の準備完了", "下载证据包": "根拠資料をダウンロード",
     "裁定结论": "裁定結果", "未分析": "未分析", "理由": "理由", "相关卡片": "関連カード",
@@ -142,7 +142,7 @@ function applyUiLocale(locale) {
     "#askTitle": "输入问题", ".panel-head p": "输入卡片、场面、连锁和需要判断的处理节点。",
     ".model-tier-label span": "裁定模型", ".model-strip span": "裁定流程",
     "#evidenceSelectorLabel": "准备证据", "#evidenceSelectorDefault": "Luna（默认）",
-    "#prepareEvidenceButton": "仅准备证据包", "#evidencePackageTitle": "证据包已准备",
+    "#prepareEvidenceButton": "仅准备证据包", "#engineOnlyButton": "仅引擎复现", "#evidencePackageTitle": "证据包已准备",
     "#evidencePackageDownload": "下载证据包", ".verdict-block .block-title span": "裁定结论",
     "#sourcesTitle": "资料来源", "#questionsTitle": "风险提示", "#cardsTitle": "相关卡片",
     "#budgetTitle": "最终裁定今日额度", "#disclaimerTitle": "免责声明",
@@ -201,6 +201,7 @@ const ui = {
   analyzeButton: document.querySelector("#analyzeButton"),
   analyzeButtonText: document.querySelector("#analyzeButtonText"),
   prepareEvidenceButton: document.querySelector("#prepareEvidenceButton"),
+  engineOnlyButton: document.querySelector("#engineOnlyButton"),
   evidencePackagePanel: document.querySelector("#evidencePackagePanel"),
   evidencePackageStatus: document.querySelector("#evidencePackageStatus"),
   evidencePackageDownload: document.querySelector("#evidencePackageDownload"),
@@ -847,7 +848,7 @@ function getDetectedCards(text) {
     .filter(Boolean);
 }
 
-async function analyzeQuestion({ prepareOnly = false } = {}) {
+async function analyzeQuestion({ prepareOnly = false, engineOnly = false } = {}) {
   lastSubmittedQuestion = ui.questionInput.value;
   const text = ui.questionInput.value.trim();
   const answerLocale = selectedUiLocale;
@@ -875,6 +876,7 @@ async function analyzeQuestion({ prepareOnly = false } = {}) {
         signal: abortController.signal,
         requestId,
         prepareOnly,
+        engineOnly: prepareOnly && engineOnly,
         onEvidencePrepared: (prepared) => {
           if (requestId === analysisRequestId) renderPreparedEvidence(prepared?.evidencePreview);
         },
@@ -883,7 +885,8 @@ async function analyzeQuestion({ prepareOnly = false } = {}) {
       if (answer?.kind === "prepared") {
         // The package stays downloadable with its button; a mistaken prepare-only click is continued
         // with 生成答案 (the final model only, on the same preparation).
-        renderPreparedOnly(answer, { question: text, requestedRulingVersion });
+        if (engineOnly) renderEngineOnly(answer, { question: text, requestedRulingVersion });
+        else renderPreparedOnly(answer, { question: text, requestedRulingVersion });
         return;
       }
       renderBackendAnswer(answer);
@@ -911,6 +914,7 @@ async function requestBackendAnswer(text, requestedRulingVersion, {
   signal,
   requestId = null,
   prepareOnly = false,
+  engineOnly = false,
   onEvidencePrepared = null,
 } = {}) {
   const backendMode = "rag";
@@ -926,6 +930,8 @@ async function requestBackendAnswer(text, requestedRulingVersion, {
       rulingVersion: requestedRulingVersion,
       answerLocale,
       action: "prepare",
+      // 仅引擎复现: the same request waits for the engine reproduction after preparing (no final model)
+      ...(engineOnly ? { engineOnly: true } : {}),
     },
     signal,
     requestedRulingVersion,
@@ -1439,10 +1445,23 @@ function publicPreparationFromSseEvent(event) {
     preparationId,
     evidencePackage: normalizePreparedEvidencePackage(payload.evidencePackage),
     evidencePreview: normalizePreparedEvidencePreview(payload.evidencePreview),
+    engineRepro: normalizeEngineOnlyResult(payload.engineRepro),
     progress: {
       totalMs,
       stageDurationsMs,
     },
+  };
+}
+
+// The engine section a 仅引擎复现 request returns with its preparation (api/answer.js engineOnlySection):
+// the short section text and the engine's full replay. null when the request did not ask for it.
+function normalizeEngineOnlyResult(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const status = typeof value.status === "string" ? value.status : "";
+  return {
+    status,
+    concise: typeof value.concise === "string" ? value.concise : "",
+    rendered: typeof value.rendered === "string" ? value.rendered : "",
   };
 }
 
@@ -1562,14 +1581,7 @@ function renderPreparedOnly(prepared, { question = "", requestedRulingVersion = 
     `The evidence for this question is ready${evidenceCount ? ` (${evidenceCount} sources, listed below)` : ""}. Press “Generate the answer” to call only the final ruling model; nothing is retrieved again. The prepared evidence is kept for 15 minutes. The evidence package can be downloaded with the button above.`,
     `この問題の証拠を準備しました${evidenceCount ? `（資料 ${evidenceCount} 件、下に表示）` : ""}。回答が必要なら「回答を生成」を押してください。最終裁定モデルだけを呼び出し、再検索はしません。準備した証拠は 15 分間保持されます。証拠パッケージは上のボタンでダウンロードできます。`,
   ));
-  if (prepared?.preparationId) {
-    preparedOnlyResult = { preparationId: prepared.preparationId, question: String(question || "").trim(),
-      requestedRulingVersion, progress: prepared.progress || null, evidencePreview: prepared.evidencePreview || [] };
-    const button = appendText(ui.verdictBody, "button", lt("生成答案", "Generate the answer", "回答を生成"));
-    button.type = "button";
-    button.className = "primary-button prepared-continue-button";
-    button.addEventListener("click", () => { void continuePreparedAnswer(); });
-  }
+  appendPreparedContinueButton(prepared, { question, requestedRulingVersion });
   renderSubAnswers([]);
   ui.stepsTitle.textContent = "处理结果";
   ui.stepsList.hidden = false;
@@ -1577,6 +1589,44 @@ function renderPreparedOnly(prepared, { question = "", requestedRulingVersion = 
   renderList(ui.questionsList, []);
   if (evidenceCount) renderPreparedEvidence(prepared.evidencePreview, { writing: false });
   else renderSources([]);
+}
+
+// 生成答案 under a prepared result: the final model's answer for the same preparation (continuePreparedAnswer).
+function appendPreparedContinueButton(prepared, { question = "", requestedRulingVersion = selectedRulingVersion } = {}) {
+  if (!prepared?.preparationId) return;
+  preparedOnlyResult = { preparationId: prepared.preparationId, question: String(question || "").trim(),
+    requestedRulingVersion, progress: prepared.progress || null, evidencePreview: prepared.evidencePreview || [] };
+  const button = appendText(ui.verdictBody, "button", lt("生成答案", "Generate the answer", "回答を生成"));
+  button.type = "button";
+  button.className = "primary-button prepared-continue-button";
+  button.addEventListener("click", () => { void continuePreparedAnswer(); });
+}
+
+// 仅引擎复现: the engine section the prepare request waited for (the short section and the collapsed full
+// replay), on top of the prepared evidence; 生成答案 still finalizes the same preparation.
+function renderEngineOnly(prepared, { question = "", requestedRulingVersion = selectedRulingVersion } = {}) {
+  renderPreparedOnly(prepared, { question, requestedRulingVersion });
+  updateModelStatus(lt("引擎复现完成", "Engine replay done", "エンジン再現完了"));
+  ui.confidenceText.textContent = lt("仅引擎", "Engine only", "エンジンのみ");
+  ui.verdictTitle.textContent = lt("ygopro 引擎复现结果", "ygopro engine replay", "ygopro エンジン再現の結果");
+  ui.rulingBasisText.textContent = lt("没有调用最终裁定模型", "The final ruling model was not called", "最終裁定モデルは呼び出していません");
+  const engine = prepared?.engineRepro || null;
+  const notStarted = !engine || engine.status === "not_started" || !engine.concise;
+  clearElement(ui.verdictBody);
+  if (notStarted) {
+    appendText(ui.verdictBody, "p", lt(
+      "本题没有运行 ygopro 引擎复现（题目里没有识别出具体的卡，或复现功能当前关闭）。需要答案时点“生成答案”。",
+      "The ygopro engine replay did not run for this question (no specific card was recognised, or the replay is switched off). Press “Generate the answer” for an answer.",
+      "この質問では ygopro エンジン再現を実行しませんでした（具体的なカードを認識できなかったか、再現機能が停止中です）。回答が必要なら「回答を生成」を押してください。",
+    ));
+  } else {
+    renderMarkdown(ui.verdictBody, engine.concise, []);
+    renderEngineReproReplay(ui.verdictBody, engine);
+  }
+  appendPreparedContinueButton(prepared, { question, requestedRulingVersion });
+  renderList(ui.stepsList, [lt("本次只准备材料并运行 ygopro 引擎复现，未调用最终裁定模型。",
+    "Evidence was prepared and the ygopro engine replay ran; the final ruling model was not called.",
+    "資料を準備して ygopro エンジン再現を実行しました。最終裁定モデルは呼び出していません。")]);
 }
 
 // 生成答案 after a prepare-only run: the final model's answer for that same preparation.
@@ -2472,9 +2522,10 @@ function setQueryPending(isPending) {
   if (!ui.analyzeButton) return;
   ui.analyzeButton.disabled = Boolean(isPending) || !selectedRulingModelIsAvailable();
   ui.analyzeButton.setAttribute("aria-busy", String(Boolean(isPending)));
-  if (ui.prepareEvidenceButton) {
-    ui.prepareEvidenceButton.disabled = Boolean(isPending) || !selectedRulingModelIsAvailable();
-    ui.prepareEvidenceButton.setAttribute("aria-busy", String(Boolean(isPending)));
+  for (const button of [ui.prepareEvidenceButton, ui.engineOnlyButton]) {
+    if (!button) continue;
+    button.disabled = Boolean(isPending) || !selectedRulingModelIsAvailable();
+    button.setAttribute("aria-busy", String(Boolean(isPending)));
   }
   syncRulingModelSelect(Boolean(isPending));
   if (ui.evidenceSelector) {
@@ -6559,6 +6610,14 @@ function renderPendingStages(stages = getPendingStages()) {
     ui.verdictBody.textContent = "正在检查是否存在完全同场景的官方 Q&A；完成后才会进入后续阶段。";
     return;
   }
+  if (pendingPipelinePhase === "engine_repro") {
+    // 仅引擎复现: the evidence is ready; the request now waits for the reproduction it started.
+    ui.verdictTitle.textContent = lt("正在等待 ygopro 引擎复现", "Waiting for the ygopro engine replay", "ygopro エンジン再現を待っています");
+    ui.verdictBody.textContent = lt("证据已准备好，正在等 ygopro 引擎复现的结果（通常再等几十秒）。不会调用最终裁定模型。",
+      "The evidence is ready; waiting for the ygopro engine replay (usually a few tens of seconds). The final ruling model is not called.",
+      "証拠の準備ができました。ygopro エンジン再現の結果を待っています（通常は数十秒）。最終裁定モデルは呼び出しません。");
+    return;
+  }
   const stage = pendingStageIndex >= 0 ? stages[pendingStageIndex] : null;
   if (!stage) {
     ui.verdictTitle.textContent = "正在准备查询";
@@ -7069,6 +7128,7 @@ async function init() {
 
   ui.analyzeButton.addEventListener("click", () => analyzeQuestion());
   ui.prepareEvidenceButton?.addEventListener("click", () => analyzeQuestion({ prepareOnly: true }));
+  ui.engineOnlyButton?.addEventListener("click", () => analyzeQuestion({ prepareOnly: true, engineOnly: true }));
   ui.evidencePackageDownload?.addEventListener("click", downloadPreparedEvidencePackage);
   ui.questionInput.addEventListener("input", scheduleAnalysis);
   ui.clearButton.addEventListener("click", () => {

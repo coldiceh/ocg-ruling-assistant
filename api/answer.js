@@ -23,6 +23,7 @@ import { translatePublicSource } from "../backend/publicSourceTranslation.mjs";
 import { enforcePublicRequestRateLimit } from "../backend/publicRequestRateLimit.mjs";
 import { readQueryAuditRequestContext } from "../backend/publicQueryAudit.mjs";
 import { preparePublicAnswer, finalizePublicAnswer, preparedAnswerProgress } from "../backend/publicPreparedAnswerService.mjs";
+import { awaitEngineReproAtMainCompletion, engineReproSectionText, engineReproWaitDeadline } from "../backend/engineRepro/session.mjs";
 import {
   buildPublicOfftopicRiskControlAnswer,
   readPublicOfftopicRiskControl,
@@ -38,6 +39,7 @@ export function createPublicAnswerHandler({
   rateLimit = enforcePublicRequestRateLimit,
   answer = answerPublicRulingQuestion,
   translate = translatePublicSource,
+  waitEngineRepro = awaitEngineReproAtMainCompletion,
   now = Date.now,
 } = {}) {
 return async function handler(request, response) {
@@ -77,7 +79,7 @@ return async function handler(request, response) {
     }
     if (["prepare", "finalize", "status"].includes(payload.action)) {
       await answerInSeparateRequest({ request, response, requestAbort, requestChannel,
-        payload, env, store: createStore({ env }), prepare, finalize, readRiskControl, now });
+        payload, env, store: createStore({ env }), prepare, finalize, readRiskControl, now, waitEngineRepro });
       return;
     }
     if (wantsPublicAnswerProgress(request, requestChannel)) {
@@ -121,8 +123,21 @@ return async function handler(request, response) {
 
 export default createPublicAnswerHandler();
 
+// 仅引擎复现: after the evidence is prepared, the same request waits for the engine reproduction that the
+// preparation started (by history record id, up to this invocation's own limit) and returns its section
+// with the preparation; the final model is not called. A preparation without a reproduction (switch off,
+// no card in the question, nothing stored) reads not_started.
+async function engineOnlySection(wait, { env, waitEngineRepro }) {
+  if (!wait?.auditId || !Number.isFinite(wait.requestStartedAt)) return { status: "not_started" };
+  const section = await waitEngineRepro({ env, auditId: wait.auditId, requestStartedAt: wait.requestStartedAt,
+    waitDeadlineAt: engineReproWaitDeadline(wait.requestStartedAt, env) }).catch(() => null);
+  if (!section) return { status: "not_started" };
+  return { status: section.status, questionStatus: section.questionStatus || null,
+    concise: engineReproSectionText(section), rendered: typeof section.rendered === "string" ? section.rendered : null };
+}
+
 async function answerInSeparateRequest({ request, response, requestAbort, requestChannel,
-  payload, env, store, prepare, finalize, readRiskControl, now }) {
+  payload, env, store, prepare, finalize, readRiskControl, now, waitEngineRepro }) {
   const streaming = wantsPublicAnswerProgress(request, requestChannel);
   if (payload.action === "status") {
     const status = await store.status(payload.preparationId);
@@ -243,14 +258,21 @@ async function answerInSeparateRequest({ request, response, requestAbort, reques
     }
     if (requestAbort.signal.aborted) return;
     if (result.preparationId) {
+      let engineRepro = null;
+      if (payload.engineOnly === true) {
+        if (streaming) sendPublicAnswerEvent(response, "phase_start", { phase: "engine_repro" });
+        engineRepro = await engineOnlySection(result.engineReproWait, { env, waitEngineRepro });
+        if (requestAbort.signal.aborted) return;
+      }
+      const prepared = { preparationId: result.preparationId, progress: measured,
+        evidencePreview: result.evidencePreview || [], evidencePackage: result.evidencePackage,
+        ...(engineRepro ? { engineRepro } : {}) };
       if (streaming) {
-        sendPublicAnswerEvent(response, "prepared", { preparationId: result.preparationId, progress: measured,
-          evidencePreview: result.evidencePreview || [], evidencePackage: result.evidencePackage });
+        sendPublicAnswerEvent(response, "prepared", prepared);
         sendPublicAnswerEvent(response, "end", measured);
         response.end();
       } else {
-        response.status(200).json({ status: "evidence_prepared", preparationId: result.preparationId, progress: measured,
-          evidencePreview: result.evidencePreview || [], evidencePackage: result.evidencePackage });
+        response.status(200).json({ status: "evidence_prepared", ...prepared });
       }
       return;
     }
