@@ -9,11 +9,38 @@ import {MAX_CPU_CONTINUATIONS, parseResumeInputs, validateCheckpointRun} from '.
 const exec = promisify(execFile);
 const fail = code => {throw new Error(code);};
 const cpuStep = 'Incrementally synchronize and mechanically verify cloud evidence assets';
-export function selectPreviousMainRun(runs, currentRunId) {
+const selectStep = 'Select saved CPU checkpoint before new source or paid work';
+const restoreStep = 'Restore verified unpublished snapshot without paid calls';
+export function previousMainRuns(runs, currentRunId) {
   if (!/^[1-9][0-9]*$/.test(String(currentRunId))) fail('sync_current_run_id_invalid');
   return [...runs].filter(r => r.head_branch === 'main' && r.path === '.github/workflows/sync-data.yml'
     && /^[1-9][0-9]*$/.test(String(r.id)) && BigInt(r.id) < BigInt(currentRunId))
-    .sort((a,b) => BigInt(a.id) > BigInt(b.id) ? -1 : 1)[0] || null;
+    .sort((a,b) => BigInt(a.id) > BigInt(b.id) ? -1 : 1);
+}
+export function selectPreviousMainRun(runs, currentRunId) {
+  return previousMainRuns(runs, currentRunId)[0] || null;
+}
+// A finished run whose sync job never got past checkpoint selection fetched no
+// source, made no paid call, and restored and published nothing, so it says
+// nothing about saved checkpoints: selection judges the run before it. Reading
+// such a run as a checkpoint failure made each refusal the reason for the next
+// day's refusal, and from 2026-10-12 one false alarm stopped every daily sync.
+export function stoppedBeforeSelection(jobs) {
+  const job = (jobs?.jobs || []).find(j => j.name === 'sync');
+  if (!job?.steps?.length) return true;
+  const step = job.steps.find(s => s.name === selectStep);
+  return Boolean(step) && step.conclusion !== 'success';
+}
+// The job log holds every step, and a test step prints fixture selections too
+// (run 38181343182 logged run_id 123 from its tests). Only a line inside the
+// selection step's own section shows that the run resumed a saved checkpoint.
+export function selectionStepChoseCheckpoint(raw) {
+  const lines = stripVTControlCharacters(raw).split(/\r?\n/)
+    .map(line => line.replace(/^﻿?\d{4}-\d{2}-\d{2}T[\d:.]+Z /, ''));
+  const start = lines.findIndex(line => line.startsWith('##[group]Run node scripts/select-sync-cpu-checkpoint.mjs'));
+  if (start < 0) fail('sync_previous_selection_log_unreadable_no_paid_restart');
+  const end = lines.findIndex((line, index) => index > start && line.startsWith('##[group]Run '));
+  return lines.slice(start + 1, end < 0 ? lines.length : end).some(line => line.startsWith('SYNC_CPU_SELECTION '));
 }
 export function parseCpuCheckpointLog(raw) {
   const lines = stripVTControlCharacters(raw).split(/\r?\n/)
@@ -69,7 +96,19 @@ export async function selectCheckpoint({repo,currentRunId,workspace,temp,runId='
   const explicit = Boolean(runId);
   const api = async suffix => JSON.parse(await command('gh',['api',`repos/${repo}/${suffix}`]));
   const recent = await api('actions/workflows/sync-data.yml/runs?branch=main&per_page=100');
-  const latest = selectPreviousMainRun(recent.workflow_runs || [],currentRunId);
+  let latest = null, passed = 0;
+  for (const candidate of previousMainRuns(recent.workflow_runs || [],currentRunId)) {
+    if (candidate.status === 'completed' && candidate.conclusion !== 'success') {
+      if (!Number.isSafeInteger(candidate.run_attempt) || candidate.run_attempt < 1) fail('sync_previous_run_attempt_invalid');
+      if (stoppedBeforeSelection(await api(`actions/runs/${candidate.id}/attempts/${candidate.run_attempt}/jobs?per_page=100`))) {
+        passed += 1; continue;
+      }
+    }
+    latest = candidate; break;
+  }
+  // Every listed run stopped at selection, so nothing shows what is saved: stay closed.
+  if (passed && !latest) fail('sync_previous_checkpoint_failure_no_paid_restart');
+  if (passed) console.log(`Passed over ${passed} earlier run(s) that stopped before checkpoint selection; judging run ${latest.id}.`);
   const fresh = async () => { await output({run_id:'',sequence:0}); return {mode:'fresh'}; };
   if (!runId && (!latest || latest.conclusion === 'success')) return fresh();
   if (runId && String(latest?.id) !== runId) fail('sync_checkpoint_not_latest_no_duplicate_or_regression');
@@ -85,14 +124,11 @@ export async function selectCheckpoint({repo,currentRunId,workspace,temp,runId='
   const job = (jobs.jobs || []).find(j=>j.name==='sync');
   if(run.conclusion !== 'failure' || job?.steps?.find(s=>s.name===cpuStep)?.conclusion !== 'failure') {
     if(explicit) fail('sync_requested_checkpoint_not_cpu_pause');
-    if(job?.steps?.some(s=>['Select saved CPU checkpoint before new source or paid work',
-      'Restore verified unpublished snapshot without paid calls'].includes(s.name) && s.conclusion==='failure'))
+    if(job?.steps?.some(s=>[selectStep,restoreStep].includes(s.name) && s.conclusion==='failure'))
       fail('sync_previous_checkpoint_failure_no_paid_restart');
-    if(job?.steps?.some(s=>s.name==='Select saved CPU checkpoint before new source or paid work' && s.conclusion==='success')) {
-      const previousLog=stripVTControlCharacters(await command('gh',['api',`repos/${repo}/actions/jobs/${job.id}/logs`,'--allow-escape-sequences']));
-      if(previousLog.split(/\r?\n/).some(line=>/^\d{4}-\d{2}-\d{2}T[\d:.]+Z SYNC_CPU_SELECTION /.test(line)))
-        fail('sync_previous_checkpoint_failure_no_paid_restart');
-    }
+    if(job?.steps?.some(s=>s.name===selectStep && s.conclusion==='success')
+      && selectionStepChoseCheckpoint(await command('gh',['api',`repos/${repo}/actions/jobs/${job.id}/logs`,'--allow-escape-sequences'])))
+      fail('sync_previous_checkpoint_failure_no_paid_restart');
     if(run.conclusion === 'cancelled') fail('sync_previous_run_cancelled_reinspect_before_paid_work');
     return fresh();
   }

@@ -297,7 +297,9 @@ test("Vercel verifies the source, runtime, and enabled Gemini asset bindings bef
   ].sort();
   assert.equal(config.functions["api/admin-model-lab.js"].excludeFiles, "data/**");
   assert.equal(config.functions["api/admin-model-lab.js"].includeFiles, undefined);
-  assert.deepEqual(config.git.deploymentEnabled, { main: true, "*": false });
+  // Production deploys from main; engine-repro-stage2 also builds previews, with an isolated
+  // OpenAI budget (0147cb8, 2026-10-17). Every other branch stays off.
+  assert.deepEqual(config.git.deploymentEnabled, { main: true, "engine-repro-stage2": true, "*": false });
   // A push whose commit message carries "[vercel skip]" (history rewrites, docs-only commits)
   // must not redeploy: the ignore command exits 0 for it and 1 for every other message.
   assert.equal(config.ignoreCommand, "echo \"$VERCEL_GIT_COMMIT_MESSAGE\" | grep -q '\\[vercel skip\\]'");

@@ -4,7 +4,8 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import {execFileSync} from 'node:child_process';
-import {selectPreviousMainRun,parseCpuCheckpointLog,nextCpuSequence,validateProgressProof,selectCheckpoint} from '../scripts/select-sync-cpu-checkpoint.mjs';
+import {selectPreviousMainRun,parseCpuCheckpointLog,nextCpuSequence,validateProgressProof,selectCheckpoint,
+  stoppedBeforeSelection,selectionStepChoseCheckpoint} from '../scripts/select-sync-cpu-checkpoint.mjs';
 import {MAX_CPU_CONTINUATIONS} from '../scripts/restore-sync-checkpoint.mjs';
 const log=(seq=4)=>`2026-09-21T15:00:00.000Z   SYNC_RESUME_SEQUENCE: ${seq}\n2026-09-21T15:00:01.000Z cloud-embedding-cache:reused=31993 pending=10217\n2026-09-21T15:31:27.000Z missing-cloud-embeddings:1680/10217\n2026-09-21T15:31:27.001Z cloud_sync_embedding_checkpoint_saved:resume_next_run\n2026-09-21T15:31:27.002Z Error: cloud_sync_embedder_exit_75\n`;
 const progress={schemaVersion:1,status:'paused_time',totalRows:42210,cachedRows:31993,computedRows:1680,remainingRows:8537};
@@ -43,7 +44,7 @@ async function fakeEnvironment(t,patch={}) {
     {name:'Incrementally synchronize and mechanically verify cloud evidence assets',conclusion:'failure'}]};
   const config={run,job,log:log(),progress,cache:true,artifact:true,...patch};
   const configPath=path.join(root,'config.json');await fs.writeFile(configPath,JSON.stringify(config));
-  const fake=`#!/usr/bin/env python3\nimport sys,os,json,pathlib\nc=json.loads(pathlib.Path(os.environ['SYNC_FAKE_GH']).read_text())\na=sys.argv[1:]\nwith open(os.environ['SYNC_FAKE_CALLS'],'a') as f:f.write(json.dumps(a)+'\\n')\nif a[0]=='api':\n p=a[1]\n if 'workflows/sync-data.yml/runs?' in p:v={'workflow_runs':[c['run']]}\n elif p.endswith('/actions/runs/123'):v=c['run']\n elif '/attempts/1/jobs?' in p:v={'jobs':[c['job']]}\n elif p.endswith('/jobs/999/logs'):print(c['log']);sys.exit(0)\n elif '/artifacts?' in p:v={'artifacts':[{'name':n,'expired':False,'workflow_run':{'id':123}} for n in (['sync-resume-snapshot-123-1','cloud-sync-progress-123-1'] if c['artifact'] else [])]}\n elif '/actions/caches?' in p:v={'actions_caches':[{'key':'cloud-embedding-rows-v1-Linux-123-1','ref':'refs/heads/main','size_in_bytes':100}] if c['cache'] else []}\n else:raise RuntimeError('UNAUTHORIZED_API')\n print(json.dumps(v))\nelif a[:2]==['run','download']:\n d=pathlib.Path(a[a.index('--dir')+1]);d.mkdir(exist_ok=True);(d/'cloud-sync-progress.json').write_text(json.dumps(c['progress']))\nelse:raise RuntimeError('UNAUTHORIZED_COMMAND')\n`;
+  const fake=`#!/usr/bin/env python3\nimport sys,os,json,pathlib\nc=json.loads(pathlib.Path(os.environ['SYNC_FAKE_GH']).read_text())\na=sys.argv[1:]\nwith open(os.environ['SYNC_FAKE_CALLS'],'a') as f:f.write(json.dumps(a)+'\\n')\nif a[0]=='api':\n p=a[1]\n if 'workflows/sync-data.yml/runs?' in p:v={'workflow_runs':[c['run']]+c.get('later',[])}\n elif p.endswith('/actions/runs/123'):v=c['run']\n elif '/attempts/1/jobs?' in p:v={'jobs':[c.get('laterJobs',{}).get(p.split('/actions/runs/')[1].split('/')[0],c['job'])]}\n elif p.endswith('/jobs/999/logs'):print(c['log']);sys.exit(0)\n elif '/artifacts?' in p:v={'artifacts':[{'name':n,'expired':False,'workflow_run':{'id':123}} for n in (['sync-resume-snapshot-123-1','cloud-sync-progress-123-1'] if c['artifact'] else [])]}\n elif '/actions/caches?' in p:v={'actions_caches':[{'key':'cloud-embedding-rows-v1-Linux-123-1','ref':'refs/heads/main','size_in_bytes':100}] if c['cache'] else []}\n else:raise RuntimeError('UNAUTHORIZED_API')\n print(json.dumps(v))\nelif a[:2]==['run','download']:\n d=pathlib.Path(a[a.index('--dir')+1]);d.mkdir(exist_ok=True);(d/'cloud-sync-progress.json').write_text(json.dumps(c['progress']))\nelse:raise RuntimeError('UNAUTHORIZED_COMMAND')\n`;
   await fs.writeFile(path.join(root,'gh'),fake,{mode:0o755});
   await fs.writeFile(path.join(root,'git'),'#!/bin/sh\nexit 0\n',{mode:0o755});
   const env={PATH:root+path.delimiter+process.env.PATH,SYNC_FAKE_GH:configPath,SYNC_FAKE_CALLS:path.join(root,'calls'),
@@ -105,8 +106,56 @@ test('a failed recovery selector cannot cause a fresh paid restart on tomorrow s
   const {options}=await fakeEnvironment(t,{job});
   await assert.rejects(selectCheckpoint(options),/previous_checkpoint_failure_no_paid_restart/);
 });
+const SELECT='Select saved CPU checkpoint before new source or paid work';
+// A sync job log as GitHub serves it: the selection step's section, then the test step, whose fixtures print selections too.
+const jobLog=(selection='')=>['2026-10-11T22:44:30.365Z ##[group]Run node scripts/select-sync-cpu-checkpoint.mjs',
+  '2026-10-11T22:44:30.366Z node scripts/select-sync-cpu-checkpoint.mjs','2026-10-11T22:44:30.367Z ##[endgroup]',
+  ...(selection?[`2026-10-11T22:44:33.000Z ${selection}`]:[]),
+  '2026-10-11T22:44:33.084Z ##[group]Run node scripts/restore-sync-checkpoint.mjs',
+  '2026-10-11T22:44:33.138Z ##[group]Run node --test tests/sync-cpu-selection.test.mjs',
+  '2026-10-11T22:44:35.085Z SYNC_CPU_SELECTION {"mode":"cpu_resume","run_id":"123","sequence":5}',''].join('\n');
 test('a post-restore failure must be repaired without re-entering paid source stages',async t=>{
-  const job={id:999,name:'sync',steps:[{name:'Select saved CPU checkpoint before new source or paid work',conclusion:'success'}]};
-  const {options}=await fakeEnvironment(t,{job,log:'2026-09-21T15:00:00.000Z SYNC_CPU_SELECTION {"mode":"cpu_resume"}\n'});
+  const job={id:999,name:'sync',steps:[{name:SELECT,conclusion:'success'}]};
+  const {options}=await fakeEnvironment(t,{job,log:jobLog('SYNC_CPU_SELECTION {"mode":"cpu_resume"}')});
   await assert.rejects(selectCheckpoint(options),/previous_checkpoint_failure_no_paid_restart/);
+});
+test('only the selection step section shows a resumed checkpoint; which runs stopped before selection',()=>{
+  assert.equal(selectionStepChoseCheckpoint(jobLog()),false);
+  assert.equal(selectionStepChoseCheckpoint(jobLog('SYNC_CPU_SELECTION {"mode":"cpu_resume"}')),true);
+  assert.equal(selectionStepChoseCheckpoint('\x1b[0m'+jobLog('\x1b[32mSYNC_CPU_SELECTION {"mode":"cpu_resume"}\x1b[0m')),true);
+  assert.throws(()=>selectionStepChoseCheckpoint('2026-10-11T22:44:35.085Z SYNC_CPU_SELECTION {}\n'),/selection_log_unreadable_no_paid_restart/);
+  const sync=steps=>({jobs:[{name:'sync',steps}]});
+  for(const jobs of [{jobs:[]},sync([]),...['failure','skipped','cancelled'].map(conclusion=>sync([{name:SELECT,conclusion}]))])
+    assert.equal(stoppedBeforeSelection(jobs),true,JSON.stringify(jobs));
+  // A selection that finished, or a job layout without the selection step, is judged as before.
+  assert.equal(stoppedBeforeSelection(sync([{name:SELECT,conclusion:'success'}])),false);
+  assert.equal(stoppedBeforeSelection(sync([{name:'Checkout',conclusion:'success'}])),false);
+});
+// Later days that stopped at selection, as on 2026-10-12 through 2026-10-25.
+const stopped=(id,conclusion)=>({run:{id,head_branch:'main',path:'.github/workflows/sync-data.yml',status:'completed',conclusion:'failure',run_attempt:1},
+  job:{id:id+1,name:'sync',run_id:id,status:'completed',conclusion:'failure',steps:conclusion?[{name:SELECT,conclusion}]:[]}});
+const laterDays=()=>{const days=[stopped(200,'failure'),stopped(300,'skipped'),stopped(400,'')];
+  return {later:days.map(d=>d.run),laterJobs:Object.fromEntries(days.map(d=>[String(d.run.id),d.job]))};};
+test('a run that published and then failed to deploy is followed by a fresh sync, however many days stopped after it',async t=>{
+  // Run 38181343182: data committed, the Pages release check failed, and its test step printed a fixture selection.
+  const job={id:999,name:'sync',run_id:123,status:'completed',conclusion:'success',steps:[{name:SELECT,conclusion:'success'},
+    {name:'Restore verified unpublished snapshot without paid calls',conclusion:'success'},
+    {name:'Incrementally synchronize and mechanically verify cloud evidence assets',conclusion:'success'},
+    {name:'Commit snapshot changes',conclusion:'success'}]};
+  const {options}=await fakeEnvironment(t,{job,log:jobLog(),...laterDays()});
+  assert.equal((await selectCheckpoint(options)).mode,'fresh');
+});
+test('days that stopped at selection do not hide a saved checkpoint: it is still resumed',async t=>{
+  const {root,options}=await fakeEnvironment(t,laterDays());
+  const result=await selectCheckpoint(options);assert.equal(result.mode,'cpu_resume');assert.equal(result.run_id,'123');assert.equal(result.sequence,5);
+  assert.ok(!(await fs.readFile(path.join(root,'calls'),'utf8')).includes('POST'));
+});
+test('days that stopped at selection repeat the refusal for its own reason instead of becoming it',async t=>{
+  const {options}=await fakeEnvironment(t,{cache:false,...laterDays()});
+  await assert.rejects(selectCheckpoint(options),/cache_missing_no_recompute/);
+});
+test('a selection log without the selection step section stays closed',async t=>{
+  const job={id:999,name:'sync',steps:[{name:SELECT,conclusion:'success'}]};
+  const {options}=await fakeEnvironment(t,{job,log:'2026-10-11T22:44:35.085Z SYNC_CPU_SELECTION {"mode":"cpu_resume"}\n'});
+  await assert.rejects(selectCheckpoint(options),/selection_log_unreadable_no_paid_restart/);
 });
