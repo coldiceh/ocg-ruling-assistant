@@ -8,37 +8,37 @@
     "algorithm": "brotli",
     "quality": 5
   },
-  "dataRevision": "c619d34a89e1ae676493b959125870b988809605f0cb26b456247c2ba0e03d3e",
-  "sourceSetDigest": "1f47dbdd1267f1a2c5837d246dbbe6a23c944d4d190a62dba7b8abc5b66764c4",
+  "dataRevision": "41efe2344d9c9df865725e58ffd3b770584626d04902f24261af206678fec380",
+  "sourceSetDigest": "1b13ac18eb50b85130007b3be5b9a5fdaf3a99333989c7a6f1b89fe44c9b4f29",
   "sources": [
     {
       "path": "cards.json",
       "bytes": 33147959,
-      "sha256": "5190fcf7b7fe2bc3b41ecead166cd89362360d6862e20e4a2546c576352789f0",
+      "sha256": "a42609ddcbf41e6fa69d73083515b9fc3c36b7452a020fdf156dd8ac688bf89b",
       "count": 14425
     },
     {
       "path": "rulings.json",
-      "bytes": 47471998,
-      "sha256": "7c3cd97d6b6def021bb8bae7980cd950b99aba25b33d268068924ff59ded61fa",
-      "count": 40317
+      "bytes": 47512042,
+      "sha256": "690de4c03d960faa4c4bbe32cf3f14108232768be366c2ad02868ed2a4184423",
+      "count": 40322
     },
     {
       "path": "qa-index.json",
-      "bytes": 65092379,
-      "sha256": "c05d402c96ae8698f3bcedf7e125aaace69a75de8c3b81f44840cea92139aff6",
+      "bytes": 65169175,
+      "sha256": "86c8547202391f285f545c6ab39b7670f20561e1e88a86df9518a27d71d83c25",
       "count": 37248
     },
     {
       "path": "evidence-index.json",
-      "bytes": 171123003,
-      "sha256": "fff3231a8807f437ad116ef80e5b145209b4df09f616dce1c93c67bafd73bd0d",
-      "count": 75951
+      "bytes": 171217787,
+      "sha256": "cf185d29557bb298e7b54752f373a1e2a6b65f341a66e98410f2d0572b1b8ad4",
+      "count": 75967
     },
     {
       "path": "ocg-rule-corpus.json",
       "bytes": 9717263,
-      "sha256": "5d9c0b7cca55e31e4b538f95440fa4f1c7701070c54c26a4c451f5e2227e74cb",
+      "sha256": "ca063e6d814bc6912b016d5104e957492361174a339e9e4ccbb1660d4b55b36c",
       "count": 41
     },
     {
@@ -50,7 +50,7 @@
   ],
   "counts": {
     "cards": 14425,
-    "records": 116188,
+    "records": 116209,
     "qaRecords": 37248
   },
   "corpora": {
@@ -58,30 +58,30 @@
       "key": "cards",
       "file": "cards.json.br",
       "encoding": "br",
-      "bytes": 2490745,
-      "sha256": "45f1dd19f6ecf1dadb73db2edd40b45f613aa75bed6e6399859887518bfc2594",
+      "bytes": 2491696,
+      "sha256": "6cb2ead6804fa48586b3fdf62aa15d37225ef9533430ca5d8fba9154c4f8614e",
       "canonicalBytes": 25373757,
-      "canonicalSha256": "61925ec8f166f2ad79c779506fbaf1110f2e04881f7dd6194775c26c63b00323",
+      "canonicalSha256": "195b172c509e5dbfc4712a0dceeb9763e228a1834ef6d951955ac0abb5b48123",
       "count": 14425
     },
     "records": {
       "key": "records",
       "file": "records.json.br",
       "encoding": "br",
-      "bytes": 16902363,
-      "sha256": "27f6082f09f1424db4cd7a9585e00e5006d1ca527344fb221ac29f5bfb60838e",
-      "canonicalBytes": 276164185,
-      "canonicalSha256": "df7840ce2923939918cd963ce593ef88fae2d69f264950ba61cc670a2bb9e6e9",
-      "count": 116188
+      "bytes": 16913105,
+      "sha256": "8685eaceb2c4bc09b731325d1f9e749077c7fdb0fb64f97ee31817803807699a",
+      "canonicalBytes": 276333809,
+      "canonicalSha256": "223cbea612a3afc4708a54c2210e7d6c7c0a1ee8e1b5ce2931809a43eb66ca6f",
+      "count": 116209
     },
     "qaRecords": {
       "key": "qaRecords",
       "file": "qa-records.json.br",
       "encoding": "br",
-      "bytes": 4913491,
-      "sha256": "b17dd6a54ec4f5d7a407f8996120b406bdfc546b4777e0ef97fb9d50b2813ff0",
-      "canonicalBytes": 66807730,
-      "canonicalSha256": "f6b599c084d25318058f504ba06df493e14821a9e02a146517fc432fd2833b53",
+      "bytes": 4916319,
+      "sha256": "b72907b1c78150fb0f6314cf419d5ad293cd2bce17b9c9e5b9fbe6368b10a847",
+      "canonicalBytes": 66863444,
+      "canonicalSha256": "4a9df90dd3807292d237dfbba44f7037da4730602d1ffa0c829215869552f146",
       "count": 37248
     }
   },
@@ -99,5 +99,5 @@
       "count": 14425
     }
   },
-  "bundleRevision": "67e53dadf260857935022660353484bca8128be35bcb37331bc9409622a3189e"
+  "bundleRevision": "ee94ad79a5c75c25857aa69f64ee9a537689627c3f482e8640ddc59a349faca2"
 }

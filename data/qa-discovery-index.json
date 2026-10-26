@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-10-26T01:50:26.409Z",
-  "sourceRevision": "32833",
+  "generatedAt": "2026-10-26T23:05:15.495Z",
+  "sourceRevision": "32839",
   "complete": true,
   "cardCount": 14342,
   "linkedCardCount": 8606,
@@ -59150,7 +59150,6 @@
       "qaIds": [
         "7467",
         "11911",
-        "12386",
         "15785",
         "19428"
       ]
@@ -102145,6 +102144,7 @@
     {
       "cardId": "23574",
       "qaIds": [
+        "12386",
         "24390"
       ]
     },
