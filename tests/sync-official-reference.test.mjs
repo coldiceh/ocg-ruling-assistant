@@ -39,5 +39,5 @@ test('source preflight occurs before paid synchronization and failures retain a 
  const s=await readFile(new URL('../.github/workflows/sync-data.yml',import.meta.url),'utf8');
  assert.ok(s.indexOf('--validate-only')<s.indexOf('id: bounded_sync'));
  assert.ok(s.includes('sync-resume-snapshot-${{ github.run_id }}-${{ github.run_attempt }}'));
- assert.ok(s.includes('cron: "0 19 * * *"'));assert.ok(s.includes('--batch-budget-usd 1'));
+ assert.ok(s.includes('- cron: "30 5 * * *"\n      timezone: "Asia/Shanghai"'));assert.ok(s.includes('--batch-budget-usd 1'));
 });

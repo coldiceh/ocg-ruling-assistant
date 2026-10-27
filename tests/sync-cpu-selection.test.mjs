@@ -83,7 +83,7 @@ test('workflow gives resumed CPU work 175 minutes, exact cache restoration and t
   assert.ok(w.includes('timeout-minutes: 240'));assert.ok(w.includes('steps.select_resume.outputs.cache_key'));
   assert.ok(w.includes("fail-on-cache-miss: ${{ steps.restore.outputs.resumed == 'true' }}"));
   assert.ok(w.includes('CLOUD_EMBED_REQUIRED_CACHED_ROWS'));assert.ok(w.includes('CLOUD_EMBED_EXPECTED_ROWS'));
-  assert.ok(w.includes('cron: "0 19 * * *"'));assert.ok(w.includes('--batch-budget-usd 1'));
+  assert.ok(w.includes('- cron: "30 5 * * *"\n      timezone: "Asia/Shanghai"'));assert.ok(w.includes('--batch-budget-usd 1'));
   assert.ok(w.includes('0.66364875'));assert.ok(w.includes('pnpm check:freshness'));
   assert.ok(w.includes('bash scripts/publish-synced-snapshot.sh'));assert.ok(w.includes('steps.select_resume.outputs.sequence'));
 });

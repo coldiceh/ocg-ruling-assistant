@@ -12,7 +12,9 @@ on:
         required: false
         default: '0'
   schedule:
-    - cron: "0 19 * * *"
+    # Every day at 05:30 China Standard Time (no daylight saving), i.e. 21:30 UTC the day before.
+    - cron: "30 5 * * *"
+      timezone: "Asia/Shanghai"
 
 permissions: {}
 
