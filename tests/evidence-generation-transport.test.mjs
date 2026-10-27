@@ -237,7 +237,13 @@ test("official Luna evidence channel never sends a b.ai key and stops before any
     fetchImpl: async (url, options) => { sent.push(options.headers.authorization); return officialResponse("gpt-6-luna"); } });
   const body = transport.prepareRequest(semanticBody());
   await transport.invoke(body, { measurement: lunaMeasurement(body) });
-  assert.deepEqual(sent, ["Bearer decisions-key"]);
+  // The official Luna card channel key is the last fallback.
+  const card = createEvidenceGenerationTransport({ contract: lunaContract,
+    env: { RAG_EVIDENCE_LUNA_CHANNEL: "official", OCG_CARD_OPENAI_API_KEY: "card-key", BAI_API_KEY: "bai-key" },
+    fetchImpl: async (url, options) => { sent.push(options.headers.authorization); return officialResponse("gpt-6-luna"); } });
+  const cardBody = card.prepareRequest(semanticBody());
+  await card.invoke(cardBody, { measurement: lunaMeasurement(cardBody) });
+  assert.deepEqual(sent, ["Bearer decisions-key", "Bearer card-key"]);
 });
 
 test("the official channel applies only to GPT-6 Luna; other b.ai models and the default stay on b.ai", async () => {

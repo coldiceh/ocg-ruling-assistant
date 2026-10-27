@@ -14,12 +14,13 @@ export function evidenceLunaChannel(env = {}) {
 }
 
 // RAG_EVIDENCE_OPENAI_API_KEY is the evidence-only copy that survives public
-// provider isolation; OCG_EVIDENCE_OPENAI_API_KEY is a dedicated key, and the
-// evidence preparation key used by Decisions is the fallback. A b.ai key is
-// never sent to the official endpoint.
+// provider isolation; OCG_EVIDENCE_OPENAI_API_KEY is a dedicated key. The
+// evidence preparation key used by Decisions, then the key of the official
+// Luna card channel (same account and daily ledger), are the fallbacks. A b.ai
+// key is never sent to the official endpoint.
 export function officialEvidenceApiKey(env = {}) {
   return String(env?.RAG_EVIDENCE_OPENAI_API_KEY || env?.OCG_EVIDENCE_OPENAI_API_KEY
-    || env?.OPENAI_DECISIONS_API_KEY || "").trim();
+    || env?.OPENAI_DECISIONS_API_KEY || env?.RAG_CARD_OPENAI_API_KEY || env?.OCG_CARD_OPENAI_API_KEY || "").trim();
 }
 
 const OFFICIAL_LUNA_MODELS = new Set(["gpt-6-luna"]);
