@@ -251,7 +251,7 @@ function officialNetwork(body, responseModel = "gpt-6-luna") {
   return { calls, fetchImpl };
 }
 
-test("the official Luna card channel sends the unchanged request to OpenAI with a card-only key and the official ledger", async () => {
+test("the official Luna card channel sends the b.ai request, minus prompt-cache writes, to OpenAI with a card-only key and the official ledger", async () => {
   const env = createPublicAnswerModelEnv(officialSourceEnv, "bai-astra-low");
   assert.equal(env.RAG_CARD_LUNA_CHANNEL, "official");
   assert.equal(env.RAG_CARD_OPENAI_API_KEY, "official-evidence-secret");
@@ -270,11 +270,15 @@ test("the official Luna card channel sends the unchanged request to OpenAI with 
   assert.equal(request.authorization, "Bearer official-evidence-secret");
   assert.equal(request.redirect, "error");
 
-  // The wire body is byte-for-byte the b.ai body for the same configuration.
+  // The wire body is the b.ai body for the same configuration plus the official-only switch that keeps
+  // the prompt out of the paid prompt cache (officialPromptCache.mjs); b.ai never receives that field.
   const bai = officialNetwork(extraction);
   await budgeted(callCardNameExtractionModel, { userQuery: "黑魔术师的效果是什么？",
     dataRevision: "official-luna-card-v1-bai", env: baseEnv, fetchImpl: bai.fetchImpl });
-  assert.deepEqual(request.body, bai.calls.bai[0].body);
+  const { prompt_cache_options: cacheOptions, ...officialBody } = request.body;
+  assert.deepEqual(cacheOptions, { mode: "explicit" });
+  assert.deepEqual(officialBody, bai.calls.bai[0].body);
+  assert.equal(Object.hasOwn(bai.calls.bai[0].body, "prompt_cache_options"), false);
 
   assert.equal(result.providerUsed, "openai");
   assert.equal(result.modelUsed, "gpt-6-luna");

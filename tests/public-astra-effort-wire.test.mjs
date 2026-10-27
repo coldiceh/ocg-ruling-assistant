@@ -92,6 +92,8 @@ test("public finalization sends one fixed official Chat Completions request and 
     messages: [{ role: "user", content: prompt }],
     reasoning_effort: "low",
     max_completion_tokens: 4096,
+    // Every question's prompt is new, so the official request never writes the paid prompt cache.
+    prompt_cache_options: { mode: "explicit" },
     stream: true,
     stream_options: { include_usage: true },
   });

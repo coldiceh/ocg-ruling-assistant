@@ -166,8 +166,10 @@ test("the official translation channel sends the same request to OpenAI and labe
     const inner = f.createBudget(args);
     return { sourceTranslation: async (request) => { ledgerProvider = request.provider; return inner.sourceTranslation(request); } };
   };
+  const bodies = [];
   const fetchImpl = async (url, options) => {
     requests.push({ url: String(url), authorization: options.headers.authorization, redirect: options.redirect });
+    bodies.push(JSON.parse(options.body));
     return f.fetchImpl(url, options);
   };
   const env = { SOURCE_TRANSLATION_DAILY_BUDGET_USD: "1", RAG_SOURCE_TRANSLATION_CHANNEL: "official",
@@ -176,7 +178,16 @@ test("the official translation channel sends the same request to OpenAI and labe
   assert.equal(result.status, "translated");
   assert.deepEqual(requests, [{ url: "https://api.openai.com/v1/responses",
     authorization: "Bearer official-evidence-secret", redirect: "error" }]);
+  assert.deepEqual(bodies[0].prompt_cache_options, { mode: "explicit" }, "no paid prompt-cache write on the official endpoint");
   assert.equal(ledgerProvider, "openai");
+
+  const relay = fixture();
+  const relayBodies = [];
+  await translatePublicSource({ payload, store: relay.store, createBudget: relay.createBudget,
+    fetchImpl: async (url, options) => { relayBodies.push(JSON.parse(options.body)); return relay.fetchImpl(url, options); },
+    env: { SOURCE_TRANSLATION_DAILY_BUDGET_USD: "1", BAI_API_KEY: "bai-secret" } });
+  assert.equal(relayBodies.length, 1);
+  assert.equal(Object.hasOwn(relayBodies[0], "prompt_cache_options"), false, "b.ai never receives the official-only field");
 
   await assert.rejects(translatePublicSource({ payload: { ...payload, targetLocale: "ja" }, store: f.store, createBudget,
     fetchImpl, env: { SOURCE_TRANSLATION_DAILY_BUDGET_USD: "1", RAG_SOURCE_TRANSLATION_CHANNEL: "official", BAI_API_KEY: "bai-secret" } }),

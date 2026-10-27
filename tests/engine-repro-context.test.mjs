@@ -97,6 +97,7 @@ test("official transport keeps all essential text above the soft target and stil
   } });
   await call({ model: DEFAULT_PLANNER.model, input: card.effectText, maxInputTokens: 1, maxOutputTokens: 1600, reasoningEffort: "low" });
   assert.equal(sent.input, card.effectText);
+  assert.deepEqual(sent.prompt_cache_options, { mode: "explicit" }, "no paid prompt-cache write");
   assert.equal(reserved, 1);
   assert.equal(settled, 1);
 });
@@ -114,7 +115,8 @@ test("batch transport also treats the input target as soft", async () => {
   const dir = mkdtempSync(join(tmpdir(), "engine-context-"));
   try {
     const runner = createModelRunner({ outDir: dir, budgetUsd: 1,
-      mock: async ({ body }) => { assert.equal(body.input, card.effectText); return { status: "completed", output: [] }; } });
+      mock: async ({ body }) => { assert.equal(body.input, card.effectText);
+        assert.deepEqual(body.prompt_cache_options, { mode: "explicit" }); return { status: "completed", output: [] }; } });
     await runner.call({ qid: "synthetic", stage: "plan", model: DEFAULT_PLANNER.model, input: card.effectText,
       maxInputTokens: 1, maxOutputTokens: 1600 });
   } finally { rmSync(dir, { recursive: true, force: true }); }
