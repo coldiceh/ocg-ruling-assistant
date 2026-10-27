@@ -6,6 +6,7 @@
 import { createHash } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { OFFICIAL_PROMPT_CACHE_OPTIONS } from "../officialPromptCache.mjs";
 
 export const OFFICIAL_RESPONSES_URL = "https://api.openai.com/v1/responses";
 
@@ -67,6 +68,7 @@ export function createModelRunner({ outDir, apiKey = null, mock = null, budgetUs
       text: { format: { type: "json_object" } },
       max_output_tokens: maxOutputTokens,
       stream: false,
+      prompt_cache_options: OFFICIAL_PROMPT_CACHE_OPTIONS,
     };
     const bodyHash = createHash("sha256").update(JSON.stringify(body)).digest("hex");
     const cachePath = join(cacheDir, qid, `${stage}-${bodyHash.slice(0, 16)}.json`);
@@ -154,7 +156,8 @@ export function createOfficialModelCall({ env, limits, fetchImpl = globalThis.fe
     timeoutMs = 120000 }) {
     if (!apiKey) throw Object.assign(new Error("engine_repro_api_key_missing"), { code: "engine_repro_not_configured" });
     const body = { model, ...(instructions ? { instructions } : {}), input, reasoning: { effort: reasoningEffort },
-      text: { format: { type: "json_object" } }, max_output_tokens: maxOutputTokens, stream: false };
+      text: { format: { type: "json_object" } }, max_output_tokens: maxOutputTokens, stream: false,
+      prompt_cache_options: OFFICIAL_PROMPT_CACHE_OPTIONS };
     const inputText = `${instructions || ""}\n${input}`;
     // maxInputTokens is a soft trimming target, never a second rejection gate.
     const reservation = await limits.reserve(worstCaseCostUsd(model, inputText, maxOutputTokens));

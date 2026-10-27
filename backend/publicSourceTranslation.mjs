@@ -2,6 +2,7 @@ import { createCloudRequestBudget } from "./cloudRequestBudget.mjs";
 import { DEFAULT_BAI_GENERATION_BASE_URL } from "./evidenceGenerationTransport.mjs";
 import { preparationError, isPublicPreparationId } from "./publicAnswerPreparationStore.mjs";
 import { responsesOutputText } from "./responsesOutputText.mjs";
+import { OFFICIAL_PROMPT_CACHE_OPTIONS } from "./officialPromptCache.mjs";
 
 export const SOURCE_TRANSLATION_VERSION = "gpt-6-luna-low-fields-v1";
 const OFFICIAL_OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
@@ -64,6 +65,7 @@ export async function translatePublicSource({ payload, store, env = process.env,
   // RAG_SOURCE_TRANSLATION_CHANNEL=official sends the same Responses request
   // to the fixed official OpenAI endpoint with an official key; otherwise b.ai.
   const official = String(env.RAG_SOURCE_TRANSLATION_CHANNEL || "").trim().toLowerCase() === "official";
+  if (official) body.prompt_cache_options = OFFICIAL_PROMPT_CACHE_OPTIONS;
   let endpoint = OFFICIAL_OPENAI_RESPONSES_URL;
   if (!official) {
     const base = new URL(String(env.RAG_EVIDENCE_BAI_BASE_URL || env.BAI_BASE_URL || DEFAULT_BAI_GENERATION_BASE_URL));

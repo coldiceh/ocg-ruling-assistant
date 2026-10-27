@@ -1,6 +1,7 @@
 import { DESCRIBED_CARD_KINDS, normalizeDescribedCards } from "./ragDescribedCardCandidates.mjs";
 import { createHash } from "node:crypto";
 import { RAG_ANSWER_LEVELS } from "./ragRulingPrompt.mjs";
+import { OFFICIAL_PROMPT_CACHE_OPTIONS } from "./officialPromptCache.mjs";
 import {
   DEFAULT_PUBLIC_BAI_BASE_URL,
   DEFAULT_PUBLIC_BAI_MODEL,
@@ -3111,6 +3112,7 @@ async function callBaiCard({ prompt, env, modelName, maxTokens, fetchImpl, reaso
     text: { format: { type: "json_object" } },
     max_output_tokens: maxTokens,
     stream: false,
+    ...(official ? { prompt_cache_options: OFFICIAL_PROMPT_CACHE_OPTIONS } : {}),
   };
   const invoke = async () => {
     const response = await postJson(transportFetch, endpoint, {
@@ -3385,6 +3387,7 @@ async function callOfficialOpenAI({
     ...(requireJson ? { response_format: { type: "json_object" } } : {}),
     reasoning_effort: PUBLIC_OPENAI_REASONING_EFFORT,
     max_completion_tokens: PUBLIC_OPENAI_MAX_COMPLETION_TOKENS,
+    prompt_cache_options: OFFICIAL_PROMPT_CACHE_OPTIONS,
   };
   let payload;
   try {
