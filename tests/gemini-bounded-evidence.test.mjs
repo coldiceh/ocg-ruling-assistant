@@ -10,6 +10,7 @@ import { createQaTools } from "../backend/geminiQaTools.mjs";
 import { buildRuleContext } from "../backend/geminiRuleContext.mjs";
 import { computeGeminiSelectionPackingBudget } from "../backend/geminiRuleQaPacking.mjs";
 import { publicAnswerHttpError } from '../backend/publicAnswerService.mjs';
+import { CLOUD_BUDGET_RESERVE } from '../backend/cloudRequestBudget.mjs';
 
 const digest = value => createHash("sha256").update(value).digest("hex");
 const rule = { id: "rule", recordType: "rule-doc", title: "fixture source",
@@ -161,17 +162,19 @@ test('removing generation limits still rejects a final evidence prompt over 1500
 });
 
 function fixture({ assets = schema3Assets(), plan, select, countTokens = 500,
-  denseRules, denseQa, remainingBudget, onEvent, decisions, reserveRequest } = {}) {
-  const requests = [];
+  denseRules, denseQa, remainingBudget, onEvent, decisions, reserveRequest, budgetStore } = {}) {
+  const requests = [], calls = [];
   const provider = createGeminiBoundedEvidenceProvider({
     loadAssets: async () => assets,
     loadDenseSearch: async ({ rules }) => ({ searchAsync: async () => denseRules || [...rules.units.values()] }),
     loadQaSearch: async ({ items }) => ({ searchAsync: async () => denseQa || items }),
-    budgetedRequest: reserveRequest || (request => request.invoke()),
+    // reserveRequest: null keeps the production budget routing.
+    budgetedRequest: reserveRequest === null ? undefined : reserveRequest || (request => request.invoke()),
     ...(remainingBudget ? { remainingBudget } : {}),
     ...(onEvent ? { onEvent } : {}),
     fetchImpl: async (url, init) => {
       const body = JSON.parse(init.body);
+      if (budgetStore && String(url) === budgetStore.url) return budgetStore.respond(body);
       if (url.endsWith(":countTokens")) return Response.json({ totalTokens: typeof countTokens === 'function' ? countTokens(body) : countTokens });
       if (url.endsWith(":embedContent")) return Response.json({ embedding: { values: Array(768).fill(1) },
         usageMetadata: { promptTokenCount: 100 } });
@@ -179,6 +182,7 @@ function fixture({ assets = schema3Assets(), plan, select, countTokens = 500,
         embeddings: body.requests.map(() => ({ values: Array(768).fill(1) })),
         usageMetadata: { promptTokenCount: 100 } });
       requests.push(body);
+      calls.push({ url: String(url), authorization: init.headers?.authorization, redirect: init.redirect, body });
       if (url === 'https://api.openai.com/v1/decisions') {
         assert.equal(typeof decisions, 'function', 'unexpected Decisions request');
         const answer = decisions(body);
@@ -203,7 +207,7 @@ function fixture({ assets = schema3Assets(), plan, select, countTokens = 500,
           thoughtsTokenCount: 20, totalTokenCount: 600 } });
     },
   });
-  return { provider, requests };
+  return { provider, requests, calls };
 }
 
 test('Decisions runs through production retrieval, delivers actual pack and accounts input-only usage', async () => {
@@ -792,3 +796,55 @@ test("each confirmed card has an independent lane for source-declared QA links",
   assert.equal(result.telemetry.bounded.deadlineMs, 60000);
   assert.ok(result.packing.prompt.length > 0);
  });
+
+test('official Luna channel sends the identical selection to OpenAI and settles it in the official daily ledger', async () => {
+  const lunaEnv = { ...unrestrictedEvidenceEnv, EVIDENCE_SELECTION_PROFILE: 'bai-gpt-6-luna-high-theoretical' };
+  const official = { ...lunaEnv, RAG_EVIDENCE_LUNA_CHANNEL: 'official', RAG_EVIDENCE_OPENAI_API_KEY: 'official-evidence-key',
+    BAI_API_KEY: 'bai-key-stays-on-bai', PUBLIC_OPENAI_BUDGET_RUN_ID: 'public-official',
+    UPSTASH_BUDGET_KV_REST_API_URL: 'https://budget.example.invalid', UPSTASH_BUDGET_KV_REST_API_TOKEN: 'budget-token' };
+  const order = [], ledgerKeys = [];
+  const budgetStore = { url: 'https://budget.example.invalid', respond: command => {
+    const reserve = command[1] === CLOUD_BUDGET_RESERVE;
+    order.push(reserve ? 'reserve' : 'settle'); ledgerKeys.push(command[3]);
+    return Response.json({ result: reserve ? ['reserved', '0', '1'] : ['settled', '0', '1'] });
+  } };
+  const select = delivered => {
+    order.push('selection');
+    const ids = delivered.groups.flatMap(group => (group.units || []).map(row => row[0])).slice(0, 1);
+    return Response.json({ id: 'official-fixture', model: 'gpt-6-luna-2026-10-01', status: 'completed',
+      output: [{ type: 'message', content: [{ type: 'output_text', text: JSON.stringify({ selectedIds: ids, note: '' }) }] }],
+      usage: { input_tokens: 115_378, output_tokens: 3_722, total_tokens: 119_100,
+        input_tokens_details: { cached_tokens: 0, cache_write_tokens: 0 } } });
+  };
+  const viaOfficial = fixture({ reserveRequest: null, budgetStore, select });
+  const result = await viaOfficial.provider.retrieve({ ...input, env: official });
+  const sent = viaOfficial.calls.filter(call => call.body.input);
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].url, 'https://api.openai.com/v1/responses');
+  assert.equal(sent[0].authorization, 'Bearer official-evidence-key');
+  assert.equal(sent[0].redirect, 'error');
+  assert.deepEqual(sent[0].body.prompt_cache_options, { mode: 'explicit' });
+  assert.deepEqual(order, ['reserve', 'selection', 'settle']);
+  assert.ok(ledgerKeys.every(key => /^ruling-cloud-budget:v1:public-official:\d{4}-\d{2}-\d{2}$/u.test(key)));
+  assert.equal(result.telemetry.stageTelemetry.selection.endpointProvider, 'openai');
+  assert.equal(result.telemetry.bounded.calls.find(row => row.stage === 'selection').channel, 'official');
+
+  // The b.ai channel receives the same selection request without the official-only field.
+  const viaBai = fixture({ select: delivered => {
+    const ids = delivered.groups.flatMap(group => (group.units || []).map(row => row[0])).slice(0, 1);
+    return { selectedIds: ids, note: '' };
+  } });
+  await viaBai.provider.retrieve({ ...input, env: { ...lunaEnv, BAI_API_KEY: 'bai-key' } });
+  const baiSent = viaBai.calls.filter(call => call.body.input);
+  assert.equal(baiSent[0].url, 'https://api.b.ai/v1/responses');
+  const { prompt_cache_options: _field, ...officialRest } = sent[0].body;
+  assert.deepEqual(officialRest, baiSent[0].body);
+});
+
+test('official Luna channel without its own key stops before planning and never uses the b.ai key', async () => {
+  const { provider, calls } = fixture({ reserveRequest: null });
+  await assert.rejects(provider.retrieve({ ...input, env: { ...unrestrictedEvidenceEnv,
+    EVIDENCE_SELECTION_PROFILE: 'bai-gpt-6-luna-high-theoretical', RAG_EVIDENCE_LUNA_CHANNEL: 'official',
+    BAI_API_KEY: 'bai-key', RAG_EVIDENCE_BAI_API_KEY: 'bai-key' } }), /official_evidence_api_key_required/u);
+  assert.equal(calls.length, 0);
+});

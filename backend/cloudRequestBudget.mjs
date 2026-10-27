@@ -797,6 +797,41 @@ export function createCloudRequestBudget({env, fetchImpl = globalThis.fetch, com
     } else ticket.uncertainty='provider_usage_missing_reservation_retained';
     return result;
   }
+  // A b.ai GPT-6 Luna evidence generation request served by the official
+  // OpenAI API (RAG_EVIDENCE_LUNA_CHANNEL=official). It is accounted in the
+  // official daily ledger. The reservation keeps the generation contract's
+  // conservative upper bound; settlement uses the official list prices of the
+  // usage OpenAI reports. OpenAI may report a dated snapshot of the model.
+  async function officialLunaGeneration({body, invoke, operation, model, measurement, generationContract, signal}) {
+    if (operation !== 'generate_content' || generationContract?.providerId !== 'bai'
+        || generationContract?.modelId !== 'gpt-6-luna') {
+      throw new Error('cloud_budget_official_luna_generation_contract_required');
+    }
+    if (model !== generationContract.modelId || body?.model !== model) {
+      throw new Error('cloud_budget_official_luna_generation_model_mismatch');
+    }
+    assertGenerationCapacity({body, contract:generationContract, measurement});
+    const upper = estimateGenerationUpperBoundUsd({measurement, contract:generationContract});
+    const ticket = await reserve({provider:'openai', model, operation, stage:'evidence_preparation', signal,
+      actualCny:0, theoreticalUsd:upper.amountUsd,
+      pricingBasis:`${upper.basis}:${generationContract.priceVersion}:official_channel_settles_openai_gpt6_luna_20261027`,
+      reservationMetadata:{
+        generationContractSha256:generationContractSha256(generationContract),
+        requestSha256:measurement.requestSha256,
+        requestBodyBytes:measurement.requestBodyBytes,
+        inputTokensUpperBound:measurement.inputTokensUpperBound,
+        maxBillableOutputTokens:generationContract.maxBillableOutputTokens,
+      }});
+    let result;
+    try { result=await invoke(); }
+    catch(error) { ticket.uncertainty='request_or_settlement_failed_reservation_retained'; throw error; }
+    const usd = gpt6LunaUsageCostUsd(result?.usage);
+    if (usd !== null) {
+      try { await settle(ticket,{usage:result.usage,returnedModel:result?.model||model,actualCny:0,actualUpperCny:0,theoreticalUsd:usd}); }
+      catch { ticket.uncertainty='provider_response_received_settlement_uncertain_reservation_retained'; }
+    } else ticket.uncertainty='provider_usage_missing_reservation_retained';
+    return result;
+  }
   async function sourceTranslation({body, invoke, signal, provider='bai'}) {
     if (body?.model !== 'gpt-6-luna' || body?.reasoning?.effort !== 'low'
         || !Number.isSafeInteger(body.max_output_tokens) || body.max_output_tokens < 1
@@ -1061,7 +1096,7 @@ export function createCloudRequestBudget({env, fetchImpl = globalThis.fetch, com
         accountedActualUpperCny:['bai','gemini'].includes(r.provider)?null:r.actualNano/UNIT,
         theoreticalUsd:r.theoreticalNano/UNIT}))};
   }
-  return {relay,deepseek,openai,decisions,baiCard,officialLunaCard,sourceTranslation,bai:request=>request?.generationContract?.providerId === 'bai'
+  return {relay,deepseek,openai,decisions,baiCard,officialLunaCard,officialLunaGeneration,sourceTranslation,bai:request=>request?.generationContract?.providerId === 'bai'
     ? baiGeneration(request) : openai({...request,provider:'bai'}),gemini,
     beforeSend,onResponse,remainingPreparationUsd,snapshot,flushDecisionsSettlements};
 }
@@ -1105,7 +1140,11 @@ export async function runOfficialDecisionsSequence(invoke) {
     }
   });
 }
-async function runOfficialBudgetRequest({env,body,invoke,measurement,signal,fetchImpl=globalThis.fetch,now=new Date()}, operation) {
+async function runOfficialBudgetRequest(request, operation) {
+  const {env,body,invoke,measurement,signal,fetchImpl=globalThis.fetch,now=new Date()}=request;
+  // Generation requests also carry the contract the ledger checks.
+  const generation=operation==='officialLunaGeneration'
+    ?{operation:request.operation,model:request.model,generationContract:request.generationContract}:{};
   signal?.throwIfAborted();
   const daily=officialDailyConfig(env,now);
   const officialEnv={
@@ -1133,7 +1172,7 @@ async function runOfficialBudgetRequest({env,body,invoke,measurement,signal,fetc
           officialDailyMigration:{legacyKey:daily.legacyKey,...utcDayBounds(daily.dayKey,env.API_BUDGET_TIMEZONE)}})};
       sequence?.entries.push(entry);
     }
-    return await entry.controller[operation]({body,invoke,measurement,signal});
+    return await entry.controller[operation]({...generation,body,invoke,measurement,signal});
   } catch(error) {
     if(error?.message==='cloud_budget_total_exceeded') {
       const exceeded=new Error('official_daily_budget_exceeded',{cause:error});
@@ -1149,6 +1188,9 @@ export function runCloudBaiRequest(request) {
 }
 export function runOfficialLunaCardRequest(request) {
   return runOfficialBudgetRequest(request, 'officialLunaCard');
+}
+export function runOfficialLunaGenerationRequest(request) {
+  return runOfficialBudgetRequest(request, 'officialLunaGeneration');
 }
 export function runCloudBaiCardRequest(request) {
   const controller=scope.getStore();

@@ -1,7 +1,28 @@
 import { createHash } from "node:crypto";
 import { responsesOutputText } from "./responsesOutputText.mjs";
+import { OFFICIAL_PROMPT_CACHE_OPTIONS } from "./officialPromptCache.mjs";
 
 export const DEFAULT_BAI_GENERATION_BASE_URL = "https://api.b.ai/v1";
+export const OFFICIAL_EVIDENCE_RESPONSES_URL = "https://api.openai.com/v1/responses";
+
+// The b.ai GPT-6 Luna evidence profiles can instead be served by the official
+// OpenAI API. RAG_EVIDENCE_LUNA_CHANNEL=official changes only the endpoint, the
+// credential, the official no-cache-write field and the budget ledger; the
+// generation contract and the rest of the Responses request stay the same.
+export function evidenceLunaChannel(env = {}) {
+  return String(env?.RAG_EVIDENCE_LUNA_CHANNEL || "").trim().toLowerCase() === "official" ? "official" : "bai";
+}
+
+// RAG_EVIDENCE_OPENAI_API_KEY is the evidence-only copy that survives public
+// provider isolation; OCG_EVIDENCE_OPENAI_API_KEY is a dedicated key, and the
+// evidence preparation key used by Decisions is the fallback. A b.ai key is
+// never sent to the official endpoint.
+export function officialEvidenceApiKey(env = {}) {
+  return String(env?.RAG_EVIDENCE_OPENAI_API_KEY || env?.OCG_EVIDENCE_OPENAI_API_KEY
+    || env?.OPENAI_DECISIONS_API_KEY || "").trim();
+}
+
+const OFFICIAL_LUNA_MODELS = new Set(["gpt-6-luna"]);
 
 export function createEvidenceGenerationTransport({ contract, env = process.env, fetchImpl = globalThis.fetch } = {}) {
   if (!contract || typeof contract !== "object") throw new TypeError("evidence_generation_transport_contract_required");
@@ -10,6 +31,9 @@ export function createEvidenceGenerationTransport({ contract, env = process.env,
   if (contract.providerId === "bai") {
     if (contract.transportContract?.protocol !== "responses" || contract.transportContract?.endpoint !== "/v1/responses") {
       throw new TypeError("evidence_generation_transport_contract_invalid");
+    }
+    if (evidenceLunaChannel(env) === "official" && OFFICIAL_LUNA_MODELS.has(contract.modelId)) {
+      return createOfficialLunaResponsesTransport({ contract, env, fetchImpl });
     }
     return createBaiResponsesTransport({ contract, env, fetchImpl });
   }
@@ -104,6 +128,48 @@ function createBaiResponsesTransport({ contract, env, fetchImpl }) {
   });
 }
 
+function createOfficialLunaResponsesTransport({ contract, env, fetchImpl }) {
+  // Fail before any model call of the question when the channel has no key.
+  const apiKey = requiredSecret(officialEvidenceApiKey(env), "official_evidence_api_key_required");
+  return Object.freeze({
+    // The generation contract remains the b.ai Luna profile (prices are its
+    // conservative reservation basis); only the transport channel changes.
+    providerId: "bai",
+    channel: "official",
+    endpointProvider: "openai",
+    protocol: "responses",
+    // Every selection prompt is new, so the official request never writes the
+    // paid prompt cache. The field is part of the measured wire body.
+    prepareRequest: (body) => ({ ...convertEvidenceGenerationRequest(body, contract),
+      prompt_cache_options: { ...OFFICIAL_PROMPT_CACHE_OPTIONS } }),
+    invoke: async (body, { measurement, signal } = {}) => {
+      assertMeasuredWireRequest(body, contract, measurement);
+      requireFetch(fetchImpl);
+      const response = await fetchImpl(OFFICIAL_EVIDENCE_RESPONSES_URL, {
+        method: "POST",
+        redirect: "error",
+        headers: {
+          authorization: `Bearer ${apiKey}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(body),
+        ...(signal ? { signal } : {}),
+      });
+      return readJsonResponse(response, `official_evidence_http_${response.status}`);
+    },
+    extractText: extractBaiResponsesText,
+    rawUsage: (raw) => raw?.usage ?? null,
+    validateResponse: (raw) => validateBaiResponse(raw, contract, { allowDatedSnapshot: true }),
+  });
+}
+
+// OpenAI may report a dated snapshot of the requested model.
+export function officialModelMatches(returned, requested) {
+  if (returned === requested) return true;
+  if (typeof returned !== "string" || typeof requested !== "string") return false;
+  return returned.startsWith(`${requested}-`) && /^\d{4}-\d{2}-\d{2}$/u.test(returned.slice(requested.length + 1));
+}
+
 function assertMeasuredWireRequest(body, contract, measurement) {
   const serialized = JSON.stringify(body);
   if (!measurement || measurement.providerId !== contract.providerId
@@ -152,8 +218,8 @@ export function evidenceGenerationResponseDiagnostic(raw) {
   };
 }
 
-function validateBaiResponse(raw, contract) {
-  if (raw?.model !== contract.modelId) {
+function validateBaiResponse(raw, contract, { allowDatedSnapshot = false } = {}) {
+  if (allowDatedSnapshot ? !officialModelMatches(raw?.model, contract.modelId) : raw?.model !== contract.modelId) {
     const error = new Error("evidence_generation_response_model_mismatch");
     error.responseDiagnostic = evidenceGenerationResponseDiagnostic(raw);
     throw error;

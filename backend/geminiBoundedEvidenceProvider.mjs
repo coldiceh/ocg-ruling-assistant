@@ -7,7 +7,8 @@ import { createRuleCandidateSearch } from './geminiRuleCandidateSearch.mjs';
 import { loadQaDenseSearch } from './geminiQaDenseSearch.mjs';
 import { GEMINI_EVIDENCE_MAX_PROMPT_CHARS, resolveGeminiSelection, packGeminiSelection, computeGeminiSelectionPackingBudget } from './geminiRuleQaPacking.mjs';
 import { summarizeCards, OCG_RULE_SOURCE_POLICY } from './ragRulingPrompt.mjs';
-import { runCloudBaiRequest, runCloudGeminiRequest, currentCloudPreparationRemainingUsd } from './cloudRequestBudget.mjs';
+import { runCloudBaiRequest, runCloudGeminiRequest, runOfficialLunaGenerationRequest,
+  currentCloudPreparationRemainingUsd } from './cloudRequestBudget.mjs';
 import { loadRuleDenseSearch, queryEmbeddingText, RULE_EMBEDDING_MODEL,
   RULE_EMBEDDING_DIMENSION } from './geminiRuleDenseSearch.mjs';
 import { admitWholeReadingUnits, mapRankedUnits, READING_SCHEDULER_CONTRACT } from './evidenceReadingScheduler.mjs';
@@ -578,9 +579,11 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
   onEvent = async () => {}, offlineEvaluationLimits } = {}) {
   const offlineLimits = offlineEvaluationLimits === undefined
     ? null : normalizeOfflineEvaluationLimits(offlineEvaluationLimits);
+  // A b.ai Luna contract served through the official channel is accounted in
+  // the official daily ledger instead of the per-question preparation budget.
   const reserveGenerationRequest = budgetedRequest || (request => (
     request.generationContract?.providerId === 'bai'
-      ? runCloudBaiRequest(request)
+      ? (request.transportChannel === 'official' ? runOfficialLunaGenerationRequest(request) : runCloudBaiRequest(request))
       : runCloudGeminiRequest(request)
   ));
   return { async retrieve({ userQuery, answerLocale = 'zh-CN', cardResolution, retrievedEvidence = {}, dataRevision,
@@ -650,7 +653,9 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
     }
     async function generate(body, measurement, stage, normalize, retry = false) {
       const contract = contracts[stage], transport = transports[stage];
-      maxUsd = Math.min(perQuestionMaxUsd, await remainingBudget({provider:contract.providerId,signal}));
+      const official = transport.channel === 'official';
+      maxUsd = Math.min(perQuestionMaxUsd, official ? Infinity
+        : await remainingBudget({provider:contract.providerId,signal}));
       const wireBody = transport.prepareRequest(applyGenerationContract(body, contract));
       assertGenerationCapacity({ body: wireBody, contract, measurement });
       const reserve = estimateGenerationUpperBoundUsd({ measurement, contract }).amountUsd;
@@ -659,6 +664,7 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
       if (spentUsd + reserve + futureOutput > maxUsd) throw new Error('evidence_request_budget_exceeded');
       signal.throwIfAborted();
       const row = { stage, operation: 'generate_content', providerId: contract.providerId, model: contract.modelId,
+        ...(official ? { channel: 'official', endpointProvider: 'openai' } : {}),
         generationContractSha256: generationContractSha256(contract), measurement,
         countedInputTokens: measurement.inputTokensUpperBound, reservedUsd: reserve, accountedUsd: reserve,
         requestSha256: measurement.requestSha256, status: 'pending', retry };
@@ -669,6 +675,7 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
       try {
         const raw = await reserveGenerationRequest({ body: wireBody, model: contract.modelId, operation: 'generate_content',
           measurement, generationContract: contract, cachedTokenCount: 0, signal,
+          ...(official ? { transportChannel: 'official', env, fetchImpl } : {}),
           invoke: () => {
             submitted = true;
             return contract.providerId === 'gemini'
@@ -1128,7 +1135,8 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
         providerUsed: contracts.plan.providerId, modelUsed: contracts.plan.modelId,
         reasoningEffort: generationReasoningEffort(contracts.plan),
         stageTelemetry: { planning: generationStageTelemetry(contracts.plan),
-          selection: generationStageTelemetry(contracts.selection) },
+          selection: { ...generationStageTelemetry(contracts.selection),
+            ...(transports.selection.channel === 'official' ? { channel: 'official', endpointProvider: 'openai' } : {}) } },
         generationProfileHash: profileHash, generationContracts: contracts, strategy: 'source_preprocessed_v1',
         evidenceSelector: useDecisions ? 'decisions' : 'luna',
         dryRun: false, warnings: [], ...revisions, assetsCacheHit: cacheHit,

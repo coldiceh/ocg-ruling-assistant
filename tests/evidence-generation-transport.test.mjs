@@ -188,3 +188,72 @@ test("B.AI evidence transport accepts its dedicated production credential namesp
   assert.equal(calls[0].url, "https://evidence.b.ai/v1/responses");
   assert.equal(calls[0].options.headers.authorization, "Bearer evidence-only-key");
 });
+
+const lunaContract = { ...contract, modelId: "gpt-6-luna" };
+function lunaMeasurement(body) {
+  return { ...measurement(body), modelId: lunaContract.modelId,
+    generationContractSha256: createHash("sha256").update(stableJson(lunaContract)).digest("hex") };
+}
+function officialResponse(model) {
+  return { ok: true, status: 200, json: async () => ({ status: "completed", model, output: [],
+    usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 } }) };
+}
+
+test("official Luna evidence channel sends the b.ai request unchanged plus the no-cache-write field", async () => {
+  const calls = [];
+  const env = { RAG_EVIDENCE_LUNA_CHANNEL: "official", RAG_EVIDENCE_OPENAI_API_KEY: "official-evidence-key",
+    RAG_EVIDENCE_BAI_API_KEY: "bai-key", BAI_API_KEY: "bai-key" };
+  const transport = createEvidenceGenerationTransport({ contract: lunaContract, env,
+    fetchImpl: async (url, options) => { calls.push({ url, options }); return officialResponse("gpt-6-luna-2026-10-01"); } });
+  assert.equal(transport.channel, "official");
+  assert.equal(transport.providerId, "bai", "the generation contract is still the b.ai Luna profile");
+  const body = transport.prepareRequest(semanticBody());
+  assert.deepEqual(body, { ...convertEvidenceGenerationRequest(semanticBody(), lunaContract),
+    prompt_cache_options: { mode: "explicit" } });
+  const raw = await transport.invoke(body, { measurement: lunaMeasurement(body) });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, "https://api.openai.com/v1/responses");
+  assert.equal(calls[0].options.redirect, "error");
+  assert.equal(calls[0].options.headers.authorization, "Bearer official-evidence-key");
+  assert.deepEqual(JSON.parse(calls[0].options.body), body);
+  assert.equal(transport.validateResponse(raw), true, "a dated official snapshot of the requested model is accepted");
+  assert.throws(() => transport.validateResponse({ ...raw, model: "gpt-6-luna-mini" }), /response_model_mismatch/u);
+  assert.throws(() => transport.validateResponse({ ...raw, model: "gpt-6-astra" }), /response_model_mismatch/u);
+  await assert.rejects(transport.invoke({ ...body, prompt_cache_options: undefined }, { measurement: lunaMeasurement(body) }),
+    /unmeasured_request_blocked/u);
+  assert.equal(calls.length, 1);
+});
+
+test("official Luna evidence channel never sends a b.ai key and stops before any call without its own key", async () => {
+  let calls = 0;
+  assert.throws(() => createEvidenceGenerationTransport({ contract: lunaContract,
+    env: { RAG_EVIDENCE_LUNA_CHANNEL: "official", RAG_EVIDENCE_BAI_API_KEY: "bai-key", BAI_API_KEY: "bai-key" },
+    fetchImpl: async () => { calls += 1; } }), /official_evidence_api_key_required/u);
+  assert.equal(calls, 0);
+  // The Decisions evidence key is the fallback credential.
+  const sent = [];
+  const transport = createEvidenceGenerationTransport({ contract: lunaContract,
+    env: { RAG_EVIDENCE_LUNA_CHANNEL: "official", OPENAI_DECISIONS_API_KEY: "decisions-key" },
+    fetchImpl: async (url, options) => { sent.push(options.headers.authorization); return officialResponse("gpt-6-luna"); } });
+  const body = transport.prepareRequest(semanticBody());
+  await transport.invoke(body, { measurement: lunaMeasurement(body) });
+  assert.deepEqual(sent, ["Bearer decisions-key"]);
+});
+
+test("the official channel applies only to GPT-6 Luna; other b.ai models and the default stay on b.ai", async () => {
+  const urls = [];
+  const fetchImpl = async (url) => { urls.push(url); return officialResponse(contract.modelId); };
+  const other = createEvidenceGenerationTransport({ contract, fetchImpl,
+    env: { RAG_EVIDENCE_LUNA_CHANNEL: "official", RAG_EVIDENCE_OPENAI_API_KEY: "official-key", BAI_API_KEY: "bai-key" } });
+  assert.equal(other.channel, undefined);
+  const otherBody = other.prepareRequest(semanticBody());
+  assert.equal(Object.hasOwn(otherBody, "prompt_cache_options"), false);
+  await other.invoke(otherBody, { measurement: measurement(otherBody) });
+  const fallback = createEvidenceGenerationTransport({ contract: lunaContract,
+    env: { RAG_EVIDENCE_OPENAI_API_KEY: "official-key", BAI_API_KEY: "bai-key" },
+    fetchImpl: async (url) => { urls.push(url); return officialResponse("gpt-6-luna"); } });
+  const lunaBody = fallback.prepareRequest(semanticBody());
+  assert.equal(Object.hasOwn(lunaBody, "prompt_cache_options"), false, "b.ai never receives the official-only field");
+  await fallback.invoke(lunaBody, { measurement: lunaMeasurement(lunaBody) });
+  assert.deepEqual(urls, ["https://api.b.ai/v1/responses", "https://api.b.ai/v1/responses"]);
+});

@@ -2,6 +2,7 @@ import { DESCRIBED_CARD_KINDS, normalizeDescribedCards } from "./ragDescribedCar
 import { createHash } from "node:crypto";
 import { RAG_ANSWER_LEVELS } from "./ragRulingPrompt.mjs";
 import { OFFICIAL_PROMPT_CACHE_OPTIONS } from "./officialPromptCache.mjs";
+import { evidenceLunaChannel, officialEvidenceApiKey } from "./evidenceGenerationTransport.mjs";
 import {
   DEFAULT_PUBLIC_BAI_BASE_URL,
   DEFAULT_PUBLIC_BAI_MODEL,
@@ -2531,6 +2532,16 @@ export function createPublicAnswerModelEnv(env = {}, profileValue) {
   // Preserve that route without restoring final-provider BAI_* credentials.
   if (evidenceBaiApiKey) result.RAG_EVIDENCE_BAI_API_KEY = evidenceBaiApiKey;
   if (evidenceBaiBaseUrl) result.RAG_EVIDENCE_BAI_BASE_URL = evidenceBaiBaseUrl;
+  // RAG_EVIDENCE_LUNA_CHANNEL=official serves the same Luna evidence requests
+  // through the official OpenAI API. Its key is copied only into the
+  // evidence-only name; the final provider never receives OPENAI_* values.
+  delete result.RAG_EVIDENCE_OPENAI_API_KEY;
+  delete result.OCG_EVIDENCE_OPENAI_API_KEY;
+  if (evidenceLunaChannel(source) === "official") {
+    result.RAG_EVIDENCE_LUNA_CHANNEL = "official";
+    const evidenceOfficialApiKey = officialEvidenceApiKey(source);
+    if (evidenceOfficialApiKey) result.RAG_EVIDENCE_OPENAI_API_KEY = evidenceOfficialApiKey;
+  } else delete result.RAG_EVIDENCE_LUNA_CHANNEL;
   // The card-only b.ai experiment is deliberately copied after the provider
   // isolation pass. It must remain available to card-name and identity calls
   // while never becoming credentials for the final ruling provider.

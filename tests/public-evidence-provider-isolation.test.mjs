@@ -74,6 +74,41 @@ for (const [profileId, provider] of profiles) {
   }
 }
 
+for (const [profileId, provider] of profiles) {
+  test(`${profileId} keeps the official Luna evidence key only in its evidence namespace`, async () => {
+    const lunaContract = { ...contract, modelId: "gpt-6-luna" };
+    const source = {
+      RAG_EVIDENCE_PIPELINE: "cloud_evidence_v1",
+      RAG_EVIDENCE_LUNA_CHANNEL: "official",
+      OPENAI_DECISIONS_API_KEY: "official-evidence-fixture-key",
+      OPENAI_API_KEY: "admin-key-must-not-survive",
+      BAI_API_KEY: "shared-fixture-key",
+      RAG_EVIDENCE_BAI_API_KEY: "bai-evidence-fixture-key",
+      OCG_FINAL_OPENAI_API_KEY: "final-fixture-key",
+    };
+    const env = createPublicAnswerModelEnv(source, profileId);
+    assert.equal(env.RAG_EVIDENCE_LUNA_CHANNEL, "official");
+    assert.equal(env.RAG_EVIDENCE_OPENAI_API_KEY, "official-evidence-fixture-key");
+    assert.equal(env.OPENAI_DECISIONS_API_KEY, undefined);
+    assert.equal(env.OPENAI_API_KEY, undefined);
+    assert.equal(env.RAG_MODEL_PROVIDER, provider);
+    const calls = [];
+    const transport = createEvidenceGenerationTransport({ contract: lunaContract, env,
+      fetchImpl: async (url, options) => {
+        calls.push({ url, authorization: options.headers.authorization });
+        return Response.json({ status: "completed", model: "gpt-6-luna", output: [], usage: {} });
+      } });
+    const body = transport.prepareRequest({ contents: [{ role: "user", parts: [{ text: "Return JSON for this transport fixture." }] }] });
+    await transport.invoke(body, { measurement: { ...measurement(body), modelId: "gpt-6-luna",
+      generationContractSha256: hash(stableJson(lunaContract)) } });
+    assert.deepEqual(calls, [{ url: "https://api.openai.com/v1/responses", authorization: "Bearer official-evidence-fixture-key" }]);
+
+    const unset = createPublicAnswerModelEnv({ ...source, RAG_EVIDENCE_LUNA_CHANNEL: "", RAG_EVIDENCE_OPENAI_API_KEY: "stale" }, profileId);
+    assert.equal(unset.RAG_EVIDENCE_LUNA_CHANNEL, undefined);
+    assert.equal(unset.RAG_EVIDENCE_OPENAI_API_KEY, undefined, "without the channel no official evidence key is carried");
+  });
+}
+
 function measurement(body) {
   const serialized = JSON.stringify(body);
   return {
