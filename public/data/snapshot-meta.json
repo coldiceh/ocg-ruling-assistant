@@ -1,13 +1,13 @@
 {
   "schemaVersion": 1,
   "status": "synced-with-warnings",
-  "generatedAt": "2026-10-28T00:44:39.604Z",
+  "generatedAt": "2026-10-29T01:10:56.125Z",
   "freshnessDays": 7,
   "sourceFreshness": "fresh",
-  "previousSourceRevision": "32839",
-  "sourceRevision": "32854",
+  "previousSourceRevision": "32854",
+  "sourceRevision": "32858",
   "pendingQaIds": [],
-  "lastSuccessfulSyncAt": "2026-10-28T00:44:39.604Z",
+  "lastSuccessfulSyncAt": "2026-10-29T01:10:56.125Z",
   "lastFailedSyncAt": null,
   "syncFailureCount": 0,
   "aliasWarnings": [],
@@ -19,9 +19,9 @@
   "contentQualityWarningCount": 0,
   "dataQualityWarningCount": 0,
   "newItems": 0,
-  "changedItems": 21,
+  "changedItems": 15,
   "removedItems": 0,
-  "qaDetailCursor": 1612,
+  "qaDetailCursor": 1675,
   "qaDiscoveryCardCount": 14342,
   "qaDiscoveryQaCount": 11475,
   "qaDiscoveryComplete": true,
@@ -59,14 +59,8 @@
   ],
   "sourceRetirementWarningCount": 2,
   "changedPaths": [
-    "/data/card/17743",
     "/data/idx/qa",
-    "/data/meta/index",
-    "/data/meta/recent",
-    "/data/qa/208",
     "/data/qa/6354",
-    "/data/qa/12386",
-    "/data/qa/23588",
-    "/data/qa/24410"
+    "/data/qa/24051"
   ]
 }
