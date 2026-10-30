@@ -1,0 +1,89 @@
+// Mock-mode smoke test of the runner: the full production pipeline runs with
+// the transport mock (no keys, no network), stops at the budget, resumes and
+// produces a report. Takes about a minute (two cold asset preloads).
+import test from "node:test";
+import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+import { parseRunnerArgs, planJobs } from "../run-retrieval-compare.mjs";
+
+const repositoryRoot = path.resolve(fileURLToPath(new URL("../../..", import.meta.url)));
+const runner = path.join(repositoryRoot, "scripts/bench/run-retrieval-compare.mjs");
+const reporter = path.join(repositoryRoot, "scripts/bench/report-retrieval-compare.mjs");
+
+function run(script, args) {
+  const child = spawnSync(process.execPath, [script, ...args], { cwd: repositoryRoot, encoding: "utf8", timeout: 300_000 });
+  return { status: child.status, output: `${child.stdout}\n${child.stderr}` };
+}
+
+test("argument parsing guards the arm flag, budget and mock ledger", () => {
+  assert.throws(() => parseRunnerArgs(["--set", "x.json"]), /真实模式必须给 --budget-usd/u);
+  assert.throws(() => parseRunnerArgs(["--set", "x.json", "--mock", "--set-env", "RULE_TOC_ADMIT_ENABLED=true"]),
+    /由 --arms 控制/u);
+  assert.throws(() => parseRunnerArgs(["--set", "x.json", "--mock", "--ledger", "upstash"]), /进程内账本/u);
+  assert.throws(() => parseRunnerArgs(["--set", "x.json", "--mock", "--arms", "baseline,other"]), /未知臂/u);
+  const parsed = parseRunnerArgs(["--set", "x.json", "--mock", "--set-env", "A=b=c"]);
+  assert.equal(parsed.ledger, "memory");
+  assert.equal(parsed.budgetUsd, 1);
+  assert.deepEqual(parsed.setEnv, { A: "b=c" });
+  const jobs = planJobs({ items: [{ qid: "Q1", question: "a" }, { qid: "Q2", question: "b" }],
+    arms: ["baseline", "toc"], repeat: 2 });
+  assert.deepEqual(jobs.map((job) => job.key), [
+    "Q1__baseline__r1", "Q1__toc__r1", "Q1__toc__r2", "Q1__baseline__r2",
+    "Q2__toc__r1", "Q2__baseline__r1", "Q2__baseline__r2", "Q2__toc__r2",
+  ]);
+});
+
+test("mock run stops at the budget, resumes to completion and reports", { timeout: 600_000 }, async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "bench-smoke-"));
+  try {
+    const set = JSON.parse(await readFile(path.join(repositoryRoot, "scripts/bench/sets/ocg-50-20260924.json"), "utf8"));
+    const setFile = path.join(directory, "set.json");
+    await writeFile(setFile, JSON.stringify({ ...set, setId: "smoke", repeat: 1,
+      items: set.items.filter((item) => ["Q1", "Q3"].includes(item.qid)) }));
+    const out = path.join(directory, "run");
+
+    const first = run(runner, ["--mock", "--set", setFile, "--out", out, "--budget-usd", "0.09",
+      "--job-estimate-usd", "0.01", "--concurrency", "2"]);
+    assert.equal(first.status, 3, first.output);
+    const stopped = JSON.parse(await readFile(path.join(out, "checkpoint.json"), "utf8"));
+    assert.equal(stopped.status, "budget_stopped");
+    assert.ok(stopped.spentUsd > 0.09 || Object.values(stopped.jobs).some((job) => job.status === "budget_stopped"));
+    assert.ok((stopped.counts.completed || 0) < 4);
+
+    const second = run(runner, ["--mock", "--set", setFile, "--out", out, "--resume", "--budget-usd", "1"]);
+    assert.equal(second.status, 0, second.output);
+    const done = JSON.parse(await readFile(path.join(out, "checkpoint.json"), "utf8"));
+    assert.equal(done.status, "completed");
+    assert.equal(done.counts.completed, 4);
+    assert.ok(done.spentUsd >= stopped.spentUsd);
+    const manifest = JSON.parse(await readFile(path.join(out, "manifest.json"), "utf8"));
+    assert.equal(manifest.sessions.length, 2);
+    assert.deepEqual(manifest.armEnvDifference, { prepare: ["RULE_TOC_ADMIT_ENABLED"], finalize: ["RULE_TOC_ADMIT_ENABLED"] });
+    assert.ok(!JSON.stringify(manifest.envSnapshots).includes("mock-final-openai-key"), "keys are masked");
+
+    const names = (await readdir(path.join(out, "results"))).filter((name) => !name.endsWith(".events.json"));
+    assert.equal(names.length, 4);
+    for (const name of names) {
+      const result = JSON.parse(await readFile(path.join(out, "results", name), "utf8"));
+      assert.equal(result.status, "completed", name);
+      assert.equal(result.integrity.ok, true, name);
+      assert.ok(result.network.every((entry) => ["mock", "ledger"].includes(entry.route)), "no real network");
+      assert.ok(result.prepared.continuation.promptBundle.prompt.length > 0);
+      assert.ok(result.final.shortAnswer.includes("MOCK"));
+      assert.ok(result.cost.calls.length >= 5);
+    }
+
+    const report = run(reporter, ["--run", out]);
+    assert.equal(report.status, 0, report.output);
+    const markdown = await readFile(path.join(out, "report.md"), "utf8");
+    assert.match(markdown, /MOCK 运行/u);
+    assert.equal(markdown.split("\n").filter((line) => /^\| Q[13] \|/u.test(line)).length, 2);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});

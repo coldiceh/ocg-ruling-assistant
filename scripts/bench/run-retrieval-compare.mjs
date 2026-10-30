@@ -154,6 +154,11 @@ export function planJobs({ items, arms, repeat }) {
   return jobs;
 }
 
+function displayPath(target) {
+  const relative = path.relative(process.cwd(), target);
+  return !relative ? "." : relative.startsWith("..") || path.isAbsolute(relative) ? target : relative;
+}
+
 function gitFacts() {
   const run = (args) => execFileSync("git", args, { cwd: repositoryRoot, encoding: "utf8",
     stdio: ["ignore", "pipe", "ignore"] }).trim();
@@ -580,9 +585,9 @@ async function main() {
   await writeJsonAtomic(manifestPath, manifest);
   await writeCheckpoint(finalStatus);
   console.log(`\n结束：${finalStatus}；完成 ${jobs.length - remaining}/${jobs.length}；累计估算费用 $${tracker.spentUsd().toFixed(4)}`
-    + `（预算 $${options.budgetUsd}）\n报告：node scripts/bench/report-retrieval-compare.mjs --run ${path.relative(process.cwd(), runDir) || "."}`);
+    + `（预算 $${options.budgetUsd}）\n报告：node scripts/bench/report-retrieval-compare.mjs --run ${displayPath(runDir)}`);
   if (remaining) {
-    console.log(`续跑：node scripts/bench/run-retrieval-compare.mjs --set ${path.relative(process.cwd(), setFile)} --out ${path.relative(process.cwd(), runDir)} --resume --budget-usd <新上限>${options.mock ? " --mock" : ""}`);
+    console.log(`续跑：node scripts/bench/run-retrieval-compare.mjs --set ${displayPath(setFile)} --out ${displayPath(runDir)} --resume --budget-usd <新上限>${options.mock ? " --mock" : ""}`);
     process.exitCode = finalStatus === "budget_stopped" ? 3 : 2;
   }
 }
