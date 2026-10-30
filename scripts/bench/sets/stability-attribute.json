@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "setId": "stability-attribute",
+  "description": "稳定性单题：同一题面重复 3 次，看两臂各自的回答与证据包是否稳定。参考答案留空，由用户判定。",
+  "source": null,
+  "repeat": 3,
+  "itemCount": 1,
+  "items": [
+    {
+      "qid": "S1",
+      "cellId": null,
+      "question": "我使用真炎龙 白界龙的②效果将No.4 猛毒刺胞 隐形水母怪特召到我方场上, 将超电导战骑 等离子磁炮王特召到对方场上. 现在是对方回合, ②：只要这张卡在怪兽区域存在，场上的表侧表示怪兽变成地属性。与①：场上的表侧表示怪兽变成水属性。谁先适用.",
+      "referenceAnswer": ""
+    }
+  ]
+}
