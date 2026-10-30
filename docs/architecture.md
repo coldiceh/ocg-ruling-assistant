@@ -66,6 +66,7 @@ flowchart LR
 - `EVIDENCE_SUPPLEMENT_ENABLED=true`（代码默认关闭，`vercel.json` 开启）时，首答为 insufficient 且写明缺口、首轮使用 bounded Luna 选证、首包仍有余量时，`backend/evidenceSupplementRound.mjs` 补一轮且只补一次：以缺口为检索范围规划和召回。补充轮只补召回缺口，不重选首轮已读单元：直接候选按身份排除首轮已提供给选证模型的阅读单元，但新单元经引用展开的目标（如所引用的定义条文）即使首轮读过也照常提供；窗口预算不变；最终包 = 首轮所选 + 本轮新选，超过包上限时保留首轮条目、按本轮顺序追加到放不下为止，被裁条目记录在遥测中。
 - 时间保护：调用已用时间 + `EVIDENCE_SUPPLEMENT_ESTIMATED_ROUND_MS`（默认 110 s）超过 280 s（300 s 函数上限减去与引擎复现等待相同的 20 s 余量）就跳过并记 `skipped_time_budget`；单请求（外部 API/Bot）从公开请求开始计时，网页 finalize 从其自身请求开始计时；补轮在 280 s 处被硬性中止。
 - 规划、检索、选证或第二次最终调用任何一步失败（或没有新条目）都保留首轮答案；补充轮期间请求被取消也只中止补充轮、保留首轮答案（记 `cancelled_during_supplement`），只有首轮本身被取消才报错；网页在补轮期间收到 `evidence_supplement` 阶段事件并显示“证据不足，正在补充检索…”，答案末尾由 `presentPublicAnswer` 加一句说明；`debug.evidenceSupplement` 记录状态、缺口、召回/入窗/选中/裁掉数量、耗时与费用。
+- 与 `RULE_TOC_ADMIT` 同时启用时的交互未处理（补充轮会按原题再跑一次目录调用、目录优先通道不经过排除过滤、110 s 估计未计入目录等待）。
 
 ## 部署
 
