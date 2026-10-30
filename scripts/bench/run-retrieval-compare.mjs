@@ -365,6 +365,12 @@ async function main() {
     throw new Error(`输出目录已存在且非空: ${runDir}（续跑请加 --resume）`);
   }
 
+  // The arm flag reaches the pipeline only through each job's env object, as
+  // every other RAG_* setting does. A value inherited by this process is
+  // removed so code that read process.env directly could not make both arms
+  // look switched on (the report would then show no ToC findings instead).
+  const inheritedArmFlag = process.env[ARM_FLAG] ?? null;
+  delete process.env[ARM_FLAG];
   const productionEnv = readVercelProductionEnv(path.join(repositoryRoot, "vercel.json"));
   const ledgerMode = options.mock ? "memory" : resolveLedgerMode(options.ledger, process.env);
   const baseEnv = buildBaseEnv({ mode, inheritedEnv: process.env, productionEnv, setEnv: options.setEnv,
@@ -438,9 +444,11 @@ async function main() {
         prepare: maskedEnvSnapshot(envs[arm].prepare), finalize: maskedEnvSnapshot(envs[arm].finalize) }])),
       armEnvDifference: armDifference,
       tocPaths: options.tocPaths,
+      inheritedArmFlagRemoved: inheritedArmFlag,
       notes: [
         "直接调用 answerRagRulingQuestionForVersion(prepareForContinuation) → finalizePreparedRagRulingQuestionForVersion，与网站 prepare/finalize 两步相同；不经过 HTTP、范围检查、审计/历史写入和引擎复现。",
         "预算账本使用 bench 专用 run id；限额设为不约束值，避免影响证据组装；--budget-usd 由 runner 在账本请求处执行。",
+        `${ARM_FLAG} 只通过每个任务的 env 对象传入管线；进程环境里的同名变量在启动时删除。`,
         "成本 = 账本按供应商回报 usage 结算的理论费用（gpt-6-astra 用 data/model-pricing.json；Luna/Gemini 用后端内置牌价，因该表没有这两类模型）。",
       ],
       sessions: [],
