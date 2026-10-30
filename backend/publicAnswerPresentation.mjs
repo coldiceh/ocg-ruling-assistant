@@ -54,6 +54,31 @@ export function classifyPublicRequestChannel(rawBody) {
   return PUBLIC_REQUEST_CHANNELS.UNKNOWN;
 }
 
+// One plain sentence for the reader when the server ran the single
+// supplementary retrieval round (ragRulingPipeline/evidenceSupplementRound).
+// It is chosen only from the server-owned round status, never from answer text.
+const EVIDENCE_SUPPLEMENT_NOTES = Object.freeze({
+  applied: Object.freeze({
+    "zh-CN": "（首轮证据不足，已补充检索一次）",
+    en: "(The first round found the evidence insufficient; one supplementary search was run.)",
+    ja: "（初回の根拠が不足していたため、追加検索を1回行いました）",
+  }),
+  attempted: Object.freeze({
+    "zh-CN": "（首轮证据不足，已尝试补充检索一次，但未得到可用的新资料，以下仍为首轮回答）",
+    en: "(The first round found the evidence insufficient; one supplementary search was tried but found no usable new material, so this is the first-round answer.)",
+    ja: "（初回の根拠が不足していたため追加検索を1回試みましたが、使える新しい資料は得られなかったため、初回の回答を表示しています）",
+  }),
+});
+
+export function evidenceSupplementNote(answer) {
+  const status = answer?.debug?.evidenceSupplement?.status;
+  const kind = status === "applied" ? "applied"
+    : status === "failed" || status === "no_new_evidence" ? "attempted" : "";
+  if (!kind) return "";
+  const locale = answer?.answerLocale === "en" || answer?.answerLocale === "ja" ? answer.answerLocale : "zh-CN";
+  return EVIDENCE_SUPPLEMENT_NOTES[kind][locale];
+}
+
 export function presentPublicAnswer(answer, {
   channel = PUBLIC_REQUEST_CHANNELS.UNKNOWN,
   env = globalThis.process?.env || {},
@@ -62,15 +87,17 @@ export function presentPublicAnswer(answer, {
     const footer = answer.generation?.embeddedInAnswerText === true
       ? String(answer.generation.answerTextFooter || "") : "";
     const shortAnswer = typeof answer.shortAnswer === "string" ? answer.shortAnswer : "";
-    return footer && shortAnswer.endsWith(footer)
-      ? { ...answer, shortAnswer: shortAnswer.slice(0, -footer.length) }
-      : answer;
+    const body = footer && shortAnswer.endsWith(footer) ? shortAnswer.slice(0, -footer.length) : shortAnswer;
+    const note = evidenceSupplementNote(answer);
+    const shown = note && body.trim() && !body.includes(note) ? `${body}\n\n${note}` : body;
+    return shown === shortAnswer ? answer : { ...answer, shortAnswer: shown };
   }
   if (channel !== PUBLIC_REQUEST_CHANNELS.EXTERNAL_API || !isPlainObject(answer)) {
     return answer;
   }
   const shortAnswer = typeof answer.shortAnswer === "string" ? answer.shortAnswer : "";
   const notice = [
+    evidenceSupplementNote(answer),
     String(env.EXTERNAL_API_TEST_NOTICE || "").trim(),
     "网页端体验完整内容：https://coldiceh.github.io/ocg-ruling-assistant/",
   ].filter((text) => text && !shortAnswer.includes(text)).join("\n");
