@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-10-29T01:10:56.125Z",
+  "generatedAt": "2026-10-30T01:25:53.711Z",
   "records": [
     {
       "id": "21385",
@@ -288952,6 +288952,7 @@
       "level": 8,
       "attribute": "earth",
       "name": "E・HERO ワイルド・ウィングマン",
+      "cnName": "元素英雄 荒野翼侠",
       "jaName": "E・HERO ワイルド・ウィングマン",
       "enName": "Elemental HERO Wild Wingman",
       "effectText": "「E・HERO ワイルドマン」＋「E・HERO フェザーマン」\nこのモンスターは融合召喚でしか特殊召喚できない。手札を１枚捨てる事で、フィールド上の魔法・罠カード１枚を破壊する。",
@@ -288961,11 +288962,11 @@
         "Elemental HERO Wild Wingman",
         "元素英雄 荒野翼侠",
         "元素－英雄 野蛮翼侠",
-        "E·HERO 野性翼人"
+        "E·HERO 野性翼人",
+        "元素－英雄 野蛮翼人"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/6643",
-      "updatedAt": "2026-09-12T21:06:27.510Z",
-      "cnName": "元素英雄 荒野翼侠",
+      "updatedAt": "2026-10-30T01:23:56.321Z",
       "chineseNameSources": [
         {
           "name": "元素英雄 荒野翼侠",
@@ -288992,6 +288993,13 @@
           "name": "E·HERO 野性翼人",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "6643"
+        },
+        {
+          "name": "元素－英雄 野蛮翼人",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "6643"
         }

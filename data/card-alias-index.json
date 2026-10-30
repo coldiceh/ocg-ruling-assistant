@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-10-29T01:10:56.125Z",
+  "generatedAt": "2026-10-30T01:25:53.711Z",
   "records": [
     {
       "alias": "“K9刑侦案件”",
@@ -121588,6 +121588,13 @@
     {
       "alias": "E·HERO 野性翼人",
       "normalizedAlias": "e·hero 野性翼人",
+      "cardId": "6643",
+      "cardName": "E・HERO ワイルド・ウィングマン",
+      "language": "zh"
+    },
+    {
+      "alias": "元素－英雄 野蛮翼人",
+      "normalizedAlias": "元素-英雄 野蛮翼人",
       "cardId": "6643",
       "cardName": "E・HERO ワイルド・ウィングマン",
       "language": "zh"

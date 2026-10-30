@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-10-29T01:10:56.125Z",
+  "generatedAt": "2026-10-30T01:25:53.711Z",
   "records": [
     {
       "id": "21385",
@@ -275458,7 +275458,8 @@
         "Elemental HERO Wild Wingman",
         "元素英雄 荒野翼侠",
         "元素－英雄 野蛮翼侠",
-        "E·HERO 野性翼人"
+        "E·HERO 野性翼人",
+        "元素－英雄 野蛮翼人"
       ],
       "chineseNameSources": [
         {
@@ -275486,6 +275487,13 @@
           "name": "E·HERO 野性翼人",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "6643"
+        },
+        {
+          "name": "元素－英雄 野蛮翼人",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "6643"
         }
