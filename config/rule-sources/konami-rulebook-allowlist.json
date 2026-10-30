@@ -1,0 +1,328 @@
+{
+  "schemaVersion": 1,
+  "kind": "rule-source-section-allowlist",
+  "description": "官方 Konami 规则资料的发布白名单：只发布这里列出的节，其余节保留在源数据中但不进入任何检索通道和目录（隐藏，不删除）。",
+  "decision": {
+    "date": "2026-10-30",
+    "userQuote": "把规则书未覆盖的卡组构筑和赛制、基础程序和术语 9 节、同调的基本规则 2 节这种有用的提取出来，其他的都先删了或隐藏暂时不再使用。",
+    "basis": "逐节对照 ocg-rule：194 个小节中 100 节有对应、43 节部分对应、36 节无对应、15 节非规则内容；保留无对应中的卡组构筑与赛制 19 节、基础程序和术语 9 节、同调基础 2 节，速度决斗 6 节不保留。"
+  },
+  "categories": {
+    "deck-construction-and-format": "卡组构筑与赛制",
+    "basic-procedure-and-terminology": "基础程序和术语",
+    "synchro-basics": "同调的基本规则"
+  },
+  "sources": [
+    {
+      "sourceId": "konami:ocg-rulebook-20200401",
+      "mode": "sections",
+      "sections": [
+        {
+          "sectionKey": "beginner-source-heading-3",
+          "title": "対戦に必要な物",
+          "titlePath": ["初級編 デュエルの基本を学ぼう", "対戦に必要な物"],
+          "titleZh": "对战所需物品",
+          "printedPages": [4, 4],
+          "category": "deck-construction-and-format",
+          "coverage": "none",
+          "reason": "“决斗”与三局制“比赛（Match）”的定义、对战所需物品；ocg-rule 无对应。"
+        },
+        {
+          "sectionKey": "beginner-source-heading-4",
+          "title": "■デッキ……（40枚以上60枚以下）",
+          "titlePath": ["初級編 デュエルの基本を学ぼう", "■デッキ……（40枚以上60枚以下）"],
+          "titleZh": "卡组（40～60 张）",
+          "printedPages": [4, 4],
+          "category": "deck-construction-and-format",
+          "coverage": "none",
+          "reason": "主卡组张数 40～60 张；ocg-rule 无对应。"
+        },
+        {
+          "sectionKey": "beginner-source-heading-5",
+          "title": "■あると便利な物",
+          "titlePath": ["初級編 デュエルの基本を学ぼう", "■あると便利な物"],
+          "titleZh": "便利物品（计算器、卡套、决斗垫）",
+          "printedPages": [4, 4],
+          "category": "deck-construction-and-format",
+          "coverage": "none",
+          "reason": "卡套须同款、不能从背面辨认卡片等用品要求；ocg-rule 无对应。"
+        },
+        {
+          "sectionKey": "beginner-source-heading-17",
+          "title": "魔法・罠カードの種類と使い方",
+          "titlePath": ["初級編 デュエルの基本を学ぼう", "魔法・罠カードの種類と使い方"],
+          "titleZh": "魔法·陷阱卡的种类与用法",
+          "printedPages": [13, 13],
+          "category": "basic-procedure-and-terminology",
+          "coverage": "none",
+          "reason": "魔法·陷阱卡卡面小节的上级标题（本节只有标题行，不产生阅读单元）；ocg-rule 无对应。"
+        },
+        {
+          "sectionKey": "beginner-source-heading-18",
+          "title": "カードの見方",
+          "titlePath": ["初級編 デュエルの基本を学ぼう", "カードの見方"],
+          "titleZh": "魔法·陷阱卡的卡面识读",
+          "printedPages": [13, 13],
+          "category": "basic-procedure-and-terminology",
+          "coverage": "none",
+          "reason": "卡名同则视为同一张卡、种类与效果图标；ocg-rule 无对应。"
+        },
+        {
+          "sectionKey": "beginner-source-heading-30",
+          "title": "■魔法と罠のセットの違い",
+          "titlePath": ["初級編 デュエルの基本を学ぼう", "■魔法と罠のセットの違い"],
+          "titleZh": "■ 魔法与陷阱盖放的区别",
+          "printedPages": [18, 18],
+          "category": "basic-procedure-and-terminology",
+          "coverage": "none",
+          "reason": "速攻魔法以外的魔法盖放当回合主要阶段可发动、对方回合不能发动；ocg-rule 无对应。"
+        },
+        {
+          "sectionKey": "intermediate-source-heading-3",
+          "title": "デッキの作り方",
+          "titlePath": ["中級編 いろいろなカードについて知ろう", "デッキの作り方"],
+          "titleZh": "卡组的构筑方法",
+          "printedPages": [30, 30],
+          "category": "deck-construction-and-format",
+          "coverage": "none",
+          "reason": "卡组构筑规则的引导段；ocg-rule 无对应。"
+        },
+        {
+          "sectionKey": "intermediate-source-heading-4",
+          "title": "●デッキのカード枚数は40枚以上60枚以下",
+          "titlePath": ["中級編 いろいろなカードについて知ろう", "●デッキのカード枚数は40枚以上60枚以下"],
+          "titleZh": "● 卡组张数 40～60 张",
+          "printedPages": [30, 30],
+          "category": "deck-construction-and-format",
+          "coverage": "none",
+          "reason": "卡组张数规则（本节只有标题行，现行切分不产生阅读单元）；ocg-rule 无对应。"
+        },
+        {
+          "sectionKey": "intermediate-source-heading-5",
+          "title": "●同じ名前のカードは３枚まで",
+          "titlePath": ["中級編 いろいろなカードについて知ろう", "●同じ名前のカードは３枚まで"],
+          "titleZh": "● 同名卡最多 3 张",
+          "printedPages": [30, 30],
+          "category": "deck-construction-and-format",
+          "coverage": "none",
+          "reason": "同名卡上限（本节只有标题行，现行切分不产生阅读单元）；ocg-rule 无对应。"
+        },
+        {
+          "sectionKey": "intermediate-source-heading-6",
+          "title": "●公式の大会で使用するデッキの場合、禁止・制限カード等の大会規定に沿って構築する。",
+          "titlePath": ["中級編 いろいろなカードについて知ろう", "●公式の大会で使用するデッキの場合、禁止・制限カード等の大会規定に沿って構築する。"],
+          "titleZh": "● 公式大会卡组须遵守禁止·限制卡等大会规定",
+          "printedPages": [30, 30],
+          "category": "deck-construction-and-format",
+          "coverage": "none",
+          "reason": "公式大会构筑须遵守大会规定；ocg-rule 无对应。"
+        },
+        {
+          "sectionKey": "intermediate-source-heading-10",
+          "title": "●レベル５以上のモンスターの枚数に注意しよう",
+          "titlePath": ["中級編 いろいろなカードについて知ろう", "●レベル５以上のモンスターの枚数に注意しよう"],
+          "titleZh": "● 注意 5 星以上怪兽数量（含额外卡组 15 张上限）",
+          "printedPages": [30, 30],
+          "category": "deck-construction-and-format",
+          "coverage": "none",
+          "reason": "额外卡组 15 张上限、不计入主卡组等构筑规则；ocg-rule 无对应。"
+        },
+        {
+          "sectionKey": "intermediate-source-heading-42",
+          "title": "シンクロモンスター",
+          "titlePath": ["中級編 いろいろなカードについて知ろう", "シンクロモンスター"],
+          "titleZh": "同调怪兽",
+          "printedPages": [47, 47],
+          "category": "synchro-basics",
+          "coverage": "none",
+          "reason": "同调召唤：调整＋调整以外怪兽，等级合计；ocg-rule 无对应。"
+        },
+        {
+          "sectionKey": "intermediate-source-heading-43",
+          "title": "＜シンクロ召喚に必要なもの＞",
+          "titlePath": ["中級編 いろいろなカードについて知ろう", "＜シンクロ召喚に必要なもの＞"],
+          "titleZh": "同调召唤所需条件",
+          "printedPages": [47, 47],
+          "category": "synchro-basics",
+          "coverage": "none",
+          "reason": "同调素材须为调整及调整以外的怪兽、可能指定卡名；ocg-rule 无对应。"
+        },
+        {
+          "sectionKey": "advanced-source-heading-4",
+          "title": "■対戦方法",
+          "titlePath": ["上級編 大会向けのルールについて知ろう", "■対戦方法"],
+          "titleZh": "■ 对战方式（三局两胜）",
+          "printedPages": [63, 63],
+          "category": "deck-construction-and-format",
+          "coverage": "none",
+          "reason": "Match 胜负、先后攻选择权、平局判定；ocg-rule 无对应。"
+        },
+        {
+          "sectionKey": "advanced-source-heading-8",
+          "title": "大会やイベントで場合によって必要となる物",
+          "titlePath": ["上級編 大会向けのルールについて知ろう", "大会やイベントで場合によって必要となる物"],
+          "titleZh": "大会/活动中视情况需要的物品",
+          "printedPages": [64, 64],
+          "category": "deck-construction-and-format",
+          "coverage": "none",
+          "reason": "副卡组小节的上级标题（本节只有标题行，不产生阅读单元）；ocg-rule 无对应。"
+        },
+        {
+          "sectionKey": "advanced-source-heading-9",
+          "title": "■サイドデッキ",
+          "titlePath": ["上級編 大会向けのルールについて知ろう", "■サイドデッキ"],
+          "titleZh": "■ 副卡组",
+          "printedPages": [64, 64],
+          "category": "deck-construction-and-format",
+          "coverage": "none",
+          "reason": "副卡组的定义与换入换出张数相等；ocg-rule 无对应。"
+        },
+        {
+          "sectionKey": "advanced-source-heading-10",
+          "title": "●サイドデッキの枚数は15枚以下",
+          "titlePath": ["上級編 大会向けのルールについて知ろう", "●サイドデッキの枚数は15枚以下"],
+          "titleZh": "● 副卡组 15 张以下",
+          "printedPages": [64, 64],
+          "category": "deck-construction-and-format",
+          "coverage": "none",
+          "reason": "副卡组张数上限（本节只有标题行，现行切分不产生阅读单元）；ocg-rule 无对应。"
+        },
+        {
+          "sectionKey": "advanced-source-heading-11",
+          "title": "●デッキ・エクストラデッキで使用しているカードと同名のカードを使用する場合、デッキ・サイドデッキ・エクストラデッキ合わせて、同名カードは3枚まで",
+          "titlePath": ["上級編 大会向けのルールについて知ろう", "●デッキ・エクストラデッキで使用しているカードと同名のカードを使用する場合、デッキ・サイドデッキ・エクストラデッキ合わせて、同名カードは3枚まで"],
+          "titleZh": "● 主/额外/副卡组合计同名卡最多 3 张",
+          "printedPages": [64, 64],
+          "category": "deck-construction-and-format",
+          "coverage": "none",
+          "reason": "同名卡合计上限（本节只有标题行，现行切分不产生阅读单元）；ocg-rule 无对应。"
+        },
+        {
+          "sectionKey": "advanced-source-heading-13",
+          "title": "その他のルール（上級者向け）",
+          "titlePath": ["上級編 大会向けのルールについて知ろう", "その他のルール（上級者向け）"],
+          "titleZh": "其他规则（进阶）",
+          "printedPages": [65, 65],
+          "category": "deck-construction-and-format",
+          "coverage": "none",
+          "reason": "禁止·限制卡小节的上级标题（本节只有标题行，不产生阅读单元）；ocg-rule 无对应。"
+        },
+        {
+          "sectionKey": "advanced-source-heading-14",
+          "title": "■禁止・制限カード",
+          "titlePath": ["上級編 大会向けのルールについて知ろう", "■禁止・制限カード"],
+          "titleZh": "■ 禁止·限制卡",
+          "printedPages": [65, 65],
+          "category": "deck-construction-and-format",
+          "coverage": "none",
+          "reason": "同名卡合计 3 张与限制规则（Limit Regulation）；ocg-rule 无对应。"
+        },
+        {
+          "sectionKey": "advanced-source-heading-15",
+          "title": "［禁止カード］",
+          "titlePath": ["上級編 大会向けのルールについて知ろう", "［禁止カード］"],
+          "titleZh": "［禁止卡］",
+          "printedPages": [65, 65],
+          "category": "deck-construction-and-format",
+          "coverage": "none",
+          "reason": "禁止卡不能使用；ocg-rule 无对应。"
+        },
+        {
+          "sectionKey": "advanced-source-heading-16",
+          "title": "［制限カード］",
+          "titlePath": ["上級編 大会向けのルールについて知ろう", "［制限カード］"],
+          "titleZh": "［限制卡］",
+          "printedPages": [65, 65],
+          "category": "deck-construction-and-format",
+          "coverage": "none",
+          "reason": "限制卡同名 1 张；ocg-rule 无对应。"
+        },
+        {
+          "sectionKey": "advanced-source-heading-17",
+          "title": "［準制限カード］",
+          "titlePath": ["上級編 大会向けのルールについて知ろう", "［準制限カード］"],
+          "titleZh": "［准限制卡］",
+          "printedPages": [65, 65],
+          "category": "deck-construction-and-format",
+          "coverage": "none",
+          "reason": "准限制卡同名 2 张及禁限表发布处；ocg-rule 无对应。"
+        },
+        {
+          "sectionKey": "advanced-source-heading-24",
+          "title": "■ルールと効果が矛盾している場合",
+          "titlePath": ["上級編 大会向けのルールについて知ろう", "■ルールと効果が矛盾している場合"],
+          "titleZh": "■ 规则与效果矛盾时",
+          "printedPages": [68, 68],
+          "category": "basic-procedure-and-terminology",
+          "coverage": "none",
+          "reason": "规则与卡片效果矛盾时以效果优先；ocg-rule 无对应。"
+        },
+        {
+          "sectionKey": "advanced-source-heading-26",
+          "title": "■デッキのカードを確認した場合の処理",
+          "titlePath": ["上級編 大会向けのルールについて知ろう", "■デッキのカードを確認した場合の処理"],
+          "titleZh": "■ 确认卡组内容后的处理",
+          "printedPages": [68, 68],
+          "category": "basic-procedure-and-terminology",
+          "coverage": "none",
+          "reason": "检索等确认整副卡组后要洗切，翻顶/放底不洗切；ocg-rule 无对应。"
+        },
+        {
+          "sectionKey": "advanced-source-heading-27",
+          "title": "■ターンの数え方",
+          "titlePath": ["上級編 大会向けのルールについて知ろう", "■ターンの数え方"],
+          "titleZh": "■ 回合的计数方法",
+          "printedPages": [69, 69],
+          "category": "basic-procedure-and-terminology",
+          "coverage": "none",
+          "reason": "双方回合各计 1 回合、“以对方回合计算”只数对方回合；ocg-rule 无对应。"
+        },
+        {
+          "sectionKey": "advanced-source-heading-35",
+          "title": "■「YU-GI-OH! TRADING CARD GAME」シリーズについて",
+          "titlePath": ["上級編 大会向けのルールについて知ろう", "■「YU-GI-OH! TRADING CARD GAME」シリーズについて"],
+          "titleZh": "■ 关于 TCG 系列卡",
+          "printedPages": [73, 73],
+          "category": "deck-construction-and-format",
+          "coverage": "none",
+          "reason": "TCG（非日文）卡与日文卡混用及公式大会可能禁止；ocg-rule 无对应。"
+        },
+        {
+          "sectionKey": "advanced-source-heading-50",
+          "title": "●フィールドのカード",
+          "titlePath": ["上級編 大会向けのルールについて知ろう", "●フィールドのカード"],
+          "titleZh": "● “场上的卡”的范围",
+          "printedPages": [80, 80],
+          "category": "basic-procedure-and-terminology",
+          "coverage": "none",
+          "reason": "“场上的卡”不含墓地、卡组、额外卡组与除外卡；ocg-rule 无对应。"
+        },
+        {
+          "sectionKey": "advanced-source-heading-61",
+          "title": "●ランダム",
+          "titlePath": ["上級編 大会向けのルールについて知ろう", "●ランダム"],
+          "titleZh": "● 随机",
+          "printedPages": [83, 83],
+          "category": "basic-procedure-and-terminology",
+          "coverage": "none",
+          "reason": "随机选择的方法；ocg-rule 无对应。"
+        },
+        {
+          "sectionKey": "advanced-source-heading-62",
+          "title": "●シャッフル",
+          "titlePath": ["上級編 大会向けのルールについて知ろう", "●シャッフル"],
+          "titleZh": "● 洗切",
+          "printedPages": [84, 84],
+          "category": "basic-procedure-and-terminology",
+          "coverage": "none",
+          "reason": "洗切的方法与禁止的作为；ocg-rule 无对应。"
+        }
+      ]
+    },
+    {
+      "sourceId": "konami:ocg-howto",
+      "mode": "withhold",
+      "reason": "官方玩法页 9 个阅读单元：6 个入门说明（ocg-rule 已覆盖）、3 个链接或宣传，全部隐藏。"
+    }
+  ]
+}
