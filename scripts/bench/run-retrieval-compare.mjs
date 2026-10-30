@@ -199,6 +199,20 @@ function compactEvidenceEvent(event) {
   return event;
 }
 
+// The provider's "reading" event repeats ruleQueryModel.bounded.reading
+// (about 0.5 MB per job); keep one copy, in the result file.
+function dedupeReadingEvents(events, continuation) {
+  const reading = continuation?.ruleQueryModel?.bounded?.reading;
+  if (!reading) return events;
+  const serialized = JSON.stringify(reading);
+  return events.map((event) => {
+    if (event?.type !== "reading") return event;
+    const { type, ...rest } = event;
+    return JSON.stringify(rest) === serialized
+      ? { type, sameAs: "results/<job>.json#prepared.continuation.ruleQueryModel.bounded.reading" } : event;
+  });
+}
+
 // Mechanical identity checks: the configured production providers really ran
 // (no silent fallback to a dry-run/mock path because a key was missing).
 export function integrityChecks({ continuation, final }) {
@@ -265,9 +279,11 @@ export function buildResultDocument({ job, attempt, run, prepared, final, error,
       evidenceFingerprint: continuation.evidenceFingerprint ?? null,
       finalPromptSha256: continuation.finalPromptSha256 ?? null,
       summary: evidenceSummary,
+      // Selector output (aliases as returned); the full read/omitted group
+      // lists stay in prepared.continuation.ruleQueryModel.bounded.
       selectedIds: continuation.ruleQueryModel?.bounded?.selectedIds || [],
-      readGroupIds: continuation.ruleQueryModel?.bounded?.readGroupIds || [],
-      omittedGroupIds: continuation.ruleQueryModel?.bounded?.omittedGroupIds || [],
+      readGroupCount: (continuation.ruleQueryModel?.bounded?.readGroupIds || []).length,
+      omittedGroupCount: (continuation.ruleQueryModel?.bounded?.omittedGroupIds || []).length,
       toc: {
         searchedPaths: tocPaths.length ? tocPaths : DEFAULT_TOC_SEARCH_ROOTS,
         findings: tocFindings,
@@ -508,7 +524,8 @@ async function main() {
       document.status = status = "invalid_config";
       stopReason ||= "integrity_check_failed";
     }
-    await writeJsonAtomic(eventsPath(runDir, job.key), { jobKey: job.key, attempt, events: context.evidenceEvents });
+    await writeJsonAtomic(eventsPath(runDir, job.key), { jobKey: job.key, attempt,
+      events: dedupeReadingEvents(context.evidenceEvents, prepared?.continuation) });
     await writeJsonAtomic(resultPath(runDir, job.key), document);
     jobStates[job.key] = { status, attempts: attempt, costUsd: jobCostUsd, wallMs: timings.totalMs,
       completedAt: timings.completedAt, error: failure ? String(failure.message || failure).slice(0, 300) : null };

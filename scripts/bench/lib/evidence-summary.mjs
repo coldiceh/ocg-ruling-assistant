@@ -3,7 +3,9 @@
 // text is read or judged.
 import { createHash } from "node:crypto";
 
-const QA_RECORD_TYPES = new Set(["qa", "faq"]);
+// recordType values written by the packer (data/gemini-rule-qa-v1: rule
+// atoms are "rule-doc", official Q&A "qa", card FAQ "card-faq").
+const RECORD_TYPE_KINDS = Object.freeze({ "rule-doc": "rule", qa: "qa", "card-faq": "faq", faq: "faq" });
 
 export function sha256Text(text) {
   return createHash("sha256").update(String(text ?? ""), "utf8").digest("hex");
@@ -23,7 +25,7 @@ export function firstSentence(text, maxChars = 160) {
 export function evidenceItemKind(group, item = {}) {
   if (group === "rawRelatedEvidence") {
     const recordType = String(item.recordType || "");
-    return QA_RECORD_TYPES.has(recordType) ? recordType : "rule";
+    return RECORD_TYPE_KINDS[recordType] || (recordType ? `other:${recordType}` : "other");
   }
   if (group === "cardTexts" || group === "userProvidedCardTexts") return "card";
   return group;
@@ -32,15 +34,17 @@ export function evidenceItemKind(group, item = {}) {
 export function summarizePromptBundle(promptBundle = {}) {
   const modelEvidence = promptBundle.modelEvidence && typeof promptBundle.modelEvidence === "object"
     ? promptBundle.modelEvidence : {};
-  const byKind = {};
+  const sets = {};
+  const add = (kind, id) => (sets[kind] ||= new Set()).add(id);
   for (const [group, items] of Object.entries(modelEvidence)) {
     if (!Array.isArray(items)) continue;
-    for (const item of items) {
-      const kind = evidenceItemKind(group, item);
-      const id = String(item?.id ?? item?.cardId ?? item?.name ?? "");
-      (byKind[kind] ||= []).push(id);
-    }
+    for (const item of items) add(evidenceItemKind(group, item), String(item?.id ?? item?.cardId ?? item?.name ?? ""));
   }
+  // Card texts reach the final prompt through promptPayload.resolvedCards.
+  const promptCards = Array.isArray(promptBundle.promptPayload?.resolvedCards)
+    ? promptBundle.promptPayload.resolvedCards : [];
+  for (const card of promptCards) add("card", String(card?.id ?? card?.name ?? ""));
+  const byKind = Object.fromEntries(Object.entries(sets).map(([kind, ids]) => [kind, [...ids]]));
   return {
     promptChars: typeof promptBundle.prompt === "string" ? promptBundle.prompt.length : null,
     promptSha256: typeof promptBundle.prompt === "string" ? sha256Text(promptBundle.prompt) : null,
