@@ -29,6 +29,8 @@ import { hasNumberedCardIdentityConflict } from "./numberedCardIdentity.mjs";
 import { retrieveExactOfficialQaDirect } from "./officialQaExactDirect.mjs";
 import { resolveRagDataRevision } from "./ragDataRevisionManifest.mjs";
 import { safeQueryAuditRetrievalTimings } from './queryAuditStore.mjs';
+import { decideEvidenceSupplement, evidenceSupplementTelemetry,
+  runEvidenceSupplementRound } from './evidenceSupplementRound.mjs';
 import {
   beginPrivateEvaluationStage,
   createPrivateEvaluationDiagnostics,
@@ -352,6 +354,10 @@ export async function answerRagRulingQuestion(options = {}) {
 export async function finalizePreparedRagRulingQuestion(options = {}) {
   const activeEnv = options.env || globalThis.process?.env || {};
   const cloudEvidence = activeEnv.RAG_EVIDENCE_PIPELINE === "cloud_evidence_v1";
+  // Start of the serverless invocation that owns this final call: the public
+  // request on the single-request path, otherwise this finalize request.
+  const invocationStartedAt = Number.isFinite(Number(options.invocationStartedAt))
+    ? Number(options.invocationStartedAt) : Date.now();
   if (cloudEvidence && (options.dryRun === true
       || /^(1|true|yes|on)$/iu.test(String(activeEnv.RAG_DRY_RUN || "")))) {
     const error = new Error("cloud_evidence_dry_run_not_supported");
@@ -363,6 +369,7 @@ export async function finalizePreparedRagRulingQuestion(options = {}) {
       { env: activeEnv, fetchImpl: options.fetchImpl, budget: options.cloudBudget },
       () => finalizePreparedRagRulingQuestion({
         ...options,
+        invocationStartedAt,
         cloudBudgetScopeActive: true,
       }),
     );
@@ -385,6 +392,7 @@ export async function finalizePreparedRagRulingQuestion(options = {}) {
     const answer = await finalizePreparedRagRulingQuestionCore({
       ...options,
       env: activeEnv,
+      invocationStartedAt,
       privateEvaluationDiagnostics: diagnostics,
     });
     totalStage?.end();
@@ -409,6 +417,10 @@ async function finalizePreparedRagRulingQuestionCore({
   privateEvaluationDiagnostics,
   pipelineStartedAt,
   skipProgressTransition = false,
+  invocationStartedAt,
+  invocationShape = "prepared_finalize",
+  evidenceSupplementProvider,
+  returnSupplementedEvidencePackage = false,
 } = {}) {
   if (!continuation || typeof continuation !== "object" || Array.isArray(continuation)
       || continuation.schemaVersion !== 1
@@ -420,8 +432,8 @@ async function finalizePreparedRagRulingQuestionCore({
   }
   if (!skipProgressTransition) progress?.transition?.("generate_ruling");
 
-  const promptBundle = continuation.promptBundle;
-  const evidence = continuation.evidence;
+  const preparedPromptBundle = continuation.promptBundle;
+  const preparedEvidence = continuation.evidence;
   const effectiveCardResolution = continuation.cardResolution;
   const cardNameModel = continuation.cardNameModel || DISABLED_AUXILIARY_STAGE;
   const ruleQueryModel = continuation.ruleQueryModel || DISABLED_AUXILIARY_STAGE;
@@ -432,12 +444,12 @@ async function finalizePreparedRagRulingQuestionCore({
   const timingsMs = { ...preparedTimingsMs };
 
   const finalModelStartedAt = Date.now();
-  const modelResult = await callRagModel({
+  const firstModelResult = await callRagModel({
     // This is intentionally the saved string. Do not rebuild the prompt from
     // evidence on the continuation path.
-    prompt: promptBundle.prompt,
+    prompt: preparedPromptBundle.prompt,
     recoveryPrompt: "",
-    evidence,
+    evidence: preparedEvidence,
     cardResolution: effectiveCardResolution,
     env,
     modelInvoker,
@@ -451,9 +463,38 @@ async function finalizePreparedRagRulingQuestionCore({
     privateEvaluationDiagnostics,
   });
   timingsMs.finalModel = elapsedMs(finalModelStartedAt);
+
+  // At most one supplementary round, decided only from the model's explicit
+  // evidence-status field and mechanical identity, room and time facts. Any
+  // failure keeps the first answer.
+  const supplementDecision = decideEvidenceSupplement({
+    env, continuation, firstModelResult, invocationStartedAt, invocationShape,
+  });
+  const supplementOutcome = supplementDecision.attempt
+    ? await runEvidenceSupplementRound({
+      decision: supplementDecision, continuation, env, signal, progress,
+      provider: evidenceSupplementProvider, modelInvoker, dryRun, fetchImpl, now,
+      thinkingMode, reasoningEffort, privateEvaluationDiagnostics,
+    })
+    : null;
+  const supplementApplied = supplementOutcome?.status === "applied";
+  const modelResult = supplementApplied ? supplementOutcome.modelResult : firstModelResult;
+  const promptBundle = supplementApplied ? supplementOutcome.promptBundle : preparedPromptBundle;
+  const evidence = supplementApplied ? supplementOutcome.evidence : preparedEvidence;
+  // Paid final-model work of this answer: the first call plus a supplementary
+  // call when one was sent (also when its answer was not used).
+  const finalModelResults = [firstModelResult,
+    ...(supplementOutcome?.modelResult ? [supplementOutcome.modelResult] : [])];
+  const supplementRetrievalCostCny = Number(supplementOutcome?.retrieval?.estimatedCostCny) || 0;
+  const supplementRetrievalCostUsd = Number(supplementOutcome?.retrieval?.estimatedCostUsd) || 0;
+  if (supplementOutcome) {
+    timingsMs.evidenceSupplement = supplementOutcome.timingsMs.total;
+    timingsMs.evidenceSupplementRetrieval = supplementOutcome.timingsMs.retrieval ?? 0;
+    timingsMs.evidenceSupplementFinalModel = supplementOutcome.timingsMs.finalModel ?? 0;
+  }
   timingsMs.total = Number.isFinite(Number(pipelineStartedAt))
     ? elapsedMs(pipelineStartedAt)
-    : (Number(preparedTimingsMs.total) || 0) + timingsMs.finalModel;
+    : (Number(preparedTimingsMs.total) || 0) + timingsMs.finalModel + (timingsMs.evidenceSupplement || 0);
 
   const publicProviderFailure = sanitizePublicProviderFailure(modelResult.providerFailure);
   const publicGenerationAttempts = sanitizePublicGenerationAttempts(modelResult.generationAttempts);
@@ -511,8 +552,16 @@ async function finalizePreparedRagRulingQuestionCore({
     ? continuation.frozenCardResolutionRejections
     : [];
   const dataRevision = continuation.dataRevision;
-  const evidenceFingerprint = continuation.evidenceFingerprint;
-  const finalPromptSha256 = continuation.finalPromptSha256;
+  // After a supplementary round the answer was generated from the new package.
+  const evidenceFingerprint = supplementApplied ? sha256Json(evidence) : continuation.evidenceFingerprint;
+  const finalPromptSha256 = supplementApplied ? sha256Text(promptBundle.prompt) : continuation.finalPromptSha256;
+  const finalModelTokenUsage = finalModelResults.length > 1
+    ? sumUsageTelemetry(finalModelResults.map((result) => result.tokenUsage))
+    : modelResult.tokenUsage || {};
+  const finalModelCostCny = finalModelResults.reduce((total, result) => total + (result.estimatedCostCny || 0), 0)
+    + supplementRetrievalCostCny;
+  const finalModelCostUsd = finalModelResults.reduce((total, result) => total + (result.estimatedCostUsd || 0), 0)
+    + supplementRetrievalCostUsd;
   const identityClarifications = pendingCardIdentityLines(effectiveCardResolution, continuation.answerLocale);
   const interpretedCards = confirmedCardIdentityLine(effectiveCardResolution, continuation.answerLocale);
   const displayedAnswer = interpretedCards ? `${normalized.shortAnswer}\n\n${interpretedCards}` : normalized.shortAnswer;
@@ -639,9 +688,9 @@ async function finalizePreparedRagRulingQuestionCore({
       ) || null,
       returnedModel: firstReturnedModel(publicGenerationAttempts),
       dryRun: modelResult.dryRun,
-      tokenUsage: modelResult.tokenUsage || {},
-      estimatedCostCny: auxiliaryEstimatedCostCny + (modelResult.estimatedCostCny || 0),
-      estimatedCostUsd: auxiliaryEstimatedCostUsd + (modelResult.estimatedCostUsd || 0),
+      tokenUsage: finalModelTokenUsage,
+      estimatedCostCny: auxiliaryEstimatedCostCny + finalModelCostCny,
+      estimatedCostUsd: auxiliaryEstimatedCostUsd + finalModelCostUsd,
       budgetStatus: modelResult.budgetStatus || null,
       generationConfig: modelResult.generationConfig || null,
       generationAttempts: publicGenerationAttempts,
@@ -661,8 +710,16 @@ async function finalizePreparedRagRulingQuestionCore({
       semanticStateTransition: null,
       semanticStateTransitionDiagnostic: null,
       deterministicDecision: null,
+      evidenceSupplement: evidenceSupplementTelemetry({
+        decision: supplementDecision, outcome: supplementOutcome, firstModelResult,
+        firstModelMs: timingsMs.finalModel, continuation,
+      }),
       timingsMs,
     },
+    // Only the web page's finalize request asks for the replacement download.
+    ...(supplementApplied && returnSupplementedEvidencePackage === true ? {
+      evidencePackage: { text: promptBundle.prompt, filename: "ocg-evidence.txt", supplemented: true },
+    } : {}),
   };
 }
 
@@ -838,6 +895,7 @@ async function answerRagRulingQuestionInternal({
   officialQaExactAlreadyChecked = false,
   evidenceSelectionProvider,
   geminiEvidenceProvider,
+  evidenceSupplementProvider,
   onEvidenceEvent,
   frozenCardResolution,
   captureEvidenceOnly = false,
@@ -1297,6 +1355,11 @@ async function answerRagRulingQuestionInternal({
     cloudBudgetScopeActive: true,
     pipelineStartedAt,
     skipProgressTransition: true,
+    // One invocation answers the whole request (external API/Bot, or the
+    // page's single-request stream); its time started before the pipeline.
+    invocationStartedAt: pipelineStartedAt - Math.max(0, Number(nonCardElapsedBeforePipelineMs) || 0),
+    invocationShape: "single_request",
+    evidenceSupplementProvider,
   });
 }
 

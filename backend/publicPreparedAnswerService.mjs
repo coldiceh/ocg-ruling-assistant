@@ -112,6 +112,8 @@ export async function finalizePublicAnswer({
       continuation: preparation.continuation,
       rulingVersion: preparation.rulingVersion,
       env: publicEnv, signal, progress,
+      // After a supplementary evidence round the page offers the new package.
+      returnSupplementedEvidencePackage: true,
     });
     try { answer = await invokeFinal(); }
     catch (error) {

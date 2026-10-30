@@ -499,6 +499,11 @@ function positiveIntegerConfig(env, key, fallback, ceiling = Infinity) {
   if (!Number.isSafeInteger(value)) throw new Error(`evidence_config_invalid_${key}`);
   return value;
 }
+
+// The configured final-package limit, read exactly as retrieve() reads it.
+export function boundedEvidenceMaxPromptChars(env = {}) {
+  return positiveIntegerConfig(env, 'GEMINI_EVIDENCE_MAX_PROMPT_CHARS', GEMINI_EVIDENCE_MAX_PROMPT_CHARS, MAX_PROMPT_CHARS);
+}
 function normalizeOfflineEvaluationLimits(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new Error('evidence_offline_evaluation_limits_invalid');
@@ -692,8 +697,7 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
     const perQuestionMaxUsd = Math.max(0, (offlineLimits?.perQuestionMaxUsd
       ?? (String(env.GEMINI_EVIDENCE_MAX_CNY) === '0' ? Infinity
         : positiveConfig(env, 'GEMINI_EVIDENCE_MAX_CNY', 0.30, 0.30) / fx)) - (supplementRound?.priorSpentUsd || 0));
-    const maxPromptChars = offlineLimits?.maxPromptChars
-      ?? positiveIntegerConfig(env, 'GEMINI_EVIDENCE_MAX_PROMPT_CHARS', GEMINI_EVIDENCE_MAX_PROMPT_CHARS, MAX_PROMPT_CHARS);
+    const maxPromptChars = offlineLimits?.maxPromptChars ?? boundedEvidenceMaxPromptChars(env);
     let maxUsd = perQuestionMaxUsd;
     const readChars = positiveConfig(env, 'GEMINI_EVIDENCE_READING_TARGET_CHARS', INITIAL_READ_CHARS);
     const useDecisions = env.EVIDENCE_SELECTOR === 'decisions';
