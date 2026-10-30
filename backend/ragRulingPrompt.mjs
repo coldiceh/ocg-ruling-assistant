@@ -1,5 +1,6 @@
 import { renderReadableData } from './readableEvidenceText.mjs';
 import { evidenceBucketsToList } from "./ragEvidenceRetriever.mjs";
+import { EVIDENCE_STATUS_INSTRUCTION } from "./evidenceStatusProtocol.mjs";
 
 export const OCG_RULE_SOURCE_POLICY = "OCG Rule（ocg-rule）是本站认可的权威规则整理，可与官方规则资料同等作为规则分析依据，不因 community_reference 标签降为仅供辅助。核对原文的适用条件、例外及更新时间；具体卡片 Q&A 与一般规则表面冲突时，先区分适用范围。保留 OCG Rule 的真实出处，不称其为 KONAMI 发布或本题官方直接 Q&A。";
 
@@ -79,6 +80,9 @@ const GENERAL_INSTRUCTIONS = Object.freeze([
   "涉及次数时记录初始权限、已使用、新增或替换及剩余次数；依原文区分上限、覆盖、明确追加，不重复计数或默认相加。decisionChecklist、decisionPlan 只是内部核对计划，不是证据或答案；仅检查适用项，不输出过程或添加题外问题。",
   "必要事实缺失或资料冲突时，说明具体缺口和条件分支，不猜测补全。输出前核对各子问题、结论、理由及步骤一致。",
   "用中文先直接回答，再简述关键处理与依据；可用 Markdown，不输出 JSON、代码围栏或内部字段/状态。引用用【资料标题】，须对应 allowedEvidenceIds 中真实资料，不输出资料 ID。用自然语言说明是直接裁定还是根据卡文及相关资料的分析，不解释检索系统。",
+  // Serialized status field read by the server (evidenceStatusProtocol.mjs);
+  // it is removed from the displayed answer before presentation.
+  EVIDENCE_STATUS_INSTRUCTION,
 ]);
 
 export function buildRagRulingPrompt({
