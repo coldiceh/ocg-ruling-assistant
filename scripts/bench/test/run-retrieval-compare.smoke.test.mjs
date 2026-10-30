@@ -95,13 +95,28 @@ test("mock run stops at the budget, resumes to completion and reports", { timeou
       assert.ok(result.prepared.continuation.promptBundle.prompt.length > 0);
       assert.ok(result.final.shortAnswer.includes("MOCK"));
       assert.ok(result.cost.calls.length >= 5);
+      const toc = result.evidence.toc.summary;
+      if (result.job.arm === "baseline") assert.equal(toc, null, name);
+      else {
+        // The mock ToC call answers unit 101; the stage records it end to end.
+        assert.equal(toc.status, "selected", name);
+        assert.equal(toc.selectedCount, 1, name);
+        assert.ok(Number.isFinite(toc.officialListUsd) && toc.officialListUsd > 0, name);
+        // The ledger settles in whole nano-dollars, hence the tolerance.
+        assert.ok(result.cost.calls.some((call) => call.operation === "generate_content"
+          && Math.abs(call.costUsd - toc.officialListUsd) < 1e-8), "ToC call is in the job's ledger cost");
+      }
     }
 
     const report = run(reporter, ["--run", out]);
     assert.equal(report.status, 0, report.output);
     const markdown = await readFile(path.join(out, "report.md"), "utf8");
     assert.match(markdown, /MOCK 运行/u);
-    assert.equal(markdown.split("\n").filter((line) => /^\| Q[13] \|/u.test(line)).length, 2);
+    const rows = markdown.split("\n").filter((line) => /^\| Q[13] \|/u.test(line));
+    assert.equal(rows.length, 2);
+    assert.ok(rows.every((row) => row.split(" | ")[5] === "selected" && row.split(" | ")[6] === "1"), rows.join("\n"));
+    assert.match(markdown, /ToC 阶段（toc 臂 2 个任务）：状态 selected 2/u);
+    assert.match(markdown, /选中单元进入最终包的题数：\d \/ 2/u);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

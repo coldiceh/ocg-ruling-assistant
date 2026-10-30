@@ -156,3 +156,24 @@ test("mock responder fails closed for unknown hosts and echoes local card refere
     onUnattributedNetwork: () => {} });
   await assert.rejects(fetchImpl("https://example.com/x"), /bench_mock_unrouted_request/u);
 });
+
+test("mock responder answers the rule-ToC request with unit 101 only when the table lists it", async () => {
+  const responder = createMockResponder({ getContext: () => ({ question: "题面" }) });
+  const tocRequest = (table, extraUser = []) => ({ method: "POST", body: JSON.stringify({ model: "gpt-6-luna", input: [
+    { role: "system", content: "Return the response as JSON." },
+    { role: "user", content: ['只输出JSON：{"unitIndexes":[目录中的序号整数],"note":"一句话说明"}', table,
+      JSON.stringify({ question: "题面" })].join("\n\n") },
+    ...extraUser.map((content) => ({ role: "user", content })),
+  ] }) });
+  const read = async (handled) => JSON.parse((await handled.response.json()).output[0].content[0].text);
+  const listed = await responder(new URL("https://api.openai.com/v1/responses"),
+    tocRequest(["100\tc02\t标题甲", "101\tc02\t同一时点适用"].join("\n")));
+  assert.equal(listed.task, "rule_toc");
+  assert.deepEqual(await read(listed), { unitIndexes: [101], note: "mock" });
+  const short = await responder(new URL("https://api.openai.com/v1/responses"), tocRequest("1\tc01\t标题",
+    ["只返回JSON对象，包含unitIndexes整数数组和note字符串。"]));
+  assert.deepEqual(await read(short), { unitIndexes: [], note: "mock" });
+  const selection = await responder(new URL("https://api.openai.com/v1/responses"), { method: "POST",
+    body: JSON.stringify({ model: "gpt-6-luna", input: [{ role: "user", content: `说明\n${JSON.stringify({ groups: [] })}` }] }) });
+  assert.equal(selection.task, "evidence_selection");
+});

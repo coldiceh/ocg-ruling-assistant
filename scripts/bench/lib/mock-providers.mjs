@@ -84,15 +84,36 @@ function mockCardTask(prompt) {
   return { task: "card_name_extraction", output: { cardNames, groupMentions: [], describedCards: [] } };
 }
 
+function userContents(body) {
+  return (Array.isArray(body.input) ? body.input : [])
+    .filter((message) => message?.role === "user" && typeof message.content === "string")
+    .map((message) => message.content);
+}
+
+function lastUserContent(body) {
+  return userContents(body).at(-1) || "";
+}
+
 function lastUserJson(body) {
-  const messages = Array.isArray(body.input) ? body.input : [];
-  const user = [...messages].reverse().find((message) => message?.role === "user");
-  const content = typeof user?.content === "string" ? user.content : "";
   try {
-    return JSON.parse(content.split("\n").at(-1));
+    return JSON.parse(lastUserContent(body).split("\n").at(-1));
   } catch {
     return null;
   }
+}
+
+// Rule-ToC admission (backend/ruleTocAdmission.mjs): its instruction asks for
+// {"unitIndexes":[...]} over a table whose lines start with "<index>\t". The
+// mock answers with the fixed unit 101 (「同一时点适用」 in the current rule
+// assets) when the table lists it, otherwise with an empty choice.
+export const MOCK_RULE_TOC_UNIT_INDEX = 101;
+export function isRuleTocRequest(content) {
+  return content.includes('"unitIndexes"');
+}
+
+function mockRuleToc(content) {
+  const listed = new RegExp(`(?:^|\n)${MOCK_RULE_TOC_UNIT_INDEX}\t`, "u").test(content);
+  return { unitIndexes: listed ? [MOCK_RULE_TOC_UNIT_INDEX] : [], note: "mock" };
 }
 
 function mockPlan(question) {
@@ -144,6 +165,13 @@ export function createMockResponder({ getContext = () => undefined } = {}) {
     if (url.hostname === "api.openai.com" && url.pathname === "/v1/responses" && method === "POST") {
       const body = JSON.parse(bodyText);
       if (Array.isArray(body.input)) {
+        // The ToC instruction sits in the first user message; a format retry
+        // appends another user message, so all of them are read.
+        const content = userContents(body).join("\n");
+        if (isRuleTocRequest(content)) {
+          return { task: "rule_toc", response: Response.json(responsesPayload(body.model,
+            JSON.stringify(mockRuleToc(content)), { inputText: bodyText, outputTokens: 40 })) };
+        }
         const delivered = lastUserJson(body);
         const isSelection = Array.isArray(delivered?.groups);
         const output = isSelection ? mockSelection(delivered) : mockPlan(getContext()?.question);
