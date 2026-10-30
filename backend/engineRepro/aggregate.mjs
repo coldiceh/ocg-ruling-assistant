@@ -41,7 +41,8 @@ export function aggregateQuestion(record) {
   // pre-planner outcomes
   if (record.preStatus) return { status: record.preStatus.status, reasonCodes: [record.preStatus.reason], flags: contextFlags };
   const plan = record.plan;
-  if (!plan) return { status: STATUS.FAIL, reasonCodes: [record.planFailure || "invalid_input"], flags: contextFlags };
+  // planFailure: the planner's rounds gave no valid plan (an unparsable repair leaves the invalid first plan in place)
+  if (!plan || record.planFailure) return { status: STATUS.FAIL, reasonCodes: [record.planFailure || "invalid_input"], flags: contextFlags };
   const flags = new Set(contextFlags);
   if (plan.what_not_why === true) flags.add("what_not_why");
   if (plan.applicability === "not_applicable") {

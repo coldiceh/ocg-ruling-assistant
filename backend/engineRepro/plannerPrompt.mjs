@@ -51,9 +51,9 @@ export const PLANNER_INSTRUCTIONS = [
   "- quoted_span：逐字摘录题面中支撑你判断的最短原话（不超过 40 字，不要整段照抄卡文）。what_not_why：题目问“为什么”时 true。",
   "- assumptions：题面没说、你为搭局面补充的、会影响结果的设定（对所有分支都成立的），字符串数组，每条不超过 40 字；填充卡、卡组内容这类不影响结果的布置不用写。",
   "- extra_cards：用到“题目中的卡”和“填充卡”以外的卡时，列出 {\"code\":卡号,\"name\":引擎卡库正式名}；没有则为空数组。",
-  "- sub_questions[].quoted_span：该子问题在题面中的最短原话（不超过 40 字）。unrepresentable：能搭出局面时为 null；搭不出时写明是哪个前置条件，此时 branches 为空数组。",
-  "- branches[].assumption：该分支独有的假设（不超过 40 字），没有则为 null。observe：看日志里的什么（不超过 30 字）。",
-  "- branches[].result_cards：题目问处理结果（会怎样、攻击力是多少、效果是否还被无效、卡去了哪里）时，列出答案要看的卡，最多 3 张：[{\"card\":卡号,\"controller\":0或1}]。短说明只报告这些卡在回放停下时的状态：在哪、表示形式、攻守、效果是否被无效。问能不能发动 / 能不能选时用 probes，result_cards 写空数组或省略。",
+  "- sub_questions[].quoted_span：该子问题在题面中的最短原话（不超过 40 字）。unrepresentable：能搭出局面时为 null；搭不出时用一句给玩家看的话写明缺的是哪个前置条件、复现器为什么补不上（不超过 60 字，会原样显示给用户，例如“题目没说是哪张卡让你抽牌，复现器不会自己补卡”），此时 branches 为空数组。",
+  "- branches[].assumption：该分支独有的假设（不超过 40 字），没有则为 null。observe：这个分支要看引擎结果里的什么（不超过 30 字，会显示给用户，用玩家的说法）。",
+  "- branches[].result_cards：题目问处理结果（会怎样、攻击力或属性等变成什么、效果是否还被无效、卡去了哪里）时，列出答案要看的卡，最多 3 张：[{\"card\":卡号,\"controller\":0或1}]。短说明报告这些卡在操作做完那一刻的完整状态：在哪、表示形式、属性、种族、等级、攻守、效果是否被无效、指示物、素材、装备关系。问能不能发动 / 能不能选时用 probes，result_cards 写空数组或省略。",
   "",
   "## 适用性（由你判断）",
   "引擎只对具体实例有意义：确定的卡、确定的局面和操作，问“会发生什么 / 能不能”。下列题型判 not_applicable（sub_questions 为空数组）：",
@@ -63,7 +63,7 @@ export const PLANNER_INSTRUCTIONS = [
   "- ruleset_version：题面明确提到 TCG、历史时点、旧卡文或禁限表时才用。用英文或日文提问不等于问 TCG。",
   "涉及具体卡、但前置状态搭不出来（本回合已通常召唤、本回合刚盖放、已用过每回合一次、连锁进行中、“之前曾经……”）不是 not_applicable：判 applicable。伤害步骤里的各个时点可以用攻击后的窗口加 at 走到（见下文），不算搭不出来。",
   "宣言卡名、数字、属性、种族都有对应的步骤（announce_*，见下文），需要宣言不是搭不出局面的理由。",
-  "题目结论依赖的前置条件（例如“刚盖放”“本回合已召唤”“某效果已发动并处理完”“处于某个连锁或时点”）要用 setup 动作打出来；与结论无关的来历（怪兽怎么上的场、卡是哪个回合盖的）可以直接预置，并写进 assumptions。缺少辅助卡时先从“相关卡”“通用工具卡”里找，再考虑 extra_cards。确实无法打出时才在该子问题 unrepresentable 写明是哪个前置条件、branches 为空。不得用会改变结论的近似局面冒充。",
+  "题目结论依赖的前置条件（例如“刚盖放”“本回合已召唤”“某效果已发动并处理完”“处于某个连锁或时点”）要用 setup 动作打出来；与结论无关的来历（怪兽怎么上的场、卡是哪个回合盖的）可以直接预置，并写进 assumptions。缺少辅助卡时先从“相关卡”“通用工具卡”里找，再考虑 extra_cards。确实无法打出时才在该子问题 unrepresentable 用一句话写明缺的是哪个前置条件、branches 为空。不得用会改变结论的近似局面冒充。",
   "一题多问：拆成多个 sub_questions，各自搭局面。某个假设会改变结论时，最多 2 个分支（同一子问题下），各分支写清 assumption；不要选优或合并。",
   "",
   "## 卡号",
@@ -109,7 +109,7 @@ export const PLANNER_INSTRUCTIONS = [
   "- 任意发动的诱发效果（“……的场合才能发动”）只有它一个触发、且当时没有连锁时，引擎用 effect_yn 询问是否发动：步骤写 {\"decision\":\"effect_yn\",\"choose\":{\"answer\":true}}，紧接着写它发动时要选的对象。写成 chain 步骤对不上这个询问，询问会被自动放弃（不发动）。",
   "- 发动时宣言卡名的魔法（如抹杀之指名者）：idle activate → select_place(自己 szone 空位) → announce_card → 双方连锁窗口 → 处理时的选择（如 select_card 选卡组里宣言的那张）。",
   "- 战斗时点（at）：战斗步骤和伤害步骤里的窗口依次是 attack_declaration（攻击宣言时：攻击宣言之后、进入伤害步骤之前的窗口，攻击宣言时才能发动的卡就在这里）、damage_step_start（伤害步骤开始时）、before_damage_calc（伤害计算前）、damage_calc（伤害计算时）、after_damage_calc（伤害计算后）、damage_step_end（伤害步骤结束时）。同一张卡在几个时点都能发动时（如欧尼斯特在伤害步骤开始时和伤害计算前都能发动），步骤写 \"at\" 指定时点，其他时点的发动机会自动放弃；不写 at 就在第一个出现它的窗口匹配。探测也可以写 at，只看该时点的窗口。",
-  "probes（探测，题目问“能不能发动/选择”时用）：{\"after\":k,\"player\":0或1,\"decision_kind\":\"idle|battle|chain|effect_yn|yesno\",\"target\":{\"card\":卡号,\"cmd\":\"可选\",\"desc\":可选},\"at\":\"可选：战斗时点\"}。观察区间 = setup 第 k 步执行之后到第 k+1 步执行之前（k 等于 setup 长度时到回放结束）。结果：出现 / 出现（核心自动发动） / 未出现 / 未到达。问一个效果（包括诱发效果）能不能发动时，decision_kind 用 chain：它也算核心的“是否发动”询问；效果没有被诱发时核心根本不询问，用 effect_yn 探测只会得到“未到达”，看不出结果。只有题目问的就是某个是/否询问本身（如是否代替破坏）时才用 effect_yn / yesno。题目问“处理结果如何”时可以不设探测，改写 result_cards：回放停在 setup 用完之后的下一个需要选择的地方（例如攻击被取消后回到战斗阶段的行动选择），所以 setup 要恰好写到要看结果的那一刻；短说明报告那一刻 result_cards 的状态（没写 result_cards 时列出双方场上的怪兽、变化了的基本分、离场的卡）。",
+  "probes（探测，题目问“能不能发动/选择”时用）：{\"after\":k,\"player\":0或1,\"decision_kind\":\"idle|battle|chain|effect_yn|yesno\",\"target\":{\"card\":卡号,\"cmd\":\"可选\",\"desc\":可选},\"at\":\"可选：战斗时点\"}。观察区间 = setup 第 k 步执行之后到第 k+1 步执行之前（k 等于 setup 长度时到回放结束）。结果：出现 / 出现（核心自动发动） / 未出现 / 未到达。问一个效果（包括诱发效果）能不能发动时，decision_kind 用 chain：它也算核心的“是否发动”询问；效果没有被诱发时核心根本不询问，用 effect_yn 探测只会得到“未到达”，看不出结果。只有题目问的就是某个是/否询问本身（如是否代替破坏）时才用 effect_yn / yesno。题目问“处理结果如何”时可以不设探测，改写 result_cards：回放停在 setup 用完之后的下一个需要选择的地方（例如攻击被取消后回到战斗阶段的行动选择），所以 setup 要恰好写到要看结果的那一刻；短说明报告那一刻 result_cards 的状态（没写 result_cards 时列出双方场上的卡、变化了的基本分、离场的卡）。",
 ].join("\n");
 
 export const PROMPT_VERSION = createHash("sha256").update(PLANNER_INSTRUCTIONS).digest("hex").slice(0, 12);
@@ -147,7 +147,7 @@ export function buildRepairInput({ plannerInput, previousPlan, failures, planLev
     ? ["上一次的输出不是有效计划：按 problems 改正，输出完整计划（同样格式，单行紧凑 JSON）。"]
     : [
       "只修复上面失败的分支。只输出 {\"extra_cards\":[...],\"sub_questions\":[{\"id\":原id,\"branches\":[{\"id\":原id,\"scenario\":{...},\"actions\":{...}}]}]}（单行紧凑 JSON），不要重复其他字段，也不要输出没有失败的分支；分支的 assumption / observe 确需改变时才写。extra_cards 只列这次新增的卡，没有则为空数组。",
-      "某个子问题确实无法搭出时，该子问题写 {\"id\":原id,\"unrepresentable\":\"缺的前置条件\",\"branches\":[]}。",
+      "某个子问题确实无法搭出时，该子问题写 {\"id\":原id,\"unrepresentable\":\"给玩家看的一句原因：缺的前置条件、复现器为什么补不上\",\"branches\":[]}。",
     ];
   return [
     plannerInput,

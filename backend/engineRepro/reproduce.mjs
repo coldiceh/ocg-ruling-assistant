@@ -221,7 +221,7 @@ export async function runEngineReproduction({ question, identity, cardsById, cid
   const record = { ...base, text: question, promptVersion: PROMPT_VERSION, planner, includeOfficialQa,
     plannerCalled: false, identity, plannerContext: [], modelUsage: [],
     timings: { startedAtMs: clock(), plannerMs: 0, repairMs: 0, engineMs: 0 } };
-  const finish = () => {
+  const finish = async () => {
     record.summary = aggregateQuestion(record);
     record.rendered = renderQuestion(record, record.summary);
     record.timings.finishedAtMs = clock();
@@ -260,7 +260,10 @@ export async function runEngineReproduction({ question, identity, cardsById, cid
   if (identity.unresolved.length || unmapped.length) {
     const names = [...identity.unresolved.map((m) => `「${m.input}」`),
       ...unmapped.map((c) => `CID ${c.cid}（${cardsById.get(c.cid)?.name || "?"}）无卡号`)];
-    record.preStatus = { status: STATUS.FAIL, reason: "identity", detail: `无法确认身份：${names.join("、")}` };
+    // structured for the short section: the mentions that did not resolve, the cards without a passcode
+    record.preStatus = { status: STATUS.FAIL, reason: "identity", detail: `无法确认身份：${names.join("、")}`,
+      unresolved: identity.unresolved.map((m) => m.input).filter(Boolean),
+      unmapped: unmapped.map((c) => cardsById.get(c.cid)?.name || `CID ${c.cid}`) };
     return finish();
   }
 
@@ -317,6 +320,12 @@ export async function runEngineReproduction({ question, identity, cardsById, cid
     }
   };
 
+  // Why a planner round gave no usable plan, kept for the short section's reason (concise.mjs):
+  // truncated output, output that is not a JSON object, or plan-check problems.
+  record.planFailures = [];
+  const unparsed = (call, response) => ({ call,
+    kind: response?.incomplete?.reason === "max_output_tokens" ? "truncated" : "not_json" });
+
   // call 1: plan
   record.plannerCalled = true;
   const r1 = await timedModel(modelOpts("plan", planned.input));
@@ -325,9 +334,11 @@ export async function runEngineReproduction({ question, identity, cardsById, cid
   let planLevelProblems = [];
   try { plan = parseJsonObject(r1.outputText); } catch (e) {
     planLevelProblems = [`输出不是完整的 JSON 对象（status=${r1.status}${r1.incomplete ? `, ${JSON.stringify(r1.incomplete)}` : ""}）：${e.message}`];
+    record.planFailures.push(unparsed("plan", r1));
   }
   if (plan) {
     planLevelProblems = (await adoptPlan(plan)).problems;
+    if (planLevelProblems.length) record.planFailures.push({ call: "plan", kind: "check", problems: planLevelProblems });
     if (!planLevelProblems.length && plan.applicability === "applicable") await runBranches();
   }
   if (plan?.applicability === "not_applicable" && !planLevelProblems.length) {
@@ -347,14 +358,20 @@ export async function runEngineReproduction({ question, identity, cardsById, cid
   const r2 = await timedModel(modelOpts("repair", repaired.input));
   record.planRaw.push({ call: "repair", status: r2.status, incomplete: r2.incomplete, text: r2.outputText });
   let fix = null;
-  try { fix = parseJsonObject(r2.outputText); } catch (e) { record.repairProblems = [`修复输出不是完整的 JSON：${e.message}`]; }
+  try { fix = parseJsonObject(r2.outputText); } catch (e) {
+    record.repairProblems = [`修复输出不是完整的 JSON：${e.message}`];
+    record.planFailures.push(unparsed("repair", r2));
+  }
   if (!fix) {
     if (planLevelProblems.length) record.planFailure = "invalid_input";
     return finish();
   }
   if (planLevelProblems.length) {
     const check = await adoptPlan(fix);
-    if (check.problems.length) { record.planFailure = "invalid_input"; record.repairProblems = check.problems; record.plan = null; }
+    if (check.problems.length) {
+      record.planFailure = "invalid_input"; record.repairProblems = check.problems; record.plan = null;
+      record.planFailures.push({ call: "repair", kind: "check", problems: check.problems });
+    }
     else if (fix.applicability === "applicable") await runBranches();
     else await verifyArchetype(fix);
     return finish();

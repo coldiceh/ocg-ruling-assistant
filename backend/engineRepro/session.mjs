@@ -171,7 +171,8 @@ export function createEngineReproSession({
           const previous = error.engineReproRecord;
           const record = { ...previous, text: question, identity,
             timings: { ...previous?.timings, startedAtMs: state.startedAtMs, finishedAtMs: clock() },
-            error: { code: error.code || null, message: String(error.message || error).slice(0, 300) },
+            error: { code: error.code || null, name: typeof error.name === "string" ? error.name : null,
+              message: String(error.message || error).slice(0, 300) },
             summary: { status: STATUS.FAIL, reasonCodes: [reason],
               flags: previous?.plannerContext?.some((context) => context.trimmed) ? ["context_trimmed"] : [] } };
           record.rendered = previous ? renderQuestion(record, record.summary)
