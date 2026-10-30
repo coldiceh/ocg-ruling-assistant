@@ -5,12 +5,13 @@
   "decision": {
     "date": "2026-10-30",
     "userQuote": "把规则书未覆盖的卡组构筑和赛制、基础程序和术语 9 节、同调的基本规则 2 节这种有用的提取出来，其他的都先删了或隐藏暂时不再使用。",
-    "basis": "逐节对照 ocg-rule：194 个小节中 100 节有对应、43 节部分对应、36 节无对应、15 节非规则内容；保留无对应中的卡组构筑与赛制 19 节、基础程序和术语 9 节、同调基础 2 节，速度决斗 6 节不保留。"
+    "basis": "逐节对照 ocg-rule：194 个小节中 100 节有对应、43 节部分对应、36 节无对应、15 节非规则内容；保留无对应中的卡组构筑与赛制 19 节、基础程序和术语 9 节、同调基础 2 节，速度决斗 6 节不保留。 后续按用户明确指定加回 16 节，保留理由为“ocg-rule 部分覆盖、缺具体限制”；条件项 beginner-source-heading-35 未加入。"
   },
   "categories": {
     "deck-construction-and-format": "卡组构筑与赛制",
     "basic-procedure-and-terminology": "基础程序和术语",
-    "synchro-basics": "同调的基本规则"
+    "synchro-basics": "同调的基本规则",
+    "partially-covered-limits": "部分覆盖、补充具体限制"
   },
   "sources": [
     {
@@ -316,6 +317,166 @@
           "category": "basic-procedure-and-terminology",
           "coverage": "none",
           "reason": "洗切的方法与禁止的作为；ocg-rule 无对应。"
+        },
+        {
+          "sectionKey": "beginner-source-heading-25",
+          "title": "［速攻魔法］",
+          "titlePath": ["初級編 デュエルの基本を学ぼう","［速攻魔法］"],
+          "titleZh": "速攻魔法",
+          "printedPages": [16,16],
+          "category": "partially-covered-limits",
+          "coverage": "partial",
+          "reason": "ocg-rule 部分覆盖、缺具体限制"
+        },
+        {
+          "sectionKey": "beginner-source-heading-26",
+          "title": "罠カード",
+          "titlePath": ["初級編 デュエルの基本を学ぼう","罠カード"],
+          "titleZh": "陷阱卡",
+          "printedPages": [17,17],
+          "category": "partially-covered-limits",
+          "coverage": "partial",
+          "reason": "ocg-rule 部分覆盖、缺具体限制"
+        },
+        {
+          "sectionKey": "beginner-source-heading-24",
+          "title": "［フィールド魔法］",
+          "titlePath": ["初級編 デュエルの基本を学ぼう","［フィールド魔法］"],
+          "titleZh": "场地魔法",
+          "printedPages": [16,16],
+          "category": "partially-covered-limits",
+          "coverage": "partial",
+          "reason": "ocg-rule 部分覆盖、缺具体限制"
+        },
+        {
+          "sectionKey": "intermediate-source-heading-58",
+          "title": "＜魔法カードの発動の仕方＞",
+          "titlePath": ["中級編 いろいろなカードについて知ろう","＜魔法カードの発動の仕方＞"],
+          "titleZh": "魔法卡的发动方法",
+          "printedPages": [57,57],
+          "category": "partially-covered-limits",
+          "coverage": "partial",
+          "reason": "ocg-rule 部分覆盖、缺具体限制"
+        },
+        {
+          "sectionKey": "intermediate-source-heading-35",
+          "title": "ペンデュラムモンスター",
+          "titlePath": ["中級編 いろいろなカードについて知ろう","ペンデュラムモンスター"],
+          "titleZh": "灵摆怪兽",
+          "printedPages": [43,43],
+          "category": "partially-covered-limits",
+          "coverage": "partial",
+          "reason": "ocg-rule 部分覆盖、缺具体限制"
+        },
+        {
+          "sectionKey": "intermediate-source-heading-36",
+          "title": "＜ペンデュラム召喚に必要なもの＞",
+          "titlePath": ["中級編 いろいろなカードについて知ろう","＜ペンデュラム召喚に必要なもの＞"],
+          "titleZh": "灵摆召唤所需条件",
+          "printedPages": [43,43],
+          "category": "partially-covered-limits",
+          "coverage": "partial",
+          "reason": "ocg-rule 部分覆盖、缺具体限制"
+        },
+        {
+          "sectionKey": "intermediate-source-heading-37",
+          "title": "［ペンデュラム召喚の手順］",
+          "titlePath": ["中級編 いろいろなカードについて知ろう","［ペンデュラム召喚の手順］"],
+          "titleZh": "灵摆召唤手续",
+          "printedPages": [43,43],
+          "category": "partially-covered-limits",
+          "coverage": "partial",
+          "reason": "ocg-rule 部分覆盖、缺具体限制"
+        },
+        {
+          "sectionKey": "intermediate-source-heading-38",
+          "title": "＜エクストラデッキからの特殊召喚＞",
+          "titlePath": ["中級編 いろいろなカードについて知ろう","＜エクストラデッキからの特殊召喚＞"],
+          "titleZh": "从额外卡组特殊召唤",
+          "printedPages": [44,44],
+          "category": "partially-covered-limits",
+          "coverage": "partial",
+          "reason": "ocg-rule 部分覆盖、缺具体限制"
+        },
+        {
+          "sectionKey": "advanced-source-heading-37",
+          "title": "■ペンデュラム召喚について",
+          "titlePath": ["上級編 大会向けのルールについて知ろう","■ペンデュラム召喚について"],
+          "titleZh": "关于灵摆召唤",
+          "printedPages": [74,74],
+          "category": "partially-covered-limits",
+          "coverage": "partial",
+          "reason": "ocg-rule 部分覆盖、缺具体限制"
+        },
+        {
+          "sectionKey": "advanced-source-heading-38",
+          "title": "ペンデュラムゾーンへのペンデュラムモンスターの置き方",
+          "titlePath": ["上級編 大会向けのルールについて知ろう","ペンデュラムゾーンへのペンデュラムモンスターの置き方"],
+          "titleZh": "灵摆怪兽在灵摆区域的放置方法",
+          "printedPages": [75,75],
+          "category": "partially-covered-limits",
+          "coverage": "partial",
+          "reason": "ocg-rule 部分覆盖、缺具体限制"
+        },
+        {
+          "sectionKey": "advanced-source-heading-39",
+          "title": "エクストラデッキへ加わるペンデュラムモンスターについて",
+          "titlePath": ["上級編 大会向けのルールについて知ろう","エクストラデッキへ加わるペンデュラムモンスターについて"],
+          "titleZh": "加入额外卡组的灵摆怪兽",
+          "printedPages": [76,76],
+          "category": "partially-covered-limits",
+          "coverage": "partial",
+          "reason": "ocg-rule 部分覆盖、缺具体限制"
+        },
+        {
+          "sectionKey": "intermediate-source-heading-48",
+          "title": "儀式モンスター",
+          "titlePath": ["中級編 いろいろなカードについて知ろう","儀式モンスター"],
+          "titleZh": "仪式怪兽",
+          "printedPages": [51,51],
+          "category": "partially-covered-limits",
+          "coverage": "partial",
+          "reason": "ocg-rule 部分覆盖、缺具体限制"
+        },
+        {
+          "sectionKey": "intermediate-source-heading-49",
+          "title": "＜儀式召喚に必要なもの＞",
+          "titlePath": ["中級編 いろいろなカードについて知ろう","＜儀式召喚に必要なもの＞"],
+          "titleZh": "仪式召唤所需条件",
+          "printedPages": [51,51],
+          "category": "partially-covered-limits",
+          "coverage": "partial",
+          "reason": "ocg-rule 部分覆盖、缺具体限制"
+        },
+        {
+          "sectionKey": "intermediate-source-heading-50",
+          "title": "儀式召喚の手順",
+          "titlePath": ["中級編 いろいろなカードについて知ろう","儀式召喚の手順"],
+          "titleZh": "仪式召唤手续",
+          "printedPages": [52,52],
+          "category": "partially-covered-limits",
+          "coverage": "partial",
+          "reason": "ocg-rule 部分覆盖、缺具体限制"
+        },
+        {
+          "sectionKey": "intermediate-source-heading-44",
+          "title": "シンクロ召喚の手順",
+          "titlePath": ["中級編 いろいろなカードについて知ろう","シンクロ召喚の手順"],
+          "titleZh": "同调召唤手续",
+          "printedPages": [48,48],
+          "category": "partially-covered-limits",
+          "coverage": "partial",
+          "reason": "ocg-rule 部分覆盖、缺具体限制"
+        },
+        {
+          "sectionKey": "intermediate-source-heading-41",
+          "title": "［エクシーズ召喚の手順］",
+          "titlePath": ["中級編 いろいろなカードについて知ろう","［エクシーズ召喚の手順］"],
+          "titleZh": "超量召唤手续",
+          "printedPages": [45,45],
+          "category": "partially-covered-limits",
+          "coverage": "partial",
+          "reason": "ocg-rule 部分覆盖、缺具体限制"
         }
       ]
     },

@@ -4,8 +4,8 @@
   "dataRevision": "c5325aed40be864c21a1aeb874c355052b495f0ea55908d854b6ee7ac7994071",
   "qaRevision": "718abe010591e5144bed22efa0b74ff04a33d223c7b2b4735b1498228880bd65",
   "qaContentRevision": "718abe010591e5144bed22efa0b74ff04a33d223c7b2b4735b1498228880bd65",
-  "ruleContentRevision": "ad776cdaf0422d02f45f79569ee9a120537892ee09a28ee31712ea5b286115e6",
-  "structureMappingRevision": "7cec6cd2173afe593ead00def58364046deac3cae9c4006a91dd5d2caae0d1bc",
+  "ruleContentRevision": "1d0e5e17e67178b36868747ce2dbef1d0802d50888c9e1e719159c93111eee72",
+  "structureMappingRevision": "d27a1e886c86f5613ee8515b5b17b24f037e0c0da9d5921ad0235ad63addbb56",
   "sources": {
     "rulings": {
       "file": "rulings.json",
@@ -39,9 +39,9 @@
     "allowlist": {
       "file": "konami-rulebook-allowlist.json",
       "path": "config/rule-sources/konami-rulebook-allowlist.json",
-      "bytes": 17826,
-      "sha256": "3866b0caddd6ddc45e621cf962b6943b98a85bd96e7fe90f386389d342dde14a",
-      "sectionCount": 30,
+      "bytes": 25828,
+      "sha256": "b0a3f5c99bef1c8665860f2aa5d63703f390c2cd717c5507d9c9a9cd73709d55",
+      "sectionCount": 46,
       "sources": [
         {
           "sourceId": "konami:ocg-rulebook-20200401",
@@ -76,7 +76,23 @@
             "advanced-source-heading-35",
             "advanced-source-heading-50",
             "advanced-source-heading-61",
-            "advanced-source-heading-62"
+            "advanced-source-heading-62",
+            "beginner-source-heading-25",
+            "beginner-source-heading-26",
+            "beginner-source-heading-24",
+            "intermediate-source-heading-58",
+            "intermediate-source-heading-35",
+            "intermediate-source-heading-36",
+            "intermediate-source-heading-37",
+            "intermediate-source-heading-38",
+            "advanced-source-heading-37",
+            "advanced-source-heading-38",
+            "advanced-source-heading-39",
+            "intermediate-source-heading-48",
+            "intermediate-source-heading-49",
+            "intermediate-source-heading-50",
+            "intermediate-source-heading-44",
+            "intermediate-source-heading-41"
           ]
         },
         {
@@ -100,7 +116,7 @@
       {
         "sourceId": "konami:ocg-rulebook-20200401",
         "mode": "sections",
-        "publishedSections": 30,
+        "publishedSections": 46,
         "sourceSections": 198,
         "publishedSectionKeys": [
           "beginner-source-heading-3",
@@ -108,14 +124,27 @@
           "beginner-source-heading-5",
           "beginner-source-heading-17",
           "beginner-source-heading-18",
+          "beginner-source-heading-24",
+          "beginner-source-heading-25",
+          "beginner-source-heading-26",
           "beginner-source-heading-30",
           "intermediate-source-heading-3",
           "intermediate-source-heading-4",
           "intermediate-source-heading-5",
           "intermediate-source-heading-6",
           "intermediate-source-heading-10",
+          "intermediate-source-heading-35",
+          "intermediate-source-heading-36",
+          "intermediate-source-heading-37",
+          "intermediate-source-heading-38",
+          "intermediate-source-heading-41",
           "intermediate-source-heading-42",
           "intermediate-source-heading-43",
+          "intermediate-source-heading-44",
+          "intermediate-source-heading-48",
+          "intermediate-source-heading-49",
+          "intermediate-source-heading-50",
+          "intermediate-source-heading-58",
           "advanced-source-heading-4",
           "advanced-source-heading-8",
           "advanced-source-heading-9",
@@ -130,6 +159,9 @@
           "advanced-source-heading-26",
           "advanced-source-heading-27",
           "advanced-source-heading-35",
+          "advanced-source-heading-37",
+          "advanced-source-heading-38",
+          "advanced-source-heading-39",
           "advanced-source-heading-50",
           "advanced-source-heading-61",
           "advanced-source-heading-62"
@@ -139,12 +171,25 @@
           "konami:ocg-rulebook-20200401:reading:beginner-source-heading-4:1",
           "konami:ocg-rulebook-20200401:reading:beginner-source-heading-5:1",
           "konami:ocg-rulebook-20200401:reading:beginner-source-heading-18:1",
+          "konami:ocg-rulebook-20200401:reading:beginner-source-heading-24:1",
+          "konami:ocg-rulebook-20200401:reading:beginner-source-heading-25:1",
+          "konami:ocg-rulebook-20200401:reading:beginner-source-heading-26:1",
           "konami:ocg-rulebook-20200401:reading:beginner-source-heading-30:1",
           "konami:ocg-rulebook-20200401:reading:intermediate-source-heading-3:1",
           "konami:ocg-rulebook-20200401:reading:intermediate-source-heading-6:1",
           "konami:ocg-rulebook-20200401:reading:intermediate-source-heading-10:1",
+          "konami:ocg-rulebook-20200401:reading:intermediate-source-heading-35:1",
+          "konami:ocg-rulebook-20200401:reading:intermediate-source-heading-36:1",
+          "konami:ocg-rulebook-20200401:reading:intermediate-source-heading-37:1",
+          "konami:ocg-rulebook-20200401:reading:intermediate-source-heading-38:1",
+          "konami:ocg-rulebook-20200401:reading:intermediate-source-heading-41:1",
           "konami:ocg-rulebook-20200401:reading:intermediate-source-heading-42:1",
           "konami:ocg-rulebook-20200401:reading:intermediate-source-heading-43:1",
+          "konami:ocg-rulebook-20200401:reading:intermediate-source-heading-44:1",
+          "konami:ocg-rulebook-20200401:reading:intermediate-source-heading-48:1",
+          "konami:ocg-rulebook-20200401:reading:intermediate-source-heading-49:1",
+          "konami:ocg-rulebook-20200401:reading:intermediate-source-heading-50:1",
+          "konami:ocg-rulebook-20200401:reading:intermediate-source-heading-58:1",
           "konami:ocg-rulebook-20200401:reading:advanced-source-heading-4:1",
           "konami:ocg-rulebook-20200401:reading:advanced-source-heading-9:1",
           "konami:ocg-rulebook-20200401:reading:advanced-source-heading-14:1",
@@ -155,11 +200,14 @@
           "konami:ocg-rulebook-20200401:reading:advanced-source-heading-26:1",
           "konami:ocg-rulebook-20200401:reading:advanced-source-heading-27:1",
           "konami:ocg-rulebook-20200401:reading:advanced-source-heading-35:1",
+          "konami:ocg-rulebook-20200401:reading:advanced-source-heading-37:1",
+          "konami:ocg-rulebook-20200401:reading:advanced-source-heading-38:1",
+          "konami:ocg-rulebook-20200401:reading:advanced-source-heading-39:1",
           "konami:ocg-rulebook-20200401:reading:advanced-source-heading-50:1",
           "konami:ocg-rulebook-20200401:reading:advanced-source-heading-61:1",
           "konami:ocg-rulebook-20200401:reading:advanced-source-heading-62:1"
         ],
-        "publishedReadingUnits": 23,
+        "publishedReadingUnits": 39,
         "sourceReadingUnits": 178
       }
     ],
@@ -168,10 +216,10 @@
   "counts": {
     "qaRecords": 37251,
     "ruleRecords": 28,
-    "sourceAtoms": 1201,
-    "readingUnits": 399,
-    "navigationInputs": 37658,
-    "ruleDenseInputs": 7532,
+    "sourceAtoms": 1235,
+    "readingUnits": 415,
+    "navigationInputs": 37674,
+    "ruleDenseInputs": 7572,
     "qaDenseInputs": 11601
   },
   "assets": {
@@ -186,10 +234,10 @@
     "ruleRecords": {
       "file": "rule-records.json.gz",
       "encoding": "gzip",
-      "bytes": 623024,
-      "sha256": "6dc835f15f11525ceb98f48a49ae61ca6a95496d8cdaffcbc538d64b441c9049",
-      "canonicalBytes": 7358105,
-      "canonicalSha256": "a0feac26f03fbd855acbd60bc56b396f9cc949ef466346293504ee004cbb9a74"
+      "bytes": 623071,
+      "sha256": "f23445add1bd31eda50fab14d8746aa8c3d0a17223027406fbcf225f68c2e283",
+      "canonicalBytes": 7358609,
+      "canonicalSha256": "2239918175bb66d0949a56acba0fd174fef894c7d3abd1bc3d1f321964841939"
     },
     "qaLexicalIndex": {
       "file": "qa-lexical-index.bm25.gz",
@@ -202,27 +250,27 @@
     "structureMapping": {
       "file": "structure-mapping.json.gz",
       "encoding": "gzip",
-      "bytes": 7992617,
-      "sha256": "1012e9522331da4c54b6f71459cc588945e85dac475004da3250a6fdf27d9128",
-      "canonicalBytes": 49613443,
-      "canonicalSha256": "0532e4831b953a44e1201598e737067ffb1e99be1409dedb137a6adbe47570ab"
+      "bytes": 8016828,
+      "sha256": "bbca4d3125ace909a04c2f3810444302dcc2752e686851ed5e07dad30cedba39",
+      "canonicalBytes": 49758713,
+      "canonicalSha256": "0713bcbcbf332996d3bc15536b4611f2eefd575c7a90af56d5701d94269bad23"
     },
     "navigationInputs": {
       "file": "navigation-inputs.json.gz",
       "encoding": "gzip",
-      "bytes": 15816346,
-      "sha256": "19a3747b9d4a6efff18eb4440df91487677000cd9e70d3e0b742327936c4bd15",
-      "canonicalBytes": 108636527,
-      "canonicalSha256": "4e99692238a169b0c0df54052e9ee0651f26887e07148073f763d33422ce568a"
+      "bytes": 15820583,
+      "sha256": "c2aa7311c9f32274f79c289e9b8f112dbe7103dbe5f53de0b6e3c86ce4871b00",
+      "canonicalBytes": 108665233,
+      "canonicalSha256": "2c284f9ac448bea60a675ec9334cb2530a2e68e2cb49f02e1b595f5ee19a4ea1"
     },
     "denseInputs": {
       "file": "dense-inputs.json.gz",
       "encoding": "gzip",
-      "bytes": 5566651,
-      "sha256": "a8f1074652ab897baf0e126d14af495759369a9d9daab0f4e6eca7bd2c6dfd98",
-      "canonicalBytes": 51609070,
-      "canonicalSha256": "5030d4d45961002dc9f054cc4f5b47519896840cf4e0e66baa11588f184303b3"
+      "bytes": 5572795,
+      "sha256": "a98cc9b4cb05a669f5b9758c46582d56d06a0141a9ed81a3251f1da7527214bb",
+      "canonicalBytes": 51648765,
+      "canonicalSha256": "aad62eee35a70382ae2b5967d49605beff3ac6f757ce481c4c23d60a0d862227"
     }
   },
-  "canonicalRevision": "e21b2ed4382037033c609127a60b4e612e52a0cac9e7ba7e1591df06d1839714"
+  "canonicalRevision": "b40f7629cc8a02f2bad469884a7f25b968da09fc442fd0e5fa29a6d2cd0c2826"
 }

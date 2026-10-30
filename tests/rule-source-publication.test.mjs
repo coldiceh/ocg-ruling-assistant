@@ -252,17 +252,29 @@ test("a missing allowlist, an ungoverned official source or a later allowlist ed
     ruleSourceAllowlistPath: paths.allowlistPath }), /gemini_rule_qa_publication_changed_after_canonical/u);
 });
 
-test("the checked-in allowlist lists 30 uncovered rulebook sections and withholds the how-to page", async () => {
+test("the checked-in allowlist keeps 30 original sections plus exactly 16 requested additions", async () => {
   const loaded = await loadRuleSourceAllowlist(DEFAULT_RULE_SOURCE_ALLOWLIST);
   const corpus = JSON.parse(await readFile(new URL("../data/ocg-rule-corpus.json", import.meta.url), "utf8")).records;
   const applied = applyRuleSourceAllowlist(corpus.filter((record) => record.recordType === "rule-doc"), loaded.allowlist);
   const rulebook = loaded.allowlist.sources.find((source) => source.sourceId === "konami:ocg-rulebook-20200401");
   const counts = {};
   for (const section of rulebook.sections) counts[section.category] = (counts[section.category] || 0) + 1;
-  assert.deepEqual(counts, { "deck-construction-and-format": 19, "basic-procedure-and-terminology": 9, "synchro-basics": 2 });
+  assert.deepEqual(counts, { "deck-construction-and-format": 19, "basic-procedure-and-terminology": 9,
+    "synchro-basics": 2, "partially-covered-limits": 16 });
+  const additions = rulebook.sections.filter(section => section.category === "partially-covered-limits");
+  assert.deepEqual(additions.map(section => section.sectionKey), [
+    "beginner-source-heading-25", "beginner-source-heading-26", "beginner-source-heading-24",
+    "intermediate-source-heading-58", "intermediate-source-heading-35", "intermediate-source-heading-36",
+    "intermediate-source-heading-37", "intermediate-source-heading-38", "advanced-source-heading-37",
+    "advanced-source-heading-38", "advanced-source-heading-39", "intermediate-source-heading-48",
+    "intermediate-source-heading-49", "intermediate-source-heading-50", "intermediate-source-heading-44",
+    "intermediate-source-heading-41",
+  ]);
+  assert.ok(additions.every(section => section.reason === "ocg-rule 部分覆盖、缺具体限制"));
+  assert.ok(!rulebook.sections.some(section => section.sectionKey === "beginner-source-heading-35"));
   assert.deepEqual(applied.applied.map(({ sourceId, mode, publishedSections }) => ({ sourceId, mode, publishedSections })),
     [{ sourceId: "konami:ocg-howto", mode: "withhold", publishedSections: 0 },
-      { sourceId: "konami:ocg-rulebook-20200401", mode: "sections", publishedSections: 30 }]);
+      { sourceId: "konami:ocg-rulebook-20200401", mode: "sections", publishedSections: 46 }]);
   assert.deepEqual(applied.absentSourceIds, []);
 });
 
