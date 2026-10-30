@@ -8,6 +8,9 @@
 // Nothing here judges relevance; descriptions are navigation text, never
 // evidence, and are not copied into the evidence package.
 
+import { estimateOpenAIModelCost } from './modelPricing.mjs';
+import { gpt6LunaUsageCostUsd } from './cloudRequestBudget.mjs';
+
 export const RULE_TOC_CHANNEL = 'rule_toc';
 export const RULE_TOC_STAGE = 'rule_toc';
 // The generation profile stage whose output allocation the ToC call uses.
@@ -59,13 +62,18 @@ function clip(value, limit) {
   return characters.length > limit ? `${characters.slice(0, limit).join('')}…` : characters.join('');
 }
 
+// Cached per immutable rule context, navigation map and clip length.
 const tocCache = new WeakMap();
+const NO_NAVIGATION = Object.freeze({});
 
 // rules.readingUnits is the immutable reading-unit map of one asset snapshot;
 // its insertion order (source, then unit order) defines the indexes.
 export function buildRuleToc({ rules, navigationRecordsByUnit, descriptionChars = RULE_TOC_DESCRIPTION_CHARS }) {
   if (!(rules?.readingUnits instanceof Map)) throw new TypeError('rule_toc_reading_units_required');
-  const cached = tocCache.get(rules)?.get(descriptionChars);
+  if (!tocCache.has(rules)) tocCache.set(rules, new WeakMap());
+  const byNavigation = tocCache.get(rules), navigationKey = navigationRecordsByUnit || NO_NAVIGATION;
+  if (!byNavigation.has(navigationKey)) byNavigation.set(navigationKey, new Map());
+  const cached = byNavigation.get(navigationKey).get(descriptionChars);
   if (cached) return cached;
   const unitKeys = Object.freeze([...rules.readingUnits.keys()]);
   const lines = unitKeys.map((unitKey, index) => {
@@ -76,8 +84,7 @@ export function buildRuleToc({ rules, navigationRecordsByUnit, descriptionChars 
     return [String(index + 1), oneLine(unit.sourceId || ''), titlePath, ...(description ? [description] : [])].join('\t');
   });
   const toc = Object.freeze({ unitKeys, text: lines.join('\n'), lineCount: lines.length, descriptionChars });
-  if (!tocCache.has(rules)) tocCache.set(rules, new Map());
-  tocCache.get(rules).set(descriptionChars, toc);
+  byNavigation.get(navigationKey).set(descriptionChars, toc);
   return toc;
 }
 
@@ -135,4 +142,46 @@ export function normalizeRuleTocOutput(output, { unitKeys, maxUnits }) {
   return { indexes, unitKeys: indexes.map(index => unitKeys[index - 1]), invalidIndexes, duplicateIndexes,
     truncatedIndexes, returnedCount: value.unitIndexes.length,
     note: typeof value.note === 'string' ? value.note.slice(0, 500) : '' };
+}
+
+function sumKnown(values) {
+  return values.every(value => Number.isFinite(value)) ? values.reduce((sum, value) => sum + value, 0) : null;
+}
+
+// Tokens and cost of the ToC call rows (first attempt and the format retry).
+// contractUsd uses the generation profile prices (the same basis as the other
+// evidence rows); officialListUsd uses the GPT-6 Luna list prices the official
+// daily ledger settles with; pricingFileUsd uses data/model-pricing.json and is
+// null with a reason when that file has no entry for the model.
+export function summarizeRuleTocCalls(rows = []) {
+  const attempts = rows.map(row => ({
+    status: row.status, retry: Boolean(row.retry), elapsedMs: row.elapsedMs ?? null,
+    ...(row.error ? { error: String(row.error).slice(0, 200) } : {}),
+    inputTokens: row.billableUsage?.inputTokens ?? null,
+    cachedInputTokens: row.billableUsage?.cachedInputTokens ?? null,
+    outputTokens: row.billableUsage?.billableOutputTokens ?? null,
+    reasoningTokens: row.billableUsage?.thinkingTokens ?? null,
+    contractUsd: row.billableCost?.amountUsd ?? null, accountedUsd: row.accountedUsd ?? 0,
+  }));
+  const responded = rows.filter(row => row.usage);
+  const officialList = responded.map(row => row.model === 'gpt-6-luna' ? gpt6LunaUsageCostUsd(row.usage) : null);
+  let pricingFileUsd = null, pricingFileStatus = responded.length ? 'priced' : 'no_usage';
+  if (responded.length) {
+    try {
+      pricingFileUsd = responded.reduce((sum, row) => sum + estimateOpenAIModelCost({ model: row.model, usage: row.usage }).totalCostUsd, 0);
+    } catch (error) {
+      pricingFileStatus = error instanceof RangeError ? 'model_not_in_pricing_file' : 'usage_invalid';
+    }
+  }
+  return {
+    attempts,
+    inputTokens: sumKnown(attempts.filter(row => row.status === 'success' || row.inputTokens !== null).map(row => row.inputTokens)),
+    cachedInputTokens: sumKnown(attempts.filter(row => row.cachedInputTokens !== null).map(row => row.cachedInputTokens)),
+    outputTokens: sumKnown(attempts.filter(row => row.status === 'success' || row.outputTokens !== null).map(row => row.outputTokens)),
+    reasoningTokens: sumKnown(attempts.filter(row => row.reasoningTokens !== null).map(row => row.reasoningTokens)),
+    contractUsd: sumKnown(attempts.filter(row => row.status === 'success' || row.contractUsd !== null).map(row => row.contractUsd)),
+    accountedUsd: attempts.reduce((sum, row) => sum + (row.accountedUsd || 0), 0),
+    officialListUsd: responded.length ? sumKnown(officialList) : null,
+    pricingFileUsd, pricingFileStatus,
+  };
 }

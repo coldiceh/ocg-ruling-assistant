@@ -222,7 +222,7 @@ function redisConfig(env) {
 // input $0.10, cached input $0.01, cache write $0.125, output $0.50; above
 // 272,000 input tokens every input tier doubles and output costs 1.5x. b.ai
 // publishes the same theoretical rates. Returns null when usage is missing.
-function gpt6LunaUsageCostUsd(usage) {
+export function gpt6LunaUsageCostUsd(usage) {
   const input = usage?.input_tokens;
   const output = usage?.output_tokens;
   if (!(Number.isSafeInteger(input) && input >= 0 && Number.isSafeInteger(output) && output >= 0)) return null;

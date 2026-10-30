@@ -22,8 +22,8 @@ export const fixtureQaRecords = Object.freeze([
     answer: 'fixture answer two', official: true },
 ]);
 
-export function ruleTocAssets() {
-  const ruleRecords = fixtureRuleRecords.map(record => ({ ...record }));
+export function ruleTocAssets({ extraRuleRecords = [] } = {}) {
+  const ruleRecords = [...fixtureRuleRecords, ...extraRuleRecords].map(record => ({ ...record }));
   const qaRecords = fixtureQaRecords.map(record => ({ ...record }));
   const qaRevision = sha256(stableJson(qaRecords));
   const parentTools = createQaTools({ records: qaRecords, qaRevision });
@@ -62,9 +62,10 @@ export const fixtureQuestion = 'fixture question about alpha and beta timing';
 export const fixturePlan = Object.freeze({ needs: [{ id: 'n1', question: 'alpha relation',
   ruleQuery: 'alpha general rule', qaQuery: 'fixture question one' }] });
 
-const userText = body => body.input.filter(message => message.role === 'user').map(message => message.content).join('\n');
+// The first user message is the original request; a format retry appends another.
+const userText = body => body.input.find(message => message.role === 'user').content;
 
-// toc(lines, body): returns the ToC model output object, a Response, or throws.
+// toc(lines, body, init): returns the ToC model output object, a Response, or throws.
 // select(delivered, body): returns the selection output object or a Response.
 export function ruleTocProvider({ assets = ruleTocAssets(), toc, select, onEvent, plan = fixturePlan,
   tocUsage = { input_tokens: 9000, output_tokens: 150, total_tokens: 9150,
@@ -97,7 +98,7 @@ export function ruleTocProvider({ assets = ruleTocAssets(), toc, select, onEvent
         calls.push({ kind: 'toc', url: String(url), body });
         const lines = text.split('\n').filter(line => /^\d+\t/u.test(line));
         if (typeof toc !== 'function') throw new Error('unexpected ToC request');
-        const output = await toc(lines, body);
+        const output = await toc(lines, body, init);
         if (output instanceof Response) return output;
         return Response.json({ id: 'toc-fixture', model: 'gpt-6-luna-2026-10-01', status: 'completed',
           output: [{ type: 'message', content: [{ type: 'output_text',
