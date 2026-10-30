@@ -1,10 +1,13 @@
 // One engine reproduction for one question: identity -> planner (1 call) -> engine -> at most one
-// repair call -> question-level status. Shared by the production answer path and the batch script.
+// repair call -> question-level status -> (optional) conclusion sentence (conclusion.mjs, 1 call).
+// Shared by the production answer path and the batch script.
 // Card identity always comes from the main answer's own card resolution (no second resolver).
 // Only mechanical checks happen here: field shapes, allowed card codes, exact names, budgets.
 import { DEFAULT_DECK, DEFAULT_SEED, FILLER_CARDS, PLANNER_INSTRUCTIONS, PROMPT_VERSION, TOOL_CARD_CODES } from "./plannerPrompt.mjs";
 import { preparePlannerContext } from "./plannerContext.mjs";
 import { STATUS, aggregateQuestion, renderQuestion } from "./aggregate.mjs";
+import { engineReproDigest } from "./concise.mjs";
+import { writeConclusion } from "./conclusion.mjs";
 
 export const DEFAULT_PLANNER = Object.freeze({ model: "gpt-6.1-sol", effort: "low", maxOutput: 1600, maxInput: 16000 });
 const REASON_CODES = ["pure_rule", "archetype_level", "tournament_policy", "ruleset_version"];
@@ -215,14 +218,36 @@ function summarizeEngine(r) {
  * @param modelCall    async ({stage, model, instructions, input, reasoningEffort, maxOutputTokens, maxInputTokens})
  *                     -> {status, incomplete, outputText, usage, costUsd, ms, cacheHit}
  * @param clock        () -> ms since the request started (timings are reported on that axis)
+ * @param conclusion   null (no conclusion sentence) or { enabled, model, effort, maxOutput, timeoutMs }
+ *                     (conclusion.mjs CONCLUSION_MODEL / conclusionConfigFromEnv); the call goes through
+ *                     the same modelCall, so it is charged and timed with the reproduction
  */
 export async function runEngineReproduction({ question, identity, cardsById, cidMap, engine, modelCall,
-  planner = DEFAULT_PLANNER, includeOfficialQa = false, clock = () => 0, record: base = {} }) {
+  planner = DEFAULT_PLANNER, includeOfficialQa = false, clock = () => 0, conclusion = null, record: base = {} }) {
   const record = { ...base, text: question, promptVersion: PROMPT_VERSION, planner, includeOfficialQa,
     plannerCalled: false, identity, plannerContext: [], modelUsage: [],
-    timings: { startedAtMs: clock(), plannerMs: 0, repairMs: 0, engineMs: 0 } };
+    timings: { startedAtMs: clock(), plannerMs: 0, repairMs: 0, engineMs: 0, conclusionMs: 0 } };
+  // The conclusion sentence (conclusion.mjs) only for a question with engine observations; it never fails
+  // the reproduction. Its time and cost are the engine section's own (timings.conclusionMs, modelUsage).
+  const addConclusion = async () => {
+    const status = record.summary.status;
+    if (status !== STATUS.OK && status !== STATUS.PARTIAL) {
+      record.conclusion = { status: "skipped", reason: "not_reproduced" };
+      return;
+    }
+    const t0 = clock();
+    const result = await writeConclusion({ question, digest: engineReproDigest(record), modelCall, config: conclusion });
+    record.timings.conclusionMs += clock() - t0;
+    if (result.responded) {
+      record.modelUsage.push({ stage: "conclusion", inputTokensEstimate: result.inputTokensEstimate ?? null,
+        inputTokens: result.usage?.inputTokens ?? null, outputTokens: result.usage?.outputTokens ?? null,
+        costUsd: Number.isFinite(result.costUsd) ? result.costUsd : null });
+    }
+    record.conclusion = result;
+  };
   const finish = async () => {
     record.summary = aggregateQuestion(record);
+    if (conclusion) await addConclusion();
     record.rendered = renderQuestion(record, record.summary);
     record.timings.finishedAtMs = clock();
     return record;
