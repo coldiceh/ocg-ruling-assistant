@@ -88,10 +88,13 @@ export function buildRuleToc({ rules, navigationRecordsByUnit, descriptionChars 
   return toc;
 }
 
+// Localized names of each confirmed card; the generic name only when none exists.
 function cardNames(resolvedCards = []) {
-  return resolvedCards.map(card => Object.fromEntries(['cnName', 'jaName', 'enName', 'name']
-    .filter(key => typeof card?.[key] === 'string' && card[key].trim())
-    .map(key => [key, card[key]]))).filter(names => Object.keys(names).length);
+  const present = (card, keys) => keys.filter(key => typeof card?.[key] === 'string' && card[key].trim());
+  return resolvedCards.map(card => {
+    const keys = present(card, ['cnName', 'jaName', 'enName']);
+    return Object.fromEntries((keys.length ? keys : present(card, ['name'])).map(key => [key, card[key]]));
+  }).filter(names => Object.keys(names).length);
 }
 
 // The fixed instruction and table come first and the question last.

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { CLOUD_BUDGET_RESERVE } from '../backend/cloudRequestBudget.mjs';
-import { buildRuleToc, normalizeRuleTocOutput, resolveRuleTocConfig,
+import { buildRuleToc, normalizeRuleTocOutput, resolveRuleTocConfig, ruleTocRequestBody,
   RULE_TOC_DESCRIPTION_CHARS } from '../backend/ruleTocAdmission.mjs';
 import { fixtureEnv, fixtureQuestion, fixtureRetrieveInput, ruleTocAssets, ruleTocProvider,
   sha256 } from './helpers/rule-toc-fixture.mjs';
@@ -202,5 +202,9 @@ test('table lines keep identity order, one line per unit, and clip descriptions'
   assert.equal(buildRuleToc({ rules, navigationRecordsByUnit: empty }), buildRuleToc({ rules, navigationRecordsByUnit: empty }));
   assert.equal(buildRuleToc({ rules, navigationRecordsByUnit: empty }).text, '1\tocg-rule:c02/页\t页 ¶ > 小节 ¶\n2\tkonami:book\t章');
   assert.throws(() => normalizeRuleTocOutput({ selectedIds: [1] }, { unitKeys: toc.unitKeys, maxUnits: 8 }), /rule_toc_output_invalid/u);
+  const body = ruleTocRequestBody({ toc, question: 'q', maxUnits: 3, resolvedCards: [
+    { name: '甲', cnName: '甲', jaName: 'カ', enName: 'A', effectText: 'not sent' }, { name: '乙' }, { id: 'no-name' }] });
+  assert.deepEqual(body.contents[0].parts.map(part => part.text).slice(1), [toc.text,
+    JSON.stringify({ question: 'q', confirmedCards: [{ cnName: '甲', jaName: 'カ', enName: 'A' }, { name: '乙' }] })]);
   assert.deepEqual(normalizeRuleTocOutput({ result: { unitIndexes: [2] } }, { unitKeys: toc.unitKeys, maxUnits: 8 }).unitKeys, ['u2']);
 });
