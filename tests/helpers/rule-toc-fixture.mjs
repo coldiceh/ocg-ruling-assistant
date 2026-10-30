@@ -67,7 +67,9 @@ const userText = body => body.input.find(message => message.role === 'user').con
 
 // toc(lines, body, init): returns the ToC model output object, a Response, or throws.
 // select(delivered, body): returns the selection output object or a Response.
-export function ruleTocProvider({ assets = ruleTocAssets(), toc, select, onEvent, plan = fixturePlan,
+// budgetStore: when given, model calls use the production budget routing
+// (official daily ledger) and its REST commands are answered by budgetStore.
+export function ruleTocProvider({ assets = ruleTocAssets(), toc, select, onEvent, plan = fixturePlan, budgetStore,
   tocUsage = { input_tokens: 9000, output_tokens: 150, total_tokens: 9150,
     input_tokens_details: { cached_tokens: 0 }, output_tokens_details: { reasoning_tokens: 100 } } } = {}) {
   const calls = [];
@@ -76,10 +78,11 @@ export function ruleTocProvider({ assets = ruleTocAssets(), toc, select, onEvent
     loadDenseSearch: async ({ rules }) => ({ searchAsync: async () => [...rules.units.values()] }),
     loadQaSearch: async ({ items }) => ({ searchAsync: async () => items }),
     remainingBudget: async () => Infinity,
-    budgetedRequest: request => request.invoke(),
+    ...(budgetStore ? {} : { budgetedRequest: request => request.invoke() }),
     ...(onEvent ? { onEvent } : {}),
     fetchImpl: async (url, init) => {
       const body = JSON.parse(init.body);
+      if (budgetStore && String(url) === budgetStore.url) return budgetStore.respond(body);
       if (String(url).endsWith(':embedContent')) {
         return Response.json({ embedding: { values: Array(768).fill(1) }, usageMetadata: { promptTokenCount: 10 } });
       }

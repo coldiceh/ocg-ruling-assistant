@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import { CLOUD_BUDGET_RESERVE } from '../backend/cloudRequestBudget.mjs';
 import { buildRuleToc, normalizeRuleTocOutput, resolveRuleTocConfig,
   RULE_TOC_DESCRIPTION_CHARS } from '../backend/ruleTocAdmission.mjs';
 import { fixtureEnv, fixtureQuestion, fixtureRetrieveInput, ruleTocAssets, ruleTocProvider,
@@ -87,6 +88,23 @@ test('flag on: the chosen unit is offered whole before the rotation, labelled an
   assert.equal(row.status, 'success');
   assert.equal(row.channel, 'official');
   assert.ok(result.packing.prompt.includes('beta timing paragraph two'));
+});
+
+test('the ToC call is reserved and settled in the official daily ledger like the selection', async () => {
+  const order = [], keys = [];
+  const budgetStore = { url: 'https://budget.example.invalid', respond: command => {
+    const reserve = command[1] === CLOUD_BUDGET_RESERVE;
+    order.push(reserve ? 'reserve' : 'settle'); keys.push(command[3]);
+    return Response.json({ result: reserve ? ['reserved', '0', '1'] : ['settled', '0', '1'] });
+  } };
+  const env = { ...onEnv, PUBLIC_OPENAI_BUDGET_RUN_ID: 'public-official',
+    UPSTASH_BUDGET_KV_REST_API_URL: budgetStore.url, UPSTASH_BUDGET_KV_REST_API_TOKEN: 'budget-token' };
+  const { bounded } = await run(env, { budgetStore, toc: () => { order.push('toc'); return { unitIndexes: [5], note: '' }; },
+    select: input => { order.push('selection'); return { selectedIds: input.groups[0].units.map(row => row[0]), note: '' }; } });
+  assert.deepEqual(order, ['reserve', 'toc', 'settle', 'reserve', 'selection', 'settle']);
+  assert.ok(keys.every(key => /^ruling-cloud-budget:v1:public-official:\d{4}-\d{2}-\d{2}$/u.test(key)));
+  assert.equal(bounded.ruleToc.status, 'selected');
+  assert.ok(Number.isFinite(bounded.ruleToc.elapsedMs) && Number.isFinite(bounded.ruleToc.assetWaitMs));
 });
 
 test('invalid and repeated indexes are dropped without a retry', async () => {

@@ -805,16 +805,18 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
       return value;
     }
     async function runRuleToc(assetReady) {
-      const started = performance.now();
-      let timer;
+      const queuedAt = performance.now();
+      let timer, started = null;
       try {
         const { assets, snapshot } = await assetReady;
+        ruleToc.assetWaitMs = performance.now() - queuedAt;
         const toc = buildRuleToc({ rules: snapshot.rules, descriptionChars: ruleTocConfig.descriptionChars,
           navigationRecordsByUnit: assets.navigationRecordsByUnit
             || new Map((assets.navigationRecords || []).map(record => [record.unitKey, record])) });
         const body = ruleTocRequestBody({ toc, question: userQuery, resolvedCards: cardResolution.resolvedCards || [],
           maxUnits: ruleTocConfig.maxUnits });
         Object.assign(ruleToc, { status: 'pending', tocUnits: toc.lineCount, tocChars: toc.text.length });
+        started = performance.now();
         timer = setTimeout(() => ruleTocAbort.abort(new Error('rule_toc_timeout')), ruleTocConfig.timeoutMs);
         const callSignal = AbortSignal.any([signal, ruleTocAbort.signal]);
         const result = await generate(body, await measure(body, RULE_TOC_STAGE), RULE_TOC_STAGE,
@@ -830,7 +832,8 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
         error: String(error?.message || error).slice(0, 200), selectedUnitKeys: [] });
       } finally {
         clearTimeout(timer);
-        ruleToc.elapsedMs = performance.now() - started;
+        // Model call time, including the format retry; asset wait is separate.
+        ruleToc.elapsedMs = started === null ? null : performance.now() - started;
         Object.assign(ruleToc, summarizeRuleTocCalls(calls.filter(row => row.stage === RULE_TOC_STAGE)));
       }
       return ruleToc;
