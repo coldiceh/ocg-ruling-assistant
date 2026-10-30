@@ -20,6 +20,7 @@ import { createEvidenceGenerationTransport } from './evidenceGenerationTransport
 import { createDecisionsTransport, parseDecisionsAnswers, decisionsCostUsd } from './decisionsTransport.mjs';
 import { createDecisionsSelectionFlow, executeSelectionFlow } from './decisionsSelectionFlow.mjs';
 import { createDecisionsSourceResolver, createDecisionsReadingDependencies } from './decisionsReadingDependencies.mjs';
+import { evidenceSupplementEnabled } from './evidenceStatusProtocol.mjs';
 
 const DECISIONS_SELECTION_CONTRACT = Object.freeze({ providerId: 'openai', modelId: 'gpt-6-luna',
   api: 'decisions', profileId: 'openai-decisions-v4', maxBillableOutputTokens: 0,
@@ -701,6 +702,9 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
     let maxUsd = perQuestionMaxUsd;
     const readChars = positiveConfig(env, 'GEMINI_EVIDENCE_READING_TARGET_CHARS', INITIAL_READ_CHARS);
     const useDecisions = env.EVIDENCE_SELECTOR === 'decisions';
+    // The final prompt asks for the evidence-status line only while the
+    // supplementary round is enabled; otherwise packing is unchanged.
+    const evidenceStatusLine = evidenceSupplementEnabled(env);
     if (supplementRound && useDecisions) {
       throw Object.assign(new Error('evidence_supplement_selector_unsupported'), { code: 'evidence_supplement_selector_unsupported' });
     }
@@ -1066,7 +1070,7 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
           recalledUnits: remaining.length, newlyRecalledUnits: remaining.filter(key => !priorKeys.has(key)).length };
       })() : null;
       const packCosts = computeGeminiSelectionPackingBudget({ userQuery, answerLocale, cardResolution, retrievedEvidence,
-        maxPromptChars,
+        maxPromptChars, evidenceStatusLine,
         rules: [...entries.values()].filter(entry => entry.kind === 'rule').map(entry => entry.body),
         qaItems: [...entries.values()].filter(entry => entry.kind === 'qa').map(entry => entry.body) });
       const aliasCosts = { ...packCosts, ruleUnitChars: {}, qaHandleChars: {} };
@@ -1092,7 +1096,7 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
         const resolve = (ruleUnitIds, qaHandles) => resolveGeminiSelection({ args: { ruleUnitIds, qaHandles },
           rules: atomRules, qaTools: { qaRevision: assets.qaRevision, readSelected: ids => ids.map(id => qaItemsByHandle.get(id)) } });
         const pack = selection => packGeminiSelection({ selection, userQuery, answerLocale, cardResolution,
-          retrievedEvidence, maxPromptChars });
+          retrievedEvidence, maxPromptChars, evidenceStatusLine });
         const base = packSupplementUnion({ baseIds: supplementRound.baseSelectionIds, newIds: [], kindOf, resolve, pack });
         return { kindOf, resolve, pack, packing: base.result.packing };
       })() : null;
@@ -1294,7 +1298,8 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
         newIds: uniq(selected.map(entry => entry.id)).filter(id => !baseSelectionIds.has(id)),
         kindOf: supplementBase.kindOf, resolve: supplementBase.resolve, pack: supplementBase.pack }) : null;
       const result = decisionsResult || supplementPack?.result
-        || packGeminiSelection({ selection: resolved, userQuery, answerLocale, cardResolution, retrievedEvidence, maxPromptChars });
+        || packGeminiSelection({ selection: resolved, userQuery, answerLocale, cardResolution, retrievedEvidence, maxPromptChars,
+          evidenceStatusLine });
       if (result.packing.capacityExceeded) throw Object.assign(new Error('gemini_bounded_pack_capacity_exceeded'), { packing: result.packing });
       timingsMs.packing = performance.now() - at; signal.throwIfAborted();
       timingsMs.total = performance.now() - started;

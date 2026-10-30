@@ -5,7 +5,7 @@
 // package room and invocation time. Nothing reads or judges the answer text.
 import { createHash } from 'node:crypto';
 import { callRagModel } from './ragModelClient.mjs';
-import { EVIDENCE_STATUSES } from './evidenceStatusProtocol.mjs';
+import { EVIDENCE_STATUSES, evidenceSupplementEnabled } from './evidenceStatusProtocol.mjs';
 import { boundedEvidenceMaxPromptChars,
   createGeminiBoundedEvidenceProvider } from './geminiBoundedEvidenceProvider.mjs';
 
@@ -16,9 +16,7 @@ export const EVIDENCE_SUPPLEMENT_PHASE = 'evidence_supplement';
 export const EVIDENCE_SUPPLEMENT_INVOCATION_BUDGET_MS = 280_000;
 export const DEFAULT_EVIDENCE_SUPPLEMENT_ESTIMATED_ROUND_MS = 110_000;
 
-export function evidenceSupplementEnabled(env = {}) {
-  return /^(?:1|true|yes|on)$/iu.test(String(env.EVIDENCE_SUPPLEMENT_ENABLED || '').trim());
-}
+export { evidenceSupplementEnabled };
 
 export function evidenceSupplementEstimatedRoundMs(env = {}) {
   const value = Number(env.EVIDENCE_SUPPLEMENT_ESTIMATED_ROUND_MS);

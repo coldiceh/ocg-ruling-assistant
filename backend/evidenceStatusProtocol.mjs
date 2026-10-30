@@ -5,6 +5,13 @@
 
 export const EVIDENCE_STATUSES = Object.freeze(['sufficient', 'insufficient', 'unknown']);
 
+// The status line is requested only while the supplementary round is enabled;
+// with the switch off every final prompt stays byte-identical to the prompt
+// before this protocol existed. Parsing stays on: an absent line is unknown.
+export function evidenceSupplementEnabled(env = {}) {
+  return /^(?:1|true|yes|on)$/iu.test(String(env?.EVIDENCE_SUPPLEMENT_ENABLED || '').trim());
+}
+
 // Kept free of the substring "中文": localized answer instructions replace it
 // with the answer language, while this line must stay byte-identical.
 export const EVIDENCE_STATUS_INSTRUCTION = '正文写完后，最后单独一行只写证据状态；这一行只供系统读取，不会展示给玩家，无论回答使用哪种语言都原样使用下列标签。所给资料足以支持上述结论时写“证据状态：充分”；缺少决定结论所必需的规则或裁定依据时写“证据状态：不足｜缺少：”，并在冒号后用一句话写明缺的是哪条规则或哪类裁定。题面没有给出的事实不算资料不足，仍按上文在正文中说明条件分支。这一行之后不要再写任何内容。';

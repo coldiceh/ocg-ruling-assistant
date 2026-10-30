@@ -62,7 +62,7 @@ flowchart LR
 
 ## 证据不足时的补充检索
 
-- 最终提示要求模型在正文最后单独一行写 `证据状态：充分` 或 `证据状态：不足｜缺少：<缺的规则/裁定>`；`backend/evidenceStatusProtocol.mjs` 只把这一行读成 `evidenceStatus`（sufficient / insufficient / unknown）与 `evidenceGap` 字段并从展示正文删除，读不出即 unknown，不触发任何动作。
+- 仅当 `EVIDENCE_SUPPLEMENT_ENABLED=true` 时，最终提示才要求模型在正文最后单独一行写 `证据状态：充分` 或 `证据状态：不足｜缺少：<缺的规则/裁定>`；开关关闭时最终提示与引入该协议前逐字节相同（测试用 483b000 的 sha256 金值核对）。`backend/evidenceStatusProtocol.mjs` 始终把这一行读成 `evidenceStatus`（sufficient / insufficient / unknown）与 `evidenceGap` 字段并从展示正文删除，读不出即 unknown，不触发任何动作。
 - `EVIDENCE_SUPPLEMENT_ENABLED=true`（代码默认关闭，`vercel.json` 开启）时，首答为 insufficient 且写明缺口、首轮使用 bounded Luna 选证、首包仍有余量时，`backend/evidenceSupplementRound.mjs` 补一轮且只补一次：以缺口为检索范围规划和召回，按身份排除首轮已提供给选证模型的阅读单元，窗口预算不变；最终包 = 首轮所选 + 本轮新选，超过包上限时保留首轮条目、按本轮顺序追加到放不下为止，被裁条目记录在遥测中。
 - 时间保护：调用已用时间 + `EVIDENCE_SUPPLEMENT_ESTIMATED_ROUND_MS`（默认 110 s）超过 280 s（300 s 函数上限减去与引擎复现等待相同的 20 s 余量）就跳过并记 `skipped_time_budget`；单请求（外部 API/Bot）从公开请求开始计时，网页 finalize 从其自身请求开始计时；补轮在 280 s 处被硬性中止。
 - 规划、检索、选证或第二次最终调用任何一步失败（或没有新条目）都保留首轮答案；网页在补轮期间收到 `evidence_supplement` 阶段事件并显示“证据不足，正在补充检索…”，答案末尾由 `presentPublicAnswer` 加一句说明；`debug.evidenceSupplement` 记录状态、缺口、召回/入窗/选中/裁掉数量、耗时与费用。

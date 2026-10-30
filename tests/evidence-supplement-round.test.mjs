@@ -8,7 +8,7 @@ import { createFocusedQaView } from "../backend/geminiFocusedQaView.mjs";
 import { createQaTools } from "../backend/geminiQaTools.mjs";
 import { resolveRagDataRevision } from "../backend/ragDataRevisionManifest.mjs";
 import { answerRagRulingQuestion, finalizePreparedRagRulingQuestion } from "../backend/ragRulingPipeline.mjs";
-import { extractEvidenceStatusLine } from "../backend/evidenceStatusProtocol.mjs";
+import { EVIDENCE_STATUS_INSTRUCTION, extractEvidenceStatusLine } from "../backend/evidenceStatusProtocol.mjs";
 import { EVIDENCE_SUPPLEMENT_INVOCATION_BUDGET_MS } from "../backend/evidenceSupplementRound.mjs";
 import { DEFAULT_WAIT_BUDGET_MS } from "../backend/engineRepro/session.mjs";
 
@@ -95,8 +95,10 @@ function offeredIds(delivered) {
 const baseEnv = { RAG_EVIDENCE_PIPELINE: "cloud_evidence_v1", GEMINI_RULE_QA_ENABLED: "true",
   RAG_LIVE_OFFICIAL_QA: "false", GEMINI_API_KEY: "fixture", GEMINI_EVIDENCE_READING_TARGET_CHARS: "9000",
   GEMINI_EVIDENCE_DEADLINE_MS: "0" };
+const enabledEnv = { ...baseEnv, EVIDENCE_SUPPLEMENT_ENABLED: "true" };
 
-async function prepare(provider, env = baseEnv) {
+// Preparation sees the same switch as finalization, as in one deployment.
+async function prepare(provider, env = enabledEnv) {
   const prepared = await answerRagRulingQuestion({ question: "original fixture question", ...data,
     prepareForContinuation: true, geminiEvidenceProvider: provider, cloudBudget: fakeBudget(), env,
     cardModelInvoker: async () => JSON.stringify({ cardNames: [], groupMentions: [] }),
@@ -245,6 +247,10 @@ test("an insufficient first answer runs one supplementary round and shows the se
     returnSupplementedEvidencePackage: true });
   assert.equal(model.prompts.length, 2);
   assert.equal(model.prompts[0], continuation.promptBundle.prompt);
+  // The switch is on, so both packages ask for the status line.
+  assert.ok(model.prompts.every((prompt) => prompt.includes(EVIDENCE_STATUS_INSTRUCTION)));
+  const { provider: off } = boundedFixture();
+  assert.equal((await prepare(off, baseEnv)).promptBundle.prompt.includes("证据状态"), false);
   assert.notEqual(model.prompts[1], model.prompts[0]);
   assert.equal(answer.shortAnswer, "补充后的回答正文");
   assert.deepEqual(progress.events, [["phase_start", "evidence_supplement"], ["phase_end"]]);

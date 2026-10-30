@@ -137,12 +137,13 @@ function selectedBodiesForSelection(selection) {
   }))];
 }
 
-export function packGeminiSelection({ selection, userQuery, answerLocale = 'zh-CN', cardResolution, retrievedEvidence = {}, maxPromptChars = GEMINI_EVIDENCE_MAX_PROMPT_CHARS, compactDisplay = false }) {
+export function packGeminiSelection({ selection, userQuery, answerLocale = 'zh-CN', cardResolution, retrievedEvidence = {}, maxPromptChars = GEMINI_EVIDENCE_MAX_PROMPT_CHARS, compactDisplay = false, evidenceStatusLine = false }) {
   const selectedBodies = selectedBodiesForSelection(selection);
   const baseEvidence = { userProvidedCardTexts: retrievedEvidence.userProvidedCardTexts || [],
     cardTexts: retrievedEvidence.cardTexts || [] };
   const base = buildRagRulingPromptBundle({ userQuery, answerLocale, cardResolution, evidence: baseEvidence,
-    env: { RAG_MAX_PROMPT_CHARS: '100000000', RAG_MAX_CARDS: Math.max(1, cardResolution.resolvedCards.length) } });
+    env: { RAG_MAX_PROMPT_CHARS: '100000000', RAG_MAX_CARDS: Math.max(1, cardResolution.resolvedCards.length) },
+    evidenceStatusLine: evidenceStatusLine === true });
   const marker = '本次用户问题、卡片原文与检索资料如下：\n';
   const at = base.prompt.indexOf(marker);
   if (at < 0) throw new Error('gemini_published_prompt_envelope_absent');
@@ -172,7 +173,7 @@ export function packGeminiSelection({ selection, userQuery, answerLocale = 'zh-C
  */
 export function computeGeminiSelectionPackingBudget({
   rules = [], qaItems = [], userQuery, answerLocale = 'zh-CN', cardResolution, retrievedEvidence = {},
-  maxPromptChars = GEMINI_EVIDENCE_MAX_PROMPT_CHARS,
+  maxPromptChars = GEMINI_EVIDENCE_MAX_PROMPT_CHARS, evidenceStatusLine = false,
 } = {}) {
   if (!Array.isArray(rules)) throw new TypeError('gemini_selection_budget_rules_invalid');
   if (!Array.isArray(qaItems)) throw new TypeError('gemini_selection_budget_qa_items_invalid');
@@ -180,7 +181,7 @@ export function computeGeminiSelectionPackingBudget({
     throw new TypeError('gemini_selection_budget_limit_invalid');
   }
 
-  const common = { userQuery, answerLocale, cardResolution, retrievedEvidence, maxPromptChars };
+  const common = { userQuery, answerLocale, cardResolution, retrievedEvidence, maxPromptChars, evidenceStatusLine };
   const emptySelection = { selectedRules: [], selectedQa: [] };
   const base = packGeminiSelection({ ...common, selection: emptySelection });
   const basePromptChars = base.packing.promptChars;
