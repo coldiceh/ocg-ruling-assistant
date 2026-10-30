@@ -8,12 +8,20 @@ import { callRagModel } from './ragModelClient.mjs';
 import { EVIDENCE_STATUSES, evidenceSupplementEnabled } from './evidenceStatusProtocol.mjs';
 import { boundedEvidenceMaxPromptChars,
   createGeminiBoundedEvidenceProvider } from './geminiBoundedEvidenceProvider.mjs';
+import { DEFAULT_WAIT_BUDGET_MS } from './engineRepro/session.mjs';
 
 export const EVIDENCE_SUPPLEMENT_PHASE = 'evidence_supplement';
-// api/answer.js runs at most 300 s (vercel.json maxDuration). Like the engine
-// reproduction wait (engineRepro/session.mjs DEFAULT_WAIT_BUDGET_MS), keep the
-// last 20 s for the audit update and the response.
-export const EVIDENCE_SUPPLEMENT_INVOCATION_BUDGET_MS = 280_000;
+// The same invocation budget as the engine reproduction wait: api/answer.js
+// runs at most 300 s (vercel.json maxDuration) and the last 20 s are kept for
+// the audit update and the response.
+export const EVIDENCE_SUPPLEMENT_INVOCATION_BUDGET_MS = DEFAULT_WAIT_BUDGET_MS;
+// Default estimate of one supplementary round (gap planning, search,
+// selection and the second final call). It is NOT a measurement of this
+// round, which has never run in production. Source: the 2026-09-24
+// production run of 45 questions, where evidence preparation averaged 76 s
+// and answering 10.8 s; 110 s adds headroom over that ~87 s sum. Calibrate it
+// with the p90 of debug.evidenceSupplement.timingsMs.total once telemetry
+// exists (env EVIDENCE_SUPPLEMENT_ESTIMATED_ROUND_MS overrides it).
 export const DEFAULT_EVIDENCE_SUPPLEMENT_ESTIMATED_ROUND_MS = 110_000;
 
 export { evidenceSupplementEnabled };
