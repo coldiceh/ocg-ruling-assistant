@@ -667,14 +667,18 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
     async function generate(body, measurement, stage, normalize, retry = false, callSignal = signal) {
       const contract = contracts[stage], transport = transports[stage];
       const official = transport.channel === 'official';
-      maxUsd = Math.min(perQuestionMaxUsd, official ? Infinity
+      const stageMaxUsd = Math.min(perQuestionMaxUsd, official ? Infinity
         : await remainingBudget({provider:contract.providerId,signal:callSignal}));
+      // The optional ToC call keeps its cap local. maxUsd is shared state that
+      // later sizes the selection window, so a concurrent ToC lookup must not
+      // replace the cap written by the plan or the embeddings.
+      if (stage !== RULE_TOC_STAGE) maxUsd = stageMaxUsd;
       const wireBody = transport.prepareRequest(applyGenerationContract(body, contract));
       assertGenerationCapacity({ body: wireBody, contract, measurement });
       const reserve = estimateGenerationUpperBoundUsd({ measurement, contract }).amountUsd;
       const futureOutput = stage === 'plan' || stage === RULE_TOC_STAGE
         ? contracts.selection.maxBillableOutputTokens * contracts.selection.pricingContract.outputUsdPerMillion / 1e6 : 0;
-      if (spentUsd + reserve + futureOutput > maxUsd) throw new Error('evidence_request_budget_exceeded');
+      if (spentUsd + reserve + futureOutput > stageMaxUsd) throw new Error('evidence_request_budget_exceeded');
       callSignal.throwIfAborted();
       const row = { stage, operation: 'generate_content', providerId: contract.providerId, model: contract.modelId,
         ...(official ? { channel: 'official', endpointProvider: 'openai' } : {}),
@@ -827,14 +831,20 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
           duplicateIndexes: result.duplicateIndexes, truncatedIndexes: result.truncatedIndexes,
           returnedCount: result.returnedCount, note: result.note });
       } catch (error) {
-        Object.assign(ruleToc, { status: ruleTocAbort.signal.aborted && !signal.aborted
-          ? (ruleTocAbort.signal.reason?.message === 'rule_toc_timeout' ? 'timeout' : 'aborted') : 'failed',
+        // timeout: its own timer; aborted: the request failed elsewhere, was
+        // cancelled by the caller or hit its deadline; failed: anything else.
+        const timedOut = ruleTocAbort.signal.aborted && ruleTocAbort.signal.reason?.message === 'rule_toc_timeout';
+        Object.assign(ruleToc, { status: timedOut ? 'timeout'
+          : ruleTocAbort.signal.aborted || signal.aborted ? 'aborted' : 'failed',
         error: String(error?.message || error).slice(0, 200), selectedUnitKeys: [] });
       } finally {
         clearTimeout(timer);
         // Model call time, including the format retry; asset wait is separate.
         ruleToc.elapsedMs = started === null ? null : performance.now() - started;
         Object.assign(ruleToc, summarizeRuleTocCalls(calls.filter(row => row.stage === RULE_TOC_STAGE)));
+        // The final ToC state is also reported when it settles after the
+        // request has already ended. Never awaited: it cannot delay the request.
+        Promise.resolve().then(() => onEvent({ type: 'rule_toc', ...ruleTocTelemetry() })).catch(() => {});
       }
       return ruleToc;
     }

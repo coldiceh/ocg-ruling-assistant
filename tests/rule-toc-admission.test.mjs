@@ -109,6 +109,88 @@ test('the ToC call is reserved and settled in the official daily ledger like the
   assert.ok(Number.isFinite(bounded.ruleToc.elapsedMs) && Number.isFinite(bounded.ruleToc.assetWaitMs));
 });
 
+test('the ToC budget lookup does not lift the Gemini cap that sizes the selection window', async () => {
+  // The Gemini remaining budget drops before the planned-query embedding (as
+  // if other requests spent it); the b.ai ToC lookup answers only after that.
+  // The selection window must still be sized against the Gemini cap.
+  const baiEnv = { ...fixtureEnv, RAG_EVIDENCE_LUNA_CHANNEL: '', BAI_API_KEY: 'fixture-bai' };
+  const budget = () => {
+    let geminiLookups = 0, releaseToc;
+    const tocLookup = new Promise(resolve => { releaseToc = resolve; });
+    return async ({ provider }) => {
+      if (provider === 'gemini') {
+        if (++geminiLookups === 3) setTimeout(() => releaseToc(Infinity), 5);
+        return geminiLookups >= 3 ? 1e-6 : Infinity;
+      }
+      return geminiLookups < 3 ? tocLookup : Infinity;
+    };
+  };
+  for (const env of [baiEnv, { ...baiEnv, RULE_TOC_ADMIT_ENABLED: 'true' }]) {
+    const fixture = ruleTocProvider({ remainingBudget: budget(), toc: () => ({ unitIndexes: [], note: '' }) });
+    await assert.rejects(fixture.provider.retrieve(fixtureRetrieveInput(fixture.assets, env)),
+      /provider_fixed_input_budget_exceeded/u, env.RULE_TOC_ADMIT_ENABLED ? 'ToC on' : 'ToC off');
+  }
+});
+
+// The ToC stage reports its final state in a 'rule_toc' event, also when it
+// settles after the request itself has already failed.
+function tocSettled() {
+  let resolve;
+  const settled = new Promise(done => { resolve = done; });
+  return { settled, onEvent: event => { if (event.type === 'rule_toc') resolve(event); } };
+}
+
+test('a main-flow failure aborts the concurrent ToC call before any ledger reservation or cost', async () => {
+  const commands = [];
+  const budgetStore = { url: 'https://budget.example.invalid', respond: command => {
+    commands.push(command[1] === CLOUD_BUDGET_RESERVE ? 'reserve' : 'settle');
+    return Response.json({ result: command[1] === CLOUD_BUDGET_RESERVE ? ['reserved', '0', '1'] : ['settled', '0', '1'] });
+  } };
+  const env = { ...onEnv, PUBLIC_OPENAI_BUDGET_RUN_ID: 'public-official',
+    UPSTASH_BUDGET_KV_REST_API_URL: budgetStore.url, UPSTASH_BUDGET_KV_REST_API_TOKEN: 'budget-token' };
+  // Hold the ToC call just before its reservation until the request has failed.
+  let release;
+  const gate = new Promise(resolve => { release = resolve; });
+  const toc = tocSettled();
+  const fixture = ruleTocProvider({ budgetStore,
+    plan: () => Response.json({ error: { code: 400 } }, { status: 400 }),
+    toc: () => assert.fail('the ToC request must not be sent'),
+    onEvent: async event => {
+      toc.onEvent(event);
+      if (event.type === 'request' && event.stage === 'rule_toc') await gate;
+    } });
+  const error = await fixture.provider.retrieve(fixtureRetrieveInput(fixture.assets, env)).then(() => null, value => value);
+  assert.match(String(error?.message), /gemini_bounded_http_400/u);
+  release();
+  const settled = await toc.settled;
+  assert.equal(settled.status, 'aborted');
+  assert.match(settled.error, /rule_toc_request_failed/u);
+  assert.deepEqual(commands, []);
+  assert.equal(fixture.calls.filter(call => call.kind === 'toc').length, 0);
+  assert.equal(settled.accountedUsd, 0);
+  assert.ok(settled.attempts.every(row => row.accountedUsd === 0 && row.inputTokens === null));
+});
+
+test('an external cancellation aborts the ToC call and records it as aborted', async () => {
+  const outer = new AbortController();
+  const toc = tocSettled();
+  let tocSignal;
+  const fixture = ruleTocProvider({ onEvent: toc.onEvent,
+    toc: (_lines, _body, init) => new Promise((_resolve, reject) => {
+      tocSignal = init.signal;
+      init.signal.addEventListener('abort', () => reject(init.signal.reason), { once: true });
+      outer.abort(new Error('client_cancelled'));
+    }) });
+  const error = await fixture.provider.retrieve({ ...fixtureRetrieveInput(fixture.assets, onEnv), signal: outer.signal })
+    .then(() => null, value => value);
+  assert.ok(error, 'the cancelled request rejects');
+  const settled = await toc.settled;
+  assert.equal(tocSignal.aborted, true);
+  assert.equal(settled.status, 'aborted');
+  assert.match(settled.error, /client_cancelled/u);
+  assert.equal(fixture.calls.filter(call => call.kind === 'selection').length, 0);
+});
+
 test('invalid and repeated indexes are dropped without a retry', async () => {
   const { calls, bounded } = await run(onEnv, { toc: () => ({ unitIndexes: [0, 6, -1, 2.5, 'abc', null, '3', 3, 5], note: '' }) });
   assert.equal(calls.filter(call => call.kind === 'toc').length, 1);

@@ -69,7 +69,10 @@ const userText = body => body.input.find(message => message.role === 'user').con
 // select(delivered, body): returns the selection output object or a Response.
 // budgetStore: when given, model calls use the production budget routing
 // (official daily ledger) and its REST commands are answered by budgetStore.
+// plan: the plan output object, or a function returning it or a Response.
+// remainingBudget: replaces the unlimited per-provider remaining budget.
 export function ruleTocProvider({ assets = ruleTocAssets(), toc, select, onEvent, plan = fixturePlan, budgetStore,
+  remainingBudget = async () => Infinity,
   tocUsage = { input_tokens: 9000, output_tokens: 150, total_tokens: 9150,
     input_tokens_details: { cached_tokens: 0 }, output_tokens_details: { reasoning_tokens: 100 } } } = {}) {
   const calls = [];
@@ -77,7 +80,7 @@ export function ruleTocProvider({ assets = ruleTocAssets(), toc, select, onEvent
     loadAssets: async () => assets,
     loadDenseSearch: async ({ rules }) => ({ searchAsync: async () => [...rules.units.values()] }),
     loadQaSearch: async ({ items }) => ({ searchAsync: async () => items }),
-    remainingBudget: async () => Infinity,
+    remainingBudget,
     ...(budgetStore ? {} : { budgetedRequest: request => request.invoke() }),
     ...(onEvent ? { onEvent } : {}),
     fetchImpl: async (url, init) => {
@@ -92,7 +95,9 @@ export function ruleTocProvider({ assets = ruleTocAssets(), toc, select, onEvent
       }
       if (String(url).endsWith(':generateContent')) {
         calls.push({ kind: 'plan', url: String(url), body });
-        return Response.json({ candidates: [{ content: { parts: [{ text: JSON.stringify(plan) }] } }],
+        const planOutput = typeof plan === 'function' ? await plan(body) : plan;
+        if (planOutput instanceof Response) return planOutput;
+        return Response.json({ candidates: [{ content: { parts: [{ text: JSON.stringify(planOutput) }] } }],
           usageMetadata: { promptTokenCount: 500, candidatesTokenCount: 80, thoughtsTokenCount: 20, totalTokenCount: 600 } });
       }
       const text = userText(body);
