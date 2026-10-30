@@ -482,10 +482,9 @@ async function finalizePreparedRagRulingQuestionCore({
   const modelResult = supplementApplied ? supplementOutcome.modelResult : firstModelResult;
   const promptBundle = supplementApplied ? supplementOutcome.promptBundle : preparedPromptBundle;
   const evidence = supplementApplied ? supplementOutcome.evidence : preparedEvidence;
-  // Paid final-model work of this answer: the first call plus a supplementary
-  // call when one was sent (also when its answer was not used).
-  const finalModelResults = [firstModelResult,
-    ...(supplementOutcome?.modelResult ? [supplementOutcome.modelResult] : [])];
+  // Incurred usage and cost of a supplementary final call, also when its
+  // answer was not used, failed or threw.
+  const supplementModelCall = supplementOutcome?.finalModelCall || null;
   const supplementRetrievalCostCny = Number(supplementOutcome?.retrieval?.estimatedCostCny) || 0;
   const supplementRetrievalCostUsd = Number(supplementOutcome?.retrieval?.estimatedCostUsd) || 0;
   if (supplementOutcome) {
@@ -556,12 +555,12 @@ async function finalizePreparedRagRulingQuestionCore({
   // After a supplementary round the answer was generated from the new package.
   const evidenceFingerprint = supplementApplied ? sha256Json(evidence) : continuation.evidenceFingerprint;
   const finalPromptSha256 = supplementApplied ? sha256Text(promptBundle.prompt) : continuation.finalPromptSha256;
-  const finalModelTokenUsage = finalModelResults.length > 1
-    ? sumUsageTelemetry(finalModelResults.map((result) => result.tokenUsage))
-    : modelResult.tokenUsage || {};
-  const finalModelCostCny = finalModelResults.reduce((total, result) => total + (result.estimatedCostCny || 0), 0)
+  const finalModelTokenUsage = supplementModelCall
+    ? sumUsageTelemetry([firstModelResult.tokenUsage, supplementModelCall.tokenUsage])
+    : firstModelResult.tokenUsage || {};
+  const finalModelCostCny = (firstModelResult.estimatedCostCny || 0) + (supplementModelCall?.estimatedCostCny || 0)
     + supplementRetrievalCostCny;
-  const finalModelCostUsd = finalModelResults.reduce((total, result) => total + (result.estimatedCostUsd || 0), 0)
+  const finalModelCostUsd = (firstModelResult.estimatedCostUsd || 0) + (supplementModelCall?.estimatedCostUsd || 0)
     + supplementRetrievalCostUsd;
   const identityClarifications = pendingCardIdentityLines(effectiveCardResolution, continuation.answerLocale);
   const interpretedCards = confirmedCardIdentityLine(effectiveCardResolution, continuation.answerLocale);

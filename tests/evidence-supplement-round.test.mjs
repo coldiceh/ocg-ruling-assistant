@@ -398,6 +398,38 @@ test("a failed supplementary step or no new entry keeps the first answer", async
   assert.equal(notShown.debug.evidenceSupplement.failureReason, "final_model_not_displayable");
 });
 
+test("a second final call that throws keeps the first answer and its incurred cost is counted", async () => {
+  const { provider } = boundedFixture();
+  const continuation = await prepare(provider);
+  let calls = 0;
+  const answer = await finalizePreparedRagRulingQuestion({ continuation, env: enabledEnv, cloudBudget: fakeBudget(),
+    evidenceSupplementProvider: provider,
+    modelInvoker: async () => {
+      calls += 1;
+      if (calls === 1) return INSUFFICIENT;
+      throw Object.assign(new Error("provider stream broke"), { code: "provider_stream_broken",
+        usage: { prompt_tokens: 120, completion_tokens: 7, total_tokens: 127 },
+        estimatedCostUsd: 0.002, estimatedCostCny: 0.014 });
+    } });
+  assert.equal(calls, 2);
+  assert.equal(answer.shortAnswer, "首轮回答正文");
+  const supplement = answer.debug.evidenceSupplement;
+  assert.equal(supplement.status, "failed");
+  assert.equal(supplement.failureReason, "provider_stream_broken");
+  assert.equal(supplement.finalModel.thrown, true);
+  assert.equal(supplement.finalModel.errorCode, "provider_stream_broken");
+  assert.deepEqual(supplement.finalModel.tokenUsage, { prompt_tokens: 120, completion_tokens: 7, total_tokens: 127 });
+  assert.equal(supplement.finalModel.estimatedCostUsd, 0.002);
+  const retrievalUsd = supplement.retrieval.estimatedCostUsd;
+  assert.ok(retrievalUsd > 0);
+  assert.equal(supplement.estimatedCostUsd, retrievalUsd + 0.002);
+  // The answer's totals include the paid work of the call that produced nothing.
+  assert.equal(answer.debug.tokenUsage.prompt_tokens, 120);
+  assert.equal(answer.debug.tokenUsage.total_tokens, 127);
+  assert.ok(answer.debug.estimatedCostUsd >= retrievalUsd + 0.002);
+  assert.ok(answer.debug.estimatedCostCny >= 0.014);
+});
+
 test("the round stops at the invocation deadline and keeps the first answer", async (t) => {
   const { provider } = boundedFixture();
   const continuation = await prepare(provider);

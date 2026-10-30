@@ -93,6 +93,34 @@ function cancelledOutcome(outcome) {
   return { ...outcome, status: 'cancelled', failureReason: 'cancelled_during_supplement' };
 }
 
+function numericUsage(items) {
+  const total = {};
+  for (const item of items) {
+    for (const [key, value] of Object.entries(item && typeof item === 'object' && !Array.isArray(item) ? item : {})) {
+      const number = Number(value);
+      if (Number.isFinite(number)) total[key] = (total[key] || 0) + number;
+    }
+  }
+  return total;
+}
+
+// Usage and cost already incurred by the second final call, whether its
+// answer was used or not. A failed provider call reports its usage on the
+// attempt and keeps a possibly-used reservation as its cost.
+function incurredModelCall(result) {
+  const reported = result?.tokenUsage && Object.keys(result.tokenUsage).length ? [result.tokenUsage]
+    : (result?.generationAttempts || []).map((attempt) => attempt?.usage);
+  return { thrown: false, tokenUsage: numericUsage(reported),
+    estimatedCostCny: Number(result?.estimatedCostCny) || 0, estimatedCostUsd: Number(result?.estimatedCostUsd) || 0 };
+}
+
+// A call that threw returns no result; keep whatever usage or cost it carries.
+function thrownModelCall(error) {
+  return { thrown: true, errorCode: failureCode(error),
+    tokenUsage: numericUsage([error?.tokenUsage || error?.usage]),
+    estimatedCostCny: Number(error?.estimatedCostCny) || 0, estimatedCostUsd: Number(error?.estimatedCostUsd) || 0 };
+}
+
 function failureCode(error) {
   for (const value of [error?.code, error?.message]) {
     if (typeof value === 'string' && /^[A-Za-z0-9_.:-]{1,80}$/u.test(value)) return value;
@@ -174,6 +202,7 @@ export async function runEvidenceSupplementRound({ decision, continuation, env =
   const roundSignal = signal ? AbortSignal.any([signal, deadline]) : deadline;
   let retrieval = null;
   let modelResult = null;
+  let finalModelCall = null;
   progress?.phase?.(EVIDENCE_SUPPLEMENT_PHASE);
   try {
     const evidence = continuation.evidence || {};
@@ -212,22 +241,27 @@ export async function runEvidenceSupplementRound({ decision, continuation, env =
       modelResult = await callRagModel({ prompt: promptBundle.prompt, recoveryPrompt: '', evidence: supplementedEvidence,
         cardResolution: continuation.cardResolution, env, modelInvoker, dryRun, fetchImpl, now, thinkingMode,
         reasoningEffort, outputMode: 'plain_text', signal: roundSignal, privateEvaluationDiagnostics });
+      finalModelCall = incurredModelCall(modelResult);
+    } catch (error) {
+      finalModelCall = thrownModelCall(error);
+      throw error;
     } finally {
       timingsMs.finalModel = Date.now() - modelStartedAt;
     }
     if (!displayable(modelResult)) {
-      return signal?.aborted ? cancelledOutcome({ retrieval, modelResult, timingsMs })
+      return signal?.aborted ? cancelledOutcome({ retrieval, modelResult, finalModelCall, timingsMs })
         : { status: 'failed', failureReason: deadline.aborted ? 'deadline_exceeded' : 'final_model_not_displayable',
-          retrieval, modelResult, timingsMs };
+          retrieval, modelResult, finalModelCall, timingsMs };
     }
-    return { status: 'applied', promptBundle, evidence: supplementedEvidence, modelResult, retrieval, timingsMs };
+    return { status: 'applied', promptBundle, evidence: supplementedEvidence, modelResult, finalModelCall, retrieval,
+      timingsMs };
   } catch (error) {
     // The first answer is already complete: a cancellation or failure during
     // this round only ends the round. The caller keeps the first answer (and
     // a finalize request can still store it for recovery).
-    if (signal?.aborted) return cancelledOutcome({ retrieval, modelResult, timingsMs });
+    if (signal?.aborted) return cancelledOutcome({ retrieval, modelResult, finalModelCall, timingsMs });
     return { status: 'failed', failureReason: deadline.aborted ? 'deadline_exceeded' : failureCode(error),
-      retrieval, modelResult, timingsMs };
+      retrieval, modelResult, finalModelCall, timingsMs };
   } finally {
     timingsMs.total = Date.now() - startedAt;
     progress?.endPhase?.();
@@ -241,7 +275,11 @@ export function evidenceSupplementTelemetry({ decision, outcome = null, firstMod
   if (!outcome) return publicDecision;
   const retrievalCostUsd = Number(outcome.retrieval?.estimatedCostUsd) || 0;
   const retrievalCostCny = Number(outcome.retrieval?.estimatedCostCny) || 0;
-  const finalModel = modelSummary(outcome.modelResult, outcome.timingsMs?.finalModel);
+  // Incurred usage and cost of the second call, also when it failed or threw.
+  const finalModel = outcome.finalModelCall
+    ? { ...modelSummary(outcome.modelResult, outcome.timingsMs?.finalModel), ...outcome.finalModelCall,
+      ms: outcome.timingsMs?.finalModel ?? null }
+    : null;
   return {
     ...publicDecision,
     status: outcome.status,
