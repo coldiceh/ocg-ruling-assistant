@@ -831,14 +831,20 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
           duplicateIndexes: result.duplicateIndexes, truncatedIndexes: result.truncatedIndexes,
           returnedCount: result.returnedCount, note: result.note });
       } catch (error) {
-        Object.assign(ruleToc, { status: ruleTocAbort.signal.aborted && !signal.aborted
-          ? (ruleTocAbort.signal.reason?.message === 'rule_toc_timeout' ? 'timeout' : 'aborted') : 'failed',
+        // timeout: its own timer; aborted: the request failed elsewhere, was
+        // cancelled by the caller or hit its deadline; failed: anything else.
+        const timedOut = ruleTocAbort.signal.aborted && ruleTocAbort.signal.reason?.message === 'rule_toc_timeout';
+        Object.assign(ruleToc, { status: timedOut ? 'timeout'
+          : ruleTocAbort.signal.aborted || signal.aborted ? 'aborted' : 'failed',
         error: String(error?.message || error).slice(0, 200), selectedUnitKeys: [] });
       } finally {
         clearTimeout(timer);
         // Model call time, including the format retry; asset wait is separate.
         ruleToc.elapsedMs = started === null ? null : performance.now() - started;
         Object.assign(ruleToc, summarizeRuleTocCalls(calls.filter(row => row.stage === RULE_TOC_STAGE)));
+        // The final ToC state is also reported when it settles after the
+        // request has already ended. Never awaited: it cannot delay the request.
+        Promise.resolve().then(() => onEvent({ type: 'rule_toc', ...ruleTocTelemetry() })).catch(() => {});
       }
       return ruleToc;
     }
