@@ -455,6 +455,23 @@ function applyGenerationContract(body, contract) {
   } };
 }
 
+// RULE_NAVIGATION_PARTITION selects how navigation-search hits are split into
+// lanes (identity partitioning only; ranking and limits are unchanged):
+//   legacy (default, identical to main): by each navigation record's own
+//     sourceKind field. Released ocg-rule records have none, so the rule lane
+//     only ever holds Konami units.
+//   unit-source-kind: by the bound reading unit's sourceKind (fix 69af952).
+//   source-family: as unit-source-kind, and rule units further per source
+//     family (the rule document id namespace: ocg-rule, konami), each with its
+//     own top 32 and lane navigation_lexical:<family> (734af32).
+export const RULE_NAVIGATION_PARTITIONS = Object.freeze(['legacy', 'unit-source-kind', 'source-family']);
+
+export function resolveRuleNavigationPartition(env = {}) {
+  const value = String(env.RULE_NAVIGATION_PARTITION ?? '').trim() || 'legacy';
+  if (!RULE_NAVIGATION_PARTITIONS.includes(value)) throw new Error('evidence_config_invalid_RULE_NAVIGATION_PARTITION');
+  return value;
+}
+
 function generationReasoningEffort(contract) {
   return contract.reasoningConfig?.responses?.effort
     ?? contract.reasoningConfig?.thinkingConfig?.thinkingLevel
@@ -615,6 +632,7 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
     // contract and transport exist only when it is on, so the off path keeps
     // the same contracts, profile hash and requests.
     const ruleTocConfig = resolveRuleTocConfig(env);
+    const navigationPartition = resolveRuleNavigationPartition(env);
     const contracts = Object.freeze({
       plan: loadGenerationContract('planning', { env }),
       selection: useDecisions ? DECISIONS_SELECTION_CONTRACT : loadGenerationContract('selection', { env }),
@@ -886,15 +904,21 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
       timingsMs.queryEmbedding = performance.now() - at;
       const lanes = [];
       const ruleKeys = result => rules.denseMapping.get(result.id) || [];
-      // Rule navigation is partitioned per source family: the namespace of the
-      // rule document id (ocg-rule, konami). Each family gets its own top 32,
-      // so one family cannot fill the whole rule navigation lane. Identity only.
+      // Navigation lanes (RULE_NAVIGATION_PARTITION). With source-family, rule
+      // navigation is partitioned per source family, the namespace of the rule
+      // document id (ocg-rule, konami): each family gets its own top 32, so one
+      // family cannot fill the whole rule navigation lane. Identity only.
       const ruleFamilyOf = unit => String(unit.sourceId).split(':')[0];
-      const ruleFamilies = uniq([...rules.readingUnits.values()].map(ruleFamilyOf));
-      const navigationPartitionOf = unitKey => {
-        const unit = units.get(unitKey);
-        return unit?.sourceKind === 'rule' ? `rule:${ruleFamilyOf(unit)}` : unit?.sourceKind;
-      };
+      const ruleFamilies = navigationPartition === 'source-family'
+        ? uniq([...rules.readingUnits.values()].map(ruleFamilyOf)) : null;
+      const navigationSearchOptions = navigationPartition === 'legacy'
+        ? { sourceKinds: ['rule','qa','faq'], limit: 32 }
+        : ruleFamilies ? { sourceKinds: [...ruleFamilies.map(family => `rule:${family}`), 'qa', 'faq'], limit: 32,
+          sourceKindForUnit: unitKey => {
+            const unit = units.get(unitKey);
+            return unit?.sourceKind === 'rule' ? `rule:${ruleFamilyOf(unit)}` : unit?.sourceKind;
+          } }
+          : { sourceKinds: ['rule','qa','faq'], limit: 32, sourceKindForUnit: unitKey => units.get(unitKey)?.sourceKind };
       const qaKeys = item => qaByParent.get(item.handle) || [];
       const confirmedCardIds = uniq((cardResolution.resolvedCards || []).map(card => card?.id)
         .filter(cardId => typeof cardId === 'string' && cardId));
@@ -949,16 +973,14 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
         for (const kind of ['qa','faq']) channels.push([kind, 'original_lexical', qaLexical[kind]]);
         timingsMs.lexicalSearch += performance.now() - searchAt;
         searchAt = performance.now();
-        // Partition by the bound reading unit's own sourceKind, as the QA
-        // lexical lane does, and rule units further by source family. Released
-        // ocg-rule navigation records carry no sourceKind field, so the record
-        // value alone left them in no partition. Ranking is unchanged.
-        const navigation = snapshot.navigationSearch.searchBySourceKind(query.text, {
-          sourceKinds: [...ruleFamilies.map(family => `rule:${family}`), 'qa', 'faq'], limit: 32,
-          sourceKindForUnit: navigationPartitionOf,
-        });
-        for (const family of ruleFamilies) channels.push(['rule', `navigation_lexical:${family}`,
+        // Outside legacy, partition by the bound reading unit's own sourceKind,
+        // as the QA lexical lane does (released ocg-rule navigation records
+        // carry no sourceKind field), and with source-family split rule units
+        // further by family. Ranking is unchanged.
+        const navigation = snapshot.navigationSearch.searchBySourceKind(query.text, navigationSearchOptions);
+        if (ruleFamilies) for (const family of ruleFamilies) channels.push(['rule', `navigation_lexical:${family}`,
           mapRankedUnits(navigation[`rule:${family}`], hit => [hit.unitKey])]);
+        else channels.push(['rule', 'navigation_lexical', mapRankedUnits(navigation.rule, hit => [hit.unitKey])]);
         for (const kind of ['qa','faq']) channels.push([kind, 'navigation_lexical',
           mapRankedUnits(navigation[kind], hit => [hit.unitKey])]);
         timingsMs.navigationSearch += performance.now() - searchAt;
@@ -1295,6 +1317,7 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
         costBasis: 'provider_list_theoretical', cacheProvisionUsd: 0, queryPlan,
         bounded: { calls, tokenCounts: counts, finalModelCalls: 0, reading: completedReading,
           schedulerContract: ruleTocConfig ? READING_SCHEDULER_PRIORITY_CONTRACT : READING_SCHEDULER_CONTRACT,
+          ...(navigationPartition !== 'legacy' ? { navigationPartition } : {}),
           ...(ruleToc ? { ruleToc: ruleTocTelemetry() } : {}),
           readingMeasure: readingMeasure?.stats || null, coverageScope: assets.coverageScope,
           ...(decisionsState ? { decisions: { acquisitionStop: decisionsState.acquisitionStop,
