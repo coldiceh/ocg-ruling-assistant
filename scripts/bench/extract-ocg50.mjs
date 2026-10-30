@@ -31,13 +31,14 @@ function single(rowHtml, pattern, label, qid) {
 
 /**
  * Extracts every question row of the benchmark table.
- * @param {string|Buffer} html raw file content (hashing uses these exact bytes)
+ * @param {string|Buffer} html raw file content (hashed after CRLF→LF normalization)
  * @param {{expectedCount?: number}} options
  */
 export function extractOcg50FromHtml(html, { expectedCount = EXPECTED_QUESTION_COUNT } = {}) {
-  const raw = Buffer.isBuffer(html) ? html : Buffer.from(String(html), "utf8");
-  const sourceHtmlSha256 = sha256Hex(raw);
-  const text = raw.toString("utf8");
+  // Git for Windows checks this file out with CRLF by default. Hash and read
+  // the LF-normalized UTF-8 text so the set and its hash are platform-stable.
+  const text = (Buffer.isBuffer(html) ? html.toString("utf8") : String(html)).replace(/\r\n?/gu, "\n");
+  const sourceHtmlSha256 = sha256Hex(Buffer.from(text, "utf8"));
   const items = [];
   for (const row of text.matchAll(/<tr\b([^>]*)>([\s\S]*?)<\/tr>/gu)) {
     const [, attributes, body] = row;

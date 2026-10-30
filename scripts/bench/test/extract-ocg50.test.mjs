@@ -33,6 +33,8 @@ test("extracts rows in order with decoded text, cell id and source hash", () => 
   assert.equal(result.items[1].question, "题面二 「引号」");
   assert.equal(result.items[0].referenceAnswer, "结论一；理由一。");
   assert.ok(result.items.every((item) => item.sourceHtmlSha256 === result.sourceHtmlSha256));
+  // A CRLF checkout (Git for Windows default) yields the same set and hash.
+  assert.deepEqual(extractOcg50FromHtml(html.replaceAll("\n", "\r\n"), { expectedCount: 2 }), result);
 });
 
 test("fails loudly on wrong count, empty fields, markup, mixed cells and out-of-order ids", () => {
