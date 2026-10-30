@@ -25,3 +25,6 @@ private-archive/
 tests/fixtures/*-cases.json
 tests/fixtures/*-goldens.json
 tests/fixtures/real-ruling-cases/
+
+# Retrieval comparison runs (scripts/bench) contain full answers, prompts and costs.
+/runs/

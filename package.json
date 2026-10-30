@@ -17,6 +17,7 @@
     "report:model-effort-matrix": "node scripts/aggregate-model-effort-matrix.mjs",
     "test:model-effort-matrix": "node --test --test-concurrency=1 tests/model-effort-matrix-aggregator.test.mjs",
     "test:relay-local-experiment": "node --test --test-concurrency=1 tests/local-relay-effort-experiment.test.mjs",
+    "test:bench": "node --test --test-concurrency=1 \"scripts/bench/test/*.test.mjs\"",
     "dev:backend": "node backend/server.mjs",
     "dev:with-engine": "node scripts/start-with-ocg-engine.mjs",
     "sync:data": "node scripts/sync-data.mjs",
