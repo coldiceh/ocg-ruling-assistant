@@ -11,10 +11,11 @@ export function sha256Text(text) {
   return createHash("sha256").update(String(text ?? ""), "utf8").digest("hex");
 }
 
-// First sentence of an answer for the report table (markdown emphasis
-// characters removed; ends at the first 。！？!? or line break).
+// First sentence of an answer for the report table: Markdown markers
+// (* # > ` and table pipes) are dropped for display only; it ends at the first
+// 。！？!? or line break. The full answer stays in the result file.
 export function firstSentence(text, maxChars = 160) {
-  const plain = String(text || "").replace(/[*#>`_|]/gu, "").trim();
+  const plain = String(text || "").replace(/[*#>`|]/gu, "").trim();
   const lineEnd = plain.indexOf("\n");
   const firstLine = lineEnd >= 0 ? plain.slice(0, lineEnd) : plain;
   const match = /^.*?[。！？!?]/u.exec(firstLine);
