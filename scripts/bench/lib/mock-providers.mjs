@@ -101,13 +101,25 @@ function mockPlan(question) {
     ruleQuery: text.slice(0, 80), qaQuery: text.slice(0, 80) }] };
 }
 
+// Takes offered ids in order while their packingBudget sizes fit the
+// available evidence characters (the limit the real selector is given).
 function mockSelection(delivered) {
-  const offered = (delivered?.groups || []).flatMap((group) => [
+  const offered = [...new Set((delivered?.groups || []).flatMap((group) => [
     ...(group.units || []).map((row) => (Array.isArray(row) ? row[0] : null)),
     ...(group.items || []).map((item) => item?.handle),
-  ]).filter((id) => typeof id === "string" && id);
-  const selectedIds = [...new Set(offered)].slice(0, MOCK_SELECTION_LIMIT);
-  return { checks: [], selectedIds, note: "MOCK：按候选出现顺序取前若干个编号，非模型选择。" };
+  ]).filter((id) => typeof id === "string" && id))];
+  const budget = delivered?.packingBudget || {};
+  const sizes = { ...(budget.ruleUnitChars || {}), ...(budget.qaHandleChars || {}) };
+  let remaining = Number.isFinite(budget.availableEvidenceChars) ? budget.availableEvidenceChars : Infinity;
+  const selectedIds = [];
+  for (const id of offered) {
+    if (selectedIds.length >= MOCK_SELECTION_LIMIT) break;
+    const size = Number.isFinite(sizes[id]) ? sizes[id] : (remaining === Infinity ? 0 : Infinity);
+    if (size > remaining) continue;
+    selectedIds.push(id);
+    remaining -= size;
+  }
+  return { checks: [], selectedIds, note: "MOCK：按候选顺序取装得下的前若干个编号，非模型选择。" };
 }
 
 function sseResponse(model, content, usage) {
