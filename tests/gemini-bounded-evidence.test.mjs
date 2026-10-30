@@ -773,7 +773,9 @@ test("each confirmed card has an independent lane for source-declared QA links",
   const assets = schema3Assets([rule], records);
   const createTools = assets.createQaTools;
   assets.createQaTools = options => ({ ...createTools(options), *searchBounded() {} });
-  assets.navigationSearch = { searchBySourceKind: () => ({ rule: [], qa: [], faq: [] }) };
+  // Like the real search, return every requested partition (rule lanes are per source family).
+  assets.navigationSearch = { searchBySourceKind: (_query, { sourceKinds }) =>
+    Object.fromEntries(sourceKinds.map(kind => [kind, []])) };
   const { provider, requests } = fixture({ assets, denseQa: [], select: () => ({
     selectedIds: [], unableToSelect: false, note: '',
   }) });

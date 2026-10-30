@@ -11,16 +11,19 @@ import { createQaTools } from '../backend/geminiQaTools.mjs';
 import { loadGeminiRuleQaAssets } from '../backend/geminiRuleQaAssets.mjs';
 
 // The navigation lanes of the production provider are partitioned by source
-// kind. Released ocg-rule navigation records carry no sourceKind field (the
-// Konami and QA/FAQ records do), so these tests exercise the provider itself
-// rather than a caller that passes its own sourceKindForUnit.
+// kind, and rule units further by source family (the namespace of the rule
+// document id). Released ocg-rule navigation records carry no sourceKind field
+// (the Konami and QA/FAQ records do), so these tests exercise the provider
+// itself rather than a caller that passes its own sourceKindForUnit.
 
 const digest = value => createHash('sha256').update(value).digest('hex');
 const offlineStop = () => Object.assign(new Error('offline_stop_before_selection'), { offlineStop: true });
 
 function releaseShapedAssets() {
-  const ruleRecords = [{ id: 'rule-doc-a', recordType: 'rule-doc', title: 'fixture rule source',
-    text: 'first rule paragraph\n\nsecond rule paragraph', sourceAuthority: 'community_reference', official: false }];
+  const ruleRecords = [{ id: 'ocg-rule:doc-a', recordType: 'rule-doc', title: 'fixture rule source',
+    text: 'first rule paragraph\n\nsecond rule paragraph', sourceAuthority: 'community_reference', official: false },
+  { id: 'konami:doc-b', recordType: 'rule-doc', title: 'fixture official source',
+    text: 'official rule paragraph', sourceAuthority: 'official_reference', official: true }];
   const qaRecords = [{ id: 'qa-a', recordType: 'qa', title: 'fixture QA', question: 'fixture question',
     answer: 'fixture answer', official: true }];
   const qaRevision = digest(stableJson(qaRecords));
@@ -80,21 +83,25 @@ const noDense = {
   loadQaSearch: async () => ({ searchAsync: async () => [] }),
 };
 
-test('navigation lane returns rule reading units whose navigation record has no sourceKind', async () => {
+test('navigation lanes return rule reading units per source family even without a record sourceKind', async () => {
   const assets = releaseShapedAssets();
   const reading = await readingBeforeSelection({ assets, userQuery: 'fixture rule description',
     env: fixtureEnv, ...noDense });
-  const lane = kind => reading.lanes.find(row => row.needId === 'original'
-    && row.sourceKind === kind && row.channel === 'navigation_lexical');
-  assert.deepEqual(lane('rule').hits.map(hit => hit.unitKey).sort(),
-    assets.ruleUnits.map(unit => unit.unitKey).sort());
-  assert.deepEqual(lane('qa').hits.map(hit => hit.unitKey),
+  const lane = (kind, channel) => reading.lanes.find(row => row.needId === 'original'
+    && row.sourceKind === kind && row.channel === channel);
+  for (const family of ['ocg-rule', 'konami']) {
+    assert.deepEqual(lane('rule', `navigation_lexical:${family}`).hits.map(hit => hit.unitKey).sort(),
+      assets.ruleUnits.filter(unit => unit.sourceId.startsWith(`${family}:`)).map(unit => unit.unitKey).sort(), family);
+  }
+  assert.equal(reading.lanes.filter(row => row.needId === 'original' && row.sourceKind === 'rule'
+    && row.channel.startsWith('navigation_lexical')).length, 2);
+  assert.deepEqual(lane('qa', 'navigation_lexical').hits.map(hit => hit.unitKey),
     assets.structureMapping.qaUnits.filter(unit => unit.sourceKind === 'qa').map(unit => unit.unitKey));
   // The admitted window may now carry a rule unit reached only by navigation.
   assert.ok(reading.offered.some(bundle => assets.ruleUnits.some(unit => unit.unitKey === bundle.unitKey)));
 });
 
-test('production release: navigation lanes are partitioned by each reading unit\'s own source kind', async () => {
+test('production release: navigation lanes are partitioned by source kind and rule source family', async () => {
   const dataDir = fileURLToPath(new URL('../data/', import.meta.url));
   const assets = await loadGeminiRuleQaAssets({ dataDir });
   const { snapshot } = prepareBoundedEvidenceSnapshot(assets);
@@ -108,16 +115,20 @@ test('production release: navigation lanes are partitioned by each reading unit\
   const userQuery = record.searchQuestions.find(question => question.text).text;
   const reading = await readingBeforeSelection({ assets, userQuery, env: fixtureEnv, ...noDense });
   const full = snapshot.navigationSearch.search(userQuery);
-  for (const kind of ['rule', 'qa', 'faq']) {
-    const lane = reading.lanes.find(row => row.needId === 'original'
-      && row.sourceKind === kind && row.channel === 'navigation_lexical');
-    const expected = full.filter(hit => snapshot.units.get(hit.unitKey)?.sourceKind === kind)
-      .slice(0, 32).map(hit => hit.unitKey);
-    assert.deepEqual(lane.hits.map(hit => hit.unitKey), expected, kind);
-    assert.equal(lane.hits.length, 32, kind);
+  const family = unit => String(unit.sourceId).split(':')[0];
+  const families = [...new Set([...snapshot.rules.readingUnits.values()].map(family))];
+  assert.deepEqual(families, ['ocg-rule', 'konami']);
+  const partitions = [...families.map(name => ['rule', `navigation_lexical:${name}`,
+    unit => unit?.sourceKind === 'rule' && family(unit) === name]),
+  ...['qa', 'faq'].map(kind => [kind, 'navigation_lexical', unit => unit?.sourceKind === kind])];
+  for (const [kind, channel, member] of partitions) {
+    const lane = reading.lanes.find(row => row.needId === 'original' && row.sourceKind === kind && row.channel === channel);
+    const expected = full.filter(hit => member(snapshot.units.get(hit.unitKey))).slice(0, 32).map(hit => hit.unitKey);
+    assert.deepEqual(lane.hits.map(hit => hit.unitKey), expected, channel);
+    assert.equal(lane.hits.length, 32, channel);
   }
   const ruleLane = reading.lanes.find(row => row.needId === 'original'
-    && row.sourceKind === 'rule' && row.channel === 'navigation_lexical');
+    && row.sourceKind === 'rule' && row.channel === `navigation_lexical:${family(snapshot.units.get(record.unitKey))}`);
   assert.ok(ruleLane.hits.some(hit => hit.unitKey === record.unitKey),
     'the record found by its own search question is in the rule navigation lane');
   assert.ok(ruleLane.hits.some(hit => assets.navigationRecordsByUnit.get(hit.unitKey)?.sourceKind === undefined)
