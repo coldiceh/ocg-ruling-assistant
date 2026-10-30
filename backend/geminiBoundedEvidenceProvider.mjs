@@ -886,6 +886,15 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
       timingsMs.queryEmbedding = performance.now() - at;
       const lanes = [];
       const ruleKeys = result => rules.denseMapping.get(result.id) || [];
+      // Rule navigation is partitioned per source family: the namespace of the
+      // rule document id (ocg-rule, konami). Each family gets its own top 32,
+      // so one family cannot fill the whole rule navigation lane. Identity only.
+      const ruleFamilyOf = unit => String(unit.sourceId).split(':')[0];
+      const ruleFamilies = uniq([...rules.readingUnits.values()].map(ruleFamilyOf));
+      const navigationPartitionOf = unitKey => {
+        const unit = units.get(unitKey);
+        return unit?.sourceKind === 'rule' ? `rule:${ruleFamilyOf(unit)}` : unit?.sourceKind;
+      };
       const qaKeys = item => qaByParent.get(item.handle) || [];
       const confirmedCardIds = uniq((cardResolution.resolvedCards || []).map(card => card?.id)
         .filter(cardId => typeof cardId === 'string' && cardId));
@@ -940,10 +949,17 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
         for (const kind of ['qa','faq']) channels.push([kind, 'original_lexical', qaLexical[kind]]);
         timingsMs.lexicalSearch += performance.now() - searchAt;
         searchAt = performance.now();
+        // Partition by the bound reading unit's own sourceKind, as the QA
+        // lexical lane does, and rule units further by source family. Released
+        // ocg-rule navigation records carry no sourceKind field, so the record
+        // value alone left them in no partition. Ranking is unchanged.
         const navigation = snapshot.navigationSearch.searchBySourceKind(query.text, {
-          sourceKinds: ['rule','qa','faq'], limit: 32,
+          sourceKinds: [...ruleFamilies.map(family => `rule:${family}`), 'qa', 'faq'], limit: 32,
+          sourceKindForUnit: navigationPartitionOf,
         });
-        for (const kind of ['rule','qa','faq']) channels.push([kind, 'navigation_lexical',
+        for (const family of ruleFamilies) channels.push(['rule', `navigation_lexical:${family}`,
+          mapRankedUnits(navigation[`rule:${family}`], hit => [hit.unitKey])]);
+        for (const kind of ['qa','faq']) channels.push([kind, 'navigation_lexical',
           mapRankedUnits(navigation[kind], hit => [hit.unitKey])]);
         timingsMs.navigationSearch += performance.now() - searchAt;
         channelCache.set(query.text, channels);
