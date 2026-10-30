@@ -1,7 +1,7 @@
 import { stableQaSelection } from "./lib/sync-input-stability.mjs";
 import { createHash } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import { basename, dirname, join, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { gzip, gunzip } from "node:zlib";
 import { promisify } from "node:util";
@@ -14,7 +14,7 @@ import { buildRuleSourceStructure, buildRuleStructureMapping, makeQaSourceUnits,
   SOURCE_STRUCTURE_MAPPING_CONTRACT } from "../backend/evidenceSourceStructure.mjs";
 import { GEMINI_RULE_QA_ASSET_DIRECTORY, GEMINI_RULE_QA_ASSET_SCHEMA_VERSION,
   GEMINI_RULE_QA_MANIFEST_FILE, loadGeminiRuleQaAssets } from "../backend/geminiRuleQaAssets.mjs";
-import { applyRuleSourceAllowlist, loadRuleSourceAllowlist,
+import { applyRuleSourceAllowlist, loadRuleSourceAllowlist, GOVERNED_RULE_SOURCE_PREFIX,
   RULE_SOURCE_PUBLICATION_CONTRACT } from "../backend/ruleSourcePublication.mjs";
 
 const gz = promisify(gzip), ungz = promisify(gunzip);
@@ -115,18 +115,30 @@ function ruleNavInput(unit, source, byKey, refsByKey) {
     canonicalBodySha256: unit.sourceCanonicalSha256, contextRefs: unit.contextRefs,
     explicitRefs: unit.explicitRefs, input, contextInputSha256: sha256(stableJson(input)) };
 }
-// The publication binding names the allowlist by file name and byte hash only,
-// so the manifest is identical wherever the repository is checked out.
+// Keep checked-in paths relative to the repository for portable manifests.
+// External fixture/override files retain their basename, never a host path.
+function allowlistDescriptor(loaded, allowlistPath) {
+  const path = relative(fileURLToPath(new URL("../", import.meta.url)), allowlistPath);
+  return { file: basename(allowlistPath),
+    path: path.startsWith("..") || isAbsolute(path) ? basename(allowlistPath) : path.split(sep).join("/"),
+    bytes: loaded.bytes, sha256: loaded.sha256,
+    sectionCount: loaded.allowlist.sources.reduce((sum, source) => sum + source.sections.length, 0),
+    sources: loaded.allowlist.sources.map(source => ({ sourceId: source.sourceId, mode: source.mode,
+      sectionKeys: source.sections.map(section => section.sectionKey) })) };
+}
 function publicationBinding(loaded, allowlistPath, applied, mapping, ruleRecords) {
   const mappedUnits = new Map(mapping.sources.map(source => [source.sourceId, source.readingUnits.length]));
   return {
     contract: RULE_SOURCE_PUBLICATION_CONTRACT,
-    allowlist: { file: basename(allowlistPath), bytes: loaded.bytes, sha256: loaded.sha256 },
+    allowlist: allowlistDescriptor(loaded, allowlistPath),
     sources: applied.applied.map(source => {
       const record = ruleRecords.find(value => value.id === source.sourceId);
       const { publication: _publication, ...complete } = record;
       return { sourceId: source.sourceId, mode: source.mode,
         publishedSections: source.publishedSections, sourceSections: source.sourceSections,
+        publishedSectionKeys: [...record.publication.publishedSectionKeys],
+        publishedReadingUnitKeys: mapping.sources.find(value => value.sourceId === source.sourceId)
+          .readingUnits.map(unit => unit.unitKey),
         publishedReadingUnits: mappedUnits.get(source.sourceId) || 0,
         sourceReadingUnits: buildRuleSourceStructure(complete).readingUnits.length };
     }),
@@ -136,9 +148,48 @@ function publicationBinding(loaded, allowlistPath, applied, mapping, ruleRecords
 async function assertPublicationBinding(binding, allowlistPath, code) {
   const current = await loadRuleSourceAllowlist(allowlistPath);
   if (binding?.contract !== RULE_SOURCE_PUBLICATION_CONTRACT
-      || binding.allowlist?.sha256 !== current.sha256 || binding.allowlist?.bytes !== current.bytes) {
+      || stableJson(binding.allowlist) !== stableJson(allowlistDescriptor(current, allowlistPath))) {
     throw new Error(code);
   }
+  return current;
+}
+
+const governed = value => [value?.id, value?.sourceId, value?.unitKey,
+  ...(value?.sourceSpans || []).map(span => span.sourceId), ...(value?.readingUnitKeys || [])]
+  .some(id => String(id || "").startsWith(GOVERNED_RULE_SOURCE_PREFIX));
+const ruleRecordsFrom = bytes => parseRecords(bytes, "rules").filter(record => record?.recordType === "rule-doc"
+  && !EXCLUDED_RULE_ROLES.has(String(record.sourceRole || "")));
+const ruleDenseInputs = mapping => mapping.denseMappings.map(value => ({ sourceKind: "rule",
+  denseUnitId: value.denseUnitId, ...value.sourceSpans[0], readingUnitKeys: value.readingUnitKeys }));
+
+// Rebuild the expected publication from the FULL synchronized source, not from
+// asset publication flags or manifest counts. Even consistently rehashed assets
+// must contain exactly the listed units, with no additions or omissions.
+async function assertPublishedRuleAssets({ sourceDir, allowlistPath, loaded, binding,
+  ruleRecords, mapping, inputs, denseInputs, navigation }) {
+  const applied = applyRuleSourceAllowlist(ruleRecordsFrom(await readFile(join(sourceDir, "ocg-rule-corpus.json"))),
+    loaded.allowlist);
+  const expected = finalizeMapping(applied.records, []);
+  const same = (actual, wanted, label) => {
+    if (stableJson(actual) !== stableJson(wanted)) {
+      throw new Error(`gemini_rule_qa_publication_${label}_invalid`);
+    }
+  };
+  same(binding, publicationBinding(loaded, allowlistPath, applied, expected, applied.records), "binding");
+  same(ruleRecords.filter(governed), applied.records.filter(governed), "records");
+  same(mapping.sources.filter(governed), expected.sources.filter(governed), "units");
+  same(mapping.denseLocators.filter(governed), expected.denseLocators.filter(governed), "dense_locators");
+  const withoutRow = values => values.filter(governed).map(({ vectorRow: _row, ...value }) => value);
+  same(withoutRow(mapping.denseMappings), withoutRow(expected.denseMappings), "dense_mapping");
+  same(denseInputs.rule.filter(governed), ruleDenseInputs(expected).filter(governed), "dense_inputs");
+  const byKey = new Map(expected.sources.flatMap(source => source.readingUnits).map(unit => [unit.unitKey, unit]));
+  const refs = new Map(expected.explicitReferences.map(ref => [ref.refKey, ref]));
+  const expectedInputs = expected.sources.filter(governed).flatMap(source => source.readingUnits
+    .map(unit => ruleNavInput(unit, source, byKey, refs)));
+  same(inputs.filter(governed), expectedInputs, "navigation_inputs");
+  const identity = value => ({ unitKey: value.unitKey, sourceId: value.sourceId,
+    canonicalBodySha256: value.canonicalBodySha256, contextInputSha256: value.contextInputSha256 });
+  same(navigation.filter(governed).map(identity), expectedInputs.map(identity), "navigation_units");
 }
 async function canonicalStage(sourceDir, destination, allowlistPath) {
   const allowlist = await loadRuleSourceAllowlist(allowlistPath);
@@ -155,8 +206,7 @@ async function canonicalStage(sourceDir, destination, allowlistPath) {
   }]));
   // The synchronized corpus keeps every fixed source complete. Governed
   // sources are published only through their listed sections.
-  const applied = applyRuleSourceAllowlist(parseRecords(bytes[2], "rules").filter(record => record?.recordType === "rule-doc"
-    && !EXCLUDED_RULE_ROLES.has(String(record.sourceRole || ""))), allowlist.allowlist);
+  const applied = applyRuleSourceAllowlist(ruleRecordsFrom(bytes[2]), allowlist.allowlist);
   const ruleRecords = applied.records;
   const qaContentRevision = sha256(stableJson(qaRecords));
   const qaRevision = qaContentRevision;
@@ -193,9 +243,7 @@ async function canonicalStage(sourceDir, destination, allowlistPath) {
   ];
   const denseInputs = {
     schemaVersion: 1,
-    rule: structureMapping.denseMappings.map(mapping => ({ sourceKind: "rule",
-      denseUnitId: mapping.denseUnitId, ...mapping.sourceSpans[0],
-      readingUnitKeys: mapping.readingUnitKeys })),
+    rule: ruleDenseInputs(structureMapping),
     qa: qaRecords.filter(record => record.recordType === "qa").map(record => {
       const embeddingInput = ruleEmbeddingText({ title: record.title, text: JSON.stringify(record) });
       return { sourceKind: "qa", denseUnitId: `qa:${record.id}`, sourceId: `qa:${record.id}`,
@@ -271,7 +319,7 @@ async function releaseStage(sourceDir, destination, navigationPath, ruleDenseDir
       throw new Error("gemini_rule_qa_source_changed_after_canonical");
     }
   }
-  await assertPublicationBinding(canonical.ruleSourcePublication, allowlistPath,
+  const loaded = await assertPublicationBinding(canonical.ruleSourcePublication, allowlistPath,
     "gemini_rule_qa_publication_changed_after_canonical");
   let [mapping, inputs] = await Promise.all([readAsset(destination, canonical.assets.structureMapping),
     readAsset(destination, canonical.assets.navigationInputs)]);
@@ -283,6 +331,11 @@ async function releaseStage(sourceDir, destination, navigationPath, ruleDenseDir
       || navigation.some((record, index) => record.unitKey !== inputs[index].unitKey)) {
     throw new Error("gemini_rule_qa_navigation_order_invalid");
   }
+  const [ruleRecords, denseInputs] = await Promise.all([
+    readAsset(destination, canonical.assets.ruleRecords), readAsset(destination, canonical.assets.denseInputs),
+  ]);
+  await assertPublishedRuleAssets({ sourceDir, allowlistPath, loaded, binding: canonical.ruleSourcePublication,
+    ruleRecords, mapping, inputs, denseInputs, navigation });
   const navigationRevision = sha256(stableJson(navigation));
   const navigationSearch = createNavigationSearch(navigation, { navigationRevision });
   const [navAsset, navigationLexicalAsset] = await Promise.all([
@@ -295,7 +348,8 @@ async function releaseStage(sourceDir, destination, navigationPath, ruleDenseDir
   ]);
   const orderedUnique = values => [...new Set(values)];
   const ruleInputHashes = orderedUnique(mapping.denseLocators.map(value => value.embeddingInputSha256));
-  if (stableJson(ruleInputHashes) !== stableJson(ruleDense.orderedContentHashes)) {
+  if (stableJson(ruleInputHashes) !== stableJson(ruleDense.orderedContentHashes)
+      || stableJson(ruleInputHashes) !== stableJson(ruleDense.entries.map(entry => entry.textSha256))) {
     throw new Error("gemini_rule_qa_rule_dense_order_binding_invalid");
   }
   const qaRecords = await readAsset(destination, canonical.assets.qaRecords);
@@ -349,16 +403,21 @@ async function navigationIndexStage(destination) {
     Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`));
   return { outputDir: destination, manifest, stage: "navigation-index", indexSource: "navigation_records" };
 }
-async function verifyStage(sourceDir, destination, allowlistPath) {
+async function verifyStage(sourceDir, destination, allowlistPath, ruleDenseDir) {
   const module = await import("../backend/geminiRuleQaAssets.mjs");
   module.clearGeminiRuleQaAssetsCacheForTests();
   const assets = await module.loadGeminiRuleQaAssets({ assetDir: destination });
   const canonical = JSON.parse(await readFile(join(destination, CANONICAL_MANIFEST), "utf8"));
+  const { canonicalRevision, ...canonicalBody } = canonical;
+  if (canonical.kind !== "gemini-rule-qa-canonical-stage" || canonical.schemaVersion !== 3
+      || canonicalRevision !== sha256(stableJson(canonicalBody))) {
+    throw new Error("gemini_rule_qa_canonical_manifest_binding_invalid");
+  }
   // Released assets must have been built from the current allowlist.
   if (stableJson(assets.manifest.ruleSourcePublication ?? null) !== stableJson(canonical.ruleSourcePublication ?? null)) {
     throw new Error("gemini_rule_qa_publication_binding_invalid");
   }
-  await assertPublicationBinding(assets.manifest.ruleSourcePublication, allowlistPath,
+  const loaded = await assertPublicationBinding(assets.manifest.ruleSourcePublication, allowlistPath,
     "gemini_rule_qa_publication_binding_invalid");
   const [inputs, denseInputs] = await Promise.all([
     readAsset(destination, canonical.assets.navigationInputs),
@@ -378,6 +437,21 @@ async function verifyStage(sourceDir, destination, allowlistPath) {
         || sha256(input.embeddingInput) !== input.embeddingInputSha256))) {
     throw new Error("gemini_rule_qa_dense_input_binding_invalid");
   }
+  const canonicalMapping = await readAsset(destination, canonical.assets.structureMapping);
+  const canonicalRecords = await readAsset(destination, canonical.assets.ruleRecords);
+  for (const [mapping, ruleRecords] of [[canonicalMapping, canonicalRecords],
+    [assets.structureMapping, assets.rulesRecords]]) {
+    await assertPublishedRuleAssets({ sourceDir, allowlistPath, loaded,
+      binding: assets.manifest.ruleSourcePublication, ruleRecords, mapping, inputs, denseInputs,
+      navigation: assets.navigationRecords });
+  }
+  const ruleDense = await denseManifest(resolve(ruleDenseDir || join(sourceDir, "rule-embedding-v1")));
+  const hashes = [...new Set(assets.structureMapping.denseLocators.map(value => value.embeddingInputSha256))];
+  if (ruleDense.dataRevision !== assets.ruleDenseRevision
+      || stableJson(ruleDense.orderedContentHashes) !== stableJson(hashes)
+      || stableJson(ruleDense.entries.map(entry => entry.textSha256)) !== stableJson(hashes)) {
+    throw new Error("gemini_rule_qa_rule_dense_order_binding_invalid");
+  }
   for (const descriptorValue of Object.values(assets.manifest.sources)) {
     const bytes = await readFile(join(sourceDir, descriptorValue.file));
     if (bytes.byteLength !== descriptorValue.bytes || sha256(bytes) !== descriptorValue.sha256) {
@@ -395,7 +469,7 @@ export async function buildGeminiRuleQaAssets({ dataDir, outputDir, stage = "rel
   if (stage === "release") return releaseStage(sourceDir, destination, navigationPath, ruleDenseDir, qaDenseDir,
     allowlistPath);
   if (stage === "navigation-index") return navigationIndexStage(destination);
-  if (stage === "verify") return verifyStage(sourceDir, destination, allowlistPath);
+  if (stage === "verify") return verifyStage(sourceDir, destination, allowlistPath, ruleDenseDir);
   throw new Error("gemini_rule_qa_stage_invalid");
 }
 function argument(name) { const index = process.argv.indexOf(name); return index < 0 ? "" : process.argv[index + 1]; }

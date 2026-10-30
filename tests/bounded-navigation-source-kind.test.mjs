@@ -243,7 +243,10 @@ test('production release: navigation lanes are partitioned by source kind and ru
     const lane = reading.lanes.find(row => row.needId === 'original' && row.sourceKind === kind && row.channel === channel);
     const expected = full.filter(hit => member(snapshot.units.get(hit.unitKey))).slice(0, 32).map(hit => hit.unitKey);
     assert.deepEqual(lane.hits.map(hit => hit.unitKey), expected, channel);
-    assert.equal(lane.hits.length, 32, channel);
+    // A publication allowlist can leave a source family with fewer than 32
+    // units. The lane contains the whole available pool up to its usual cap.
+    const available = [...snapshot.units.values()].filter(member).length;
+    assert.equal(lane.hits.length, Math.min(32, available), channel);
   }
   const ruleLane = reading.lanes.find(row => row.needId === 'original'
     && row.sourceKind === 'rule' && row.channel === `navigation_lexical:${family(snapshot.units.get(record.unitKey))}`);

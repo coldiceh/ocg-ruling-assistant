@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { gunzipSync } from "node:zlib";
 
@@ -193,7 +194,8 @@ test("withheld sections reach no search lane, dense row, navigation record or ta
   const { canonical, dense, assets } = await release(paths);
   const keyFor = (section) => `${SOURCE_ID}:reading:${section}:1`;
   assert.deepEqual(canonical.manifest.ruleSourcePublication.sources, [{ sourceId: SOURCE_ID, mode: "sections",
-    publishedSections: 1, sourceSections: 4, publishedReadingUnits: 1, sourceReadingUnits: 3 }]);
+    publishedSections: 1, sourceSections: 4, publishedSectionKeys: ["a"],
+    publishedReadingUnitKeys: [keyFor("a")], publishedReadingUnits: 1, sourceReadingUnits: 3 }]);
   assert.equal(assets.manifest.ruleSourcePublication.allowlist.sha256, sha256(await readFile(paths.allowlistPath)));
   assert.ok(dense.rule.every((row) => !/beta|delta/u.test(row.embeddingInput)));
   assert.ok(dense.rule.some((row) => /alpha listed body/u.test(row.embeddingInput)));
@@ -264,10 +266,85 @@ test("the checked-in allowlist lists 30 uncovered rulebook sections and withhold
   assert.deepEqual(applied.absentSourceIds, []);
 });
 
+test("canonical and release bind the allowlist path, count and every section identity", async (t) => {
+  const paths = await fixture(t);
+  const { canonical, assets } = await release(paths);
+  assert.deepEqual(canonical.manifest.ruleSourcePublication, assets.manifest.ruleSourcePublication);
+  assert.deepEqual(canonical.manifest.ruleSourcePublication.allowlist, {
+    file: "allowlist.json", path: "allowlist.json", bytes: (await readFile(paths.allowlistPath)).length,
+    sha256: sha256(await readFile(paths.allowlistPath)), sectionCount: 1,
+    sources: [{ sourceId: SOURCE_ID, mode: "sections", sectionKeys: ["a"] }],
+  });
+  for (const stage of ["release", "verify"]) {
+    await assert.rejects(buildGeminiRuleQaAssets({ dataDir: paths.dataDir, stage,
+      ruleSourceAllowlistPath: join(paths.directory, "missing.json") }), /rule_source_allowlist_missing/u);
+  }
+  await writeJson(paths.allowlistPath, allowlist([{ ...LISTED, sections: [] }]));
+  for (const stage of ["release", "verify"]) {
+    await assert.rejects(buildGeminiRuleQaAssets({ dataDir: paths.dataDir, stage,
+      ruleSourceAllowlistPath: paths.allowlistPath }), /rule_source_allowlist_sections_empty/u);
+  }
+});
+
+// Build a fully coherent but wrong release, then replace BOTH policy bindings
+// with the approved one and rehash the manifests. Checking hashes or counts
+// alone cannot catch this; the verifier must consult the full source again.
+for (const [name, sections] of [
+  ["extra hidden unit", [...LISTED.sections,
+    { sectionKey: "b", title: "Beta rules", titlePath: ["Fixture container", "Beta rules"], category: "test", reason: "test" }]],
+  ["same-count substituted unit", [
+    { sectionKey: "b", title: "Beta rules", titlePath: ["Fixture container", "Beta rules"], category: "test", reason: "test" }]],
+  ["missing listed unit", null],
+]) {
+  test(`release and verify reject consistently rehashed assets with ${name}`, async (t) => {
+    const paths = await fixture(t);
+    const approved = (await release(paths)).canonical.manifest.ruleSourcePublication;
+    const alternate = await writeJson(join(paths.directory, "alternate.json"), allowlist([
+      sections ? { ...LISTED, sections } : { sourceId: SOURCE_ID, mode: "withhold", reason: "test" },
+    ]));
+    await release({ ...paths, allowlistPath: alternate });
+    for (const [file, revision] of [["canonical-manifest.json", "canonicalRevision"], ["manifest.json", "bundleRevision"]]) {
+      const path = join(paths.dataDir, "gemini-rule-qa-v1", file);
+      const body = JSON.parse(await readFile(path, "utf8"));
+      delete body[revision];
+      body.ruleSourcePublication = approved;
+      await writeJson(path, { ...body, [revision]: sha256(stableJson(body)) });
+    }
+    for (const stage of ["release", "verify"]) {
+      await assert.rejects(buildGeminiRuleQaAssets({ dataDir: paths.dataDir, stage,
+        ruleSourceAllowlistPath: paths.allowlistPath }), /gemini_rule_qa_publication_records_invalid/u);
+    }
+  });
+}
+
+test("release and verify reject a vector index that drops a published row", async (t) => {
+  const paths = await fixture(t);
+  await release(paths);
+  const path = join(paths.dataDir, "rule-embedding-v1", "evidence-vector-index.json");
+  const index = JSON.parse(await readFile(path, "utf8"));
+  index.entries.pop();
+  await writeJson(path, index);
+  for (const stage of ["release", "verify"]) {
+    await assert.rejects(buildGeminiRuleQaAssets({ dataDir: paths.dataDir, stage,
+      ruleSourceAllowlistPath: paths.allowlistPath }), /gemini_rule_qa_rule_dense_order_binding_invalid/u);
+  }
+});
+
+test("verify checks the canonical manifest hash, including its policy section count", async (t) => {
+  const paths = await fixture(t);
+  await release(paths);
+  const path = join(paths.dataDir, "gemini-rule-qa-v1", "canonical-manifest.json");
+  const manifest = JSON.parse(await readFile(path, "utf8"));
+  manifest.ruleSourcePublication.allowlist.sectionCount++;
+  await writeJson(path, manifest);
+  await assert.rejects(buildGeminiRuleQaAssets({ dataDir: paths.dataDir, stage: "verify",
+    ruleSourceAllowlistPath: paths.allowlistPath }), /gemini_rule_qa_canonical_manifest_binding_invalid/u);
+});
+
 test("published production assets contain only the listed official rulebook sections", async () => {
   clearGeminiRuleQaAssetsCacheForTests();
   const [assets, loaded] = await Promise.all([
-    loadGeminiRuleQaAssets({ dataDir: new URL("../data/", import.meta.url).pathname }),
+    loadGeminiRuleQaAssets({ dataDir: fileURLToPath(new URL("../data/", import.meta.url)) }),
     loadRuleSourceAllowlist(DEFAULT_RULE_SOURCE_ALLOWLIST),
   ]);
   assert.equal(assets.manifest.ruleSourcePublication.allowlist.sha256, loaded.sha256);

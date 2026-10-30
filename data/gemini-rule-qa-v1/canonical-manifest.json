@@ -38,8 +38,53 @@
     "contract": "rule-source-section-publication-v1",
     "allowlist": {
       "file": "konami-rulebook-allowlist.json",
+      "path": "config/rule-sources/konami-rulebook-allowlist.json",
       "bytes": 17826,
-      "sha256": "3866b0caddd6ddc45e621cf962b6943b98a85bd96e7fe90f386389d342dde14a"
+      "sha256": "3866b0caddd6ddc45e621cf962b6943b98a85bd96e7fe90f386389d342dde14a",
+      "sectionCount": 30,
+      "sources": [
+        {
+          "sourceId": "konami:ocg-rulebook-20200401",
+          "mode": "sections",
+          "sectionKeys": [
+            "beginner-source-heading-3",
+            "beginner-source-heading-4",
+            "beginner-source-heading-5",
+            "beginner-source-heading-17",
+            "beginner-source-heading-18",
+            "beginner-source-heading-30",
+            "intermediate-source-heading-3",
+            "intermediate-source-heading-4",
+            "intermediate-source-heading-5",
+            "intermediate-source-heading-6",
+            "intermediate-source-heading-10",
+            "intermediate-source-heading-42",
+            "intermediate-source-heading-43",
+            "advanced-source-heading-4",
+            "advanced-source-heading-8",
+            "advanced-source-heading-9",
+            "advanced-source-heading-10",
+            "advanced-source-heading-11",
+            "advanced-source-heading-13",
+            "advanced-source-heading-14",
+            "advanced-source-heading-15",
+            "advanced-source-heading-16",
+            "advanced-source-heading-17",
+            "advanced-source-heading-24",
+            "advanced-source-heading-26",
+            "advanced-source-heading-27",
+            "advanced-source-heading-35",
+            "advanced-source-heading-50",
+            "advanced-source-heading-61",
+            "advanced-source-heading-62"
+          ]
+        },
+        {
+          "sourceId": "konami:ocg-howto",
+          "mode": "withhold",
+          "sectionKeys": []
+        }
+      ]
     },
     "sources": [
       {
@@ -47,6 +92,8 @@
         "mode": "withhold",
         "publishedSections": 0,
         "sourceSections": 9,
+        "publishedSectionKeys": [],
+        "publishedReadingUnitKeys": [],
         "publishedReadingUnits": 0,
         "sourceReadingUnits": 9
       },
@@ -55,6 +102,63 @@
         "mode": "sections",
         "publishedSections": 30,
         "sourceSections": 198,
+        "publishedSectionKeys": [
+          "beginner-source-heading-3",
+          "beginner-source-heading-4",
+          "beginner-source-heading-5",
+          "beginner-source-heading-17",
+          "beginner-source-heading-18",
+          "beginner-source-heading-30",
+          "intermediate-source-heading-3",
+          "intermediate-source-heading-4",
+          "intermediate-source-heading-5",
+          "intermediate-source-heading-6",
+          "intermediate-source-heading-10",
+          "intermediate-source-heading-42",
+          "intermediate-source-heading-43",
+          "advanced-source-heading-4",
+          "advanced-source-heading-8",
+          "advanced-source-heading-9",
+          "advanced-source-heading-10",
+          "advanced-source-heading-11",
+          "advanced-source-heading-13",
+          "advanced-source-heading-14",
+          "advanced-source-heading-15",
+          "advanced-source-heading-16",
+          "advanced-source-heading-17",
+          "advanced-source-heading-24",
+          "advanced-source-heading-26",
+          "advanced-source-heading-27",
+          "advanced-source-heading-35",
+          "advanced-source-heading-50",
+          "advanced-source-heading-61",
+          "advanced-source-heading-62"
+        ],
+        "publishedReadingUnitKeys": [
+          "konami:ocg-rulebook-20200401:reading:beginner-source-heading-3:1",
+          "konami:ocg-rulebook-20200401:reading:beginner-source-heading-4:1",
+          "konami:ocg-rulebook-20200401:reading:beginner-source-heading-5:1",
+          "konami:ocg-rulebook-20200401:reading:beginner-source-heading-18:1",
+          "konami:ocg-rulebook-20200401:reading:beginner-source-heading-30:1",
+          "konami:ocg-rulebook-20200401:reading:intermediate-source-heading-3:1",
+          "konami:ocg-rulebook-20200401:reading:intermediate-source-heading-6:1",
+          "konami:ocg-rulebook-20200401:reading:intermediate-source-heading-10:1",
+          "konami:ocg-rulebook-20200401:reading:intermediate-source-heading-42:1",
+          "konami:ocg-rulebook-20200401:reading:intermediate-source-heading-43:1",
+          "konami:ocg-rulebook-20200401:reading:advanced-source-heading-4:1",
+          "konami:ocg-rulebook-20200401:reading:advanced-source-heading-9:1",
+          "konami:ocg-rulebook-20200401:reading:advanced-source-heading-14:1",
+          "konami:ocg-rulebook-20200401:reading:advanced-source-heading-15:1",
+          "konami:ocg-rulebook-20200401:reading:advanced-source-heading-16:1",
+          "konami:ocg-rulebook-20200401:reading:advanced-source-heading-17:1",
+          "konami:ocg-rulebook-20200401:reading:advanced-source-heading-24:1",
+          "konami:ocg-rulebook-20200401:reading:advanced-source-heading-26:1",
+          "konami:ocg-rulebook-20200401:reading:advanced-source-heading-27:1",
+          "konami:ocg-rulebook-20200401:reading:advanced-source-heading-35:1",
+          "konami:ocg-rulebook-20200401:reading:advanced-source-heading-50:1",
+          "konami:ocg-rulebook-20200401:reading:advanced-source-heading-61:1",
+          "konami:ocg-rulebook-20200401:reading:advanced-source-heading-62:1"
+        ],
         "publishedReadingUnits": 23,
         "sourceReadingUnits": 178
       }
@@ -120,5 +224,5 @@
       "canonicalSha256": "5030d4d45961002dc9f054cc4f5b47519896840cf4e0e66baa11588f184303b3"
     }
   },
-  "canonicalRevision": "2d603a41ed6a4ab4e2a4e84239fceaef4677659c0584095e55036639abaf5b31"
+  "canonicalRevision": "e21b2ed4382037033c609127a60b4e612e52a0cac9e7ba7e1591df06d1839714"
 }

@@ -31,10 +31,13 @@ GitHub Actions 的 `Sync ruling data` 会同时同步 YGOResources 和 OCG Rule�
 - 隐藏的节不进入规则词法检索、向量检索（`data/rule-embedding-v1`）、导航检索和导航记录，也不进入规则目录（ToC）。
 - 发布的规则记录仍带完整原文，偏移和哈希不变；记录上的 `publication` 字段列出发布的节 id。保留节的阅读单元、导航描述和向量与全文构建时完全相同。
 - 当前清单：规则书 30 节，都是 ocg-rule 没有对应内容的节，分为卡组构筑与赛制 19 节、基础程序和术语 9 节、同调的基本规则 2 节。不发布的有：速度决斗 6 节；ocg-rule 已覆盖或部分覆盖的节；与事务局答复冲突的 4 处（抽卡/伤害计数、“？”攻守、1 回合 1 次、伤害步骤可发动的卡）。官方玩法页整页隐藏（`mode: "withhold"`）。
-- 出错就停，不会悄悄全部隐藏或全部放行：清单缺失、为空或格式错误，`konami:` 来源没有条目，节 id 不存在，或标题、标题路径与源结构对不上时，构建都会报错。canonical 和 release 清单记录了白名单的文件名和字节哈希，白名单改了但资产没重建，release 和 `pnpm run verify:gemini-rule-qa` 都会失败。
+- 出错就停，不会悄悄全部隐藏或全部放行：清单缺失、为空或格式错误，`konami:` 来源没有条目，节 id 不存在，或标题、标题路径与源结构对不上时，构建都会报错。canonical 和 release manifest 记录白名单的仓库相对路径、字节数、SHA-256、总节数及各来源的全部节 id，并记录实际发布的阅读单元 id。白名单固定使用 LF 换行，避免 Windows 检出改变文件哈希。
+- release 和 `pnpm run verify:gemini-rule-qa` 会重新从完整同步语料和当前白名单构造预期集合，复核规则记录、结构映射、阅读单元、向量输入及导航输入/记录；多放、漏放或同数量换成别的单元都会报错，即使资产哈希已一起更新。verify 同时核对 canonical manifest 哈希和规则向量索引的完整有序条目集合；暂存重建时核对输出目录内的向量索引。
 - 有 7 个保留节只有一行标题（例如「●同じ名前のカードは３枚まで」「●サイドデッキの枚数は15枚以下」），现行切分不会为它们生成阅读单元，所以检索不到这几行。要让它们可检索得改结构切分，而改切分需要为这些新单元生成导航描述。
 
 ### 增删节
+
+只读检查：`node scripts/audit-rule-source-publication.mjs` 对 50 题逐题运行规则词法、规则向量及导航检索，检查完整候选队列和生产上限内候选，也检查三种导航分区及 `buildRuleToc` 实际目录。结果以 JSON 输出。向量查询使用由题面生成的本地确定性探针，不是语义嵌入；它只证明候选身份边界，不评价召回相关性。检查不调用模型、不写入资产。
 
 1. 编辑白名单。在 `sources[].sections` 里增删条目：`sectionKey`、`title`、`titlePath` 从 `data/fixed-rule-sources/konami-ocg-rulebook-20200401.json` 的 `structure.sections` 原样抄（`titlePath` 是从顶层到本节的标题），`category` 用 `categories` 里的键，`reason` 写保留理由。要整份隐藏某个来源，用 `"mode": "withhold"` 加 `reason`。
 2. 重建发布资产，有两种方式：

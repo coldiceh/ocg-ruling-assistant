@@ -303,6 +303,7 @@ export async function runBoundedEvidenceAssetSync(options = {}, dependencies = {
       dataDir: normalized.dataDir,
       outputDir: assetDir,
       stage: "verify",
+      ruleDenseDir: join(normalized.outDir, "rule-embedding-v1"),
       ...normalized.publication,
     });
     if (verified.manifest.bundleRevision !== released.manifest.bundleRevision) {
