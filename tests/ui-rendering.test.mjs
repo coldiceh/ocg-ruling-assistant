@@ -2106,6 +2106,19 @@ test("engine reproduction: short section in the answer text, full replay collaps
   assert.equal(details.childNodes[1].tagName, "pre");
   assert.equal(details.childNodes[1].textContent, replay, "line breaks of the full replay are kept");
 
+  // 2026-10-30 layout: the conclusion sentence, then the observations it used as a list under their lead line
+  const withConclusion = ["主回答。", "【ygopro 引擎复现（实验性）】已复现", "结论：在 ygopro 里，对方场上的「测试怪兽B」是暗属性。",
+    "依据的引擎观察值：\n- 到我方战斗阶段时，对方场上的「测试怪兽B」：表侧攻击表示，属性 暗\n- 我方在主要阶段1可以选择「发动测试魔法」",
+    "局面：我方手卡 测试魔法。", "ygopro 只显示它运行的结果，卡片脚本可能有 bug，不代表官方裁定。"].join("\n\n");
+  render({ answerLevel: "rule_analysis", mode: "rag_baseline", shortAnswer: withConclusion, usedEvidence: [], debug: {},
+    engineRepro: { status: "done", rendered: replay, concise: "" } });
+  const blocks = ui.verdictBody.childNodes.slice(0, -1);
+  assert.deepEqual(blocks.map((node) => node.tagName), ["p", "p", "p", "p", "ul", "p", "p"]);
+  assert.equal(inlineText(blocks[3]), "依据的引擎观察值：");
+  assert.deepEqual(blocks[4].childNodes.map((node) => [node.tagName, inlineText(node)]), [
+    ["li", "到我方战斗阶段时，对方场上的「测试怪兽B」：表侧攻击表示，属性 暗"], ["li", "我方在主要阶段1可以选择「发动测试魔法」"]]);
+  assert.equal(ui.verdictBody.childNodes.at(-1).tagName, "details");
+
   render({ answerLevel: "rule_analysis", mode: "rag_baseline", shortAnswer: "主回答。", usedEvidence: [], debug: {} });
   assert.equal(ui.verdictBody.childNodes.some((node) => node.tagName === "details"), false);
   render({ answerLevel: "rule_analysis", mode: "rag_baseline", shortAnswer: "主回答。", usedEvidence: [], debug: {},
