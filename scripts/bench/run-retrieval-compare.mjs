@@ -24,7 +24,7 @@ import {
 import { createBenchFetch } from "./lib/bench-fetch.mjs";
 import { createCostTracker } from "./lib/cost-tracker.mjs";
 import {
-  DEFAULT_TOC_SEARCH_ROOTS, findTocIds, firstSentence, sha256Text, summarizePromptBundle,
+  RULE_TOC_SOURCE, findTocIds, firstSentence, sha256Text, summarizePromptBundle, summarizeRuleToc,
 } from "./lib/evidence-summary.mjs";
 import { createMemoryLedgerStore } from "./lib/memory-ledger.mjs";
 import { createMockResponder } from "./lib/mock-providers.mjs";
@@ -51,7 +51,8 @@ const USAGE = `用法:
   --qids Q1,Q5              只跑指定题号
   --repeat <n>              覆盖题集的 repeat
   --set-env KEY=VALUE       追加环境变量（可重复；两臂相同）
-  --toc-path <dot.path>     ToC 选中 id 的位置（可重复，如 continuation.ruleQueryModel.bounded.ruleToc.selectedIds）
+  --toc-path <dot.path>     覆盖项：另行读取 ToC 选中 id 的位置（可重复）。默认直接读
+                            prepared.continuation.ruleQueryModel.bounded.ruleToc
   --allow-code-change       续跑时允许代码 commit 与上次不同（会记入 manifest）
   --preflight-only          只检查配置并打印将要使用的环境，不跑任务、不发请求
 `;
@@ -183,6 +184,7 @@ function errorRecord(error) {
       estimatedCostUsd: error.boundedRetrieval.estimatedCostUsd ?? null,
       timingsMs: error.boundedRetrieval.timingsMs || null,
       calls: (error.boundedRetrieval.calls || []).map(({ measurement, ...call }) => call),
+      ruleToc: error.boundedRetrieval.ruleToc ?? null,
     } : null,
     stack: String(error.stack || "").split("\n").slice(0, 8).join("\n"),
   };
@@ -257,13 +259,17 @@ export function buildResultDocument({ job, attempt, run, prepared, final, error,
   jobCostUsd, tocPaths, status }) {
   const continuation = prepared?.continuation || null;
   const promptBundle = continuation?.promptBundle || null;
-  const roots = { continuation, final };
-  const tocSearchRoots = Object.fromEntries(DEFAULT_TOC_SEARCH_ROOTS.map((dotted) => [dotted,
-    dotted.split(".").reduce((value, part) => value?.[part], roots)]));
-  const tocFindings = tocPaths.length ? findTocIds(roots, tocPaths) : findTocIds(tocSearchRoots);
-  const tocSelectedIds = [...new Set(tocFindings.flatMap((finding) => finding.ids))];
   const evidenceSummary = promptBundle ? summarizePromptBundle(promptBundle) : null;
   const finalAllowed = new Set(evidenceSummary?.allowedEvidenceIds || []);
+  // ToC stage outcome, read from the field the stage writes (absent in the
+  // baseline arm). --toc-path only adds an override id list.
+  const ruleToc = continuation?.ruleQueryModel?.bounded?.ruleToc ?? error?.boundedRetrieval?.ruleToc ?? null;
+  let tocOverride = null;
+  if (tocPaths.length) {
+    const findings = findTocIds({ prepared: { continuation }, continuation, final }, tocPaths);
+    const ids = [...new Set(findings.flatMap((finding) => finding.ids))];
+    tocOverride = { paths: tocPaths, findings, selectedIds: ids, inFinalPack: ids.filter((id) => finalAllowed.has(id)) };
+  }
   return {
     schemaVersion: RESULT_SCHEMA_VERSION,
     job: { key: job.key, qid: job.qid, cellId: job.cellId, arm: job.arm, armFlag: { [ARM_FLAG]: ARMS[job.arm] },
@@ -305,10 +311,9 @@ export function buildResultDocument({ job, attempt, run, prepared, final, error,
       readGroupCount: (continuation.ruleQueryModel?.bounded?.readGroupIds || []).length,
       omittedGroupCount: (continuation.ruleQueryModel?.bounded?.omittedGroupIds || []).length,
       toc: {
-        searchedPaths: tocPaths.length ? tocPaths : DEFAULT_TOC_SEARCH_ROOTS,
-        findings: tocFindings,
-        selectedIds: tocSelectedIds,
-        inFinalPack: tocSelectedIds.filter((id) => finalAllowed.has(id)),
+        source: RULE_TOC_SOURCE,
+        summary: summarizeRuleToc(ruleToc),
+        ...(tocOverride ? { override: tocOverride } : {}),
       },
       resolvedCards: (continuation.cardResolution?.resolvedCards || []).map((card) => ({
         id: card?.id ?? null, name: card?.name ?? null, input: card?.input ?? null })),

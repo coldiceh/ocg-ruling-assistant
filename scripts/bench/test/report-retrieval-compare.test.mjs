@@ -6,8 +6,9 @@ import {
   compareEvidence,
   median,
   percentile,
+  tocCells,
 } from "../report-retrieval-compare.mjs";
-import { firstSentence, summarizePromptBundle } from "../lib/evidence-summary.mjs";
+import { firstSentence, summarizePromptBundle, summarizeRuleToc } from "../lib/evidence-summary.mjs";
 
 function bundle(rules, qa = [], faq = []) {
   return {
@@ -25,8 +26,19 @@ function bundle(rules, qa = [], faq = []) {
   };
 }
 
+// Stage telemetry as written by geminiBoundedEvidenceProvider (bounded.ruleToc).
+function ruleToc({ status = "selected", selected = [], admitted = selected, intoPack = admitted, elapsedMs = 2_400,
+  officialListUsd = 0.0061, contractUsd = 0.012, error }) {
+  return { status, ...(error ? { error } : {}), selectedUnitKeys: selected, selectedCount: selected.length,
+    admittedUnitKeys: admitted, admittedCount: admitted.length, inBaselineWindowUnitKeys: [], inBaselineWindowCount: 0,
+    inOtherLanesUnitKeys: [], inOtherLanesCount: 0, selectedIntoPackUnitKeys: intoPack,
+    selectedIntoPackCount: intoPack.length, notAdmitted: [], elapsedMs, assetWaitMs: 3, inputTokens: 60_000,
+    cachedInputTokens: 0, outputTokens: 50, reasoningTokens: 20, contractUsd, officialListUsd, accountedUsd: contractUsd,
+    tocUnits: 563, tocChars: 102_785, attempts: [{ status: "success" }] };
+}
+
 function result({ qid, arm, repeat = 1, status = "completed", answer = "结论。理由。", promptBundle, costUsd = 0.1,
-  prepareMs = 10_000, finalizeMs = 2_000, tocIds = [], reference = "参考结论。" }) {
+  prepareMs = 10_000, finalizeMs = 2_000, toc = null, reference = "参考结论。" }) {
   const summary = promptBundle ? summarizePromptBundle(promptBundle) : null;
   return {
     job: { key: `${qid}__${arm}__r${repeat}`, qid, arm, repeat },
@@ -35,10 +47,10 @@ function result({ qid, arm, repeat = 1, status = "completed", answer = "结论�
     answer: status === "completed" ? { text: answer } : null,
     timingsMs: { wall: { prepare: prepareMs, finalize: finalizeMs, total: prepareMs + finalizeMs } },
     cost: { totalUsd: costUsd },
-    evidence: promptBundle ? { dataRevision: "rev-1", finalPromptSha256: summary.promptSha256, summary,
-      toc: { selectedIds: tocIds, inFinalPack: tocIds.filter((id) => summary.allowedEvidenceIds.includes(id)) } } : null,
-    prepared: promptBundle ? { continuation: { promptBundle } } : null,
-    error: status === "completed" ? null : { message: "provider timeout" },
+    evidence: promptBundle ? { dataRevision: "rev-1", finalPromptSha256: summary.promptSha256, summary } : null,
+    prepared: promptBundle ? { continuation: { promptBundle, ruleQueryModel: { bounded: toc ? { ruleToc: toc } : {} } } } : null,
+    error: status === "completed" ? null : { message: "provider timeout",
+      boundedRetrieval: toc ? { ruleToc: toc } : null },
   };
 }
 
@@ -54,11 +66,13 @@ test("report rows keep answers verbatim, show evidence diffs and leave both judg
   const results = [
     result({ qid: "Q1", arm: "baseline", answer: "**可以发动。**处理时不适用。", promptBundle: bundle(["r1", "r2"], ["q1"]) }),
     result({ qid: "Q1", arm: "toc", answer: "不能发动|原因见下。", promptBundle: bundle(["r2", "r3", "r4"], ["q1"], ["f1"]),
-      tocIds: ["r3", "r9"], costUsd: 0.13, prepareMs: 12_000 }),
+      toc: ruleToc({ selected: ["u3", "u9"], admitted: ["u3"], intoPack: ["u3"] }), costUsd: 0.13, prepareMs: 12_000 }),
     result({ qid: "Q2", arm: "baseline", promptBundle: bundle(["r1"]) }),
-    result({ qid: "Q2", arm: "toc", promptBundle: bundle(["r1"]) }),
+    result({ qid: "Q2", arm: "toc", promptBundle: bundle(["r1"]),
+      toc: ruleToc({ status: "empty", selected: [], elapsedMs: 1_500, officialListUsd: 0.0049, contractUsd: 0.01 }) }),
     result({ qid: "Q3", arm: "baseline", promptBundle: bundle(["r5"]), costUsd: 0.2 }),
-    result({ qid: "Q3", arm: "toc", status: "failed" }),
+    result({ qid: "Q3", arm: "toc", status: "failed",
+      toc: { status: "timeout", error: "rule_toc_timeout", selectedUnitKeys: [], elapsedMs: 30_000, attempts: [] } }),
   ];
   const report = buildRetrievalCompareReport({ manifest, checkpoint, results });
   const rows = report.split("\n").filter((line) => /^\| Q\d/u.test(line));
@@ -69,13 +83,17 @@ test("report rows keep answers verbatim, show evidence diffs and leave both judg
   assert.equal(q1[2], "可以发动。");
   assert.equal(q1[3], "不能发动原因见下。"); // table pipes are display-only Markdown
   assert.equal(q1[4], "规则 +2/−1（2→3）；QA/FAQ +1/−0");
-  assert.equal(q1[5], "1/2 入包");
-  assert.equal(q1[6], "$0.1000 · 10.0+2.0s");
-  assert.equal(q1[7], "$0.1300 · 12.0+2.0s");
+  assert.deepEqual(q1.slice(5, 11), ["selected", "2", "1", "1", "2.4", "$0.0061"]);
+  assert.equal(q1[11], "$0.1000 · 10.0+2.0s");
+  assert.equal(q1[12], "$0.1300 · 12.0+2.0s");
+  assert.deepEqual(rows[1].split(" | ").slice(5, 11), ["empty", "0", "0", "0", "1.5", "$0.0049"]);
+  assert.deepEqual(rows[2].split(" | ").slice(5, 11), ["timeout（rule_toc_timeout）", "0", "–", "–", "30.0", "–"]);
   assert.ok(rows.every((row) => row.endsWith("|  |  |")), "judgment columns must stay empty");
   assert.match(rows[1], /规则 \+0\/−0（1→1）；相同/u);
   assert.match(rows[2], /（failed：provider timeout）/u);
   assert.match(report, /两臂都完成的题 2 道；证据编号集合不同 1 道/u);
+  assert.match(report, /ToC 阶段（toc 臂 3 个任务）：状态 selected 1、empty 1、timeout 1；费用合计 officialListUsd \$0\.0110（contractUsd \$0\.0220/u);
+  assert.match(report, /选中单元进入最终包的题数：1 \/ 2/u);
   assert.match(report, /\| baseline \| 3\/3 \| \$0\.4000 \| \$0\.1333 \|/u);
   assert.match(report, /\| toc \| 2\/3 \| \$0\.2300 \|/u);
   assert.match(report, /- \*\*Q1\*\* rule：新增 `r3`、`r4`；减少 `r1`。faq：新增 `f1`；减少 无/u);
@@ -105,3 +123,23 @@ test("statistics and helpers are mechanical", () => {
   const summary = summarizePromptBundle(bundle(["r1"], ["q1"], ["f1"]));
   assert.deepEqual(summary.counts, { rule: 1, qa: 1, faq: 1, card: 1 });
 });
+
+test("ToC columns read bounded.ruleToc, mark --toc-path overrides and survive a missing stage record", () => {
+  const promptBundle = bundle(["r1", "r2"]);
+  const overridden = result({ qid: "Q1", arm: "toc", promptBundle, toc: ruleToc({ selected: ["u1"] }) });
+  overridden.evidence.toc = { override: { selectedIds: ["r1", "r7", "r9"], inFinalPack: ["r1"] } };
+  assert.deepEqual(tocCells(overridden), ["selected", "3*", "1", "1*", "2.4", "$0.0061"]);
+  assert.deepEqual(tocCells(result({ qid: "Q1", arm: "toc", promptBundle })), ["无记录", "–", "–", "–", "–", "–"]);
+  const partial = summarizeRuleToc({ status: "failed", selectedUnitKeys: ["a", "b"], error: "rule_toc_output_invalid" });
+  assert.equal(partial.selectedCount, 2);
+  assert.equal(partial.admittedCount, null);
+  const report = buildRetrievalCompareReport({ manifest: { ...manifest, tocPaths: ["continuation.x.ids"],
+    set: { setId: "s", selectedQids: ["Q1"] } }, checkpoint, results: [overridden] });
+  assert.match(report, /带 \* 的选中\/进最终包数来自 --toc-path 覆盖：continuation\.x\.ids/u);
+  assert.equal(stripToc(buildRetrievalCompareReport({ manifest: { ...manifest, arms: ["baseline"] }, checkpoint,
+    results: [result({ qid: "Q1", arm: "baseline", promptBundle })] })).includes("ToC 状态"), false);
+});
+
+function stripToc(text) {
+  return text.split("\n").filter((line) => line.startsWith("| 题号")).join("\n");
+}

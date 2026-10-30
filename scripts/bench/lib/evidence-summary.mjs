@@ -68,44 +68,56 @@ function stringArray(value) {
   return Array.isArray(value) && value.every((item) => typeof item === "string") ? value : null;
 }
 
-/**
- * Locates the rule-ToC admitted unit ids in a job's prepared output. The ToC
- * stage lives on another branch, so the field is not known here: explicit
- * --toc-path values win; otherwise every telemetry key whose name contains
- * "toc" is visited and string-id arrays under it are collected. Large text
- * fields (prompt, evidence bodies) are not searched.
- */
-export function findTocIds(roots, explicitPaths = [], { maxDepth = 8 } = {}) {
-  const found = [];
-  if (explicitPaths.length) {
-    for (const dotted of explicitPaths) {
-      const value = valueAtPath(roots, dotted);
-      const ids = stringArray(value) || stringArray(value?.selectedIds) || stringArray(value?.ids);
-      if (ids) found.push({ path: dotted, ids });
-    }
-    return found;
-  }
-  const seen = new WeakSet();
-  const visit = (value, pathParts, underToc, depth) => {
-    if (!value || typeof value !== "object" || depth > maxDepth || seen.has(value)) return;
-    seen.add(value);
-    if (Array.isArray(value)) {
-      if (underToc && stringArray(value) && value.length) found.push({ path: pathParts.join("."), ids: value });
-      return;
-    }
-    for (const [key, child] of Object.entries(value)) {
-      if (["prompt", "promptPayload", "modelEvidence", "text", "body", "cardTexts"].includes(key)) continue;
-      // "ruleToc", "tocAdmit", "rule_toc", "TOC" — not "protocol".
-      const tocKey = /^toc|[^a-z]toc|Toc|TOC/u.test(key);
-      visit(child, [...pathParts, key], underToc || tocKey, depth + 1);
-    }
-  };
-  for (const [name, root] of Object.entries(roots)) visit(root, [name], false, 0);
-  return found;
+// The rule-ToC stage (RULE_TOC_ADMIT_ENABLED) records its outcome here; the
+// field set is the one written by backend/geminiBoundedEvidenceProvider.mjs.
+export const RULE_TOC_SOURCE = "prepared.continuation.ruleQueryModel.bounded.ruleToc";
+const RULE_TOC_KEY_LISTS = Object.freeze([
+  ["selectedUnitKeys", "selectedCount"],
+  ["admittedUnitKeys", "admittedCount"],
+  ["inBaselineWindowUnitKeys", "inBaselineWindowCount"],
+  ["inOtherLanesUnitKeys", "inOtherLanesCount"],
+  ["selectedIntoPackUnitKeys", "selectedIntoPackCount"],
+]);
+const RULE_TOC_SCALARS = Object.freeze(["status", "error", "elapsedMs", "assetWaitMs", "inputTokens",
+  "cachedInputTokens", "outputTokens", "reasoningTokens", "contractUsd", "officialListUsd", "accountedUsd",
+  "tocUnits", "tocChars"]);
+
+// The stage telemetry of one stored result: the prepared continuation, else
+// the copy kept in a failed job's error record.
+export function ruleTocOfResult(result) {
+  return result?.prepared?.continuation?.ruleQueryModel?.bounded?.ruleToc
+    ?? result?.evidence?.toc?.ruleToc
+    ?? result?.error?.boundedRetrieval?.ruleToc
+    ?? null;
 }
 
-export const DEFAULT_TOC_SEARCH_ROOTS = Object.freeze([
-  "continuation.ruleQueryModel",
-  "continuation.evidence.debug",
-  "continuation.timingsMs",
-]);
+// Flat view of the stage telemetry with every count present (counts are taken
+// from the key lists when the stage did not write them, e.g. after a failure).
+export function summarizeRuleToc(ruleToc) {
+  if (!ruleToc || typeof ruleToc !== "object") return null;
+  const summary = Object.fromEntries(RULE_TOC_SCALARS.map((key) => [key, ruleToc[key] ?? null]));
+  for (const [list, count] of RULE_TOC_KEY_LISTS) {
+    const keys = Array.isArray(ruleToc[list]) ? ruleToc[list] : null;
+    summary[list] = keys;
+    summary[count] = Number.isFinite(ruleToc[count]) ? ruleToc[count] : keys ? keys.length : null;
+  }
+  summary.notAdmitted = Array.isArray(ruleToc.notAdmitted) ? ruleToc.notAdmitted : null;
+  summary.notAdmittedCount = summary.notAdmitted ? summary.notAdmitted.length : null;
+  summary.attemptCount = Array.isArray(ruleToc.attempts) ? ruleToc.attempts.length : null;
+  return summary;
+}
+
+/**
+ * --toc-path override: reads string-id arrays (or {selectedIds|ids}) at the
+ * given dot paths of {prepared, continuation, final}. Without it the runner
+ * and report read RULE_TOC_SOURCE directly.
+ */
+export function findTocIds(roots, explicitPaths = []) {
+  const found = [];
+  for (const dotted of explicitPaths) {
+    const value = valueAtPath(roots, dotted);
+    const ids = stringArray(value) || stringArray(value?.selectedIds) || stringArray(value?.ids);
+    if (ids) found.push({ path: dotted, ids });
+  }
+  return found;
+}

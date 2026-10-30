@@ -7,7 +7,7 @@ import { writeFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { firstSentence, summarizePromptBundle } from "./lib/evidence-summary.mjs";
+import { firstSentence, ruleTocOfResult, summarizePromptBundle, summarizeRuleToc } from "./lib/evidence-summary.mjs";
 import { loadRun } from "./lib/run-files.mjs";
 
 const ARM_ORDER = ["baseline", "toc"];
@@ -97,12 +97,55 @@ function ruleDiffCell(comparison) {
   return parts.join("；");
 }
 
-function tocCell(toc) {
-  if (!toc) return "–";
-  if (toc.status !== "completed") return "–";
-  const ids = toc.evidence?.toc?.selectedIds || [];
-  if (!ids.length) return "未找到";
-  return `${(toc.evidence.toc.inFinalPack || []).length}/${ids.length} 入包`;
+export const TOC_COLUMNS = Object.freeze(["ToC 状态", "ToC 选中", "ToC 入窗", "ToC 进最终包", "ToC 耗时 (s)",
+  "ToC 费用 officialListUsd"]);
+
+function count(value) {
+  return Number.isFinite(value) ? String(value) : "–";
+}
+
+// Columns for the toc-arm job of a row, from the stage telemetry
+// (ruleQueryModel.bounded.ruleToc). A --toc-path override replaces only the
+// selected and in-pack counts and is marked with *.
+export function tocCells(result) {
+  if (!result) return TOC_COLUMNS.map(() => "–");
+  const summary = summarizeRuleToc(ruleTocOfResult(result));
+  const override = result.evidence?.toc?.override;
+  if (!summary && !override) return ["无记录", "–", "–", "–", "–", "–"];
+  return [
+    cell(summary?.status || "–") + (summary?.error ? `（${cell(String(summary.error).slice(0, 40))}）` : ""),
+    override ? `${override.selectedIds.length}*` : count(summary?.selectedCount),
+    count(summary?.admittedCount),
+    override ? `${override.inFinalPack.length}*` : count(summary?.selectedIntoPackCount),
+    seconds(summary?.elapsedMs),
+    usd(summary?.officialListUsd),
+  ];
+}
+
+export function tocStageStats(results) {
+  const tocResults = results.filter((result) => result.job.arm === "toc");
+  const summaries = tocResults.map((result) => ({ result, summary: summarizeRuleToc(ruleTocOfResult(result)) }));
+  const statuses = {};
+  for (const { summary } of summaries) {
+    const status = summary?.status || "无记录";
+    statuses[status] = (statuses[status] || 0) + 1;
+  }
+  const withSummary = summaries.filter((entry) => entry.summary);
+  const sum = (key) => {
+    const values = withSummary.map((entry) => entry.summary[key]).filter(Number.isFinite);
+    return values.length ? values.reduce((total, value) => total + value, 0) : null;
+  };
+  const completed = summaries.filter((entry) => entry.result.status === "completed");
+  const elapsed = withSummary.map((entry) => entry.summary.elapsedMs);
+  return {
+    jobs: tocResults.length,
+    statuses,
+    officialListUsd: sum("officialListUsd"),
+    contractUsd: sum("contractUsd"),
+    elapsed: { mean: mean(elapsed), median: median(elapsed), p95: percentile(elapsed, 0.95) },
+    completed: completed.length,
+    intoPack: completed.filter((entry) => (entry.summary?.selectedIntoPackCount || 0) > 0).length,
+  };
 }
 
 function costTimeCell(result) {
@@ -164,8 +207,10 @@ export function buildRetrievalCompareReport({ manifest, checkpoint, results: sto
     + `预算 ${usd(checkpoint?.budgetUsd ?? manifest.budgetUsd, 2)}，账本累计 ${usd(checkpoint?.spentUsd)}`);
   lines.push("- 判定列留空，由用户填写；本报告不做任何正误判断。", "");
 
+  const showToc = arms.includes("toc");
   const header = ["题号", "参考答案", ...arms.map((arm) => `${arm} 回答首句`)];
-  if (arms.length === 2) header.push("证据包差异（toc 相对 baseline）", "ToC 选中单元");
+  if (arms.length === 2) header.push("证据包差异（toc 相对 baseline）");
+  if (showToc) header.push(...TOC_COLUMNS);
   header.push(...arms.map((arm) => `${arm} 费用 · 准备+作答`), ...arms.map((arm) => `判定 ${arm}（用户填）`));
   lines.push(`| ${header.join(" | ")} |`, `|${header.map(() => "---").join("|")}|`);
   const comparisons = [];
@@ -178,7 +223,8 @@ export function buildRetrievalCompareReport({ manifest, checkpoint, results: sto
     const label = multipleRepeats ? `${row.qid} #${row.repeat}` : row.qid;
     const reference = String(anyResult?.referenceAnswer || "").trim() || "（空）";
     const cells = [label, cell(reference), ...arms.map((arm) => answerCell(row.arms[arm]))];
-    if (arms.length === 2) cells.push(ruleDiffCell(comparison), tocCell(toc));
+    if (arms.length === 2) cells.push(ruleDiffCell(comparison));
+    if (showToc) cells.push(...tocCells(toc));
     cells.push(...arms.map((arm) => costTimeCell(row.arms[arm])), ...arms.map(() => ""));
     lines.push(`| ${cells.join(" | ")} |`);
   }
@@ -203,10 +249,17 @@ export function buildRetrievalCompareReport({ manifest, checkpoint, results: sto
   lines.push(`- 总费用：已完成任务合计 ${usd(completedCost)}；账本累计（含失败/中断任务已发生的调用）${usd(checkpoint?.spentUsd)}。`);
   if (arms.length === 2) {
     lines.push(`- 两臂都完成的题 ${completedPairs.length} 道；证据编号集合不同 ${evidenceDiffer.length} 道；最终提示词哈希不同 ${promptDiffer.length} 道。`);
-    const tocFound = results.filter((result) => result.job.arm === "toc" && result.status === "completed"
-      && (result.evidence?.toc?.selectedIds || []).length).length;
-    lines.push(`- toc 臂中找到 ToC 选中 id 的任务：${tocFound} 个`
-      + (tocFound ? "。" : "（未找到时请确认 ToC 分支已合入，并用 --toc-path 指定字段）。"));
+  }
+  if (showToc) {
+    const toc = tocStageStats(results);
+    const statusText = Object.entries(toc.statuses).map(([status, number]) => `${status} ${number}`).join("、") || "–";
+    lines.push(`- ToC 阶段（toc 臂 ${toc.jobs} 个任务）：状态 ${statusText}；`
+      + `费用合计 officialListUsd ${usd(toc.officialListUsd)}（contractUsd ${usd(toc.contractUsd)}，已含在 toc 臂费用合计内）；`
+      + `调用耗时 均值/中位/P95 ${seconds(toc.elapsed.mean)} / ${seconds(toc.elapsed.median)} / ${seconds(toc.elapsed.p95)} s。`);
+    lines.push(`- 选中单元进入最终包的题数：${toc.intoPack} / ${toc.completed}（toc 臂已完成任务中 selectedIntoPackCount > 0）。`);
+    lines.push("- ToC 列取自 prepared.continuation.ruleQueryModel.bounded.ruleToc："
+      + "选中 = selectedCount，入窗 = admittedCount（进入选证候选窗），进最终包 = selectedIntoPackCount。"
+      + (manifest.tocPaths?.length ? ` 带 * 的选中/进最终包数来自 --toc-path 覆盖：${manifest.tocPaths.join("、")}。` : ""));
   }
   const failures = results.filter((result) => result.status !== "completed");
   if (failures.length) {
