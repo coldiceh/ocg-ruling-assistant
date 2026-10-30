@@ -55,3 +55,26 @@ test("final ruling prompt requests only checks relevant to the current question"
   assert.match(prompt, /不要为了满足固定清单而添加与题面无关的规则类别/u);
   assert.doesNotMatch(prompt, /## 固定反向检查|`counterChecks` 必须且每种只出现一次/u);
 });
+
+test("the public final prompt asks for one evidence-status line in every answer language", async () => {
+  const { EVIDENCE_STATUS_INSTRUCTION, extractEvidenceStatusLine } = await import("../backend/evidenceStatusProtocol.mjs");
+  const { packGeminiSelection } = await import("../backend/geminiRuleQaPacking.mjs");
+  const { buildRagRulingPromptBundle } = await import("../backend/ragRulingPrompt.mjs");
+  assert.doesNotMatch(EVIDENCE_STATUS_INSTRUCTION, /中文/u, "localization must not rewrite the protocol labels");
+  assert.match(EVIDENCE_STATUS_INSTRUCTION, /最后单独一行/u);
+  assert.match(EVIDENCE_STATUS_INSTRUCTION, /“证据状态：充分”/u);
+  assert.match(EVIDENCE_STATUS_INSTRUCTION, /“证据状态：不足｜缺少：”/u);
+  for (const answerLocale of ["zh-CN", "en", "ja"]) {
+    const bounded = packGeminiSelection({ selection: { selectedRules: [], selectedQa: [] }, userQuery: "q", answerLocale,
+      cardResolution: { resolvedCards: [] }, retrievedEvidence: { cardTexts: [] } }).packing.prompt;
+    const ordinary = buildRagRulingPromptBundle({ userQuery: "q", answerLocale, cardResolution: { resolvedCards: [] },
+      evidence: {} }).prompt;
+    for (const prompt of [bounded, ordinary]) {
+      const instructions = prompt.slice(0, prompt.indexOf("本次用户问题、卡片原文与检索资料如下："));
+      assert.ok(instructions.trimEnd().endsWith(EVIDENCE_STATUS_INSTRUCTION), answerLocale);
+    }
+  }
+  // Both documented shapes are machine-readable as written in the instruction.
+  assert.equal(extractEvidenceStatusLine("结论\n证据状态：充分").evidenceStatus, "sufficient");
+  assert.equal(extractEvidenceStatusLine("结论\n证据状态：不足｜缺少：某条规则").evidenceGap, "某条规则");
+});
