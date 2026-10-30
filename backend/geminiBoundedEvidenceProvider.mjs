@@ -1016,10 +1016,11 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
         const groups = offered.flatMap(bundle => {
           const rules = bundle.entries.filter(entry => entry.kind === 'rule').map(entry => ({ ...entry.body, id: entry.alias }));
           const items = bundle.entries.filter(entry => entry.kind === 'qa').map(entry => ({ ...entry.body, handle: entry.alias }));
-          // Only bundles admitted by the optional ToC lane carry a channel label.
-          const label = bundle.admittedBy ? { channel: bundle.admittedBy } : {};
-          return [ ...(rules.length ? [{ groupId: bundle.unitKey, kind: 'rule', ...label, units: rules }] : []),
-            ...(items.length ? [{ groupId: bundle.unitKey, kind: 'qa', ...label, items }] : []) ];
+          // ToC-admitted bundles are serialized like every other group; their
+          // origin is kept in telemetry (admittedBy, rule_toc hits) only, so the
+          // selector reads no extra hint.
+          return [ ...(rules.length ? [{ groupId: bundle.unitKey, kind: 'rule', units: rules }] : []),
+            ...(items.length ? [{ groupId: bundle.unitKey, kind: 'qa', items }] : []) ];
         });
         return boundedSelectionBody(input, queryPlan, groups, { ...revisions,
           unread: unread.map(({ title, sourceKind, size, reason }) => ({ title, sourceKind, size, reason })), omittedCount }, aliasCosts);

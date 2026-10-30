@@ -51,7 +51,7 @@ test('flag off or absent: plan and selection requests are byte-identical to the 
 test('flag on: the chosen unit is offered whole before the rotation, labelled and accounted', async () => {
   let tocLines;
   const { calls, bounded, result } = await run(onEnv, { toc: lines => { tocLines = lines; return { unitIndexes: [5], note: 'needs the timing rule' }; },
-    select: input => ({ selectedIds: input.groups.find(group => group.channel === 'rule_toc').units.map(row => row[0]), note: '' }) });
+    select: input => ({ selectedIds: input.groups.find(group => group.groupId === OMITTED_KEY).units.map(row => row[0]), note: '' }) });
   assert.deepEqual(calls.map(call => call.kind), ['plan', 'toc', 'selection']);
   // The table lists every rule reading unit; the question and card names come last.
   assert.equal(tocLines.length, 5);
@@ -68,8 +68,10 @@ test('flag on: the chosen unit is offered whole before the rotation, labelled an
   assert.ok(bounded.reading.offered[0].hits.some(hit => hit.channel === 'rule_toc'));
   assert.ok(bounded.reading.lanes.some(lane => lane.channel === 'rule_toc' && lane.hits[0].unitKey === OMITTED_KEY));
   assert.equal(bounded.schedulerContract, V3);
+  // The selector sees the admitted unit first, serialized exactly like any other group.
   const groups = delivered(calls.find(call => call.kind === 'selection')).groups;
-  assert.deepEqual(groups.filter(group => group.channel === 'rule_toc').map(group => group.groupId), [OMITTED_KEY]);
+  assert.equal(groups[0].groupId, OMITTED_KEY);
+  assert.ok(groups.every(group => Object.keys(group).join() === (group.kind === 'rule' ? 'groupId,kind,units' : 'groupId,kind,items')));
   assert.ok(bounded.ruleToc.window.measuredChars <= 5000);
   // Telemetry.
   const toCTelemetry = bounded.ruleToc;
@@ -164,11 +166,12 @@ test('a chosen unit outside every lane is materialized with its packing cost', a
   const outside = ordered.findIndex(key => !inLanes.has(key));
   assert.ok(outside >= 0, 'fixture has a rule unit in no lane');
   const second = await run(onEnv, { assets: ruleTocAssets({ extraRuleRecords }), toc: () => ({ unitIndexes: [outside + 1], note: '' }),
-    select: input => ({ selectedIds: input.groups.find(group => group.channel === 'rule_toc').units.map(row => row[0]), note: '' }) });
+    select: input => ({ selectedIds: input.groups.find(group => group.groupId === ordered[outside]).units.map(row => row[0]), note: '' }) });
   assert.deepEqual(second.bounded.ruleToc.inOtherLanesUnitKeys, []);
   assert.equal(second.bounded.reading.offered[0].unitKey, ordered[outside]);
   const input = delivered(second.calls.find(call => call.kind === 'selection'));
-  const ids = input.groups.find(group => group.channel === 'rule_toc').units.map(row => row[0]);
+  const ids = input.groups.find(group => group.groupId === ordered[outside]).units.map(row => row[0]);
+  assert.equal(input.groups.some(group => Object.hasOwn(group, 'channel')), false);
   for (const id of ids) assert.ok(Number.isSafeInteger(input.packingBudget.ruleUnitChars[id]), id);
   assert.equal(second.bounded.ruleToc.selectedIntoPackCount, 1);
 });
