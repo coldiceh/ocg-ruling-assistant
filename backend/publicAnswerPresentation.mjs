@@ -64,15 +64,28 @@ const EVIDENCE_SUPPLEMENT_NOTES = Object.freeze({
     ja: "（初回の根拠が不足していたため、追加検索を1回行いました）",
   }),
   attempted: Object.freeze({
-    "zh-CN": "（首轮证据不足，已尝试补充检索一次，但未得到可用的新资料，以下仍为首轮回答）",
-    en: "(The first round found the evidence insufficient; one supplementary search was tried but found no usable new material, so this is the first-round answer.)",
-    ja: "（初回の根拠が不足していたため追加検索を1回試みましたが、使える新しい資料は得られなかったため、初回の回答を表示しています）",
+    "zh-CN": "（首轮证据不足，已尝试补充检索一次，但未得到可用的新资料，以上仍为首轮回答）",
+    en: "(The first round found the evidence insufficient; one supplementary search was tried but found no usable new material, so the answer above is the first-round answer.)",
+    ja: "（初回の根拠が不足していたため追加検索を1回試みましたが、使える新しい資料は得られなかったため、上記は初回の回答です）",
+  }),
+  timedOut: Object.freeze({
+    "zh-CN": "（首轮证据不足，补充检索因时间限制中止，以上仍为首轮回答）",
+    en: "(The first round found the evidence insufficient; the supplementary search was stopped by the time limit, so the answer above is the first-round answer.)",
+    ja: "（初回の根拠が不足していましたが、追加検索は時間制限により中止したため、上記は初回の回答です）",
+  }),
+  cancelled: Object.freeze({
+    "zh-CN": "（首轮证据不足，补充检索因请求中断而中止，以上仍为首轮回答）",
+    en: "(The first round found the evidence insufficient; the supplementary search was stopped because the request was interrupted, so the answer above is the first-round answer.)",
+    ja: "（初回の根拠が不足していましたが、追加検索はリクエストの中断により中止したため、上記は初回の回答です）",
   }),
 });
 
 export function evidenceSupplementNote(answer) {
-  const status = answer?.debug?.evidenceSupplement?.status;
+  const supplement = answer?.debug?.evidenceSupplement;
+  const status = supplement?.status;
   const kind = status === "applied" ? "applied"
+    : status === "cancelled" ? "cancelled"
+    : status === "failed" && supplement?.failureReason === "deadline_exceeded" ? "timedOut"
     : status === "failed" || status === "no_new_evidence" ? "attempted" : "";
   if (!kind) return "";
   const locale = answer?.answerLocale === "en" || answer?.answerLocale === "ja" ? answer.answerLocale : "zh-CN";
