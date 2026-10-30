@@ -11,7 +11,8 @@ import { runCloudBaiRequest, runCloudGeminiRequest, runOfficialLunaGenerationReq
   currentCloudPreparationRemainingUsd } from './cloudRequestBudget.mjs';
 import { loadRuleDenseSearch, queryEmbeddingText, RULE_EMBEDDING_MODEL,
   RULE_EMBEDDING_DIMENSION } from './geminiRuleDenseSearch.mjs';
-import { admitWholeReadingUnits, mapRankedUnits, READING_SCHEDULER_CONTRACT } from './evidenceReadingScheduler.mjs';
+import { admitWholeReadingUnits, mapRankedUnits, READING_SCHEDULER_CONTRACT,
+  READING_SCHEDULER_PRIORITY_CONTRACT } from './evidenceReadingScheduler.mjs';
 import { createReadingMeasure, resolveReadingMeasurePolicy } from './evidenceReadingMeasure.mjs';
 import { createNavigationSearch } from './evidenceNavigationSearch.mjs';
 import { loadEvidenceGenerationContract, generationContractSha256, buildEvidenceInputMeasurement,
@@ -20,6 +21,8 @@ import { createEvidenceGenerationTransport } from './evidenceGenerationTransport
 import { createDecisionsTransport, parseDecisionsAnswers, decisionsCostUsd } from './decisionsTransport.mjs';
 import { createDecisionsSelectionFlow, executeSelectionFlow } from './decisionsSelectionFlow.mjs';
 import { createDecisionsSourceResolver, createDecisionsReadingDependencies } from './decisionsReadingDependencies.mjs';
+import { RULE_TOC_CHANNEL, RULE_TOC_STAGE, RULE_TOC_CONTRACT_STAGE, RULE_TOC_RETRY_INSTRUCTION, resolveRuleTocConfig,
+  buildRuleToc, ruleTocRequestBody, normalizeRuleTocOutput, summarizeRuleTocCalls } from './ruleTocAdmission.mjs';
 
 const DECISIONS_SELECTION_CONTRACT = Object.freeze({ providerId: 'openai', modelId: 'gpt-6-luna',
   api: 'decisions', profileId: 'openai-decisions-v4', maxBillableOutputTokens: 0,
@@ -452,6 +455,23 @@ function applyGenerationContract(body, contract) {
   } };
 }
 
+// RULE_NAVIGATION_PARTITION selects how navigation-search hits are split into
+// lanes (identity partitioning only; ranking and limits are unchanged):
+//   legacy (default, identical to main): by each navigation record's own
+//     sourceKind field. Released ocg-rule records have none, so the rule lane
+//     only ever holds Konami units.
+//   unit-source-kind: by the bound reading unit's sourceKind (fix 69af952).
+//   source-family: as unit-source-kind, and rule units further per source
+//     family (the rule document id namespace: ocg-rule, konami), each with its
+//     own top 32 and lane navigation_lexical:<family> (734af32).
+export const RULE_NAVIGATION_PARTITIONS = Object.freeze(['legacy', 'unit-source-kind', 'source-family']);
+
+export function resolveRuleNavigationPartition(env = {}) {
+  const value = String(env.RULE_NAVIGATION_PARTITION ?? '').trim() || 'legacy';
+  if (!RULE_NAVIGATION_PARTITIONS.includes(value)) throw new Error('evidence_config_invalid_RULE_NAVIGATION_PARTITION');
+  return value;
+}
+
 function generationReasoningEffort(contract) {
   return contract.reasoningConfig?.responses?.effort
     ?? contract.reasoningConfig?.thinkingConfig?.thinkingLevel
@@ -608,14 +628,23 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
     if (useDecisions && !(env.OPENAI_DECISIONS_API_KEY || env.OPENAI_API_KEY)) {
       throw new Error('decisions_api_key_required');
     }
+    // RULE_TOC_ADMIT_ENABLED (default off) adds one optional ToC stage. Its
+    // contract and transport exist only when it is on, so the off path keeps
+    // the same contracts, profile hash and requests.
+    const ruleTocConfig = resolveRuleTocConfig(env);
+    const navigationPartition = resolveRuleNavigationPartition(env);
     const contracts = Object.freeze({
       plan: loadGenerationContract('planning', { env }),
       selection: useDecisions ? DECISIONS_SELECTION_CONTRACT : loadGenerationContract('selection', { env }),
+      ...(ruleTocConfig ? { [RULE_TOC_STAGE]: loadGenerationContract(RULE_TOC_CONTRACT_STAGE,
+        { env: { ...env, EVIDENCE_NAVIGATION_PROFILE: ruleTocConfig.profile } }) } : {}),
     });
     const transports = Object.freeze({
       plan: createEvidenceGenerationTransport({ contract: contracts.plan, env, fetchImpl }),
       selection: useDecisions ? createDecisionsTransport({ env, fetchImpl, ...(budgetedRequest ? { budgetedRequest } : {}) })
         : createEvidenceGenerationTransport({ contract: contracts.selection, env, fetchImpl }),
+      ...(ruleTocConfig ? { [RULE_TOC_STAGE]: createEvidenceGenerationTransport({
+        contract: contracts[RULE_TOC_STAGE], env, fetchImpl }) } : {}),
     });
     const profileHash = hash(JSON.stringify(contracts));
     const timingsMs = {}, calls = [], counts = [], denseSkipped = [];
@@ -651,18 +680,24 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
       measuredBodies.set(key, measurement);
       return measurement;
     }
-    async function generate(body, measurement, stage, normalize, retry = false) {
+    // callSignal lets the optional ToC call be cancelled on its own; plan and
+    // selection always use the request signal.
+    async function generate(body, measurement, stage, normalize, retry = false, callSignal = signal) {
       const contract = contracts[stage], transport = transports[stage];
       const official = transport.channel === 'official';
-      maxUsd = Math.min(perQuestionMaxUsd, official ? Infinity
-        : await remainingBudget({provider:contract.providerId,signal}));
+      const stageMaxUsd = Math.min(perQuestionMaxUsd, official ? Infinity
+        : await remainingBudget({provider:contract.providerId,signal:callSignal}));
+      // The optional ToC call keeps its cap local. maxUsd is shared state that
+      // later sizes the selection window, so a concurrent ToC lookup must not
+      // replace the cap written by the plan or the embeddings.
+      if (stage !== RULE_TOC_STAGE) maxUsd = stageMaxUsd;
       const wireBody = transport.prepareRequest(applyGenerationContract(body, contract));
       assertGenerationCapacity({ body: wireBody, contract, measurement });
       const reserve = estimateGenerationUpperBoundUsd({ measurement, contract }).amountUsd;
-      const futureOutput = stage === 'plan'
+      const futureOutput = stage === 'plan' || stage === RULE_TOC_STAGE
         ? contracts.selection.maxBillableOutputTokens * contracts.selection.pricingContract.outputUsdPerMillion / 1e6 : 0;
-      if (spentUsd + reserve + futureOutput > maxUsd) throw new Error('evidence_request_budget_exceeded');
-      signal.throwIfAborted();
+      if (spentUsd + reserve + futureOutput > stageMaxUsd) throw new Error('evidence_request_budget_exceeded');
+      callSignal.throwIfAborted();
       const row = { stage, operation: 'generate_content', providerId: contract.providerId, model: contract.modelId,
         ...(official ? { channel: 'official', endpointProvider: 'openai' } : {}),
         generationContractSha256: generationContractSha256(contract), measurement,
@@ -674,13 +709,13 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
       let submitted = false;
       try {
         const raw = await reserveGenerationRequest({ body: wireBody, model: contract.modelId, operation: 'generate_content',
-          measurement, generationContract: contract, cachedTokenCount: 0, signal,
+          measurement, generationContract: contract, cachedTokenCount: 0, signal: callSignal,
           ...(official ? { transportChannel: 'official', env, fetchImpl } : {}),
           invoke: () => {
             submitted = true;
             return contract.providerId === 'gemini'
               ? api('generateContent', wireBody, contract.modelId)
-              : transport.invoke(wireBody, { measurement, signal });
+              : transport.invoke(wireBody, { measurement, signal: callSignal });
           } });
         await onEvent({ type: 'response', stage, raw });
         transport.validateResponse(raw);
@@ -702,7 +737,7 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
         if (!submitted) { spentUsd -= row.accountedUsd; row.accountedUsd = 0; row.submitted = false; }
         row.elapsedMs = performance.now() - at; row.status = 'failed'; row.error = error.message;
         const identityFailure = identityFailures.get(error);
-        const protocol = !!identityFailure || error instanceof SyntaxError || /^evidence_plan_.*_absent$|^gemini_bounded_output_absent$|^evidence_generation_output_absent$|^evidence_selection_fields_absent$/.test(error.message);
+        const protocol = !!identityFailure || error instanceof SyntaxError || /^evidence_plan_.*_absent$|^gemini_bounded_output_absent$|^evidence_generation_output_absent$|^evidence_selection_fields_absent$|^rule_toc_output_invalid$/.test(error.message);
         const transient = [502,503,504,520,521,522,523,524].includes(error.status);
         if (!retry && (protocol || transient)) {
           const nextBody = protocol ? { ...body, contents: [...body.contents,
@@ -711,9 +746,10 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
               ...identityFailure,
             }) : stage === 'plan'
               ? '只返回JSON对象，包含needs数组；每项完整包含question、ruleQuery、qaQuery字符串。无需解释。'
+              : stage === RULE_TOC_STAGE ? RULE_TOC_RETRY_INSTRUCTION
               : '只返回JSON对象，包含selectedIds字符串数组和note字符串；缺少依据时在note说明，不编造编号。无需解释。' }] }] } : body;
-          if (transient) await delay(500, undefined, { signal });
-          return generate(nextBody, await measure(nextBody, stage, `${stage}_retry`), stage, normalize, true);
+          if (transient) await delay(500, undefined, { signal: callSignal });
+          return generate(nextBody, await measure(nextBody, stage, `${stage}_retry`), stage, normalize, true, callSignal);
         }
         throw error;
       }
@@ -772,6 +808,64 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
         } finally { row.elapsedMs = performance.now() - at; }
       }
     }
+    // Optional ToC stage. Its failure, timeout or empty answer never fails the
+    // request: the state below records it and the window is assembled as usual.
+    const ruleToc = ruleTocConfig ? { enabled: true, channel: RULE_TOC_CHANNEL, profile: ruleTocConfig.profile,
+      provider: contracts[RULE_TOC_STAGE].providerId, model: contracts[RULE_TOC_STAGE].modelId,
+      reasoningEffort: generationReasoningEffort(contracts[RULE_TOC_STAGE]),
+      ...(transports[RULE_TOC_STAGE].channel === 'official' ? { transportChannel: 'official' } : {}),
+      maxUnits: ruleTocConfig.maxUnits, timeoutMs: ruleTocConfig.timeoutMs,
+      descriptionChars: ruleTocConfig.descriptionChars, status: 'not_started' } : null;
+    const ruleTocAbort = ruleTocConfig ? new AbortController() : null;
+    function ruleTocTelemetry() {
+      const value = structuredClone(ruleToc);
+      for (const [keys, count] of [['selectedUnitKeys', 'selectedCount'],
+        ['inBaselineWindowUnitKeys', 'inBaselineWindowCount'], ['inOtherLanesUnitKeys', 'inOtherLanesCount'],
+        ['admittedUnitKeys', 'admittedCount'], ['selectedIntoPackUnitKeys', 'selectedIntoPackCount']]) {
+        if (Array.isArray(value[keys])) value[count] = value[keys].length;
+      }
+      return value;
+    }
+    async function runRuleToc(assetReady) {
+      const queuedAt = performance.now();
+      let timer, started = null;
+      try {
+        const { assets, snapshot } = await assetReady;
+        ruleToc.assetWaitMs = performance.now() - queuedAt;
+        const toc = buildRuleToc({ rules: snapshot.rules, descriptionChars: ruleTocConfig.descriptionChars,
+          navigationRecordsByUnit: assets.navigationRecordsByUnit
+            || new Map((assets.navigationRecords || []).map(record => [record.unitKey, record])) });
+        const body = ruleTocRequestBody({ toc, question: userQuery, resolvedCards: cardResolution.resolvedCards || [],
+          maxUnits: ruleTocConfig.maxUnits });
+        Object.assign(ruleToc, { status: 'pending', tocUnits: toc.lineCount, tocChars: toc.text.length });
+        started = performance.now();
+        timer = setTimeout(() => ruleTocAbort.abort(new Error('rule_toc_timeout')), ruleTocConfig.timeoutMs);
+        const callSignal = AbortSignal.any([signal, ruleTocAbort.signal]);
+        const result = await generate(body, await measure(body, RULE_TOC_STAGE), RULE_TOC_STAGE,
+          output => normalizeRuleTocOutput(output, { unitKeys: toc.unitKeys, maxUnits: ruleTocConfig.maxUnits }),
+          false, callSignal);
+        Object.assign(ruleToc, { status: result.unitKeys.length ? 'selected' : 'empty',
+          indexes: result.indexes, selectedUnitKeys: result.unitKeys, invalidIndexes: result.invalidIndexes,
+          duplicateIndexes: result.duplicateIndexes, truncatedIndexes: result.truncatedIndexes,
+          returnedCount: result.returnedCount, note: result.note });
+      } catch (error) {
+        // timeout: its own timer; aborted: the request failed elsewhere, was
+        // cancelled by the caller or hit its deadline; failed: anything else.
+        const timedOut = ruleTocAbort.signal.aborted && ruleTocAbort.signal.reason?.message === 'rule_toc_timeout';
+        Object.assign(ruleToc, { status: timedOut ? 'timeout'
+          : ruleTocAbort.signal.aborted || signal.aborted ? 'aborted' : 'failed',
+        error: String(error?.message || error).slice(0, 200), selectedUnitKeys: [] });
+      } finally {
+        clearTimeout(timer);
+        // Model call time, including the format retry; asset wait is separate.
+        ruleToc.elapsedMs = started === null ? null : performance.now() - started;
+        Object.assign(ruleToc, summarizeRuleTocCalls(calls.filter(row => row.stage === RULE_TOC_STAGE)));
+        // The final ToC state is also reported when it settles after the
+        // request has already ended. Never awaited: it cannot delay the request.
+        Promise.resolve().then(() => onEvent({ type: 'rule_toc', ...ruleTocTelemetry() })).catch(() => {});
+      }
+      return ruleToc;
+    }
     try {
       const input = questionInput(userQuery, cardResolution, retrievedEvidence);
       const planBody = boundedPlanBody(input);
@@ -794,6 +888,9 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
         const result = await generate(planBody, await measure(planBody, 'plan'), 'plan', normalizeEvidencePlan);
         timingsMs.plan = performance.now() - at; completedPlan = result; return result;
       })();
+      // The ToC input is the original question, card names and the release
+      // table, so the call runs alongside planning and retrieval.
+      const ruleTocReady = ruleTocConfig ? runRuleToc(assetReady) : null;
       const results = await Promise.allSettled([assetReady, planReady, embedBatch([userQuery], true)]);
       for (const result of results) if (result.status === 'rejected') throw result.reason;
       const { assets, snapshot, cacheHit, dense, qaDense } = results[0].value;
@@ -807,6 +904,21 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
       timingsMs.queryEmbedding = performance.now() - at;
       const lanes = [];
       const ruleKeys = result => rules.denseMapping.get(result.id) || [];
+      // Navigation lanes (RULE_NAVIGATION_PARTITION). With source-family, rule
+      // navigation is partitioned per source family, the namespace of the rule
+      // document id (ocg-rule, konami): each family gets its own top 32, so one
+      // family cannot fill the whole rule navigation lane. Identity only.
+      const ruleFamilyOf = unit => String(unit.sourceId).split(':')[0];
+      const ruleFamilies = navigationPartition === 'source-family'
+        ? uniq([...rules.readingUnits.values()].map(ruleFamilyOf)) : null;
+      const navigationSearchOptions = navigationPartition === 'legacy'
+        ? { sourceKinds: ['rule','qa','faq'], limit: 32 }
+        : ruleFamilies ? { sourceKinds: [...ruleFamilies.map(family => `rule:${family}`), 'qa', 'faq'], limit: 32,
+          sourceKindForUnit: unitKey => {
+            const unit = units.get(unitKey);
+            return unit?.sourceKind === 'rule' ? `rule:${ruleFamilyOf(unit)}` : unit?.sourceKind;
+          } }
+          : { sourceKinds: ['rule','qa','faq'], limit: 32, sourceKindForUnit: unitKey => units.get(unitKey)?.sourceKind };
       const qaKeys = item => qaByParent.get(item.handle) || [];
       const confirmedCardIds = uniq((cardResolution.resolvedCards || []).map(card => card?.id)
         .filter(cardId => typeof cardId === 'string' && cardId));
@@ -861,10 +973,15 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
         for (const kind of ['qa','faq']) channels.push([kind, 'original_lexical', qaLexical[kind]]);
         timingsMs.lexicalSearch += performance.now() - searchAt;
         searchAt = performance.now();
-        const navigation = snapshot.navigationSearch.searchBySourceKind(query.text, {
-          sourceKinds: ['rule','qa','faq'], limit: 32,
-        });
-        for (const kind of ['rule','qa','faq']) channels.push([kind, 'navigation_lexical',
+        // Outside legacy, partition by the bound reading unit's own sourceKind,
+        // as the QA lexical lane does (released ocg-rule navigation records
+        // carry no sourceKind field), and with source-family split rule units
+        // further by family. Ranking is unchanged.
+        const navigation = snapshot.navigationSearch.searchBySourceKind(query.text, navigationSearchOptions);
+        if (ruleFamilies) for (const family of ruleFamilies) channels.push(['rule', `navigation_lexical:${family}`,
+          mapRankedUnits(navigation[`rule:${family}`], hit => [hit.unitKey])]);
+        else channels.push(['rule', 'navigation_lexical', mapRankedUnits(navigation.rule, hit => [hit.unitKey])]);
+        for (const kind of ['qa','faq']) channels.push([kind, 'navigation_lexical',
           mapRankedUnits(navigation[kind], hit => [hit.unitKey])]);
         timingsMs.navigationSearch += performance.now() - searchAt;
         channelCache.set(query.text, channels);
@@ -947,6 +1064,9 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
         const groups = offered.flatMap(bundle => {
           const rules = bundle.entries.filter(entry => entry.kind === 'rule').map(entry => ({ ...entry.body, id: entry.alias }));
           const items = bundle.entries.filter(entry => entry.kind === 'qa').map(entry => ({ ...entry.body, handle: entry.alias }));
+          // ToC-admitted bundles are serialized like every other group; their
+          // origin is kept in telemetry (admittedBy, rule_toc hits) only, so the
+          // selector reads no extra hint.
           return [ ...(rules.length ? [{ groupId: bundle.unitKey, kind: 'rule', units: rules }] : []),
             ...(items.length ? [{ groupId: bundle.unitKey, kind: 'qa', items }] : []) ];
         });
@@ -955,11 +1075,12 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
       }
       const exactWindowChars = offered => JSON.stringify(selectionBody(offered)).length;
       const readingMeasurePolicy = resolveReadingMeasurePolicy(env.EVIDENCE_READING_MEASURE_POLICY);
-      let readingMeasure = null;
-      const assemble = maxChars => {
+      let readingMeasure = null, ruleTocLanes;
+      const assemble = (maxChars, priorityLanes = ruleTocLanes) => {
         readingMeasure = createReadingMeasure({ exactMeasure: exactWindowChars, maxChars, policy: readingMeasurePolicy });
         const result = admitWholeReadingUnits({ lanes, materialize, getReferences, maxChars, signal,
-          maxEntries: useDecisions ? 253 : Infinity, measure: readingMeasure.measure });
+          maxEntries: useDecisions ? 253 : Infinity, measure: readingMeasure.measure,
+          ...(priorityLanes ? { priorityLanes } : {}) });
         // The admitted window is verified once against the exact serialized
         // request. The additive policy admits by an upper bound, so this check
         // normally passes without removing anything; it is the mechanical
@@ -977,6 +1098,37 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
         result.omittedCount = result.omitted.length;
         return result;
       };
+      if (ruleTocReady) {
+        // The window this request would read without the ToC stage. It is
+        // assembled while the ToC call may still be running and is used only
+        // to report which chosen units would have been read anyway.
+        const baseline = assemble(readChars, null);
+        const waitAt = performance.now();
+        await ruleTocReady;
+        timingsMs.ruleTocWait = performance.now() - waitAt;
+        const chosen = ruleToc.selectedUnitKeys || [];
+        // A chosen unit outside every lane is materialized now. Packing costs
+        // are per entry, so only the newly created entries are measured.
+        const known = new Set(entries.keys());
+        chosen.forEach(materialize);
+        const added = [...entries.values()].filter(entry => !known.has(entry.id));
+        if (added.length) {
+          const addedCosts = computeGeminiSelectionPackingBudget({ userQuery, answerLocale, cardResolution,
+            retrievedEvidence, maxPromptChars,
+            rules: added.filter(entry => entry.kind === 'rule').map(entry => entry.body),
+            qaItems: added.filter(entry => entry.kind === 'qa').map(entry => entry.body) });
+          for (const entry of added) {
+            if (entry.kind === 'rule') aliasCosts.ruleUnitChars[entry.alias] = addedCosts.ruleUnitChars[entry.id];
+            else aliasCosts.qaHandleChars[entry.alias] = addedCosts.qaHandleChars[entry.id];
+          }
+        }
+        ruleTocLanes = [{ needId: RULE_TOC_CHANNEL, queryVariantId: RULE_TOC_CHANNEL, sourceKind: 'rule',
+          channel: RULE_TOC_CHANNEL, hits: chosen.map((unitKey, sourceRank) => ({ unitKey, sourceRank, mappingOrdinal: 0 })) }];
+        const baselineKeys = new Set(baseline.offered.map(bundle => bundle.unitKey));
+        Object.assign(ruleToc, { inBaselineWindowUnitKeys: chosen.filter(key => baselineKeys.has(key)),
+          inOtherLanesUnitKeys: chosen.filter(key => lanes.some(lane => lane.hits.some(hit => hit.unitKey === key))),
+          baselineWindow: { offeredUnits: baseline.offered.length, measuredChars: baseline.measuredChars } });
+      }
       let admitted = assemble(readChars);
       timingsMs.candidateAssembly = performance.now() - assemblyAt;
       timingsMs.search = performance.now() - at;
@@ -1022,9 +1174,18 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
         admitted.measuredChars = JSON.stringify(body).length;
       }
       }
+      if (ruleToc) {
+        const offeredKeys = new Set(admitted.offered.map(bundle => bundle.unitKey));
+        const chosen = ruleToc.selectedUnitKeys || [];
+        Object.assign(ruleToc, { admittedUnitKeys: chosen.filter(key => offeredKeys.has(key)),
+          notAdmitted: chosen.filter(key => !offeredKeys.has(key)).map(unitKey => ({ unitKey,
+            reason: admitted.omitted.find(row => row.unitKey === unitKey)?.reason ?? null })),
+          window: { offeredUnits: admitted.offered.length, measuredChars: admitted.measuredChars } });
+      }
       completedReading = { offered: admitted.offered.map(bundle => ({ unitKey: bundle.unitKey,
-        atomIds: bundle.entries.map(entry => entry.id), hits: bundle.hits })), omitted: admitted.omitted,
-        lanes: lanes.map(lane => ({ ...lane, hits: lane.hits })), denseSkipped };
+        atomIds: bundle.entries.map(entry => entry.id), hits: bundle.hits,
+        ...(bundle.admittedBy ? { admittedBy: bundle.admittedBy } : {}) })), omitted: admitted.omitted,
+        lanes: [...lanes, ...(ruleTocLanes || [])].map(lane => ({ ...lane, hits: lane.hits })), denseSkipped };
       await onEvent({ type: 'reading', ...completedReading });
       const visibleEntries = new Map(admitted.offered.flatMap(bundle => bundle.entries.map(entry => [entry.alias, entry])));
       at = performance.now();
@@ -1114,6 +1275,11 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
         return selection;
       });
       timingsMs.selection = performance.now() - at;
+      if (ruleToc) {
+        const selectedAtomIds = new Set(selection.selectedIds.map(id => visibleEntries.get(id)?.id ?? id));
+        ruleToc.selectedIntoPackUnitKeys = (ruleToc.admittedUnitKeys || []).filter(key =>
+          (rules.readingUnits.get(key)?.atomIds || []).some(atomId => selectedAtomIds.has(atomId)));
+      }
       if (selection.unableToSelect) throw Object.assign(new Error('evidence_model_unable_to_select'), {
         code: 'evidence_model_unable_to_select', statusCode: 503, selectionFailure: selection,
       });
@@ -1134,9 +1300,12 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
       const telemetry = { provider: contracts.plan.providerId, model: contracts.plan.modelId,
         providerUsed: contracts.plan.providerId, modelUsed: contracts.plan.modelId,
         reasoningEffort: generationReasoningEffort(contracts.plan),
-        stageTelemetry: { planning: generationStageTelemetry(contracts.plan),
+        stageTelemetry: { planning: { ...generationStageTelemetry(contracts.plan),
+            ...(transports.plan.channel === 'official' ? { channel: 'official', endpointProvider: 'openai' } : {}) },
           selection: { ...generationStageTelemetry(contracts.selection),
-            ...(transports.selection.channel === 'official' ? { channel: 'official', endpointProvider: 'openai' } : {}) } },
+            ...(transports.selection.channel === 'official' ? { channel: 'official', endpointProvider: 'openai' } : {}) },
+          ...(ruleToc ? { ruleToc: { ...generationStageTelemetry(contracts[RULE_TOC_STAGE]),
+            ...(transports[RULE_TOC_STAGE].channel === 'official' ? { channel: 'official', endpointProvider: 'openai' } : {}) } } : {}) },
         generationProfileHash: profileHash, generationContracts: contracts, strategy: 'source_preprocessed_v1',
         evidenceSelector: useDecisions ? 'decisions' : 'luna',
         dryRun: false, warnings: [], ...revisions, assetsCacheHit: cacheHit,
@@ -1147,7 +1316,10 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
         estimatedCostUsd: spentUsd, estimatedCostCny: spentUsd * fx, actualCostKnown: false,
         costBasis: 'provider_list_theoretical', cacheProvisionUsd: 0, queryPlan,
         bounded: { calls, tokenCounts: counts, finalModelCalls: 0, reading: completedReading,
-          schedulerContract: READING_SCHEDULER_CONTRACT, readingMeasure: readingMeasure?.stats || null, coverageScope: assets.coverageScope,
+          schedulerContract: ruleTocConfig ? READING_SCHEDULER_PRIORITY_CONTRACT : READING_SCHEDULER_CONTRACT,
+          ...(navigationPartition !== 'legacy' ? { navigationPartition } : {}),
+          ...(ruleToc ? { ruleToc: ruleTocTelemetry() } : {}),
+          readingMeasure: readingMeasure?.stats || null, coverageScope: assets.coverageScope,
           ...(decisionsState ? { decisions: { acquisitionStop: decisionsState.acquisitionStop,
             modelReportedStatus: decisionsState.finalStatus, events: decisionsState.events } } : {}),
           readGroupIds: admitted.offered.map(bundle => bundle.unitKey), selectedIds: selection.selectedIds,
@@ -1159,7 +1331,9 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
       await onEvent({ type: 'packed', selection: resolved, ...result });
       return { ...result, telemetry };
     } catch (error) {
+      ruleTocAbort?.abort(new Error('rule_toc_request_failed'));
       error.boundedRetrieval = { calls, tokenCounts: counts, estimatedCostUsd: spentUsd,
+        ...(ruleToc ? { ruleToc: ruleTocTelemetry() } : {}),
         elapsedBeforeRetrievalMs, elapsedMs: performance.now() - started, timingsMs: { ...timingsMs },
         finalModelCalls: 0, completedPlan, reading: completedReading,
         ...(error.decisionsFailure ? { decisionsFailure: error.decisionsFailure } : {}),

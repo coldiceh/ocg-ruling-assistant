@@ -93,3 +93,41 @@ test('adding supplemental needs does not dilute the original query reading turn'
   ] });
   assert.deepEqual(result.offered.map(bundle => bundle.unitKey), ['o1', 'a1', 'o2', 'b1']);
 });
+
+test('priority lanes are offered whole before the rotation and still count against the window', () => {
+  const lanes = [lane('original', 'original', 'rule', 'dense', ['o1', 'o2', 'p2'])];
+  const priorityLanes = [lane('rule_toc', 'rule_toc', 'rule', 'rule_toc', ['p1', 'p2'])];
+  const result = admitWholeReadingUnits({ materialize, measure, maxChars: 3, lanes, priorityLanes });
+  assert.deepEqual(result.offered.map(bundle => bundle.unitKey), ['p1', 'p2', 'o1']);
+  assert.deepEqual(result.offered.map(bundle => bundle.admittedBy), ['rule_toc', 'rule_toc', undefined]);
+  // A unit in both a priority lane and an ordinary lane keeps every hit.
+  assert.deepEqual(result.offered[1].hits.map(hit => hit.channel).sort(), ['dense', 'rule_toc']);
+  assert.deepEqual(result.omitted.map(row => [row.unitKey, row.reason]), [['o2', 'reading_capacity']]);
+  assert.equal(result.contract, 'priority-whole-unit-then-original-support-need-unseen-whole-bundle-v3');
+});
+
+test('a priority unit over the window is omitted with the ordinary reason and later ones are still tried', () => {
+  const bundles = {
+    big: { unitKey: 'big', sourceKind: 'rule', entries: [{ id: 'big', chars: 50 }] },
+    small: { unitKey: 'small', sourceKind: 'rule', entries: [{ id: 'small', chars: 1 }] },
+    o1: { unitKey: 'o1', sourceKind: 'rule', entries: [{ id: 'o1', chars: 1 }] },
+  };
+  const result = admitWholeReadingUnits({ materialize: key => bundles[key], measure, maxChars: 2,
+    lanes: [lane('original', 'original', 'rule', 'dense', ['o1'])],
+    priorityLanes: [lane('rule_toc', 'rule_toc', 'rule', 'rule_toc', ['big', 'small'])] });
+  assert.deepEqual(result.offered.map(bundle => bundle.unitKey), ['small', 'o1']);
+  assert.equal(result.omitted[0].unitKey, 'big');
+  assert.equal(result.omitted[0].reason, 'reading_capacity');
+  assert.equal(result.omitted[0].hit.channel, 'rule_toc');
+});
+
+test('without priority lanes the v2 contract and admission order are unchanged; empty priority uses v3', () => {
+  const lanes = [lane('original', 'original', 'rule', 'dense', ['o1', 'o2']), lane('n1', 'n1.zh', 'rule', 'dense', ['a1'])];
+  const plain = admitWholeReadingUnits({ materialize, measure, maxChars: 10, lanes });
+  const empty = admitWholeReadingUnits({ materialize, measure, maxChars: 10, lanes, priorityLanes: [] });
+  assert.equal(plain.contract, 'original-support-need-unseen-whole-bundle-v2');
+  assert.equal(empty.contract, 'priority-whole-unit-then-original-support-need-unseen-whole-bundle-v3');
+  assert.deepEqual(empty.offered, plain.offered);
+  assert.throws(() => admitWholeReadingUnits({ materialize, measure, maxChars: 10, lanes,
+    priorityLanes: [lane('original', 'original', 'rule', 'rule_toc', ['x'])] }), /evidence_reading_lane_duplicate/u);
+});
