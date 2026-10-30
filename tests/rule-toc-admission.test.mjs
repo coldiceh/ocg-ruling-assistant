@@ -109,6 +109,29 @@ test('the ToC call is reserved and settled in the official daily ledger like the
   assert.ok(Number.isFinite(bounded.ruleToc.elapsedMs) && Number.isFinite(bounded.ruleToc.assetWaitMs));
 });
 
+test('the ToC budget lookup does not lift the Gemini cap that sizes the selection window', async () => {
+  // The Gemini remaining budget drops before the planned-query embedding (as
+  // if other requests spent it); the b.ai ToC lookup answers only after that.
+  // The selection window must still be sized against the Gemini cap.
+  const baiEnv = { ...fixtureEnv, RAG_EVIDENCE_LUNA_CHANNEL: '', BAI_API_KEY: 'fixture-bai' };
+  const budget = () => {
+    let geminiLookups = 0, releaseToc;
+    const tocLookup = new Promise(resolve => { releaseToc = resolve; });
+    return async ({ provider }) => {
+      if (provider === 'gemini') {
+        if (++geminiLookups === 3) setTimeout(() => releaseToc(Infinity), 5);
+        return geminiLookups >= 3 ? 1e-6 : Infinity;
+      }
+      return geminiLookups < 3 ? tocLookup : Infinity;
+    };
+  };
+  for (const env of [baiEnv, { ...baiEnv, RULE_TOC_ADMIT_ENABLED: 'true' }]) {
+    const fixture = ruleTocProvider({ remainingBudget: budget(), toc: () => ({ unitIndexes: [], note: '' }) });
+    await assert.rejects(fixture.provider.retrieve(fixtureRetrieveInput(fixture.assets, env)),
+      /provider_fixed_input_budget_exceeded/u, env.RULE_TOC_ADMIT_ENABLED ? 'ToC on' : 'ToC off');
+  }
+});
+
 test('invalid and repeated indexes are dropped without a retry', async () => {
   const { calls, bounded } = await run(onEnv, { toc: () => ({ unitIndexes: [0, 6, -1, 2.5, 'abc', null, '3', 3, 5], note: '' }) });
   assert.equal(calls.filter(call => call.kind === 'toc').length, 1);

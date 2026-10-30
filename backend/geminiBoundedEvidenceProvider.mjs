@@ -667,14 +667,18 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
     async function generate(body, measurement, stage, normalize, retry = false, callSignal = signal) {
       const contract = contracts[stage], transport = transports[stage];
       const official = transport.channel === 'official';
-      maxUsd = Math.min(perQuestionMaxUsd, official ? Infinity
+      const stageMaxUsd = Math.min(perQuestionMaxUsd, official ? Infinity
         : await remainingBudget({provider:contract.providerId,signal:callSignal}));
+      // The optional ToC call keeps its cap local. maxUsd is shared state that
+      // later sizes the selection window, so a concurrent ToC lookup must not
+      // replace the cap written by the plan or the embeddings.
+      if (stage !== RULE_TOC_STAGE) maxUsd = stageMaxUsd;
       const wireBody = transport.prepareRequest(applyGenerationContract(body, contract));
       assertGenerationCapacity({ body: wireBody, contract, measurement });
       const reserve = estimateGenerationUpperBoundUsd({ measurement, contract }).amountUsd;
       const futureOutput = stage === 'plan' || stage === RULE_TOC_STAGE
         ? contracts.selection.maxBillableOutputTokens * contracts.selection.pricingContract.outputUsdPerMillion / 1e6 : 0;
-      if (spentUsd + reserve + futureOutput > maxUsd) throw new Error('evidence_request_budget_exceeded');
+      if (spentUsd + reserve + futureOutput > stageMaxUsd) throw new Error('evidence_request_budget_exceeded');
       callSignal.throwIfAborted();
       const row = { stage, operation: 'generate_content', providerId: contract.providerId, model: contract.modelId,
         ...(official ? { channel: 'official', endpointProvider: 'openai' } : {}),
