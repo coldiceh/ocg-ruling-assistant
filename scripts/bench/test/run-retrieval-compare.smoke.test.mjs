@@ -9,7 +9,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { parseRunnerArgs, planJobs } from "../run-retrieval-compare.mjs";
+import { integrityChecks, parseRunnerArgs, planJobs, unledgeredModelRequests } from "../run-retrieval-compare.mjs";
 
 const repositoryRoot = path.resolve(fileURLToPath(new URL("../../..", import.meta.url)));
 const runner = path.join(repositoryRoot, "scripts/bench/run-retrieval-compare.mjs");
@@ -36,6 +36,25 @@ test("argument parsing guards the arm flag, budget and mock ledger", () => {
     "Q1__baseline__r1", "Q1__toc__r1", "Q1__toc__r2", "Q1__baseline__r2",
     "Q2__toc__r1", "Q2__baseline__r1", "Q2__baseline__r2", "Q2__toc__r2",
   ]);
+});
+
+test("integrity checks catch silent mock fallbacks and model calls without a ledger ticket", () => {
+  const continuation = { cardNameModel: { dryRun: false, providerUsed: "openai", modelUsed: "gpt-6-luna" },
+    ruleQueryModel: { dryRun: false, evidenceSelector: "luna", stageTelemetry: { selection: { channel: "official" } } } };
+  const final = { debug: { dryRun: false, providerUsed: "openai", requestedModel: "gpt-6-astra" } };
+  const network = [
+    { route: "mock", host: "api.openai.com", path: "/v1/responses" },
+    { route: "mock", host: "generativelanguage.googleapis.com", path: "/v1beta/models/m:countTokens" },
+    { route: "ledger", host: "bench-ledger.invalid", path: "/" },
+    { route: "mock", host: "ygocdb.com", path: "/api/v0/" },
+  ];
+  assert.equal(integrityChecks({ continuation, final, network, calls: [{ status: "usage_settled" }] }).ok, true);
+  assert.deepEqual(unledgeredModelRequests(network, []), { requests: 1, tickets: 0, ok: false });
+  const fallback = integrityChecks({ continuation, final: { debug: { ...final.debug, dryRun: true, providerUsed: "mock" } },
+    network, calls: [{ status: "usage_settled" }] });
+  assert.equal(fallback.ok, false);
+  assert.deepEqual(fallback.checks.filter((check) => !check.ok).map((check) => check.id),
+    ["final_model_ran", "final_provider_openai"]);
 });
 
 test("mock run stops at the budget, resumes to completion and reports", { timeout: 600_000 }, async () => {

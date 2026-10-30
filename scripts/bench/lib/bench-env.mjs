@@ -45,7 +45,9 @@ export const MOCK_KEYS = Object.freeze({
 });
 
 const RELEVANT_PREFIX = /^(?:RAG_|GEMINI_|OCG_|EVIDENCE_|CLOUD_|PUBLIC_|BAI_|OPENAI_|RELAY_|DEEPSEEK_|GLM_|UPSTASH_|KV_|REDIS_|BAIGE_|ENGINE_REPRO|QUERY_AUDIT_|API_|RULE_|DECISIONS_|MODEL_|PRIVATE_EVALUATION_|SOURCE_TRANSLATION_|ADMIN_MODEL_LAB_|NODE_OPTIONS$)/u;
-const SECRET_NAME = /(?:KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL|AUTH)/u;
+// Whole name segments only: *_API_KEY, *_TOKEN, *_SECRET … are masked, while
+// settings such as RAG_CARD_SELECTION_MAX_OUTPUT_TOKENS stay readable.
+const SECRET_NAME = /(?:^|_)(?:KEY|TOKEN|SECRET|PASSWORD|CREDENTIALS?|AUTH)(?:$|_)/u;
 
 export function readVercelProductionEnv(vercelJsonPath) {
   const parsed = JSON.parse(readFileSync(vercelJsonPath, "utf8"));

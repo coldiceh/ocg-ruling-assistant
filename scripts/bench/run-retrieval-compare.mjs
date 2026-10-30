@@ -220,10 +220,24 @@ function dedupeReadingEvents(events, continuation) {
 
 // Mechanical identity checks: the configured production providers really ran
 // (no silent fallback to a dry-run/mock path because a key was missing).
-export function integrityChecks({ continuation, final }) {
+// Paid model endpoints. Every request to them must hold a budget-ledger
+// ticket, otherwise its cost would be missing from the run (Gemini
+// countTokens is free and is not ledgered by production).
+const MODEL_HOSTS = new Set(["api.openai.com", "generativelanguage.googleapis.com", "api.b.ai",
+  "api.deepseek.com", "open.bigmodel.cn", "api.siliconflow.cn", "api.moonshot.cn"]);
+
+export function unledgeredModelRequests(network = [], calls = []) {
+  const requests = network.filter((entry) => entry.route !== "ledger" && MODEL_HOSTS.has(entry.host)
+    && !/:countTokens$/u.test(entry.path || "")).length;
+  const tickets = calls.filter((call) => call.status !== "blocked").length;
+  return { requests, tickets, ok: requests <= tickets };
+}
+
+export function integrityChecks({ continuation, final, network = [], calls = [] }) {
   const card = continuation?.cardNameModel || {};
   const rule = continuation?.ruleQueryModel || {};
   const debug = final?.debug || {};
+  const coverage = unledgeredModelRequests(network, calls);
   const checks = [
     ["card_name_model_ran", card.dryRun === false, `${card.providerUsed}/${card.modelUsed}`],
     ["card_name_official_channel", card.providerUsed === "openai", String(card.providerUsed)],
@@ -234,6 +248,7 @@ export function integrityChecks({ continuation, final }) {
     ["final_model_ran", debug.dryRun === false, String(debug.dryRun)],
     ["final_provider_openai", debug.providerUsed === "openai", String(debug.providerUsed)],
     ["final_model_astra", debug.requestedModel === "gpt-6-astra", String(debug.requestedModel)],
+    ["ledger_covers_model_requests", coverage.ok, `${coverage.requests} model requests / ${coverage.tickets} ledger tickets`],
   ].map(([id, ok, observed]) => ({ id, ok: Boolean(ok), observed }));
   return { ok: checks.every((check) => check.ok), checks };
 }
@@ -307,7 +322,7 @@ export function buildResultDocument({ job, attempt, run, prepared, final, error,
         finalTokenUsage: final?.debug?.tokenUsage || null,
         finalEstimatedCostUsd: final?.debug?.estimatedCostUsd ?? null,
       } },
-    integrity: continuation && final ? integrityChecks({ continuation, final }) : null,
+    integrity: continuation && final ? integrityChecks({ continuation, final, network: context.network, calls }) : null,
     network: context.network,
     error: errorRecord(error),
     // Complete artifacts: the exact prepared continuation (prompt bundle =
