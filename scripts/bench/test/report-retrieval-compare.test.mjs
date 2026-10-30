@@ -197,5 +197,10 @@ test("evidence report lists rule sections and QA/FAQ numbers per arm, diffs agai
   assert.ok(rows.every((row) => row.endsWith("|  |")), "user column stays empty");
   assert.match(report, /\| nav-family\+toc \| 1\/1 \| \$0\.0402 \| \$0\.0402 \| \$0\.0010 \| \$0\.0100 \| \$0\.0002 \| \$0\.0200 \| \$0\.0090 \| \$0\.0000 \| 41\.0 \/ 41\.0 \/ 41\.0 \| 6\.0 \/ 6\.0 \/ 6\.0 \| 30\.0 \/ 30\.0 \/ 30\.0 \| 9\.0 \/ 9\.0 \/ 9\.0 \|/u);
   assert.match(report, /nav-family\+toc 相对 baseline：两臂都完成 1 题，证据编号集合不同 1 题/u);
+  // Every Markdown table keeps its column count (escaped pipes excluded).
+  const cellsOf = (line) => line.replace(/\\\|/gu, "").split("|").length;
+  for (const table of report.split(/\n(?!\|)/u).map((block) => block.split("\n").filter((line) => line.startsWith("|")))) {
+    assert.ok(table.every((line) => cellsOf(line) === cellsOf(table[0])), table.join("\n"));
+  }
   assert.doesNotMatch(report, /正确|错误|通过率|准确率/u);
 });

@@ -361,10 +361,11 @@ export function buildEvidenceCompareReport({ manifest, checkpoint, results: stor
   }
 
   lines.push("## 汇总（按臂）", "");
-  lines.push(`| 臂 | 完成/任务 | 费用合计 | 每题均值 | ${COST_STAGES.filter((stage) => stage !== "final")
-    .map((stage) => COST_STAGE_LABELS[stage]).join(" | ")} | 准备 均值/中位/P95 (s) | 规划 均值/中位/P95 (s) | `
-    + "选证 均值/中位/P95 (s) | ToC 调用 均值/中位/P95 (s) | 串行合计 (min) |");
-  lines.push(`|${Array.from({ length: 13 }, () => "---").join("|")}|`);
+  const summaryHeader = ["臂", "完成/任务", "费用合计", "每题均值",
+    ...COST_STAGES.filter((stage) => stage !== "final").map((stage) => COST_STAGE_LABELS[stage]),
+    "准备 均值/中位/P95 (s)", "规划 均值/中位/P95 (s)", "选证 均值/中位/P95 (s)", "ToC 调用 均值/中位/P95 (s)",
+    "串行合计 (min)"];
+  lines.push(`| ${summaryHeader.join(" | ")} |`, `|${summaryHeader.map(() => "---").join("|")}|`);
   const armResults = Object.fromEntries(arms.map((arm) => [arm, results.filter((result) => result.job.arm === arm)]));
   let serialMs = 0;
   for (const arm of arms) {
