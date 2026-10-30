@@ -1,12 +1,20 @@
-// Environment construction for the retrieval comparison runner. The two arms
-// share one base environment and differ only in RULE_TOC_ADMIT_ENABLED; the
-// runner asserts that after the production public-answer env transform.
+// Environment construction for the retrieval comparison runner. The arms are
+// the named configurations of backend/evidenceExperimentArms.mjs: they share
+// one base environment and differ only in the arm keys whose values differ;
+// the runner asserts that after the production public-answer env transform.
 import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 
+import {
+  DEFAULT_EVIDENCE_EXPERIMENT_ARMS, EVIDENCE_EXPERIMENT_ARM_DEFAULTS, EVIDENCE_EXPERIMENT_ARM_KEYS,
+  evidenceExperimentArm,
+} from "../../../backend/evidenceExperimentArms.mjs";
+
 export const PRODUCTION_PROFILE_ID = "official-astra-low";
-export const ARM_FLAG = "RULE_TOC_ADMIT_ENABLED";
-export const ARMS = Object.freeze({ baseline: "false", toc: "true" });
+export const ARM_KEYS = EVIDENCE_EXPERIMENT_ARM_KEYS;
+export const DEFAULT_ARMS = DEFAULT_EVIDENCE_EXPERIMENT_ARMS;
+// Throws for an unknown, conflicting or non-canonical arm name.
+export const armConfig = evidenceExperimentArm;
 export const MEMORY_LEDGER_URL = "https://bench-ledger.invalid/";
 export const MEMORY_LEDGER_TOKEN = "bench-memory-ledger";
 export const NON_BINDING_LIMIT = "100000";
@@ -106,13 +114,27 @@ export function buildBaseEnv({
     base.UPSTASH_BUDGET_KV_REST_API_URL = MEMORY_LEDGER_URL;
     base.UPSTASH_BUDGET_KV_REST_API_TOKEN = MEMORY_LEDGER_TOKEN;
   }
-  delete base[ARM_FLAG];
+  for (const key of ARM_KEYS) delete base[key];
   return base;
 }
 
 export function armEnv(baseEnv, arm) {
-  if (!Object.hasOwn(ARMS, arm)) throw new Error(`unknown arm: ${arm}`);
-  return { ...baseEnv, [ARM_FLAG]: ARMS[arm] };
+  return { ...baseEnv, ...armConfig(arm) };
+}
+
+// The arm keys whose values differ between two arms: the only env keys on
+// which their jobs may differ.
+export function armKeyDifference(left, right) {
+  const [a, b] = [armConfig(left), armConfig(right)];
+  return ARM_KEYS.filter((key) => a[key] !== b[key]).sort();
+}
+
+// The baseline arm must be the production configuration (vercel.json, with
+// the code default for a key it does not set).
+export function baselineProductionMismatch(productionEnv) {
+  const baseline = armConfig("baseline");
+  return ARM_KEYS.filter((key) => (productionEnv[key] ?? EVIDENCE_EXPERIMENT_ARM_DEFAULTS[key]) !== baseline[key])
+    .map((key) => `${key}: vercel.json=${productionEnv[key] ?? "(未设置)"} baseline=${baseline[key]}`);
 }
 
 export function relevantEnvEntries(env) {
@@ -151,11 +173,11 @@ export function envDifference(left, right) {
 
 // Credentials that the production configuration needs; checked before any
 // real-mode job so a missing key cannot silently fall back to a mock path.
-export function missingRealModeEnv(env) {
+export function missingRealModeEnv(env, { prepareOnly = false } = {}) {
   const any = (...names) => names.some((name) => String(env[name] || "").trim());
   const missing = [];
   if (!any("GEMINI_RULE_QA_API_KEY", "GEMINI_API_KEY")) missing.push("GEMINI_RULE_QA_API_KEY 或 GEMINI_API_KEY");
-  if (!any("OCG_FINAL_OPENAI_API_KEY")) missing.push("OCG_FINAL_OPENAI_API_KEY");
+  if (!prepareOnly && !any("OCG_FINAL_OPENAI_API_KEY")) missing.push("OCG_FINAL_OPENAI_API_KEY");
   if (!any("RAG_CARD_OPENAI_API_KEY", "OCG_CARD_OPENAI_API_KEY", "OPENAI_DECISIONS_API_KEY")) {
     missing.push("RAG_CARD_OPENAI_API_KEY 或 OCG_CARD_OPENAI_API_KEY（卡名 Luna 官方通道）");
   }

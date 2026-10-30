@@ -143,3 +143,59 @@ test("ToC columns read bounded.ruleToc, mark --toc-path overrides and survive a 
 function stripToc(text) {
   return text.split("\n").filter((line) => line.startsWith("| 题号")).join("\n");
 }
+
+// Evidence-pack runs (the runner default): one table per question.
+function packedBundle(rules, qa = [], faq = []) {
+  return {
+    prompt: `PROMPT ${[...rules.map((rule) => rule.id), ...qa, ...faq].join(",")}`,
+    modelEvidence: { rawRelatedEvidence: [
+      ...rules.map(({ id, sourceId, titlePath }) => ({ id, recordType: "rule-doc", sourceId, title: titlePath[0],
+        sourceSection: { titlePath: titlePath.map((title) => `${title} ¶`) } })),
+      ...qa.map((number) => ({ id: `h${number}`, recordType: "qa", text: JSON.stringify({ id: `ygoresources-qa-${number}` }) })),
+      ...faq.map((recordId) => ({ id: `h-${recordId}`, recordType: "card-faq", text: JSON.stringify({ id: recordId }) })),
+    ] },
+    allowedEvidenceIds: [...rules.map((rule) => rule.id), ...qa.map((number) => `h${number}`), ...faq.map((id) => `h-${id}`)],
+  };
+}
+
+test("evidence report lists rule sections and QA/FAQ numbers per arm, diffs against baseline, leaves the user column empty", () => {
+  const atom = (doc, number, titlePath) => ({ id: `ocg-rule:${doc}:atom:${number}`, sourceId: `ocg-rule:${doc}`, titlePath });
+  const timing = { prepare: 41_000, planning: 6_000, selection: 30_000, tocCall: 9_000 };
+  const byStage = (toc) => ({ card: { usd: 0.001 }, planning: { usd: 0.01 }, embedding: { usd: 0.0002 },
+    selection: { usd: 0.02 }, toc: { usd: toc ? 0.009 : 0 }, final: { usd: 0 }, other: { usd: 0 } });
+  const evidenceResult = (arm, promptBundle, toc = null, costUsd = 0.0312) => {
+    const document = result({ qid: "Q1", arm, promptBundle, toc, costUsd, prepareMs: timing.prepare, finalizeMs: 0 });
+    document.question = "题面|含竖线";
+    document.cost.byStage = byStage(Boolean(toc));
+    document.timingsMs.stages = timing;
+    return document;
+  };
+  const a35 = atom("c02/doc", 35, ["怪兽的效果分类", "同一时点适用"]);
+  const a36 = atom("c02/doc", 36, ["怪兽的效果分类", "同一时点适用"]);
+  const a12 = atom("c03/doc", 12, ["只能有○○存在"]);
+  const results = [
+    evidenceResult("baseline", packedBundle([a36, a35, a12], ["24345"], ["card-faq-21385-1"])),
+    evidenceResult("nav-family+toc", packedBundle([a35, a36], ["24345", "100"]),
+      ruleToc({ selected: ["u1"], admitted: ["u1"], intoPack: ["u1"] }), 0.0402),
+  ];
+  const report = buildRetrievalCompareReport({ checkpoint, results, manifest: { ...manifest, prepareOnly: true,
+    arms: ["baseline", "nav-family+toc"], armConfigs: {
+      baseline: { RULE_NAVIGATION_PARTITION: "legacy", EVIDENCE_PLANNING_PROFILE: "g", RULE_TOC_ADMIT_ENABLED: "false" },
+      "nav-family+toc": { RULE_NAVIGATION_PARTITION: "source-family", EVIDENCE_PLANNING_PROFILE: "g", RULE_TOC_ADMIT_ENABLED: "true" } },
+    set: { setId: "s", selectedQids: ["Q1"] } } });
+  assert.match(report, /^# 证据对比/u);
+  assert.match(report, /### Q1\n\n- 题面：题面\\\|含竖线\n- 参考答案：参考结论。/u);
+  const rows = report.split("\n").filter((line) => /^\| (?:baseline|nav-family\+toc) \| ocg-rule/u.test(line));
+  assert.equal(rows.length, 2);
+  const [base, toc] = rows.map((row) => row.split(" | "));
+  assert.equal(base[1], "ocg-rule:c02/doc › 怪兽的效果分类 > 同一时点适用 #35,36<br>ocg-rule:c03/doc › 只能有○○存在 #12");
+  assert.equal(base[2], "QA#24345、FAQ card-faq-21385-1");
+  assert.equal(base[3], "（基线）");
+  assert.equal(toc[3], "−规则 ocg-rule:c03/doc › 只能有○○存在 #12<br>+QA#100<br>−FAQ card-faq-21385-1");
+  assert.equal(toc[4], "selected 选中 1 / 入窗 1 / 进包 1");
+  assert.deepEqual(toc.slice(5, 7), ["41.0", "$0.0402"]);
+  assert.ok(rows.every((row) => row.endsWith("|  |")), "user column stays empty");
+  assert.match(report, /\| nav-family\+toc \| 1\/1 \| \$0\.0402 \| \$0\.0402 \| \$0\.0010 \| \$0\.0100 \| \$0\.0002 \| \$0\.0200 \| \$0\.0090 \| \$0\.0000 \| 41\.0 \/ 41\.0 \/ 41\.0 \| 6\.0 \/ 6\.0 \/ 6\.0 \| 30\.0 \/ 30\.0 \/ 30\.0 \| 9\.0 \/ 9\.0 \/ 9\.0 \|/u);
+  assert.match(report, /nav-family\+toc 相对 baseline：两臂都完成 1 题，证据编号集合不同 1 题/u);
+  assert.doesNotMatch(report, /正确|错误|通过率|准确率/u);
+});

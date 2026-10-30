@@ -1,6 +1,7 @@
-// Mock-mode smoke test of the runner: the full production pipeline runs with
-// the transport mock (no keys, no network), stops at the budget, resumes and
-// produces a report. Takes about a minute (two cold asset preloads).
+// Mock-mode smoke tests of the runner: the full production pipeline runs with
+// the transport mock (no keys, no network). The evidence-pack run stops at the
+// budget, resumes and reports; a --with-final run also answers. About a
+// minute and a half (three cold asset preloads).
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
@@ -20,7 +21,20 @@ function run(script, args) {
   return { status: child.status, output: `${child.stdout}\n${child.stderr}` };
 }
 
-test("argument parsing guards the arm flag, budget and mock ledger", () => {
+async function setFile(directory, qids) {
+  const set = JSON.parse(await readFile(path.join(repositoryRoot, "scripts/bench/sets/ocg-50-20260924.json"), "utf8"));
+  const file = path.join(directory, "set.json");
+  await writeFile(file, JSON.stringify({ ...set, setId: "smoke", repeat: 1,
+    items: set.items.filter((item) => qids.includes(item.qid)) }));
+  return file;
+}
+
+async function readResults(out) {
+  const names = (await readdir(path.join(out, "results"))).filter((name) => !name.endsWith(".events.json")).sort();
+  return Promise.all(names.map(async (name) => JSON.parse(await readFile(path.join(out, "results", name), "utf8"))));
+}
+
+test("argument parsing guards the arm keys, budget and mock ledger", () => {
   assert.throws(() => parseRunnerArgs(["--set", "x.json"]), /真实模式必须给 --budget-usd/u);
   assert.throws(() => parseRunnerArgs(["--set", "x.json", "--mock", "--set-env", "RULE_TOC_ADMIT_ENABLED=true"]),
     /由 --arms 控制/u);
@@ -38,9 +52,10 @@ test("argument parsing guards the arm flag, budget and mock ledger", () => {
   ]);
 });
 
-test("integrity checks catch silent mock fallbacks and model calls without a ledger ticket", () => {
+test("integrity checks catch silent fallbacks, unledgered calls and a stage that does not match its arm", () => {
   const continuation = { cardNameModel: { dryRun: false, providerUsed: "openai", modelUsed: "gpt-6-luna" },
-    ruleQueryModel: { dryRun: false, evidenceSelector: "luna", stageTelemetry: { selection: { channel: "official" } } } };
+    ruleQueryModel: { dryRun: false, evidenceSelector: "luna", stageTelemetry: { selection: { channel: "official" },
+      planning: { provider: "gemini", model: "gemini-3.8-flash", reasoningEffort: "medium" } }, bounded: {} } };
   const final = { debug: { dryRun: false, providerUsed: "openai", requestedModel: "gpt-6-astra" } };
   const network = [
     { route: "mock", host: "api.openai.com", path: "/v1/responses" },
@@ -55,68 +70,122 @@ test("integrity checks catch silent mock fallbacks and model calls without a led
   assert.equal(fallback.ok, false);
   assert.deepEqual(fallback.checks.filter((check) => !check.ok).map((check) => check.id),
     ["final_model_ran", "final_provider_openai"]);
+  const lunaArm = { config: { RULE_NAVIGATION_PARTITION: "source-family", RULE_TOC_ADMIT_ENABLED: "true",
+    EVIDENCE_PLANNING_PROFILE: "bai-gpt-6-luna-medium-theoretical" },
+  planning: { provider: "bai", model: "gpt-6-luna", reasoningEffort: "medium" } };
+  const mismatch = integrityChecks({ continuation, network, calls: [{ status: "usage_settled" }], arm: lunaArm,
+    prepareOnly: true });
+  assert.deepEqual(mismatch.checks.filter((check) => !check.ok).map((check) => check.id),
+    ["planning_matches_arm", "planning_official_channel", "rule_toc_matches_arm", "navigation_partition_matches_arm"]);
+  assert.ok(!mismatch.checks.some((check) => check.id.startsWith("final_")), "no final checks without a final call");
 });
 
-test("mock run stops at the budget, resumes to completion and reports", { timeout: 600_000 }, async () => {
+test("mock evidence-pack run stops at the budget, resumes to completion and reports evidence", { timeout: 600_000 }, async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), "bench-smoke-"));
   try {
-    const set = JSON.parse(await readFile(path.join(repositoryRoot, "scripts/bench/sets/ocg-50-20260924.json"), "utf8"));
-    const setFile = path.join(directory, "set.json");
-    await writeFile(setFile, JSON.stringify({ ...set, setId: "smoke", repeat: 1,
-      items: set.items.filter((item) => ["Q1", "Q3"].includes(item.qid)) }));
+    const set = await setFile(directory, ["Q1", "Q3"]);
     const out = path.join(directory, "run");
-
-    const first = run(runner, ["--mock", "--set", setFile, "--out", out, "--budget-usd", "0.09",
-      "--job-estimate-usd", "0.01", "--concurrency", "2"]);
+    const arms = "baseline,toc,nav-family+plan-luna+toc";
+    const first = run(runner, ["--mock", "--set", set, "--out", out, "--arms", arms, "--budget-usd", "0.04",
+      "--job-estimate-usd", "0.005", "--concurrency", "2"]);
     assert.equal(first.status, 3, first.output);
     const stopped = JSON.parse(await readFile(path.join(out, "checkpoint.json"), "utf8"));
     assert.equal(stopped.status, "budget_stopped");
-    assert.ok(stopped.spentUsd > 0.09 || Object.values(stopped.jobs).some((job) => job.status === "budget_stopped"));
-    assert.ok((stopped.counts.completed || 0) < 4);
+    assert.ok((stopped.counts.completed || 0) < 6);
 
-    const second = run(runner, ["--mock", "--set", setFile, "--out", out, "--resume", "--budget-usd", "1"]);
+    const second = run(runner, ["--mock", "--set", set, "--out", out, "--arms", arms, "--resume", "--budget-usd", "1"]);
     assert.equal(second.status, 0, second.output);
     const done = JSON.parse(await readFile(path.join(out, "checkpoint.json"), "utf8"));
     assert.equal(done.status, "completed");
-    assert.equal(done.counts.completed, 4);
+    assert.equal(done.counts.completed, 6);
     assert.ok(done.spentUsd >= stopped.spentUsd);
     const manifest = JSON.parse(await readFile(path.join(out, "manifest.json"), "utf8"));
+    assert.equal(manifest.prepareOnly, true);
     assert.equal(manifest.sessions.length, 2);
-    assert.deepEqual(manifest.armEnvDifference, { prepare: ["RULE_TOC_ADMIT_ENABLED"], finalize: ["RULE_TOC_ADMIT_ENABLED"] });
+    assert.deepEqual(manifest.armEnvDifference.map((entry) => [entry.arms.join(" vs "), entry.keys.join()]), [
+      ["baseline vs toc", "RULE_TOC_ADMIT_ENABLED"],
+      ["baseline vs nav-family+plan-luna+toc", "EVIDENCE_PLANNING_PROFILE,RULE_NAVIGATION_PARTITION,RULE_TOC_ADMIT_ENABLED"],
+      ["toc vs nav-family+plan-luna+toc", "EVIDENCE_PLANNING_PROFILE,RULE_NAVIGATION_PARTITION"],
+    ]);
     assert.ok(!JSON.stringify(manifest.envSnapshots).includes("mock-final-openai-key"), "keys are masked");
 
-    const names = (await readdir(path.join(out, "results"))).filter((name) => !name.endsWith(".events.json"));
-    assert.equal(names.length, 4);
-    for (const name of names) {
-      const result = JSON.parse(await readFile(path.join(out, "results", name), "utf8"));
+    const results = await readResults(out);
+    assert.equal(results.length, 6);
+    for (const result of results) {
+      const name = result.job.key;
+      const toc = result.job.armConfig.RULE_TOC_ADMIT_ENABLED === "true";
+      const telemetry = result.prepared.continuation.ruleQueryModel;
       assert.equal(result.status, "completed", name);
-      assert.equal(result.integrity.ok, true, name);
+      assert.equal(result.integrity.ok, true, `${name}: ${JSON.stringify(result.integrity.checks.filter((c) => !c.ok))}`);
       assert.ok(result.network.every((entry) => ["mock", "ledger"].includes(entry.route)), "no real network");
+      assert.equal(result.final, null, "no final model call");
       assert.ok(result.prepared.continuation.promptBundle.prompt.length > 0);
-      assert.ok(result.final.shortAnswer.includes("MOCK"));
-      assert.ok(result.cost.calls.length >= 5);
-      const toc = result.evidence.toc.summary;
-      if (result.job.arm === "baseline") assert.equal(toc, null, name);
+      assert.ok(result.evidence.selectedIds.length > 0);
+      const stages = result.cost.byStage;
+      assert.equal(stages.final.calls, 0, name);
+      for (const stage of ["card", "planning", "selection"]) assert.ok(stages[stage].calls >= 1 && stages[stage].usd > 0, `${name} ${stage}`);
+      assert.ok(stages.embedding.calls >= 1, name);
+      assert.equal(stages.other.calls, 0, name);
+      assert.equal(stages.toc.calls, toc ? 1 : 0, name);
+      assert.ok(Math.abs(Object.values(stages).reduce((sum, entry) => sum + entry.usd, 0) - result.cost.totalUsd) < 1e-12);
+      assert.equal(telemetry.stageTelemetry.planning.provider, result.job.arm.includes("plan-luna") ? "bai" : "gemini");
+      assert.equal(telemetry.bounded.navigationPartition ?? "legacy", result.job.armConfig.RULE_NAVIGATION_PARTITION);
+      assert.ok(Number.isFinite(result.timingsMs.stages.planning) && Number.isFinite(result.timingsMs.stages.selection));
+      const tocSummary = result.evidence.toc.summary;
+      if (!toc) assert.equal(tocSummary, null, name);
       else {
         // The mock ToC call answers unit 101; the stage records it end to end.
-        assert.equal(toc.status, "selected", name);
-        assert.equal(toc.selectedCount, 1, name);
-        assert.ok(Number.isFinite(toc.officialListUsd) && toc.officialListUsd > 0, name);
+        assert.equal(tocSummary.status, "selected", name);
+        assert.equal(tocSummary.selectedCount, 1, name);
         // The ledger settles in whole nano-dollars, hence the tolerance.
-        assert.ok(result.cost.calls.some((call) => call.operation === "generate_content"
-          && Math.abs(call.costUsd - toc.officialListUsd) < 1e-8), "ToC call is in the job's ledger cost");
+        assert.ok(Math.abs(stages.toc.usd - tocSummary.officialListUsd) < 1e-8, "ToC call is in the job's ledger cost");
       }
     }
 
     const report = run(reporter, ["--run", out]);
     assert.equal(report.status, 0, report.output);
     const markdown = await readFile(path.join(out, "report.md"), "utf8");
+    assert.match(markdown, /# 证据对比/u);
     assert.match(markdown, /MOCK 运行/u);
-    const rows = markdown.split("\n").filter((line) => /^\| Q[13] \|/u.test(line));
-    assert.equal(rows.length, 2);
-    assert.ok(rows.every((row) => row.split(" | ")[5] === "selected" && row.split(" | ")[6] === "1"), rows.join("\n"));
+    for (const qid of ["Q1", "Q3"]) assert.match(markdown, new RegExp(`### ${qid}\\n\\n- 题面：.+\\n- 参考答案：.+`, "u"));
+    const header = markdown.split("\n").filter((line) => line.startsWith("| 臂 | 规则单元"));
+    assert.equal(header.length, 2);
+    assert.ok(header.every((line) => line.endsWith("| 证据是否包含参考答案所需依据（用户填） |")));
+    const armRows = markdown.split("\n").filter((line) => /^\| (?:baseline|toc|nav-family\+plan-luna\+toc) \| (?:ocg-rule|konami):/u.test(line));
+    assert.equal(armRows.length, 6, armRows.join("\n"));
+    assert.ok(armRows.every((line) => line.endsWith("|  |")), "the user column stays empty");
+    assert.ok(armRows.filter((line) => line.startsWith("| baseline |")).every((line) => line.includes(" | （基线） | ")));
     assert.match(markdown, /ToC 阶段（toc 臂 2 个任务）：状态 selected 2/u);
-    assert.match(markdown, /选中单元进入最终包的题数：\d \/ 2/u);
+    assert.match(markdown, /\| nav-family\+plan-luna\+toc \| 2\/2 \| \$\d/u);
+    assert.doesNotMatch(markdown, /正确|错误|通过率|准确率/u);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("mock run with --with-final also answers and keeps the answer table", { timeout: 600_000 }, async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "bench-smoke-final-"));
+  try {
+    const set = await setFile(directory, ["Q1"]);
+    const out = path.join(directory, "run");
+    const result = run(runner, ["--mock", "--with-final", "--set", set, "--out", out, "--arms", "baseline,toc"]);
+    assert.equal(result.status, 0, result.output);
+    const results = await readResults(out);
+    assert.equal(results.length, 2);
+    for (const entry of results) {
+      assert.equal(entry.integrity.ok, true, entry.job.key);
+      assert.ok(entry.integrity.checks.some((check) => check.id === "final_model_astra"));
+      assert.ok(entry.final.shortAnswer.includes("MOCK"));
+      assert.equal(entry.cost.byStage.final.calls, 1);
+    }
+    const report = run(reporter, ["--run", out]);
+    assert.equal(report.status, 0, report.output);
+    const markdown = await readFile(path.join(out, "report.md"), "utf8");
+    assert.match(markdown, /# 检索方式对比/u);
+    const rows = markdown.split("\n").filter((line) => /^\| Q1 \|/u.test(line));
+    assert.equal(rows.length, 1);
+    assert.deepEqual(rows[0].split(" | ").slice(5, 7), ["selected", "1"]);
+    assert.match(markdown, /选中单元进入最终包的题数：\d \/ 1/u);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

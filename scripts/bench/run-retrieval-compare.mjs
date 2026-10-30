@@ -1,12 +1,15 @@
 #!/usr/bin/env node
-// Retrieval comparison runner: answers the same question set with two arms
-// that differ only in RULE_TOC_ADMIT_ENABLED (baseline=false, toc=true), and
-// writes one result file per question × arm × repeat with the final answer,
-// the complete evidence pack, per-call cost and stage timings. It calls the
-// production pipeline directly (prepare → finalize, as the website does),
+// Retrieval comparison runner: prepares the evidence pack of the same
+// question set under several named arms (backend/evidenceExperimentArms.mjs:
+// baseline, toc, nav-family, nav-family+plan-luna+toc, …) that differ only in
+// their arm keys, and writes one result file per question × arm × repeat with
+// the complete evidence pack, selector output, bounded telemetry (ToC
+// included), per-call and per-stage cost and stage timings. By default it
+// stops at the evidence pack (the website's prepare step); --with-final also
+// calls the final model (finalize). It calls the production pipeline directly,
 // without the HTTP route, scope check, audit/history writes or the engine
-// reproduction. Nothing here judges answers; the report leaves that column
-// for the user.
+// reproduction. Nothing here judges answers or evidence; the report leaves
+// those columns for the user.
 import { AsyncLocalStorage } from "node:async_hooks";
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
@@ -17,9 +20,9 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import {
-  ARM_FLAG, ARMS, ASSUMED_DASHBOARD_ENV, FRESH_CACHE_ENV, MEMORY_LEDGER_URL, PRODUCTION_PROFILE_ID,
-  UPSTASH_ENV_PAIRS, armEnv, buildBaseEnv, envDifference, maskedEnvSnapshot, missingRealModeEnv,
-  readVercelProductionEnv, resolveLedgerMode,
+  ARM_KEYS, ASSUMED_DASHBOARD_ENV, DEFAULT_ARMS, FRESH_CACHE_ENV, MEMORY_LEDGER_URL, PRODUCTION_PROFILE_ID,
+  UPSTASH_ENV_PAIRS, armConfig, armEnv, armKeyDifference, baselineProductionMismatch, buildBaseEnv, envDifference,
+  maskedEnvSnapshot, missingRealModeEnv, readVercelProductionEnv, resolveLedgerMode,
 } from "./lib/bench-env.mjs";
 import { createBenchFetch } from "./lib/bench-fetch.mjs";
 import { createCostTracker } from "./lib/cost-tracker.mjs";
@@ -28,29 +31,36 @@ import {
 } from "./lib/evidence-summary.mjs";
 import { createMemoryLedgerStore } from "./lib/memory-ledger.mjs";
 import { createMockResponder } from "./lib/mock-providers.mjs";
+import { boundedCallsOf, stageCostBreakdown, stageTimings } from "./lib/stage-costs.mjs";
 import {
   RESULT_SCHEMA_VERSION, eventsPath, jobKey, readJsonIfExists, resultPath, writeJsonAtomic,
 } from "./lib/run-files.mjs";
 
 const repositoryRoot = path.resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const DEFAULT_JOB_ESTIMATE_USD = 0.15;
+const DEFAULT_PREPARE_JOB_ESTIMATE_USD = 0.05;
 
 const USAGE = `用法:
   node scripts/bench/run-retrieval-compare.mjs --set <set.json> [选项]
 
 选项:
-  --arms baseline,toc       要跑的臂（默认两臂；只差 ${ARM_FLAG}）
+  --arms a,b,...            要跑的臂（默认 ${DEFAULT_ARMS.join(",")}）。臂名为 baseline 或按
+                            nav-unit|nav-family、plan-luna|plan-luna-low、toc 顺序用 + 组合，
+                            只在 ${ARM_KEYS.join("、")} 上不同
+  --prepare-only            只跑到证据包，不调用最终模型（默认）
+  --with-final              同时调用最终作答模型（Astra），产物多出回答与作答费用
   --out <dir>               输出目录（默认 runs/retrieval-compare-<时间戳>）
   --concurrency <n>         并发任务数（默认 2；同一题面的任务不会同时跑）
   --budget-usd <x>          累计估算费用上限；超过即停止并写 checkpoint（真实模式必填）
-  --job-estimate-usd <x>    每个任务的费用预估，用于开新任务前的预算判断（默认 ${DEFAULT_JOB_ESTIMATE_USD}）
+  --job-estimate-usd <x>    每个任务的费用预估，用于开新任务前的预算判断
+                            （默认只到证据包 ${DEFAULT_PREPARE_JOB_ESTIMATE_USD}，--with-final ${DEFAULT_JOB_ESTIMATE_USD}）
   --resume                  续跑 --out 指定的已有目录（跳过已完成任务，累计费用从 ledger.jsonl 恢复）
   --mock                    传输层 mock：无 key、不联网，验证链路与产物格式
   --ledger auto|memory|upstash  预算账本存储（默认 auto：有 Upstash 凭据用 Upstash，否则进程内）
   --limit <n>               只跑题集前 n 题
   --qids Q1,Q5              只跑指定题号
   --repeat <n>              覆盖题集的 repeat
-  --set-env KEY=VALUE       追加环境变量（可重复；两臂相同）
+  --set-env KEY=VALUE       追加环境变量（可重复；各臂相同；不能设臂变量）
   --toc-path <dot.path>     覆盖项：另行读取 ToC 选中 id 的位置（可重复）。默认直接读
                             prepared.continuation.ruleQueryModel.bounded.ruleToc
   --allow-code-change       续跑时允许代码 commit 与上次不同（会记入 manifest）
@@ -58,8 +68,7 @@ const USAGE = `用法:
 `;
 
 export function parseRunnerArgs(argv) {
-  const options = { arms: ["baseline", "toc"], concurrency: 2, setEnv: {}, tocPaths: [], ledger: "auto",
-    jobEstimateUsd: DEFAULT_JOB_ESTIMATE_USD };
+  const options = { arms: [...DEFAULT_ARMS], concurrency: 2, setEnv: {}, tocPaths: [], ledger: "auto" };
   const valueOf = (index, name) => {
     const value = argv[index + 1];
     if (value === undefined || value.startsWith("--")) throw new Error(`${name} 需要一个值`);
@@ -72,6 +81,8 @@ export function parseRunnerArgs(argv) {
       case "--resume": options.resume = true; break;
       case "--mock": options.mock = true; break;
       case "--preflight-only": options.preflightOnly = true; break;
+      case "--prepare-only": options.prepareOnlyFlag = true; break;
+      case "--with-final": options.withFinal = true; break;
       case "--allow-code-change": options.allowCodeChange = true; break;
       case "--set": options.set = valueOf(index, argument); index += 1; break;
       case "--out": options.out = valueOf(index, argument); index += 1; break;
@@ -99,7 +110,7 @@ export function parseRunnerArgs(argv) {
         const at = pair.indexOf("=");
         if (at <= 0) throw new Error("--set-env 需要 KEY=VALUE");
         const key = pair.slice(0, at);
-        if (key === ARM_FLAG) throw new Error(`${ARM_FLAG} 由 --arms 控制，不能用 --set-env 设置`);
+        if (ARM_KEYS.includes(key)) throw new Error(`${key} 由 --arms 控制，不能用 --set-env 设置`);
         options.setEnv[key] = pair.slice(at + 1);
         index += 1; break;
       }
@@ -109,7 +120,17 @@ export function parseRunnerArgs(argv) {
   }
   if (options.help) return options;
   if (!options.set) throw new Error("缺少 --set <题集 json>");
-  for (const arm of options.arms) if (!Object.hasOwn(ARMS, arm)) throw new Error(`未知臂: ${arm}（可用 baseline,toc）`);
+  if (options.prepareOnlyFlag && options.withFinal) throw new Error("--prepare-only 与 --with-final 只能选一个");
+  options.prepareOnly = !options.withFinal;
+  delete options.prepareOnlyFlag;
+  options.jobEstimateUsd ??= options.prepareOnly ? DEFAULT_PREPARE_JOB_ESTIMATE_USD : DEFAULT_JOB_ESTIMATE_USD;
+  for (const arm of options.arms) {
+    try {
+      armConfig(arm);
+    } catch (error) {
+      throw new Error(`未知臂: ${arm}（${error.message}）`);
+    }
+  }
   if (!options.arms.length || new Set(options.arms).size !== options.arms.length) throw new Error("--arms 不能为空或重复");
   if (!options.mock && !options.budgetUsd && !options.preflightOnly) throw new Error("真实模式必须给 --budget-usd");
   if (options.mock) {
@@ -235,10 +256,14 @@ export function unledgeredModelRequests(network = [], calls = []) {
   return { requests, tickets, ok: requests <= tickets };
 }
 
-export function integrityChecks({ continuation, final, network = [], calls = [] }) {
+// arm: { config, planning: { provider, model, reasoningEffort } } — what the
+// job's arm configured; the checks compare it with what the stages report.
+export function integrityChecks({ continuation, final, network = [], calls = [], arm = null, prepareOnly = false }) {
   const card = continuation?.cardNameModel || {};
   const rule = continuation?.ruleQueryModel || {};
   const debug = final?.debug || {};
+  const planning = rule.stageTelemetry?.planning || {};
+  const bounded = rule.bounded || {};
   const coverage = unledgeredModelRequests(network, calls);
   const checks = [
     ["card_name_model_ran", card.dryRun === false, `${card.providerUsed}/${card.modelUsed}`],
@@ -247,17 +272,32 @@ export function integrityChecks({ continuation, final, network = [], calls = [] 
     ["evidence_selection_official_channel", rule.stageTelemetry?.selection?.channel === "official",
       String(rule.stageTelemetry?.selection?.channel)],
     ["evidence_generation_ran", rule.dryRun === false, String(rule.dryRun)],
-    ["final_model_ran", debug.dryRun === false, String(debug.dryRun)],
-    ["final_provider_openai", debug.providerUsed === "openai", String(debug.providerUsed)],
-    ["final_model_astra", debug.requestedModel === "gpt-6-astra", String(debug.requestedModel)],
+    ...(arm ? [
+      ["planning_matches_arm", planning.provider === arm.planning.provider && planning.model === arm.planning.model
+        && planning.reasoningEffort === arm.planning.reasoningEffort,
+      `${planning.provider}/${planning.model}/${planning.reasoningEffort}`],
+      ...(arm.planning.provider === "bai" ? [["planning_official_channel", planning.channel === "official",
+        String(planning.channel)]] : []),
+      ["rule_toc_matches_arm", Boolean(bounded.ruleToc) === (arm.config.RULE_TOC_ADMIT_ENABLED === "true"),
+        bounded.ruleToc ? "on" : "off"],
+      ["navigation_partition_matches_arm",
+        (bounded.navigationPartition ?? "legacy") === arm.config.RULE_NAVIGATION_PARTITION,
+        String(bounded.navigationPartition ?? "legacy")],
+    ] : []),
+    ...(prepareOnly ? [] : [
+      ["final_model_ran", debug.dryRun === false, String(debug.dryRun)],
+      ["final_provider_openai", debug.providerUsed === "openai", String(debug.providerUsed)],
+      ["final_model_astra", debug.requestedModel === "gpt-6-astra", String(debug.requestedModel)],
+    ]),
     ["ledger_covers_model_requests", coverage.ok, `${coverage.requests} model requests / ${coverage.tickets} ledger tickets`],
   ].map(([id, ok, observed]) => ({ id, ok: Boolean(ok), observed }));
   return { ok: checks.every((check) => check.ok), checks };
 }
 
 export function buildResultDocument({ job, attempt, run, prepared, final, error, timings, context, calls,
-  jobCostUsd, tocPaths, status }) {
+  jobCostUsd, tocPaths, status, arm = null }) {
   const continuation = prepared?.continuation || null;
+  const prepareOnly = run.prepareOnly === true;
   const promptBundle = continuation?.promptBundle || null;
   const evidenceSummary = promptBundle ? summarizePromptBundle(promptBundle) : null;
   const finalAllowed = new Set(evidenceSummary?.allowedEvidenceIds || []);
@@ -272,10 +312,10 @@ export function buildResultDocument({ job, attempt, run, prepared, final, error,
   }
   return {
     schemaVersion: RESULT_SCHEMA_VERSION,
-    job: { key: job.key, qid: job.qid, cellId: job.cellId, arm: job.arm, armFlag: { [ARM_FLAG]: ARMS[job.arm] },
+    job: { key: job.key, qid: job.qid, cellId: job.cellId, arm: job.arm, armConfig: armConfig(job.arm),
       repeat: job.repeat, attempt },
-    run: { runId: run.runId, sessionId: run.sessionId, mode: run.mode, setId: run.setId, setSha256: run.setSha256,
-      codeCommit: run.git.commit, codeDirty: run.git.dirty },
+    run: { runId: run.runId, sessionId: run.sessionId, mode: run.mode, prepareOnly, setId: run.setId,
+      setSha256: run.setSha256, codeCommit: run.git.commit, codeDirty: run.git.dirty },
     status,
     question: job.question,
     referenceAnswer: job.referenceAnswer,
@@ -287,6 +327,7 @@ export function buildResultDocument({ job, attempt, run, prepared, final, error,
       final: final?.debug?.timingsMs || null,
       evidenceProvider: continuation?.ruleQueryModel?.timingsMs || null,
       retrievalStages: continuation?.evidence?.debug?.timingsMs || null,
+      stages: stageTimings({ continuation, error, wall: { prepare: timings.prepareMs } }),
     },
     answer: final ? {
       text: final.shortAnswer ?? null,
@@ -321,13 +362,15 @@ export function buildResultDocument({ job, attempt, run, prepared, final, error,
       ambiguousMentions: continuation.cardResolution?.ambiguousMentions || [],
     } : null,
     cost: { totalUsd: jobCostUsd, calls,
+      byStage: stageCostBreakdown({ calls, boundedCalls: boundedCallsOf({ continuation, error }) }),
       pipelineReported: {
         preparationCloudCosts: prepared?.debug?.cloudCosts || null,
         finalCloudCosts: final?.debug?.cloudCosts || null,
         finalTokenUsage: final?.debug?.tokenUsage || null,
         finalEstimatedCostUsd: final?.debug?.estimatedCostUsd ?? null,
       } },
-    integrity: continuation && final ? integrityChecks({ continuation, final, network: context.network, calls }) : null,
+    integrity: continuation && (final || prepareOnly)
+      ? integrityChecks({ continuation, final, network: context.network, calls, arm, prepareOnly }) : null,
     network: context.network,
     error: errorRecord(error),
     // Complete artifacts: the exact prepared continuation (prompt bundle =
@@ -348,6 +391,7 @@ async function main() {
   const { set, sha256: setSha256 } = loadQuestionSet(setFile);
   const runDir = path.resolve(options.out || path.join("runs",
     `retrieval-compare-${new Date().toISOString().replace(/[-:]/gu, "").replace(/\..+$/u, "")}${options.mock ? "-mock" : ""}`));
+  const prepareOnly = options.prepareOnly;
   const runId = path.basename(runDir);
   const manifestPath = path.join(runDir, "manifest.json");
   const checkpointPath = path.join(runDir, "checkpoint.json");
@@ -363,6 +407,9 @@ async function main() {
     if (manifest.set.sha256 !== setSha256) throw new Error("--resume: 题集内容与原运行不同");
     if (manifest.mode !== mode) throw new Error(`--resume: 原运行是 ${manifest.mode} 模式`);
     if (JSON.stringify(manifest.arms) !== JSON.stringify(options.arms)) throw new Error("--resume: --arms 与原运行不同");
+    if ((manifest.prepareOnly === true) !== prepareOnly) {
+      throw new Error(`--resume: 原运行${manifest.prepareOnly ? "只到证据包" : "含最终作答（--with-final）"}，本次参数不同`);
+    }
     if (manifest.git.commit !== git.commit && !options.allowCodeChange) {
       throw new Error(`--resume: 代码 commit 已从 ${manifest.git.commit} 变为 ${git.commit}；确认要混用请加 --allow-code-change`);
     }
@@ -370,18 +417,21 @@ async function main() {
     throw new Error(`输出目录已存在且非空: ${runDir}（续跑请加 --resume）`);
   }
 
-  // The arm flag reaches the pipeline only through each job's env object, as
-  // every other RAG_* setting does. A value inherited by this process is
-  // removed so code that read process.env directly could not make both arms
-  // look switched on (the report would then show no ToC findings instead).
-  const inheritedArmFlag = process.env[ARM_FLAG] ?? null;
-  delete process.env[ARM_FLAG];
+  // The arm keys reach the pipeline only through each job's env object, as
+  // every other RAG_* setting does. Values inherited by this process are
+  // removed so code that read process.env directly could not make every arm
+  // look the same.
+  const inheritedArmEnv = Object.fromEntries(ARM_KEYS.filter((key) => process.env[key] !== undefined)
+    .map((key) => [key, process.env[key]]));
+  for (const key of ARM_KEYS) delete process.env[key];
   const productionEnv = readVercelProductionEnv(path.join(repositoryRoot, "vercel.json"));
+  const baselineMismatch = baselineProductionMismatch(productionEnv);
+  if (baselineMismatch.length) throw new Error(`baseline 臂与 vercel.json 生产配置不一致:\n- ${baselineMismatch.join("\n- ")}`);
   const ledgerMode = options.mock ? "memory" : resolveLedgerMode(options.ledger, process.env);
   const baseEnv = buildBaseEnv({ mode, inheritedEnv: process.env, productionEnv, setEnv: options.setEnv,
     ledgerMode, runId: manifest?.runId || runId });
   if (mode === "real") {
-    const missing = missingRealModeEnv(baseEnv);
+    const missing = missingRealModeEnv(baseEnv, { prepareOnly });
     if (missing.length) throw new Error(`真实模式缺少环境变量（未发出任何请求）:\n- ${missing.join("\n- ")}`);
   }
   const ledgerUrls = ledgerMode === "memory" ? [MEMORY_LEDGER_URL]
@@ -402,27 +452,41 @@ async function main() {
 
   // Backend modules load only after fetch is routed.
   const { createPublicAnswerModelEnv } = await import("../../backend/ragModelClient.mjs");
+  const { loadEvidenceGenerationContract } = await import("../../backend/evidenceGenerationContract.mjs");
   const { assertPublicRulingModelProfileAvailable } = await import("../../backend/publicRulingModelConfig.mjs");
   const { preloadRagRequestAssets } = await import("../../backend/ragRulingPipeline.mjs");
   const { answerRagRulingQuestionForVersion, finalizePreparedRagRulingQuestionForVersion } =
     await import("../../backend/rulingVersionRegistry.mjs");
 
   const envs = {};
+  const arms = {};
   for (const arm of options.arms) {
     const source = armEnv(baseEnv, arm);
-    assertPublicRulingModelProfileAvailable(PRODUCTION_PROFILE_ID, source);
+    // The final model is not called when only the evidence pack is prepared.
+    if (!prepareOnly) assertPublicRulingModelProfileAvailable(PRODUCTION_PROFILE_ID, source);
     // Same transforms as publicAnswerService (prepare) and publicPreparedAnswerService (finalize).
     envs[arm] = {
       prepare: { ...createPublicAnswerModelEnv(source, PRODUCTION_PROFILE_ID), EVIDENCE_SELECTOR: "luna" },
       finalize: createPublicAnswerModelEnv(source, PRODUCTION_PROFILE_ID),
     };
+    const planning = loadEvidenceGenerationContract("planning", { env: envs[arm].prepare });
+    arms[arm] = { config: armConfig(arm), planning: { provider: planning.providerId, model: planning.modelId,
+      reasoningEffort: planning.reasoningConfig?.responses?.effort ?? planning.reasoningConfig?.thinkingConfig?.thinkingLevel
+        ?? null, profile: envs[arm].prepare.EVIDENCE_PLANNING_PROFILE } };
   }
-  const armDifference = options.arms.length === 2 ? {
-    prepare: envDifference(envs[options.arms[0]].prepare, envs[options.arms[1]].prepare),
-    finalize: envDifference(envs[options.arms[0]].finalize, envs[options.arms[1]].finalize),
-  } : null;
-  if (armDifference && (armDifference.prepare.join() !== ARM_FLAG || armDifference.finalize.join() !== ARM_FLAG)) {
-    throw new Error(`两臂环境差异不止 ${ARM_FLAG}: ${JSON.stringify(armDifference)}`);
+  // Every pair of arms may differ only in the arm keys whose values differ,
+  // after the same production env transform.
+  const armDifference = [];
+  for (const [index, left] of options.arms.entries()) {
+    for (const right of options.arms.slice(index + 1)) {
+      const expected = armKeyDifference(left, right).join();
+      const observed = { prepare: envDifference(envs[left].prepare, envs[right].prepare),
+        finalize: envDifference(envs[left].finalize, envs[right].finalize) };
+      if (observed.prepare.join() !== expected || observed.finalize.join() !== expected) {
+        throw new Error(`臂 ${left} 与 ${right} 的环境差异应只有 [${expected}]，实际 ${JSON.stringify(observed)}`);
+      }
+      armDifference.push({ arms: [left, right], keys: observed.prepare });
+    }
   }
 
   const items = set.items.filter((item) => !options.qids || options.qids.includes(item.qid))
@@ -433,13 +497,14 @@ async function main() {
 
   const session = { sessionId, startedAt: new Date().toISOString(), argv: process.argv.slice(2), git,
     restoredLedgerEvents: restoredEvents, budgetUsd: options.budgetUsd, jobEstimateUsd: options.jobEstimateUsd,
-    concurrency: options.concurrency, plannedJobs: jobs.length };
+    concurrency: options.concurrency, plannedJobs: jobs.length, prepareOnly };
   if (!manifest) {
     manifest = {
-      schemaVersion: 1, runId, mode, createdAt: session.startedAt,
+      schemaVersion: 1, runId, mode, prepareOnly, createdAt: session.startedAt,
       set: { file: path.relative(repositoryRoot, setFile).replaceAll("\\", "/"), setId: set.setId ?? null,
         sha256: setSha256, itemCount: set.items.length, selectedQids: items.map((item) => item.qid), repeat },
-      arms: options.arms, armFlag: ARM_FLAG, armValues: Object.fromEntries(options.arms.map((arm) => [arm, ARMS[arm]])),
+      arms: options.arms, armKeys: ARM_KEYS, armConfigs: Object.fromEntries(options.arms.map((arm) => [arm, arms[arm].config])),
+      armPlanning: Object.fromEntries(options.arms.map((arm) => [arm, arms[arm].planning])),
       profile: PRODUCTION_PROFILE_ID, ledgerMode, budgetUsd: options.budgetUsd, git,
       node: process.version, platform: `${os.platform()}-${os.arch()}`,
       productionEnvSource: { file: "vercel.json", keys: Object.keys(productionEnv).sort() },
@@ -449,12 +514,14 @@ async function main() {
         prepare: maskedEnvSnapshot(envs[arm].prepare), finalize: maskedEnvSnapshot(envs[arm].finalize) }])),
       armEnvDifference: armDifference,
       tocPaths: options.tocPaths,
-      inheritedArmFlagRemoved: inheritedArmFlag,
+      inheritedArmEnvRemoved: inheritedArmEnv,
       notes: [
-        "直接调用 answerRagRulingQuestionForVersion(prepareForContinuation) → finalizePreparedRagRulingQuestionForVersion，与网站 prepare/finalize 两步相同；不经过 HTTP、范围检查、审计/历史写入和引擎复现。",
+        prepareOnly
+          ? "只到证据包：直接调用 answerRagRulingQuestionForVersion(prepareForContinuation)，与网站 prepare 步骤相同，不调用最终模型；不经过 HTTP、范围检查、审计/历史写入和引擎复现。"
+          : "直接调用 answerRagRulingQuestionForVersion(prepareForContinuation) → finalizePreparedRagRulingQuestionForVersion，与网站 prepare/finalize 两步相同；不经过 HTTP、范围检查、审计/历史写入和引擎复现。",
         "预算账本使用 bench 专用 run id；限额设为不约束值，避免影响证据组装；--budget-usd 由 runner 在账本请求处执行。",
-        `${ARM_FLAG} 只通过每个任务的 env 对象传入管线；进程环境里的同名变量在启动时删除。`,
-        "成本 = 账本按供应商回报 usage 结算的理论费用（gpt-6-astra 用 data/model-pricing.json；Luna/Gemini 用后端内置牌价，因该表没有这两类模型）。",
+        `臂变量（${ARM_KEYS.join("、")}）只通过每个任务的 env 对象传入管线；进程环境里的同名变量在启动时删除。`,
+        "成本 = 账本按供应商回报 usage 结算的理论费用（gpt-6-astra 用 data/model-pricing.json；Luna/Gemini 用后端内置牌价，因该表没有这两类模型）。分阶段费用按账本调用的 operation 与证据生成请求哈希归类。",
       ],
       sessions: [],
     };
@@ -532,6 +599,7 @@ async function main() {
         });
         timings.prepareMs = performance.now() - t0;
         if (prepared?.status !== "evidence_prepared") throw new Error(`prepare_returned_${prepared?.status || "unexpected_shape"}`);
+        if (prepareOnly) return;
         const t1 = performance.now();
         final = await finalizePreparedRagRulingQuestionForVersion({
           continuation: prepared.continuation, rulingVersion: "latest",
@@ -551,8 +619,8 @@ async function main() {
     let status = failure ? "failed" : "completed";
     if (tracker.blockedJobs.has(job.key)) status = "budget_stopped";
     const document = buildResultDocument({ job, attempt, prepared, final, error: failure, timings, context, calls,
-      jobCostUsd, tocPaths: options.tocPaths, status,
-      run: { runId: manifest.runId, sessionId, mode, setId: set.setId ?? null, setSha256, git } });
+      jobCostUsd, tocPaths: options.tocPaths, status, arm: arms[job.arm],
+      run: { runId: manifest.runId, sessionId, mode, prepareOnly, setId: set.setId ?? null, setSha256, git } });
     if (status === "completed" && document.integrity && !document.integrity.ok) {
       document.status = status = "invalid_config";
       stopReason ||= "integrity_check_failed";
@@ -578,7 +646,7 @@ async function main() {
   const runningQuestions = new Set();
   const estimate = () => Math.max(options.jobEstimateUsd, maxObservedJobUsd);
   const admit = () => tracker.spentUsd() + (inFlight.size + 1) * estimate() <= options.budgetUsd;
-  console.log(`运行目录 ${runDir}\n模式 ${mode}，账本 ${ledgerMode}，预算 $${options.budgetUsd}，`
+  console.log(`运行目录 ${runDir}\n模式 ${mode}${prepareOnly ? "（只到证据包）" : "（含最终作答）"}，臂 ${options.arms.join(" / ")}，账本 ${ledgerMode}，预算 $${options.budgetUsd}，`
     + `待跑 ${pending.length}/${jobs.length} 个任务，已累计 $${tracker.spentUsd().toFixed(4)}，资产预载 ${(session.preloadMs / 1000).toFixed(1)}s`);
   while (queue.length || inFlight.size) {
     if (!stopReason && tracker.budgetExceeded) stopReason = "budget_exceeded";
@@ -615,7 +683,8 @@ async function main() {
   console.log(`\n结束：${finalStatus}；完成 ${jobs.length - remaining}/${jobs.length}；累计估算费用 $${tracker.spentUsd().toFixed(4)}`
     + `（预算 $${options.budgetUsd}）\n报告：node scripts/bench/report-retrieval-compare.mjs --run ${displayPath(runDir)}`);
   if (remaining) {
-    console.log(`续跑：node scripts/bench/run-retrieval-compare.mjs --set ${displayPath(setFile)} --out ${displayPath(runDir)} --resume --budget-usd <新上限>${options.mock ? " --mock" : ""}`);
+    console.log(`续跑：node scripts/bench/run-retrieval-compare.mjs --set ${displayPath(setFile)} --out ${displayPath(runDir)} --resume --budget-usd <新上限>`
+      + ` --arms ${options.arms.join(",")}${prepareOnly ? "" : " --with-final"}${options.mock ? " --mock" : ""}`);
     process.exitCode = finalStatus === "budget_stopped" ? 3 : 2;
   }
 }

@@ -121,3 +121,58 @@ export function findTocIds(roots, explicitPaths = []) {
   }
   return found;
 }
+
+// Display labels of the evidence pack sent to the final model, grouped for a
+// report: rule atoms by source document and section title path (no text), Q&A
+// by official number, card FAQ by record id. Identity fields only; the " ¶"
+// permalink glyph of the rule pages is dropped for display.
+const dropPilcrow = (value) => String(value ?? "").replace(/\s*¶\s*$/u, "").replace(/\s+/gu, " ").trim();
+
+function recordOf(item) {
+  try {
+    const record = JSON.parse(item?.text ?? "null");
+    return record && typeof record === "object" ? record : null;
+  } catch {
+    return null;
+  }
+}
+
+export function packedEvidenceLabels(promptBundle = {}) {
+  const items = Array.isArray(promptBundle?.modelEvidence?.rawRelatedEvidence)
+    ? promptBundle.modelEvidence.rawRelatedEvidence : [];
+  const sections = new Map();
+  const qa = [];
+  const other = [];
+  for (const item of items) {
+    const id = String(item?.id ?? "");
+    if (item?.recordType === "rule-doc") {
+      const titlePath = Array.isArray(item.sourceSection?.titlePath) && item.sourceSection.titlePath.length
+        ? item.sourceSection.titlePath : [item.title || ""];
+      const label = `${item.sourceId || item.parentSourceId || "?"} › ${titlePath.map(dropPilcrow).filter(Boolean).join(" > ")}`;
+      if (!sections.has(label)) sections.set(label, { label, atomIds: [], atoms: [] });
+      const section = sections.get(label);
+      section.atomIds.push(id);
+      section.atoms.push(/:atom:(\d+)$/u.exec(id)?.[1] ?? id);
+      continue;
+    }
+    const record = recordOf(item);
+    if (item?.recordType === "qa") {
+      const number = /^ygoresources-qa-(\d+)$/u.exec(String(record?.id || ""))?.[1]
+        || /\/qa\/(\d+)(?:$|[?#])/u.exec(String(item.sourceUrl || ""))?.[1];
+      qa.push({ id, label: number ? `QA#${number}` : `QA ${id.slice(0, 12)}` });
+    } else if (item?.recordType === "card-faq") {
+      qa.push({ id, label: `FAQ ${record?.id || dropPilcrow(item.title) || id.slice(0, 12)}` });
+    } else {
+      other.push({ id, label: `${item?.recordType || "other"} ${id.slice(0, 24)}` });
+    }
+  }
+  // Atom numbers in source order within a section (display only).
+  for (const section of sections.values()) {
+    if (!section.atoms.every((atom) => /^\d+$/u.test(atom))) continue;
+    const order = section.atoms.map((atom, index) => [Number(atom), index]).sort((left, right) => left[0] - right[0]);
+    section.atoms = order.map(([, index]) => section.atoms[index]);
+    section.atomIds = order.map(([, index]) => section.atomIds[index]);
+  }
+  return { ruleSections: [...sections.values()], qa, other };
+}
+
