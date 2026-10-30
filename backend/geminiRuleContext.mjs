@@ -4,6 +4,7 @@ import { GEMINI_EVIDENCE_MAX_PROMPT_CHARS } from './geminiRuleQaPacking.mjs';
 import { OCG_RULE_SOURCE_POLICY } from './ragRulingPrompt.mjs';
 import { buildRuleStructureMapping, mapDenseLocatorsToReadingUnits,
   sourceSha256, stableJson } from './evidenceSourceStructure.mjs';
+import { readRulePublication, rulePublicationVisibility } from './ruleSourcePublication.mjs';
 
 export const sha256 = value => createHash('sha256').update(value).digest('hex');
 export const GEMINI_RULE_QA_MODEL = 'gemini-3.8-flash';
@@ -62,6 +63,11 @@ export function buildRuleContext(records, { ruleContentRevision, structureMappin
         || section.start < 0 || section.end > doc.text.length || section.start >= section.end
         || ((section.parentKey || section.parentId) && !sourceIds.has(section.parentKey || section.parentId))) throw new Error('gemini_rule_structure_range_invalid');
     }
+    // A published section list withholds every other paragraph of this source
+    // from all search, dense and table-of-contents structures. Paragraph and
+    // section numbering stays that of the complete source.
+    const publication = readRulePublication(doc);
+    const visibility = publication ? rulePublicationVisibility(publication, sourceSections) : null;
     // Exact source-string segmentation, not a cross-field semantic comparison.
     const paragraphs = Array.from(doc.text.matchAll(/[\s\S]+?(?:\n{2,}|$)/g), match => match[0]);
     if (paragraphs.join('') !== doc.text) throw new Error('gemini_rule_segmentation_changed_bytes');
@@ -73,13 +79,14 @@ export function buildRuleContext(records, { ruleContentRevision, structureMappin
     offsets.slice(0, -1).forEach((start, index) => {
       const end = offsets[index + 1], text = doc.text.slice(start, end);
       const id = `R${docIndex + 1}.${index + 1}`;
+      const containing = sourceSections.filter(section => section.start <= start && section.end >= end)
+        .sort((a, b) => (a.end - a.start) - (b.end - b.start));
+      const sourceSection = containing[0];
+      if (visibility && !(sourceSection && visibility.published.has(sourceSection.sectionKey || sourceSection.id))) return;
       units.set(id, { id, recordType: 'rule-doc', title: doc.title, ...source, text,
         parentSourceId: doc.id, sourceId: doc.id, sourceCanonicalSha256: canonicalHash,
         sourceStart: start, sourceEnd: end, ruleUnitIndex: index });
       docUnits.push({ id, start, end });
-      const containing = sourceSections.filter(section => section.start <= start && section.end >= end)
-        .sort((a, b) => (a.end - a.start) - (b.end - b.start));
-      const sourceSection = containing[0];
       if (sourceSection) {
         unitSections.set(id, sourceIds.get(sourceSection.sectionKey || sourceSection.id));
         const titlePath = [];
@@ -98,7 +105,8 @@ export function buildRuleContext(records, { ruleContentRevision, structureMappin
         ...(units.get(id).sourceSection?.sourceSectionKey
           ? { sectionKey: units.get(id).sourceSection.sourceSectionKey } : {}) }));
     });
-    const ruleSections = sourceSections.map(section => {
+    const ruleSections = sourceSections.filter(section => !visibility
+      || visibility.visible.has(section.sectionKey || section.id)).map(section => {
       const unitIds = docUnits.filter(unit => unit.start >= section.start && unit.end <= section.end).map(unit => unit.id);
       const item = { sectionId: sourceIds.get(section.sectionKey || section.id), title: section.title,
         parentSectionId: sourceIds.get(section.parentKey || section.parentId) || null, ruleDocumentId: doc.id,
@@ -107,6 +115,7 @@ export function buildRuleContext(records, { ruleContentRevision, structureMappin
       sections.set(item.sectionId, item);
       return Object.fromEntries(Object.entries(item).filter(([key]) => key !== 'ruleUnitIds'));
     });
+    if (visibility && !docUnits.length) return;
     context.push(renderReadableData({ ruleDocumentId: doc.id, title: doc.title, ...source, ...(ruleSections.length ? { ruleSections } : {}) }));
     for (const unit of docUnits) context.push(`${unit.id}\n${units.get(unit.id).text}`);
   });
@@ -121,6 +130,10 @@ export function buildRuleContext(records, { ruleContentRevision, structureMappin
     const doc = docs.find(item => item.id === sourceMapping.sourceId);
     if (!doc || documentHashes.get(doc) !== sourceMapping.sourceCanonicalSha256) {
       throw new Error('gemini_rule_structure_mapping_source_binding_invalid');
+    }
+    // The mapping must publish exactly what the record's publication lists.
+    if (stableJson(readRulePublication(doc)) !== stableJson(sourceMapping.publication ?? null)) {
+      throw new Error('gemini_rule_structure_mapping_publication_invalid');
     }
     const atomSource = { sourceUrl: doc.sourceUrl, source: doc.sourceName,
       ...(Object.hasOwn(doc, 'sourceAuthority') ? { sourceAuthority: doc.sourceAuthority } : {}),

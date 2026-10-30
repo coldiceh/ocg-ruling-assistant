@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
 
+import { readRulePublication, rulePublicationVisibility } from "./ruleSourcePublication.mjs";
+
 export const SOURCE_STRUCTURE_MAPPING_CONTRACT = "source-structure-mapping-v1";
 export const READING_UNIT_TARGET_CHARS = 2400;
 
@@ -240,9 +242,36 @@ export function buildRuleSourceStructure(record, { targetChars = READING_UNIT_TA
     const sectionFirst = (unitsBySection.get(block.sectionKey) || [])[0];
     if (owner || sectionFirst) unitForBlock.set(block.blockKey, (owner || sectionFirst).unitKey);
   }
-  return { sourceId: record.id, sourceCanonicalSha256: canonicalSha256, structureStatus, sections, blocks,
+  const structure = { sourceId: record.id, sourceCanonicalSha256: canonicalSha256, structureStatus, sections, blocks,
     atoms, readingUnits, unitForBlock,
     explicitLinks: Array.isArray(record.structure?.explicitLinks) ? record.structure.explicitLinks : [] };
+  const publication = readRulePublication(record);
+  return publication ? publishedSourceStructure(structure, publication) : structure;
+}
+
+// Applied after the complete structure is built, so atom, block and reading
+// unit identities of published sections are exactly those of the full source.
+// A reading unit is published when its own section is listed; units of other
+// sections, and atoms outside every section, are withheld with their blocks.
+function publishedSourceStructure(structure, publication) {
+  const { published, visible } = rulePublicationVisibility(publication, structure.sections);
+  const readingUnits = structure.readingUnits.filter((unit) => published.has(unit.sectionKey));
+  const unitKeys = new Set(readingUnits.map((unit) => unit.unitKey));
+  for (const unit of readingUnits) unit.contextRefs = unit.contextRefs.filter((key) => unitKeys.has(key));
+  const atomKeys = new Set(readingUnits.flatMap((unit) => unit.atomKeys));
+  const blocks = structure.blocks.filter((block) => readingUnits.some((unit) => (
+    block.start >= unit.start && block.end <= unit.end)));
+  const blockKeys = new Set(blocks.map((block) => block.blockKey));
+  return { ...structure,
+    sections: structure.sections.filter((section) => visible.has(section.sectionKey)),
+    blocks,
+    atoms: structure.atoms.filter((atom) => atomKeys.has(atom.atomKey)),
+    readingUnits,
+    unitForBlock: new Map([...structure.unitForBlock].filter(([blockKey, unitKey]) => (
+      blockKeys.has(blockKey) && unitKeys.has(unitKey)))),
+    explicitLinks: structure.explicitLinks.filter((link) => blockKeys.has(link.fromBlockKey)),
+    publication: { contract: publication.contract, mode: publication.mode,
+      publishedSectionKeys: [...publication.publishedSectionKeys] } };
 }
 
 export function buildRuleStructureMapping(records, options = {}) {

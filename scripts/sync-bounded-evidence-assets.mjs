@@ -81,6 +81,7 @@ export async function runBoundedEvidenceAssetSync(options = {}, dependencies = {
       dataDir: normalized.dataDir,
       outputDir: assetDir,
       stage: "canonical",
+      ...normalized.publication,
     });
     const canonicalManifest = canonical.manifest;
     const [navigationInputs, denseInputs] = await Promise.all([
@@ -295,12 +296,14 @@ export async function runBoundedEvidenceAssetSync(options = {}, dependencies = {
       navigationPath,
       ruleDenseDir: join(normalized.outDir, "rule-embedding-v1"),
       qaDenseDir: join(normalized.outDir, "qa-embedding-v1"),
+      ...normalized.publication,
     });
     onProgress({ stage: "release_verify" });
     const verified = await builder({
       dataDir: normalized.dataDir,
       outputDir: assetDir,
       stage: "verify",
+      ...normalized.publication,
     });
     if (verified.manifest.bundleRevision !== released.manifest.bundleRevision) {
       throw codedError("bounded_sync_release_verify_revision_mismatch", 5);
@@ -509,6 +512,9 @@ function normalizeOptions(options) {
     maxUsd: batchBudgetUsd || Number(options.maxUsd),
     batchBudgetUsd, navigationConcurrency, progress: Boolean(options.progress),
     batchSize,
+    // Unset means the builder's checked-in allowlist; tests may bind another.
+    publication: options.ruleSourceAllowlistPath
+      ? { ruleSourceAllowlistPath: resolve(options.ruleSourceAllowlistPath) } : {},
     env: options.env || process.env,
   };
 }
@@ -537,6 +543,7 @@ function parseArguments(argv) {
     else if (argument === "--navigation-concurrency") options.navigationConcurrency = Number(take(index++));
     else if (argument === "--progress") options.progress = true;
     else if (argument === "--batch-size") options.batchSize = Number(take(index++));
+    else if (argument === "--rule-source-allowlist") options.ruleSourceAllowlistPath = take(index++);
     else if (argument === "--cloud") options.cloud = true;
     else if (argument === "--report-only-cost") options.reportOnlyCost = true;
     else if (argument === "--execute") options.execute = true;

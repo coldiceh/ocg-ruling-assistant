@@ -1,7 +1,7 @@
 import { stableQaSelection } from "./lib/sync-input-stability.mjs";
 import { createHash } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { gzip, gunzip } from "node:zlib";
 import { promisify } from "node:util";
@@ -10,15 +10,20 @@ import { ruleEmbeddingText } from "../backend/geminiRuleDenseSearch.mjs";
 import { createQaSnapshot } from "../backend/geminiQaTools.mjs";
 import { createFocusedQaView } from "../backend/geminiFocusedQaView.mjs";
 import { createNavigationSearch } from "../backend/evidenceNavigationSearch.mjs";
-import { buildRuleStructureMapping, makeQaSourceUnits, sourceSha256, stableJson,
+import { buildRuleSourceStructure, buildRuleStructureMapping, makeQaSourceUnits, sourceSha256, stableJson,
   SOURCE_STRUCTURE_MAPPING_CONTRACT } from "../backend/evidenceSourceStructure.mjs";
 import { GEMINI_RULE_QA_ASSET_DIRECTORY, GEMINI_RULE_QA_ASSET_SCHEMA_VERSION,
   GEMINI_RULE_QA_MANIFEST_FILE, loadGeminiRuleQaAssets } from "../backend/geminiRuleQaAssets.mjs";
+import { applyRuleSourceAllowlist, loadRuleSourceAllowlist,
+  RULE_SOURCE_PUBLICATION_CONTRACT } from "../backend/ruleSourcePublication.mjs";
 
 const gz = promisify(gzip), ungz = promisify(gunzip);
 const QA_TYPES = new Set(["qa", "card-faq"]);
 const EXCLUDED_RULE_ROLES = new Set(["toc", "table-of-contents", "site-info", "rule-test"]);
 const CANONICAL_MANIFEST = "canonical-manifest.json";
+// Sections of fixed official sources that are published; see docs/rule-corpus.md.
+export const DEFAULT_RULE_SOURCE_ALLOWLIST = fileURLToPath(
+  new URL("../config/rule-sources/konami-rulebook-allowlist.json", import.meta.url));
 const FILES = { qaRecords: "qa-records.json.gz", ruleRecords: "rule-records.json.gz",
   qaLexicalIndex: "qa-lexical-index.bm25.gz", structureMapping: "structure-mapping.json.gz",
   releaseStructureMapping: "structure-mapping.release.json.gz",
@@ -110,7 +115,33 @@ function ruleNavInput(unit, source, byKey, refsByKey) {
     canonicalBodySha256: unit.sourceCanonicalSha256, contextRefs: unit.contextRefs,
     explicitRefs: unit.explicitRefs, input, contextInputSha256: sha256(stableJson(input)) };
 }
-async function canonicalStage(sourceDir, destination) {
+// The publication binding names the allowlist by file name and byte hash only,
+// so the manifest is identical wherever the repository is checked out.
+function publicationBinding(loaded, allowlistPath, applied, mapping, ruleRecords) {
+  const mappedUnits = new Map(mapping.sources.map(source => [source.sourceId, source.readingUnits.length]));
+  return {
+    contract: RULE_SOURCE_PUBLICATION_CONTRACT,
+    allowlist: { file: basename(allowlistPath), bytes: loaded.bytes, sha256: loaded.sha256 },
+    sources: applied.applied.map(source => {
+      const record = ruleRecords.find(value => value.id === source.sourceId);
+      const { publication: _publication, ...complete } = record;
+      return { sourceId: source.sourceId, mode: source.mode,
+        publishedSections: source.publishedSections, sourceSections: source.sourceSections,
+        publishedReadingUnits: mappedUnits.get(source.sourceId) || 0,
+        sourceReadingUnits: buildRuleSourceStructure(complete).readingUnits.length };
+    }),
+    absentSourceIds: [...applied.absentSourceIds],
+  };
+}
+async function assertPublicationBinding(binding, allowlistPath, code) {
+  const current = await loadRuleSourceAllowlist(allowlistPath);
+  if (binding?.contract !== RULE_SOURCE_PUBLICATION_CONTRACT
+      || binding.allowlist?.sha256 !== current.sha256 || binding.allowlist?.bytes !== current.bytes) {
+    throw new Error(code);
+  }
+}
+async function canonicalStage(sourceDir, destination, allowlistPath) {
+  const allowlist = await loadRuleSourceAllowlist(allowlistPath);
   const names = ["rulings.json", "qa-index.json", "ocg-rule-corpus.json", "rag-data-revision-manifest.json", "cards.json"];
   const bytes = await Promise.all(names.map(name => readFile(join(sourceDir, name))));
   const qaRecords = stableQaSelection(parseRecords(bytes[1], "qa_index"), parseRecords(bytes[0], "rulings"),
@@ -122,8 +153,11 @@ async function canonicalStage(sourceDir, destination) {
     cardId: String(card.id), cnName: String(card.cnName || ""), jaName: String(card.jaName || ""),
     enName: String(card.enName || ""), sourceUrl: String(card.sourceUrl || ""),
   }]));
-  const ruleRecords = parseRecords(bytes[2], "rules").filter(record => record?.recordType === "rule-doc"
-    && !EXCLUDED_RULE_ROLES.has(String(record.sourceRole || "")));
+  // The synchronized corpus keeps every fixed source complete. Governed
+  // sources are published only through their listed sections.
+  const applied = applyRuleSourceAllowlist(parseRecords(bytes[2], "rules").filter(record => record?.recordType === "rule-doc"
+    && !EXCLUDED_RULE_ROLES.has(String(record.sourceRole || ""))), allowlist.allowlist);
+  const ruleRecords = applied.records;
   const qaContentRevision = sha256(stableJson(qaRecords));
   const qaRevision = qaContentRevision;
   const parentSnapshot = createQaSnapshot({ records: qaRecords, qaRevision });
@@ -133,8 +167,10 @@ async function canonicalStage(sourceDir, destination) {
     canonicalBodySha256: sha256(record.text), sourceUrl: record.sourceUrl,
     sourceRole: record.sourceRole,
     ...(Object.hasOwn(record, "sourceAuthority") ? { sourceAuthority: record.sourceAuthority } : {}),
-    ...(Object.hasOwn(record, "official") ? { official: record.official } : {}) }))));
+    ...(Object.hasOwn(record, "official") ? { official: record.official } : {}),
+    ...(Object.hasOwn(record, "publication") ? { publication: record.publication } : {}) }))));
   const structureMapping = finalizeMapping(ruleRecords, qaUnits.map(({ text: _text, ...unit }) => unit));
+  const ruleSourcePublication = publicationBinding(allowlist, allowlistPath, applied, structureMapping, ruleRecords);
   const qaSnapshot = parentSnapshot;
   const readingByKey = new Map(structureMapping.sources.flatMap(source => source.readingUnits)
     .map(unit => [unit.unitKey, unit]));
@@ -188,6 +224,7 @@ async function canonicalStage(sourceDir, destination) {
   const body = { schemaVersion: GEMINI_RULE_QA_ASSET_SCHEMA_VERSION, kind: "gemini-rule-qa-canonical-stage",
     dataRevision, qaRevision, qaContentRevision, ruleContentRevision,
     structureMappingRevision: structureMapping.structureMappingRevision, sources: sourceDescriptors,
+    ruleSourcePublication,
     counts: { qaRecords: qaRecords.length, ruleRecords: ruleRecords.length,
       sourceAtoms: structureMapping.sources.reduce((sum, source) => sum + source.atoms.length, 0),
       readingUnits: structureMapping.sources.reduce((sum, source) => sum + source.readingUnits.length, 0),
@@ -219,7 +256,7 @@ async function denseManifest(directory) {
   }
   return manifest;
 }
-async function releaseStage(sourceDir, destination, navigationPath, ruleDenseDir, qaDenseDir) {
+async function releaseStage(sourceDir, destination, navigationPath, ruleDenseDir, qaDenseDir, allowlistPath) {
   const canonical = JSON.parse(await readFile(join(destination, CANONICAL_MANIFEST), "utf8"));
   if (canonical.schemaVersion !== 3 || canonical.kind !== "gemini-rule-qa-canonical-stage") {
     throw new Error("gemini_rule_qa_canonical_manifest_invalid");
@@ -234,6 +271,8 @@ async function releaseStage(sourceDir, destination, navigationPath, ruleDenseDir
       throw new Error("gemini_rule_qa_source_changed_after_canonical");
     }
   }
+  await assertPublicationBinding(canonical.ruleSourcePublication, allowlistPath,
+    "gemini_rule_qa_publication_changed_after_canonical");
   let [mapping, inputs] = await Promise.all([readAsset(destination, canonical.assets.structureMapping),
     readAsset(destination, canonical.assets.navigationInputs)]);
   if (mapping.structureMappingRevision !== canonical.structureMappingRevision) {
@@ -287,7 +326,7 @@ async function releaseStage(sourceDir, destination, navigationPath, ruleDenseDir
     qaDenseRevision, ruleDenseRevision,
     contracts: { sourceAdapter: "source-structure-v1", canonicalBody: "canonical-body-v1",
       navigationPrompt: "navigation-v1", lexicalIndex: "context-navigation-v1" },
-    revisions, sources: canonical.sources,
+    revisions, sources: canonical.sources, ruleSourcePublication: canonical.ruleSourcePublication,
     counts: { ...canonical.counts, navigationRecords: navigation.length },
     assets: { ...canonical.assets, structureMapping: mappingAsset, navigationRecords: navAsset,
       navigationLexicalIndex: navigationLexicalAsset } };
@@ -310,11 +349,17 @@ async function navigationIndexStage(destination) {
     Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`));
   return { outputDir: destination, manifest, stage: "navigation-index", indexSource: "navigation_records" };
 }
-async function verifyStage(sourceDir, destination) {
+async function verifyStage(sourceDir, destination, allowlistPath) {
   const module = await import("../backend/geminiRuleQaAssets.mjs");
   module.clearGeminiRuleQaAssetsCacheForTests();
   const assets = await module.loadGeminiRuleQaAssets({ assetDir: destination });
   const canonical = JSON.parse(await readFile(join(destination, CANONICAL_MANIFEST), "utf8"));
+  // Released assets must have been built from the current allowlist.
+  if (stableJson(assets.manifest.ruleSourcePublication ?? null) !== stableJson(canonical.ruleSourcePublication ?? null)) {
+    throw new Error("gemini_rule_qa_publication_binding_invalid");
+  }
+  await assertPublicationBinding(assets.manifest.ruleSourcePublication, allowlistPath,
+    "gemini_rule_qa_publication_binding_invalid");
   const [inputs, denseInputs] = await Promise.all([
     readAsset(destination, canonical.assets.navigationInputs),
     readAsset(destination, canonical.assets.denseInputs),
@@ -342,13 +387,15 @@ async function verifyStage(sourceDir, destination) {
   return { outputDir: destination, manifest: assets.manifest, stage: "verify", indexSource: "verified" };
 }
 export async function buildGeminiRuleQaAssets({ dataDir, outputDir, stage = "release", navigationPath,
-  ruleDenseDir, qaDenseDir } = {}) {
+  ruleDenseDir, qaDenseDir, ruleSourceAllowlistPath } = {}) {
   const sourceDir = resolve(dataDir || "data");
   const destination = resolve(outputDir || join(sourceDir, GEMINI_RULE_QA_ASSET_DIRECTORY));
-  if (stage === "canonical") return canonicalStage(sourceDir, destination);
-  if (stage === "release") return releaseStage(sourceDir, destination, navigationPath, ruleDenseDir, qaDenseDir);
+  const allowlistPath = resolve(ruleSourceAllowlistPath || DEFAULT_RULE_SOURCE_ALLOWLIST);
+  if (stage === "canonical") return canonicalStage(sourceDir, destination, allowlistPath);
+  if (stage === "release") return releaseStage(sourceDir, destination, navigationPath, ruleDenseDir, qaDenseDir,
+    allowlistPath);
   if (stage === "navigation-index") return navigationIndexStage(destination);
-  if (stage === "verify") return verifyStage(sourceDir, destination);
+  if (stage === "verify") return verifyStage(sourceDir, destination, allowlistPath);
   throw new Error("gemini_rule_qa_stage_invalid");
 }
 function argument(name) { const index = process.argv.indexOf(name); return index < 0 ? "" : process.argv[index + 1]; }
@@ -359,7 +406,8 @@ if (import.meta.url === pathToFileURL(process.argv[1] || "").href) {
     outputDir: resolve(argument("--output-dir") || join(root, "data", GEMINI_RULE_QA_ASSET_DIRECTORY)),
     navigationPath: argument("--navigation") || undefined,
     ruleDenseDir: argument("--rule-dense-dir") || undefined,
-    qaDenseDir: argument("--qa-dense-dir") || undefined });
+    qaDenseDir: argument("--qa-dense-dir") || undefined,
+    ruleSourceAllowlistPath: argument("--rule-source-allowlist") || undefined });
   process.stdout.write(`${JSON.stringify({ ok: true, stage: result.stage, outputDir: result.outputDir,
     bundleRevision: result.manifest.bundleRevision, canonicalRevision: result.manifest.canonicalRevision,
     counts: result.manifest.counts })}\n`);
