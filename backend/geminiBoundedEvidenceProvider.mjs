@@ -1034,9 +1034,13 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
         return { unitKey, sourceKind: confirmedFaq ? 'faq' : bundleUnits[0].sourceKind,
           title: confirmedFaq?.title || bundleUnits[0].title || bundleUnits[0].titlePath?.at(-1) || '', entries: bundleEntries };
       }
-      // Identity exclusion for a supplementary round: a reading unit the first
-      // round already offered, or one whose every entry it already offered, is
-      // not offered again. Nothing here reads or compares source text.
+      // Identity exclusion for a supplementary round, applied to direct
+      // candidates only: a reading unit the first round already offered, or
+      // one whose every entry it already offered, is not a candidate again.
+      // The round fills a recall gap; it does not re-select what was read.
+      // Reference targets of newly read units (for example a definition they
+      // cite) are still offered, even when the first round read them.
+      // Nothing here reads or compares source text.
       const supplementExclusion = new Map();
       function supplementExcluded(unitKey) {
         if (!supplementRound) return false;
@@ -1055,10 +1059,8 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
         const confirmedFaq = unitKey.startsWith('confirmed-card-faq:')
           ? snapshot.faqParentBundles.get(unitKey.slice('confirmed-card-faq:'.length)) : null;
         const sourceUnits = confirmedFaq ? confirmedFaq.unitKeys.map(key => units.get(key)) : [units.get(unitKey)];
-        const references = sourceUnits.flatMap(unit => (unit?.explicitRefs || [])
+        return sourceUnits.flatMap(unit => (unit?.explicitRefs || [])
           .map(ref => rules.explicitReferenceMap.get(ref)).filter(Boolean));
-        return supplementRound ? references.map(ref => ({ ...ref, targetReadingUnitKeys: (ref.targetReadingUnitKeys || [])
-          .filter(key => !supplementExcluded(key)) })) : references;
       }
       for (const key of allKeys) for (const ref of getReferences(key)) for (const target of ref.targetReadingUnitKeys || []) materialize(target);
       const supplementCandidates = supplementRound ? (() => {

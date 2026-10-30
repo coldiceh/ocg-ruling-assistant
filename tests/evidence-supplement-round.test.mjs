@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { createGeminiBoundedEvidenceProvider } from "../backend/geminiBoundedEvidenceProvider.mjs";
-import { buildRuleStructureMapping, makeQaSourceUnits, stableJson } from "../backend/evidenceSourceStructure.mjs";
+import { buildRuleStructureMapping, makeQaSourceUnits, sourceSha256, stableJson } from "../backend/evidenceSourceStructure.mjs";
 import { createFocusedQaView } from "../backend/geminiFocusedQaView.mjs";
 import { createQaTools } from "../backend/geminiQaTools.mjs";
 import { resolveRagDataRevision } from "../backend/ragDataRevisionManifest.mjs";
@@ -19,13 +19,13 @@ const fakeBudget = () => ({ snapshot: () => ({ calls: [] }) });
 const INSUFFICIENT = "首轮回答正文\n证据状态：不足｜缺少：关于发动时点的一般规则";
 const SUFFICIENT = "补充后的回答正文\n证据状态：充分";
 
-const ruleRecords = [1, 2, 3, 4].map((n) => ({ id: `rule-${n}`, recordType: "rule-doc", title: `rule source ${n}`,
+const defaultRuleRecords = [1, 2, 3, 4].map((n) => ({ id: `rule-${n}`, recordType: "rule-doc", title: `rule source ${n}`,
   text: `rule ${n} first paragraph ${"x".repeat(300)}\n\nrule ${n} second paragraph ${"y".repeat(300)}`,
   sourceAuthority: "official_reference", official: true }));
-const qaRecords = [1, 2, 3, 4].map((n) => ({ id: `qa-${n}`, recordType: "qa", title: `fixture QA ${n}`,
+const defaultQaRecords = [1, 2, 3, 4].map((n) => ({ id: `qa-${n}`, recordType: "qa", title: `fixture QA ${n}`,
   question: `fixture question ${n} ${"q".repeat(200)}`, answer: `fixture answer ${n} ${"a".repeat(200)}`, official: true }));
 
-function schema3Assets() {
+function schema3Assets(ruleRecords = defaultRuleRecords, qaRecords = defaultQaRecords) {
   const qaRevision = digest(stableJson(qaRecords));
   const parentTools = createQaTools({ records: qaRecords, qaRevision });
   const parents = parentTools.readSelected(parentTools.snapshotHandles);
@@ -50,8 +50,8 @@ function schema3Assets() {
 
 // A bounded provider over the fixture release. `select(delivered, round)`
 // returns the selected aliases; requests are recorded per round.
-function boundedFixture({ select = (delivered) => offeredIds(delivered).slice(0, 1) } = {}) {
-  const assets = schema3Assets();
+function boundedFixture({ select = (delivered) => offeredIds(delivered).slice(0, 1), rules, qas } = {}) {
+  const assets = schema3Assets(rules, qas);
   const requests = [];
   let round = 0;
   const provider = createGeminiBoundedEvidenceProvider({
@@ -190,6 +190,32 @@ test("a supplementary provider round reads only units the first round never offe
   assert.equal(second.supplement.basePromptSha256, digest(first.packing.prompt));
   assert.equal(second.supplement.excludedUnits >= firstOffered.length, true);
   assert.equal(second.supplement.offeredUnits, reread.length);
+});
+
+test("reference targets of newly read units are offered even when the first round read them", async () => {
+  const text = (n) => `rule ${n} first paragraph ${"x".repeat(300)}\n\nrule ${n} second paragraph ${"y".repeat(300)}`;
+  const rules = [1, 2, 3, 4, 5, 6].map((n) => ({ id: `rule-${n}`, recordType: "rule-doc", title: `rule source ${n}`,
+    text: text(n), sourceAuthority: "official_reference", official: true,
+    // rule-4 cites rule-1 through a source-declared link.
+    ...(n === 4 ? { structure: { schemaVersion: 1, canonicalSha256: sourceSha256(text(4)), sections: [],
+      explicitLinks: [{ linkOrdinal: 1, fromBlockKey: "rule-4:opaque:1", targetSourceId: "rule-1" }] } } : {}) }));
+  const unit = (n) => `rule-${n}:reading:rule-${n}:root:1`;
+  const { provider, requests } = boundedFixture({ rules, qas: [] });
+  const env = { ...baseEnv, GEMINI_EVIDENCE_READING_TARGET_CHARS: "7000" };
+  const first = await provider.retrieve({ userQuery: "original fixture question", dataRevision, env,
+    cardResolution: { resolvedCards: [] }, retrievedEvidence: { cardTexts: [] } });
+  const offered = first.telemetry.bounded.reading.offered;
+  assert.deepEqual(offered.map((bundle) => bundle.unitKey), [unit(1), unit(2), unit(3)]);
+  await provider.retrieve({ userQuery: "original fixture question", dataRevision, env,
+    cardResolution: { resolvedCards: [] }, retrievedEvidence: { cardTexts: [] },
+    supplement: { evidenceGap: "缺少的规则", baseSelectionIds: first.packing.modelEvidence.rawRelatedEvidence.map((item) => item.id),
+      excludeUnitKeys: offered.map((bundle) => bundle.unitKey), excludeEntryIds: offered.flatMap((bundle) => bundle.atomIds),
+      priorLanes: first.telemetry.bounded.reading.lanes, basePromptChars: first.packing.prompt.length } });
+  const reread = requests.find((request) => request.round === 2 && !request.plan).delivered.groups.map((group) => group.groupId);
+  assert.ok(reread.includes(unit(4)), "a unit the first round never offered is a direct candidate");
+  assert.ok(reread.includes(unit(1)), "the definition it cites is offered again through the reference");
+  assert.equal(reread.includes(unit(2)), false, "first-round units are not direct candidates again");
+  assert.equal(reread.includes(unit(3)), false, "first-round units are not direct candidates again");
 });
 
 test("the union keeps every first-round entry and trims new entries in selection order at the limit", async () => {
