@@ -1,6 +1,8 @@
 // Source identity, finite queue order and serialized size only. This scheduler
 // makes no decision about relevance, completeness or ruling correctness.
 export const READING_SCHEDULER_CONTRACT = 'original-support-need-unseen-whole-bundle-v2';
+// In effect only when a caller passes priorityLanes (RULE_TOC_ADMIT_ENABLED).
+export const READING_SCHEDULER_PRIORITY_CONTRACT = 'priority-whole-unit-then-original-support-need-unseen-whole-bundle-v3';
 export const DENSE_MAPPING_ORDER_CONTRACT = 'source-rank-mapping-ordinal-interleave-v1';
 
 export function mapRankedUnits(results, mapResult, limit = 32) {
@@ -86,8 +88,16 @@ export function createReadingLanes(lanes) {
   return { needs, allHits };
 }
 
+// priorityLanes (optional): finite, already ordered lanes whose hits are each
+// offered once, whole, before the rotation below starts. They are measured
+// against the same maxChars/maxEntries and, when they do not fit, are recorded
+// as omitted with the same reasons. They take no rotation turn and do not
+// expand explicit links. Without priorityLanes the v2 assembly is unchanged.
 export function admitWholeReadingUnits({ lanes, materialize, measure, maxChars,
-  getReferences = () => [], signal, omissionLimit = 24, maxEntries = Infinity }) {
+  getReferences = () => [], signal, omissionLimit = 24, maxEntries = Infinity, priorityLanes }) {
+  if (priorityLanes !== undefined && !Array.isArray(priorityLanes)) {
+    throw new Error('evidence_reading_priority_lanes_invalid');
+  }
   // Recreate all cursors for every assembly, including a smaller budget retry.
   const state = createReadingLanes(lanes);
   const offered = [], omitted = [], seen = new Set(), offeredIds = new Set();
@@ -99,6 +109,50 @@ export function admitWholeReadingUnits({ lanes, materialize, measure, maxChars,
   supporting.children = new Map([...state.needs].filter(([id]) => id !== 'original'));
   const turns = [original, supporting].filter(Boolean);
   let visits = 0, measuredChars = measure([]), advanced;
+  function admit(hit, admittedBy) {
+    const bundle = materialize(hit.unitKey);
+    if (!bundle || bundle.unitKey !== hit.unitKey || !Array.isArray(bundle.entries)) {
+      throw new Error('evidence_reading_bundle_binding_invalid');
+    }
+    const entries = bundle.entries.filter(entry => !offeredIds.has(entry.id));
+    const proposed = [...offered, { ...bundle, entries, hits: state.allHits.get(hit.unitKey) || [hit],
+      ...(admittedBy ? { admittedBy } : {}) }];
+    // The entry cap is an exact count, so it is checked before the serialized
+    // measurement; a bundle that cannot fit by count is never measured whole.
+    const fitsEntries = offeredIds.size + entries.length <= maxEntries;
+    const chars = fitsEntries ? measure(proposed) : null;
+    if (fitsEntries && chars <= maxChars) {
+      offered.push(proposed.at(-1));
+      for (const entry of entries) offeredIds.add(entry.id);
+      measuredChars = chars;
+      return true;
+    }
+    omitted.push({ unitKey: bundle.unitKey, title: bundle.title || '', sourceKind: bundle.sourceKind,
+      size: measure([bundle]), reason: fitsEntries ? 'reading_capacity' : 'selection_choice_capacity', hit });
+    return false;
+  }
+  if (priorityLanes) {
+    const priorityHits = [];
+    for (const lane of priorityLanes) {
+      const { needId, queryVariantId, sourceKind, channel } = lane || {};
+      if (![needId, queryVariantId, sourceKind, channel].every(value => typeof value === 'string' && value)
+        || !Array.isArray(lane.hits)) throw new Error('evidence_reading_lane_identity_invalid');
+      if (state.needs.has(needId)) throw new Error('evidence_reading_lane_duplicate');
+      for (const raw of lane.hits) {
+        const hit = { needId, queryVariantId, sourceKind, channel, ...raw, depth: 0 };
+        priorityHits.push(hit);
+        if (!state.allHits.has(hit.unitKey)) state.allHits.set(hit.unitKey, []);
+        state.allHits.get(hit.unitKey).push(hit);
+      }
+    }
+    for (const hit of priorityHits) {
+      signal?.throwIfAborted();
+      visits++;
+      if (seen.has(hit.unitKey)) continue;
+      seen.add(hit.unitKey);
+      admit(hit, hit.channel);
+    }
+  }
   do {
     advanced = false;
     for (const need of turns) {
@@ -114,28 +168,11 @@ export function admitWholeReadingUnits({ lanes, materialize, measure, maxChars,
         advanced = true;
         if (seen.has(hit.unitKey)) continue;
         seen.add(hit.unitKey);
-        const bundle = materialize(hit.unitKey);
-        if (!bundle || bundle.unitKey !== hit.unitKey || !Array.isArray(bundle.entries)) {
-          throw new Error('evidence_reading_bundle_binding_invalid');
-        }
-        const entries = bundle.entries.filter(entry => !offeredIds.has(entry.id));
-        const proposed = [...offered, { ...bundle, entries, hits: state.allHits.get(hit.unitKey) || [hit] }];
-        // The entry cap is an exact count, so it is checked before the serialized
-        // measurement; a bundle that cannot fit by count is never measured whole.
-        const fitsEntries = offeredIds.size + entries.length <= maxEntries;
-        const chars = fitsEntries ? measure(proposed) : null;
-        if (fitsEntries && chars <= maxChars) {
-          offered.push(proposed.at(-1));
-          for (const entry of entries) offeredIds.add(entry.id);
-          measuredChars = chars;
-          break;
-        }
-        omitted.push({ unitKey: bundle.unitKey, title: bundle.title || '', sourceKind: bundle.sourceKind,
-          size: measure([bundle]), reason: fitsEntries ? 'reading_capacity' : 'selection_choice_capacity', hit });
+        if (admit(hit)) break;
       }
     }
   } while (advanced);
   return { offered, omitted, unread: omitted.slice(0, omissionLimit),
     omittedCount: omitted.length, offeredIds: [...offeredIds], visits, measuredChars,
-    contract: READING_SCHEDULER_CONTRACT };
+    contract: priorityLanes ? READING_SCHEDULER_PRIORITY_CONTRACT : READING_SCHEDULER_CONTRACT };
 }
