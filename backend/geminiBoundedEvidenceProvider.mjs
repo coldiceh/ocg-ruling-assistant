@@ -861,8 +861,13 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
         for (const kind of ['qa','faq']) channels.push([kind, 'original_lexical', qaLexical[kind]]);
         timingsMs.lexicalSearch += performance.now() - searchAt;
         searchAt = performance.now();
+        // Partition by the bound reading unit's own sourceKind, as the QA
+        // lexical lane does. Released ocg-rule navigation records carry no
+        // sourceKind field, so the record value alone left them in no
+        // partition. This is an identity lookup; ranking is unchanged.
         const navigation = snapshot.navigationSearch.searchBySourceKind(query.text, {
           sourceKinds: ['rule','qa','faq'], limit: 32,
+          sourceKindForUnit: unitKey => units.get(unitKey)?.sourceKind,
         });
         for (const kind of ['rule','qa','faq']) channels.push([kind, 'navigation_lexical',
           mapRankedUnits(navigation[kind], hit => [hit.unitKey])]);
