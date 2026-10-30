@@ -30,7 +30,7 @@ export function evidenceSupplementEstimatedRoundMs(env = {}) {
  * web page's prepared answer.
  */
 export function decideEvidenceSupplement({ env = {}, continuation, firstModelResult, invocationStartedAt,
-  invocationShape = 'prepared_finalize', nowMs = Date.now() } = {}) {
+  invocationShape = 'prepared_finalize', nowMs = Date.now(), requestCancelled = false } = {}) {
   const answer = firstModelResult?.answer || {};
   const evidenceStatus = EVIDENCE_STATUSES.includes(answer.evidenceStatus) ? answer.evidenceStatus : 'unknown';
   const evidenceGap = evidenceStatus === 'insufficient' ? String(answer.evidenceGap || '').trim() : '';
@@ -39,6 +39,8 @@ export function decideEvidenceSupplement({ env = {}, continuation, firstModelRes
   if (evidenceStatus !== 'insufficient') return { ...base, attempt: false, status: 'not_needed' };
   if (!base.enabled) return { ...base, attempt: false, status: 'disabled' };
   const skip = (skipReason, extra = {}) => ({ ...base, attempt: false, status: 'skipped', skipReason, ...extra });
+  // The request ended after the first answer completed: no paid round starts.
+  if (requestCancelled === true) return skip('request_cancelled');
   if (!evidenceGap) return skip('evidence_gap_absent');
   const reading = continuation?.ruleQueryModel?.bounded?.reading;
   if (continuation?.mode !== 'cloud_evidence_v1' || !Array.isArray(reading?.lanes) || !Array.isArray(reading?.offered)
@@ -85,6 +87,10 @@ function displayable(modelResult) {
   return Boolean(answer && !modelResult.providerFailure
     && !(answer.riskFlags || []).includes('model_output_not_displayable')
     && String(answer.shortAnswer || '').trim());
+}
+
+function cancelledOutcome(outcome) {
+  return { ...outcome, status: 'cancelled', failureReason: 'cancelled_during_supplement' };
 }
 
 function failureCode(error) {
@@ -210,15 +216,16 @@ export async function runEvidenceSupplementRound({ decision, continuation, env =
       timingsMs.finalModel = Date.now() - modelStartedAt;
     }
     if (!displayable(modelResult)) {
-      signal?.throwIfAborted();
-      return { status: 'failed', failureReason: deadline.aborted ? 'deadline_exceeded' : 'final_model_not_displayable',
-        retrieval, modelResult, timingsMs };
+      return signal?.aborted ? cancelledOutcome({ retrieval, modelResult, timingsMs })
+        : { status: 'failed', failureReason: deadline.aborted ? 'deadline_exceeded' : 'final_model_not_displayable',
+          retrieval, modelResult, timingsMs };
     }
     return { status: 'applied', promptBundle, evidence: supplementedEvidence, modelResult, retrieval, timingsMs };
   } catch (error) {
-    // A cancelled request stays cancelled. Every other failure keeps the
-    // first answer and is reported in telemetry.
-    if (signal?.aborted) throw error;
+    // The first answer is already complete: a cancellation or failure during
+    // this round only ends the round. The caller keeps the first answer (and
+    // a finalize request can still store it for recovery).
+    if (signal?.aborted) return cancelledOutcome({ retrieval, modelResult, timingsMs });
     return { status: 'failed', failureReason: deadline.aborted ? 'deadline_exceeded' : failureCode(error),
       retrieval, modelResult, timingsMs };
   } finally {

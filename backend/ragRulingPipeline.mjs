@@ -469,6 +469,7 @@ async function finalizePreparedRagRulingQuestionCore({
   // failure keeps the first answer.
   const supplementDecision = decideEvidenceSupplement({
     env, continuation, firstModelResult, invocationStartedAt, invocationShape,
+    requestCancelled: signal?.aborted === true,
   });
   const supplementOutcome = supplementDecision.attempt
     ? await runEvidenceSupplementRound({

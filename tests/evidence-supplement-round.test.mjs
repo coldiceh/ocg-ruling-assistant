@@ -398,13 +398,10 @@ test("a failed supplementary step or no new entry keeps the first answer", async
   assert.equal(notShown.debug.evidenceSupplement.failureReason, "final_model_not_displayable");
 });
 
-test("the round stops at the invocation deadline, while a cancelled request stays cancelled", async (t) => {
+test("the round stops at the invocation deadline and keeps the first answer", async (t) => {
   const { provider } = boundedFixture();
   const continuation = await prepare(provider);
-  const env = { ...baseEnv, EVIDENCE_SUPPLEMENT_ENABLED: "true", EVIDENCE_SUPPLEMENT_ESTIMATED_ROUND_MS: "1" };
-  const waitsForAbort = { retrieve: ({ signal }) => new Promise((_resolve, reject) => {
-    signal.addEventListener("abort", () => reject(signal.reason), { once: true });
-  }) };
+  const env = { ...enabledEnv, EVIDENCE_SUPPLEMENT_ESTIMATED_ROUND_MS: "1" };
   // AbortSignal.timeout does not keep a process alive; a served request does.
   const keepAlive = setInterval(() => {}, 20);
   t.after(() => clearInterval(keepAlive));
@@ -416,15 +413,43 @@ test("the round stops at the invocation deadline, while a cancelled request stay
   assert.equal(timedOut.shortAnswer, "首轮回答正文");
   assert.equal(timedOut.debug.evidenceSupplement.status, "failed");
   assert.equal(timedOut.debug.evidenceSupplement.failureReason, "deadline_exceeded");
+});
 
+const waitsForAbort = { retrieve: ({ signal }) => new Promise((_resolve, reject) => {
+  signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+}) };
+
+test("a cancellation during the round ends only the round; a cancelled first call still throws", async () => {
+  const { provider } = boundedFixture();
+  const continuation = await prepare(provider);
+  const progress = recordingProgress();
   const controller = new AbortController();
-  const pending = finalizePreparedRagRulingQuestion({ continuation, env, cloudBudget: fakeBudget(),
-    signal: controller.signal, modelInvoker: scriptedModel(INSUFFICIENT).modelInvoker,
+  const answer = await finalizePreparedRagRulingQuestion({ continuation, env: enabledEnv, cloudBudget: fakeBudget(),
+    signal: controller.signal, progress, modelInvoker: scriptedModel(INSUFFICIENT).modelInvoker,
     evidenceSupplementProvider: { retrieve: (input) => {
       setImmediate(() => controller.abort(new Error("client_disconnected")));
       return waitsForAbort.retrieve(input);
     } } });
-  await assert.rejects(pending, /client_disconnected/u);
+  assert.equal(answer.shortAnswer, "首轮回答正文");
+  assert.equal(answer.debug.evidenceSupplement.status, "cancelled");
+  assert.equal(answer.debug.evidenceSupplement.failureReason, "cancelled_during_supplement");
+  assert.equal(answer.debug.evidenceSupplement.triggered, true);
+  assert.deepEqual(progress.events, [["phase_start", "evidence_supplement"], ["phase_end"]]);
+
+  // Cancelled after the first answer but before the round: no round starts.
+  const late = new AbortController();
+  let retrieves = 0;
+  const skipped = await finalizePreparedRagRulingQuestion({ continuation, env: enabledEnv, cloudBudget: fakeBudget(),
+    signal: late.signal, evidenceSupplementProvider: { retrieve: async () => { retrieves += 1; } },
+    modelInvoker: async () => { late.abort(new Error("client_disconnected")); return INSUFFICIENT; } });
+  assert.equal(retrieves, 0);
+  assert.equal(skipped.shortAnswer, "首轮回答正文");
+  assert.equal(skipped.debug.evidenceSupplement.skipReason, "request_cancelled");
+
+  // A request cancelled before its first final call is still rejected.
+  await assert.rejects(finalizePreparedRagRulingQuestion({ continuation, env: enabledEnv, cloudBudget: fakeBudget(),
+    signal: AbortSignal.abort(new Error("client_disconnected")), evidenceSupplementProvider: provider,
+    modelInvoker: scriptedModel(INSUFFICIENT).modelInvoker }), /client_disconnected/u);
 });
 
 test("the round's invocation budget is the engine-reproduction wait budget under the 300 s function limit", async () => {
