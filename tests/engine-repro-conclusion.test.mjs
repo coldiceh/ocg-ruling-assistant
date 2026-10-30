@@ -266,6 +266,25 @@ test("output shape check only: ids resolved in section order, each once; nothing
   }
 });
 
+test("a fault while building the conclusion never fails the reproduction", async () => {
+  // engine state the digest cannot read (a getter that throws, on a copy) reaches the conclusion step only
+  const hostile = () => {
+    const result = attributeEngineResult();
+    const monster = { ...monsterState };
+    Object.defineProperty(monster, "attribute", { enumerable: true, get() { throw new Error("boom"); } });
+    result.state.players[1].mzone = [monster];
+    return result;
+  };
+  const transport = mockOpenAi({ planOutput: attributePlan, conclusion: { conclusion: "不应出现", used: ["o1"] } });
+  const record = await runEngineReproduction({ question: ATTRIBUTE_QUESTION, identity: identityOf(1, 2), cardsById, cidMap,
+    engine: engineReturning(hostile), clock: () => transport.clockRef.t, conclusion: CONCLUSION_MODEL,
+    modelCall: createOfficialModelCall({ env: { ENGINE_REPRO_OPENAI_API_KEY: "test-key" }, limits: fakeLimits(), fetchImpl: transport.fetchImpl }) });
+  assert.equal(record.summary.status, "已复现");
+  assert.deepEqual([record.conclusion.status, record.conclusion.error], ["failed", "conclusion_internal_error:boom"]);
+  assert.deepEqual(transport.calls.map((call) => call.stage), ["plan"], "no conclusion request was sent");
+  assert.ok(typeof record.rendered === "string" && Number.isFinite(record.timings.finishedAtMs));
+});
+
 test("writeConclusion never throws: a budget refusal or a missing call is a recorded outcome", async () => {
   const digest = { subQuestions: [], observations: [{ id: "o1", text: "甲" }], notReproduced: [] };
   const refused = await writeConclusion({ question: "q", digest, modelCall: async () => {

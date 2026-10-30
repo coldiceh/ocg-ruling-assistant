@@ -236,8 +236,15 @@ export async function runEngineReproduction({ question, identity, cardsById, cid
       return;
     }
     const t0 = clock();
-    const result = await writeConclusion({ question, digest: engineReproDigest(record), modelCall, config: conclusion });
-    record.timings.conclusionMs += clock() - t0;
+    let result;
+    try {
+      result = await writeConclusion({ question, digest: engineReproDigest(record), modelCall, config: conclusion });
+    } catch (error) {
+      // writeConclusion records every call outcome itself; this only catches a fault while building its input
+      result = { status: "failed", error: `conclusion_internal_error:${String(error?.message || error).slice(0, 80)}` };
+    } finally {
+      record.timings.conclusionMs += clock() - t0;
+    }
     if (result.responded) {
       record.modelUsage.push({ stage: "conclusion", inputTokensEstimate: result.inputTokensEstimate ?? null,
         inputTokens: result.usage?.inputTokens ?? null, outputTokens: result.usage?.outputTokens ?? null,
