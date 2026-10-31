@@ -994,6 +994,9 @@ async function requestPreparedAnswer(preparationId, requestedRulingVersion, { si
   }
   const answer = validatePublicAnswerRulingVersion(finalResult, requestedRulingVersion);
   clearStoredPublicAnswerPreparationId(preparationId);
+  // After a supplementary search the final model read a new package; the download offers that one.
+  const supplementedPackage = normalizePreparedEvidencePackage(answer?.evidencePackage);
+  if (supplementedPackage) setPreparedEvidencePackage(supplementedPackage);
   return answer;
 }
 
@@ -1071,6 +1074,8 @@ async function recoverStoredPublicAnswer({
       } catch {
         return null;
       }
+      const supplementedPackage = normalizePreparedEvidencePackage(validatedAnswer?.evidencePackage);
+      if (supplementedPackage) setPreparedEvidencePackage(supplementedPackage);
       clearStoredPublicAnswerPreparationId(preparationId);
       return validatedAnswer;
     }
@@ -6616,6 +6621,15 @@ function renderPendingStages(stages = getPendingStages()) {
     ui.verdictBody.textContent = lt("证据已准备好，正在等 ygopro 引擎复现的结果（通常再等几十秒）。不会调用最终裁定模型。",
       "The evidence is ready; waiting for the ygopro engine replay (usually a few tens of seconds). The final ruling model is not called.",
       "証拠の準備ができました。ygopro エンジン再現の結果を待っています（通常は数十秒）。最終裁定モデルは呼び出しません。");
+    return;
+  }
+  if (pendingPipelinePhase === "evidence_supplement") {
+    // The first ruling reported missing evidence; the server searches once more for that gap and answers again.
+    ui.verdictTitle.textContent = lt("证据不足，正在补充检索…", "Evidence insufficient, running a supplementary search…",
+      "根拠が不足しているため、追加検索しています…");
+    ui.verdictBody.textContent = lt("首轮回答认为现有资料不足，正在按缺口补充检索一次并重新生成裁定（只补一次，通常还要一到两分钟）。",
+      "The first answer found the evidence insufficient. Searching once more for the missing material and regenerating the ruling (one extra round only; usually another minute or two).",
+      "最初の回答で根拠が不足していたため、不足分を1回だけ追加検索して裁定を作り直しています（通常はさらに1〜2分かかります）。");
     return;
   }
   const stage = pendingStageIndex >= 0 ? stages[pendingStageIndex] : null;

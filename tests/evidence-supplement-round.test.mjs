@@ -1,0 +1,530 @@
+import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import { readFile } from "node:fs/promises";
+import test from "node:test";
+import { createGeminiBoundedEvidenceProvider } from "../backend/geminiBoundedEvidenceProvider.mjs";
+import { buildRuleStructureMapping, makeQaSourceUnits, sourceSha256, stableJson } from "../backend/evidenceSourceStructure.mjs";
+import { createFocusedQaView } from "../backend/geminiFocusedQaView.mjs";
+import { createQaTools } from "../backend/geminiQaTools.mjs";
+import { resolveRagDataRevision } from "../backend/ragDataRevisionManifest.mjs";
+import { answerRagRulingQuestion, finalizePreparedRagRulingQuestion } from "../backend/ragRulingPipeline.mjs";
+import { EVIDENCE_STATUS_INSTRUCTION, extractEvidenceStatusLine } from "../backend/evidenceStatusProtocol.mjs";
+import { decideEvidenceSupplement, EVIDENCE_SUPPLEMENT_INVOCATION_BUDGET_MS } from "../backend/evidenceSupplementRound.mjs";
+import { DEFAULT_WAIT_BUDGET_MS } from "../backend/engineRepro/session.mjs";
+
+const digest = (value) => createHash("sha256").update(value).digest("hex");
+const data = { cards: [], records: [], qaRecords: [] };
+const dataRevision = resolveRagDataRevision(data, "");
+const fakeBudget = () => ({ snapshot: () => ({ calls: [] }) });
+const INSUFFICIENT = "首轮回答正文\n证据状态：不足｜缺少：关于发动时点的一般规则";
+const SUFFICIENT = "补充后的回答正文\n证据状态：充分";
+
+const defaultRuleRecords = [1, 2, 3, 4].map((n) => ({ id: `rule-${n}`, recordType: "rule-doc", title: `rule source ${n}`,
+  text: `rule ${n} first paragraph ${"x".repeat(300)}\n\nrule ${n} second paragraph ${"y".repeat(300)}`,
+  sourceAuthority: "official_reference", official: true }));
+const defaultQaRecords = [1, 2, 3, 4].map((n) => ({ id: `qa-${n}`, recordType: "qa", title: `fixture QA ${n}`,
+  question: `fixture question ${n} ${"q".repeat(200)}`, answer: `fixture answer ${n} ${"a".repeat(200)}`, official: true }));
+
+function schema3Assets(ruleRecords = defaultRuleRecords, qaRecords = defaultQaRecords) {
+  const qaRevision = digest(stableJson(qaRecords));
+  const parentTools = createQaTools({ records: qaRecords, qaRevision });
+  const parents = parentTools.readSelected(parentTools.snapshotHandles);
+  const focused = createFocusedQaView({ qaRevision, items: parents });
+  const focusedByHandle = new Map(focused.items.map((item) => [item.handle, item]));
+  const qaUnits = makeQaSourceUnits(focused.items).map((unit) => ({ ...unit, item: focusedByHandle.get(unit.handle) }));
+  const { structureMappingRevision: _old, ...mappingBody } = buildRuleStructureMapping(ruleRecords);
+  const structureMapping = { ...mappingBody, qaUnits };
+  structureMapping.structureMappingRevision = digest(stableJson(structureMapping));
+  const navigationRecords = [...structureMapping.sources.flatMap((source) => source.readingUnits), ...qaUnits]
+    .map((unit) => ({ unitKey: unit.unitKey, sourceId: unit.sourceId,
+      canonicalBodySha256: unit.sourceCanonicalSha256 || unit.canonicalBodySha256, contextInputSha256: "c".repeat(64),
+      titlePath: unit.titlePath || [], descriptionZh: "", descriptionJa: "", searchQuestions: [],
+      navigationStatus: "not_generated_in_scope", contextRefs: unit.contextRefs || [], explicitRefs: unit.explicitRefs || [],
+      generator: null }));
+  return { schemaVersion: 3, manifest: { schemaVersion: 3 }, dataRevision, bundleRevision: "b", qaRevision,
+    ruleContentRevision: digest(stableJson(ruleRecords)), navigationRevision: "n",
+    structureMappingRevision: structureMapping.structureMappingRevision, ruleDenseRevision: "rd", qaDenseRevision: "qd",
+    rulesRecords: ruleRecords, structureMapping, navigationRecords,
+    createQaTools: (options) => createQaTools({ records: qaRecords, qaRevision, ...options }) };
+}
+
+// A bounded provider over the fixture release. `select(delivered, round)`
+// returns the selected aliases; requests are recorded per round.
+function boundedFixture({ select = (delivered, round) => round === 1 ? offeredIds(delivered).slice(0, 1)
+  : [...priorOfferedIds(delivered), ...newOfferedIds(delivered).slice(0, 1)], rules, qas } = {}) {
+  const assets = schema3Assets(rules, qas);
+  const requests = [];
+  let round = 0;
+  const provider = createGeminiBoundedEvidenceProvider({
+    loadAssets: async () => assets,
+    loadDenseSearch: async ({ rules }) => ({ searchAsync: async () => [...rules.units.values()] }),
+    loadQaSearch: async ({ items }) => ({ searchAsync: async () => items }),
+    budgetedRequest: (request) => request.invoke(),
+    remainingBudget: async () => Number.POSITIVE_INFINITY,
+    fetchImpl: async (url, init) => {
+      const body = JSON.parse(init.body);
+      if (url.endsWith(":countTokens")) return Response.json({ totalTokens: 500 });
+      if (url.endsWith(":embedContent")) return Response.json({ embedding: { values: Array(768).fill(1) },
+        usageMetadata: { promptTokenCount: 100 } });
+      if (url.endsWith(":batchEmbedContents")) return Response.json({
+        embeddings: body.requests.map(() => ({ values: Array(768).fill(1) })), usageMetadata: { promptTokenCount: 100 } });
+      const text = JSON.stringify(body);
+      const plan = text.includes("为原题规划证据检索") || text.includes("为原题做一次补充检索规划");
+      if (plan) round += 1;
+      const delivered = JSON.parse(body.contents ? body.contents[0].parts[1].text
+        : body.input.find((message) => message.role === "user").content.split("\n").at(-1));
+      requests.push({ round, plan, text, delivered });
+      const output = plan
+        ? { needs: [{ id: "n", question: "fixture relation", ruleQuery: "fixture rule search", qaQuery: "fixture qa search" }] }
+        : { selectedIds: select(delivered, round), note: "" };
+      if (body.input) return Response.json({ id: "fixture", model: body.model, status: "completed",
+        output: [{ type: "message", content: [{ type: "output_text", text: JSON.stringify(output) }] }],
+        usage: { input_tokens: 500, output_tokens: 100, total_tokens: 600 } });
+      return Response.json({ candidates: [{ content: { parts: [{ text: JSON.stringify(output) }] } }],
+        usageMetadata: { promptTokenCount: 500, candidatesTokenCount: 80, thoughtsTokenCount: 20, totalTokenCount: 600 } });
+    },
+  });
+  return { provider, requests, assets };
+}
+
+function offeredIds(delivered) {
+  return (delivered.groups || []).flatMap((group) => [
+    ...(group.units || []).map((row) => row[0]), ...(group.items || []).map((item) => item.handle)]);
+}
+
+function priorOfferedIds(delivered) {
+  return offeredIds({ groups: (delivered.groups || []).filter((group) => group.groupId === "previously_delivered") });
+}
+
+function newOfferedIds(delivered) {
+  return offeredIds({ groups: (delivered.groups || []).filter((group) => group.groupId !== "previously_delivered") });
+}
+
+// As in production (vercel.json), the first round has no separate retrieval deadline.
+const baseEnv = { RAG_EVIDENCE_PIPELINE: "cloud_evidence_v1", GEMINI_RULE_QA_ENABLED: "true",
+  RAG_LIVE_OFFICIAL_QA: "false", GEMINI_API_KEY: "fixture", GEMINI_EVIDENCE_READING_TARGET_CHARS: "9000",
+  GEMINI_EVIDENCE_DEADLINE_MS: "0" };
+const enabledEnv = { ...baseEnv, EVIDENCE_SUPPLEMENT_ENABLED: "true" };
+
+// Preparation sees the same switch as finalization, as in one deployment.
+async function prepare(provider, env = enabledEnv) {
+  const prepared = await answerRagRulingQuestion({ question: "original fixture question", ...data,
+    prepareForContinuation: true, geminiEvidenceProvider: provider, cloudBudget: fakeBudget(), env,
+    cardModelInvoker: async () => JSON.stringify({ cardNames: [], groupMentions: [] }),
+    fetchImpl: async () => { throw new Error("unexpected transport"); } });
+  assert.equal(prepared.status, "evidence_prepared");
+  return JSON.parse(JSON.stringify(prepared.continuation));
+}
+
+function scriptedModel(...answers) {
+  const prompts = [];
+  return { prompts, modelInvoker: async ({ prompt }) => {
+    prompts.push(prompt);
+    assert.ok(prompts.length <= answers.length, "unexpected extra final-model call");
+    return answers[prompts.length - 1];
+  } };
+}
+
+function recordingProgress() {
+  const events = [];
+  return { events, transition() {}, phase: (name) => events.push(["phase_start", name]),
+    endPhase: () => events.push(["phase_end"]) };
+}
+
+test("the status line is read as a field, removed from the shown text, and unknown when unreadable", () => {
+  assert.deepEqual(extractEvidenceStatusLine("结论\n\n证据状态：充分"),
+    { text: "结论", evidenceStatus: "sufficient", evidenceGap: "", evidenceStatusLine: "parsed" });
+  assert.deepEqual(extractEvidenceStatusLine("结论\n证据状态：不足｜缺少：关于发动时点的一般规则  \n"),
+    { text: "结论", evidenceStatus: "insufficient", evidenceGap: "关于发动时点的一般规则", evidenceStatusLine: "parsed" });
+  assert.deepEqual(extractEvidenceStatusLine("结论\n**证据状态: 不足|缺少: 规则 X**"),
+    { text: "结论", evidenceStatus: "insufficient", evidenceGap: "规则 X", evidenceStatusLine: "parsed" });
+  // A protocol line with an undocumented value is still removed, but unknown.
+  assert.deepEqual(extractEvidenceStatusLine("结论\n证据状态：部分不足"),
+    { text: "结论", evidenceStatus: "unknown", evidenceGap: "", evidenceStatusLine: "malformed" });
+  // Only the last line is the protocol position; nothing else is searched.
+  for (const text of ["结论\n证据状态：充分\n补充说明", "没有状态行的结论"]) {
+    assert.deepEqual(extractEvidenceStatusLine(text), { text, evidenceStatus: "unknown", evidenceGap: "", evidenceStatusLine: "absent" });
+  }
+});
+
+test("finalized answers never show the status line and record the parsed status", async () => {
+  const continuation = { schemaVersion: 1, mode: "rag_baseline", promptBundle: { prompt: "saved prompt",
+    modelEvidence: {}, allowedEvidenceIds: [] }, evidence: {},
+    cardResolution: { resolvedCards: [], unresolvedMentions: [], ambiguousMentions: [] }, timingsMs: {} };
+  for (const [raw, status, gap] of [[SUFFICIENT, "sufficient", ""],
+    [INSUFFICIENT, "insufficient", "关于发动时点的一般规则"], ["只有正文", "unknown", ""]]) {
+    const answer = await finalizePreparedRagRulingQuestion({ continuation, env: { RAG_MODEL_PROVIDER: "mock" },
+      modelInvoker: async () => raw });
+    assert.doesNotMatch(answer.shortAnswer, /证据状态/u);
+    assert.equal(answer.debug.evidenceSupplement.evidenceStatus, status);
+    assert.equal(answer.debug.evidenceSupplement.evidenceGap, gap);
+    // The switch is off by default: no round is started.
+    assert.equal(answer.debug.evidenceSupplement.triggered, false);
+    assert.equal(answer.debug.evidenceSupplement.status, status === "insufficient" ? "disabled" : "not_needed");
+  }
+});
+
+test("a supplementary provider round can reread unselected evidence and reselect the old package", async () => {
+  const { provider, requests } = boundedFixture();
+  const first = await provider.retrieve({ userQuery: "original fixture question", dataRevision, env: baseEnv,
+    cardResolution: { resolvedCards: [] }, retrievedEvidence: { cardTexts: [] } });
+  const firstOffered = first.telemetry.bounded.reading.offered.map((bundle) => bundle.unitKey);
+  const firstSelected = first.packing.modelEvidence.rawRelatedEvidence.map((item) => item.id);
+  assert.ok(firstOffered.length > 0 && first.telemetry.bounded.reading.omitted.length > 0,
+    "the fixture window must leave candidates unread");
+  const second = await provider.retrieve({ userQuery: "original fixture question", dataRevision,
+    env: { ...baseEnv, GEMINI_EVIDENCE_READING_TARGET_CHARS: "18000" },
+    cardResolution: { resolvedCards: [] }, retrievedEvidence: { cardTexts: [] },
+    supplement: { evidenceGap: "关于发动时点的一般规则", baseSelectionIds: firstSelected,
+      excludeUnitKeys: [],
+      excludeEntryIds: firstSelected,
+      priorLanes: first.telemetry.bounded.reading.lanes, previousQueryPlan: first.telemetry.queryPlan,
+      previouslyDelivered: [{ recordType: "rule-doc", title: "rule source 1" }],
+      basePromptChars: first.packing.prompt.length } });
+  const supplementRequests = requests.filter((request) => request.round === 2);
+  assert.equal(supplementRequests.length, 2);
+  assert.match(supplementRequests[0].text, /为原题做一次补充检索规划/u);
+  assert.equal(supplementRequests[0].delivered.supplement.evidenceGap, "关于发动时点的一般规则");
+  const selection = supplementRequests[1];
+  assert.match(selection.text, /本次是补充选证/u);
+  const reread = selection.delivered.groups.map((group) => group.groupId);
+  assert.ok(reread.length > 0);
+  assert.ok(reread.includes("previously_delivered"));
+  assert.equal(priorOfferedIds(selection.delivered).length, firstSelected.length);
+  assert.ok(reread.some((unitKey) => firstOffered.includes(unitKey)),
+    "first-round read-but-unselected material is eligible again");
+  // The final package starts from the question and card texts; the model must
+  // explicitly select old evidence it still needs.
+  assert.ok(selection.delivered.packingBudget.basePromptChars < first.packing.prompt.length);
+  const delivered = second.packing.modelEvidence.rawRelatedEvidence.map((item) => item.id);
+  assert.deepEqual(delivered.slice(0, firstSelected.length), firstSelected);
+  assert.equal(delivered.length, firstSelected.length + 1);
+  assert.deepEqual(second.supplement.addedEntryIds, delivered.slice(firstSelected.length));
+  assert.deepEqual(second.supplement.trimmedEntryIds, []);
+  assert.deepEqual(second.supplement.removedEntryIds, []);
+  assert.equal(second.supplement.basePromptSha256, digest(first.packing.prompt));
+  assert.ok(second.supplement.excludedUnits < firstOffered.length);
+  assert.ok(second.supplement.offeredUnits > 0);
+});
+
+test("previously delivered reference targets stay visible once alongside reread candidates", async () => {
+  const text = (n) => `rule ${n} first paragraph ${"x".repeat(300)}\n\nrule ${n} second paragraph ${"y".repeat(300)}`;
+  const rules = [1, 2, 3, 4, 5, 6].map((n) => ({ id: `rule-${n}`, recordType: "rule-doc", title: `rule source ${n}`,
+    text: text(n), sourceAuthority: "official_reference", official: true,
+    // rule-4 cites rule-1 through a source-declared link.
+    ...(n === 4 ? { structure: { schemaVersion: 1, canonicalSha256: sourceSha256(text(4)), sections: [],
+      explicitLinks: [{ linkOrdinal: 1, fromBlockKey: "rule-4:opaque:1", targetSourceId: "rule-1" }] } } : {}) }));
+  const unit = (n) => `rule-${n}:reading:rule-${n}:root:1`;
+  const { provider, requests } = boundedFixture({ rules, qas: [] });
+  const env = { ...baseEnv, GEMINI_EVIDENCE_READING_TARGET_CHARS: "7000" };
+  const first = await provider.retrieve({ userQuery: "original fixture question", dataRevision, env,
+    cardResolution: { resolvedCards: [] }, retrievedEvidence: { cardTexts: [] } });
+  const offered = first.telemetry.bounded.reading.offered;
+  assert.deepEqual(offered.map((bundle) => bundle.unitKey), [unit(1), unit(2), unit(3)]);
+  const firstSelected = first.packing.modelEvidence.rawRelatedEvidence.map((item) => item.id);
+  await provider.retrieve({ userQuery: "original fixture question", dataRevision,
+    env: { ...env, GEMINI_EVIDENCE_READING_TARGET_CHARS: "18000" },
+    cardResolution: { resolvedCards: [] }, retrievedEvidence: { cardTexts: [] },
+    supplement: { evidenceGap: "缺少的规则", baseSelectionIds: firstSelected,
+      excludeUnitKeys: [], excludeEntryIds: firstSelected,
+      priorLanes: first.telemetry.bounded.reading.lanes, basePromptChars: first.packing.prompt.length } });
+  const selection = requests.find((request) => request.round === 2 && !request.plan).delivered;
+  const reread = selection.groups.map((group) => group.groupId);
+  assert.ok(reread.includes(unit(4)), "a unit the first round never offered is a direct candidate");
+  assert.ok(reread.includes("previously_delivered"), "the old selected definition stays available");
+  assert.ok(reread.includes(unit(2)), "read-but-unselected material remains a direct candidate");
+  assert.ok(reread.includes(unit(3)), "read-but-unselected material remains a direct candidate");
+  const aliases = offeredIds(selection);
+  assert.equal(new Set(aliases).size, aliases.length, "references do not duplicate the already delivered original");
+});
+
+test("whole-package re-selection can leave out old evidence without programmatic trimming", async () => {
+  const { provider } = boundedFixture({ select: (delivered, round) => round === 1
+    ? offeredIds(delivered).slice(0, 1) : newOfferedIds(delivered).slice(0, 1) });
+  const first = await provider.retrieve({ userQuery: "original fixture question", dataRevision, env: baseEnv,
+    cardResolution: { resolvedCards: [] }, retrievedEvidence: { cardTexts: [] } });
+  const firstSelected = first.packing.modelEvidence.rawRelatedEvidence.map((item) => item.id);
+  const supplement = { evidenceGap: "缺少的规则", baseSelectionIds: firstSelected,
+    excludeUnitKeys: [], excludeEntryIds: firstSelected,
+    priorLanes: first.telemetry.bounded.reading.lanes, basePromptChars: first.packing.prompt.length };
+  const second = await provider.retrieve({ userQuery: "original fixture question", dataRevision, env: baseEnv,
+    cardResolution: { resolvedCards: [] }, retrievedEvidence: { cardTexts: [] }, supplement });
+  const delivered = second.packing.modelEvidence.rawRelatedEvidence.map((item) => item.id);
+  assert.equal(delivered.length, 1);
+  assert.ok(delivered.every((id) => !firstSelected.includes(id)));
+  assert.deepEqual(second.supplement.addedEntryIds, delivered);
+  assert.deepEqual(second.supplement.removedEntryIds, firstSelected);
+  assert.deepEqual(second.supplement.trimmedEntryIds, []);
+  assert.ok(second.packing.prompt.length <= second.supplement.maxPromptChars);
+});
+
+test("a full first package does not prevent a supplementary re-selection", async () => {
+  const { provider, requests } = boundedFixture();
+  const continuation = await prepare(provider);
+  continuation.promptBundle.prompt = "x".repeat(14000);
+  const decision = decideEvidenceSupplement({ continuation, env: enabledEnv,
+    firstModelResult: { answer: { evidenceStatus: "insufficient", evidenceGap: "缺少的规则" } },
+    invocationStartedAt: Date.now() });
+  assert.equal(decision.attempt, true);
+  const before = requests.length;
+  const firstSelected = continuation.promptBundle.modelEvidence.rawRelatedEvidence.map((item) => item.id);
+  const second = await provider.retrieve({ userQuery: "original fixture question", dataRevision, env: baseEnv,
+    cardResolution: { resolvedCards: [] }, retrievedEvidence: { cardTexts: [] },
+    supplement: { evidenceGap: "缺少的规则", baseSelectionIds: firstSelected, excludeUnitKeys: [],
+      excludeEntryIds: firstSelected, priorLanes: continuation.ruleQueryModel.bounded.reading.lanes,
+      basePromptChars: continuation.promptBundle.prompt.length } });
+  assert.ok(requests.length > before);
+  assert.ok(second.supplement.addedEntryIds.length > 0);
+});
+
+test("a Decisions selector or invalid supplementary request stops before any request", async () => {
+  const { provider, requests } = boundedFixture();
+  const supplement = { evidenceGap: "缺少的规则", baseSelectionIds: [], excludeUnitKeys: [], excludeEntryIds: [],
+    priorLanes: [], basePromptChars: 14000 };
+  await assert.rejects(provider.retrieve({ userQuery: "q", dataRevision,
+    env: { ...baseEnv, EVIDENCE_SELECTOR: "decisions", OPENAI_DECISIONS_API_KEY: "fixture" },
+    cardResolution: { resolvedCards: [] }, supplement: { ...supplement, basePromptChars: 100 } }),
+  { code: "evidence_supplement_selector_unsupported" });
+  await assert.rejects(provider.retrieve({ userQuery: "q", dataRevision, env: baseEnv,
+    cardResolution: { resolvedCards: [] }, supplement: { ...supplement, evidenceGap: "" } }),
+  { code: "evidence_supplement_request_invalid" });
+  assert.equal(requests.length, 0);
+});
+
+test("an insufficient first answer runs one supplementary round and shows the second answer", async () => {
+  const { provider, requests } = boundedFixture();
+  const continuation = await prepare(provider);
+  const firstSelected = continuation.promptBundle.modelEvidence.rawRelatedEvidence.map((item) => item.id);
+  // The second answer may still report a gap: there is never a third call.
+  const model = scriptedModel(INSUFFICIENT, "补充后的回答正文\n证据状态：不足｜缺少：另一条规则");
+  const progress = recordingProgress();
+  const env = { ...baseEnv, EVIDENCE_SUPPLEMENT_ENABLED: "true" };
+  const answer = await finalizePreparedRagRulingQuestion({ continuation, env, cloudBudget: fakeBudget(),
+    modelInvoker: model.modelInvoker, evidenceSupplementProvider: provider, progress,
+    returnSupplementedEvidencePackage: true });
+  assert.equal(model.prompts.length, 2);
+  assert.equal(model.prompts[0], continuation.promptBundle.prompt);
+  // The switch is on, so both packages ask for the status line.
+  assert.ok(model.prompts.every((prompt) => prompt.includes(EVIDENCE_STATUS_INSTRUCTION)));
+  const { provider: off } = boundedFixture();
+  assert.equal((await prepare(off, baseEnv)).promptBundle.prompt.includes("证据状态"), false);
+  assert.notEqual(model.prompts[1], model.prompts[0]);
+  assert.equal(answer.shortAnswer, "补充后的回答正文");
+  assert.deepEqual(progress.events, [["phase_start", "evidence_supplement"], ["phase_end"]]);
+  const used = answer.usedEvidence.map((item) => item.id);
+  assert.deepEqual(used.slice(0, firstSelected.length), firstSelected);
+  assert.equal(used.length, firstSelected.length + 1);
+  assert.deepEqual(answer.evidencePackage, { text: model.prompts[1], filename: "ocg-evidence.txt", supplemented: true });
+  assert.equal(answer.debug.finalPromptSha256, digest(model.prompts[1]));
+  const supplement = answer.debug.evidenceSupplement;
+  assert.equal(supplement.status, "applied");
+  assert.equal(supplement.triggered, true);
+  assert.equal(supplement.evidenceGap, "关于发动时点的一般规则");
+  assert.equal(supplement.invocation.shape, "prepared_finalize");
+  assert.equal(supplement.retrieval.addedEntries, 1);
+  assert.equal(supplement.retrieval.removedEntries, 0);
+  assert.deepEqual(supplement.retrieval.removedEntryIds, []);
+  assert.equal(supplement.retrieval.trimmedEntries, 0);
+  assert.equal(supplement.retrieval.baseRepackIdentical, true);
+  assert.ok(supplement.retrieval.offeredUnits > 0 && supplement.retrieval.recalledUnits >= supplement.retrieval.offeredUnits);
+  assert.equal(supplement.finalModel.evidenceStatus, "insufficient");
+  assert.equal(supplement.firstRound.evidenceStatus, "insufficient");
+  assert.ok(supplement.estimatedCostUsd > 0);
+  assert.ok(answer.debug.estimatedCostUsd >= supplement.estimatedCostUsd);
+  assert.ok(Number.isFinite(answer.debug.timingsMs.evidenceSupplement));
+  assert.ok(Number.isFinite(answer.debug.timingsMs.finalModel));
+  assert.equal(requests.filter((request) => request.round === 2).length, 2);
+  // Without the web finalize request's flag no package is attached.
+  const { provider: other } = boundedFixture();
+  const plain = await finalizePreparedRagRulingQuestion({ continuation: await prepare(other), env,
+    cloudBudget: fakeBudget(), modelInvoker: scriptedModel(INSUFFICIENT, SUFFICIENT).modelInvoker,
+    evidenceSupplementProvider: other });
+  assert.equal(plain.debug.evidenceSupplement.status, "applied");
+  assert.equal(Object.hasOwn(plain, "evidencePackage"), false);
+});
+
+test("an invocation that cannot fit the estimated round skips it and records skipped_time_budget", async () => {
+  const { provider, requests } = boundedFixture();
+  const continuation = await prepare(provider);
+  const before = requests.length;
+  const model = scriptedModel(INSUFFICIENT);
+  const progress = recordingProgress();
+  const answer = await finalizePreparedRagRulingQuestion({ continuation, cloudBudget: fakeBudget(),
+    env: { ...baseEnv, EVIDENCE_SUPPLEMENT_ENABLED: "true" }, modelInvoker: model.modelInvoker,
+    evidenceSupplementProvider: provider, progress,
+    invocationStartedAt: Date.now() - (EVIDENCE_SUPPLEMENT_INVOCATION_BUDGET_MS - 100_000) });
+  assert.equal(model.prompts.length, 1);
+  assert.equal(requests.length, before);
+  assert.deepEqual(progress.events, []);
+  assert.equal(answer.shortAnswer, "首轮回答正文");
+  assert.equal(answer.debug.evidenceSupplement.status, "skipped");
+  assert.equal(answer.debug.evidenceSupplement.skipReason, "skipped_time_budget");
+  assert.equal(answer.debug.evidenceSupplement.triggered, false);
+  assert.equal(answer.debug.evidenceSupplement.invocation.estimatedRoundMs, 110_000);
+  // The estimate is configurable.
+  const shorter = await finalizePreparedRagRulingQuestion({ continuation, cloudBudget: fakeBudget(),
+    env: { ...baseEnv, EVIDENCE_SUPPLEMENT_ENABLED: "true", EVIDENCE_SUPPLEMENT_ESTIMATED_ROUND_MS: "60000" },
+    modelInvoker: scriptedModel(INSUFFICIENT, SUFFICIENT).modelInvoker, evidenceSupplementProvider: provider,
+    invocationStartedAt: Date.now() - (EVIDENCE_SUPPLEMENT_INVOCATION_BUDGET_MS - 100_000) });
+  assert.equal(shorter.debug.evidenceSupplement.status, "applied");
+});
+
+test("the single-request path counts its time from the public request", async () => {
+  const run = async (nonCardElapsedBeforePipelineMs) => {
+    const { provider } = boundedFixture();
+    const model = scriptedModel(INSUFFICIENT, SUFFICIENT);
+    const answer = await answerRagRulingQuestion({ question: "original fixture question", ...data,
+      geminiEvidenceProvider: provider, evidenceSupplementProvider: provider, cloudBudget: fakeBudget(),
+      env: { ...baseEnv, EVIDENCE_SUPPLEMENT_ENABLED: "true" }, nonCardElapsedBeforePipelineMs,
+      cardModelInvoker: async () => JSON.stringify({ cardNames: [], groupMentions: [] }),
+      modelInvoker: model.modelInvoker, fetchImpl: async () => { throw new Error("unexpected transport"); } });
+    return { answer, calls: model.prompts.length };
+  };
+  const late = await run(200_000);
+  assert.equal(late.calls, 1);
+  assert.equal(late.answer.debug.evidenceSupplement.skipReason, "skipped_time_budget");
+  assert.equal(late.answer.debug.evidenceSupplement.invocation.shape, "single_request");
+  assert.ok(late.answer.debug.evidenceSupplement.invocation.elapsedMs >= 200_000);
+  const early = await run(1_000);
+  assert.equal(early.calls, 2);
+  assert.equal(early.answer.debug.evidenceSupplement.status, "applied");
+  assert.equal(early.answer.debug.evidenceSupplement.invocation.shape, "single_request");
+  assert.equal(early.answer.shortAnswer, "补充后的回答正文");
+  assert.equal(Object.hasOwn(early.answer, "evidencePackage"), false);
+});
+
+test("a failed supplementary step or no new entry keeps the first answer", async () => {
+  const { provider } = boundedFixture();
+  const continuation = await prepare(provider);
+  const env = { ...baseEnv, EVIDENCE_SUPPLEMENT_ENABLED: "true" };
+  const failing = { retrieve: async ({ supplement }) => {
+    const deliveredIds = continuation.promptBundle.modelEvidence.rawRelatedEvidence.map((item) => item.id);
+    assert.deepEqual(supplement.baseSelectionIds, deliveredIds);
+    assert.deepEqual(supplement.excludeEntryIds, deliveredIds);
+    assert.deepEqual(supplement.excludeUnitKeys, []);
+    throw Object.assign(new Error("evidence_plan_needs_absent"),
+      { boundedRetrieval: { estimatedCostUsd: 0.001, timingsMs: { plan: 5 } } });
+  } };
+  const progress = recordingProgress();
+  const failed = await finalizePreparedRagRulingQuestion({ continuation, env, cloudBudget: fakeBudget(),
+    modelInvoker: scriptedModel(INSUFFICIENT).modelInvoker, evidenceSupplementProvider: failing, progress,
+    returnSupplementedEvidencePackage: true });
+  assert.equal(failed.shortAnswer, "首轮回答正文");
+  assert.equal(failed.debug.evidenceSupplement.status, "failed");
+  assert.equal(failed.debug.evidenceSupplement.failureReason, "evidence_plan_needs_absent");
+  assert.equal(failed.debug.evidenceSupplement.retrieval.estimatedCostUsd, 0.001);
+  assert.equal(failed.debug.finalPromptSha256, continuation.finalPromptSha256);
+  assert.deepEqual(failed.usedEvidence.map((item) => item.id),
+    continuation.promptBundle.modelEvidence.rawRelatedEvidence.map((item) => item.id));
+  assert.equal(Object.hasOwn(failed, "evidencePackage"), false);
+  assert.deepEqual(progress.events, [["phase_start", "evidence_supplement"], ["phase_end"]]);
+
+  const { provider: empty } = boundedFixture({ select: (delivered, round) => round === 1 ? offeredIds(delivered).slice(0, 1) : [] });
+  const model = scriptedModel(INSUFFICIENT);
+  const unchanged = await finalizePreparedRagRulingQuestion({ continuation: await prepare(empty), env,
+    cloudBudget: fakeBudget(), modelInvoker: model.modelInvoker, evidenceSupplementProvider: empty });
+  assert.equal(model.prompts.length, 1);
+  assert.equal(unchanged.shortAnswer, "首轮回答正文");
+  assert.equal(unchanged.debug.evidenceSupplement.status, "no_new_evidence");
+  assert.equal(unchanged.debug.evidenceSupplement.retrieval.addedEntries, 0);
+
+  // A second final call that fails keeps the first answer too.
+  const { provider: third } = boundedFixture();
+  const notShown = await finalizePreparedRagRulingQuestion({ continuation: await prepare(third), env,
+    cloudBudget: fakeBudget(), modelInvoker: scriptedModel(INSUFFICIENT, "").modelInvoker, evidenceSupplementProvider: third });
+  assert.equal(notShown.shortAnswer, "首轮回答正文");
+  assert.equal(notShown.debug.evidenceSupplement.status, "failed");
+  assert.equal(notShown.debug.evidenceSupplement.failureReason, "final_model_not_displayable");
+});
+
+test("a second final call that throws keeps the first answer and its incurred cost is counted", async () => {
+  const { provider } = boundedFixture();
+  const continuation = await prepare(provider);
+  let calls = 0;
+  const answer = await finalizePreparedRagRulingQuestion({ continuation, env: enabledEnv, cloudBudget: fakeBudget(),
+    evidenceSupplementProvider: provider,
+    modelInvoker: async () => {
+      calls += 1;
+      if (calls === 1) return INSUFFICIENT;
+      throw Object.assign(new Error("provider stream broke"), { code: "provider_stream_broken",
+        usage: { prompt_tokens: 120, completion_tokens: 7, total_tokens: 127 },
+        estimatedCostUsd: 0.002, estimatedCostCny: 0.014 });
+    } });
+  assert.equal(calls, 2);
+  assert.equal(answer.shortAnswer, "首轮回答正文");
+  const supplement = answer.debug.evidenceSupplement;
+  assert.equal(supplement.status, "failed");
+  assert.equal(supplement.failureReason, "provider_stream_broken");
+  assert.equal(supplement.finalModel.thrown, true);
+  assert.equal(supplement.finalModel.errorCode, "provider_stream_broken");
+  assert.deepEqual(supplement.finalModel.tokenUsage, { prompt_tokens: 120, completion_tokens: 7, total_tokens: 127 });
+  assert.equal(supplement.finalModel.estimatedCostUsd, 0.002);
+  const retrievalUsd = supplement.retrieval.estimatedCostUsd;
+  assert.ok(retrievalUsd > 0);
+  assert.equal(supplement.estimatedCostUsd, retrievalUsd + 0.002);
+  // The answer's totals include the paid work of the call that produced nothing.
+  assert.equal(answer.debug.tokenUsage.prompt_tokens, 120);
+  assert.equal(answer.debug.tokenUsage.total_tokens, 127);
+  assert.ok(answer.debug.estimatedCostUsd >= retrievalUsd + 0.002);
+  assert.ok(answer.debug.estimatedCostCny >= 0.014);
+});
+
+test("the round stops at the invocation deadline and keeps the first answer", async (t) => {
+  const { provider } = boundedFixture();
+  const continuation = await prepare(provider);
+  const env = { ...enabledEnv, EVIDENCE_SUPPLEMENT_ESTIMATED_ROUND_MS: "1" };
+  // AbortSignal.timeout does not keep a process alive; a served request does.
+  const keepAlive = setInterval(() => {}, 20);
+  t.after(() => clearInterval(keepAlive));
+  const startedAt = Date.now();
+  const timedOut = await finalizePreparedRagRulingQuestion({ continuation, env, cloudBudget: fakeBudget(),
+    modelInvoker: scriptedModel(INSUFFICIENT).modelInvoker, evidenceSupplementProvider: waitsForAbort,
+    invocationStartedAt: Date.now() - EVIDENCE_SUPPLEMENT_INVOCATION_BUDGET_MS + 300 });
+  assert.ok(Date.now() - startedAt < 5_000);
+  assert.equal(timedOut.shortAnswer, "首轮回答正文");
+  assert.equal(timedOut.debug.evidenceSupplement.status, "failed");
+  assert.equal(timedOut.debug.evidenceSupplement.failureReason, "deadline_exceeded");
+});
+
+const waitsForAbort = { retrieve: ({ signal }) => new Promise((_resolve, reject) => {
+  signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+}) };
+
+test("a cancellation during the round ends only the round; a cancelled first call still throws", async () => {
+  const { provider } = boundedFixture();
+  const continuation = await prepare(provider);
+  const progress = recordingProgress();
+  const controller = new AbortController();
+  const answer = await finalizePreparedRagRulingQuestion({ continuation, env: enabledEnv, cloudBudget: fakeBudget(),
+    signal: controller.signal, progress, modelInvoker: scriptedModel(INSUFFICIENT).modelInvoker,
+    evidenceSupplementProvider: { retrieve: (input) => {
+      setImmediate(() => controller.abort(new Error("client_disconnected")));
+      return waitsForAbort.retrieve(input);
+    } } });
+  assert.equal(answer.shortAnswer, "首轮回答正文");
+  assert.equal(answer.debug.evidenceSupplement.status, "cancelled");
+  assert.equal(answer.debug.evidenceSupplement.failureReason, "cancelled_during_supplement");
+  assert.equal(answer.debug.evidenceSupplement.triggered, true);
+  assert.deepEqual(progress.events, [["phase_start", "evidence_supplement"], ["phase_end"]]);
+
+  // Cancelled after the first answer but before the round: no round starts.
+  const late = new AbortController();
+  let retrieves = 0;
+  const skipped = await finalizePreparedRagRulingQuestion({ continuation, env: enabledEnv, cloudBudget: fakeBudget(),
+    signal: late.signal, evidenceSupplementProvider: { retrieve: async () => { retrieves += 1; } },
+    modelInvoker: async () => { late.abort(new Error("client_disconnected")); return INSUFFICIENT; } });
+  assert.equal(retrieves, 0);
+  assert.equal(skipped.shortAnswer, "首轮回答正文");
+  assert.equal(skipped.debug.evidenceSupplement.skipReason, "request_cancelled");
+
+  // A request cancelled before its first final call is still rejected.
+  await assert.rejects(finalizePreparedRagRulingQuestion({ continuation, env: enabledEnv, cloudBudget: fakeBudget(),
+    signal: AbortSignal.abort(new Error("client_disconnected")), evidenceSupplementProvider: provider,
+    modelInvoker: scriptedModel(INSUFFICIENT).modelInvoker }), /client_disconnected/u);
+});
+
+test("the round's invocation budget is the engine-reproduction wait budget under the 300 s function limit", async () => {
+  const vercel = JSON.parse(await readFile(new URL("../vercel.json", import.meta.url), "utf8"));
+  assert.equal(vercel.functions["api/answer.js"].maxDuration, 300);
+  assert.equal(EVIDENCE_SUPPLEMENT_INVOCATION_BUDGET_MS, DEFAULT_WAIT_BUDGET_MS);
+});

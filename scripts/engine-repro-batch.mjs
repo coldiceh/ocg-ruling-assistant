@@ -7,7 +7,9 @@
 //   OPENAI key: read from ENGINE_REPRO_OPENAI_API_KEY / OPENAI_DECISIONS_API_KEY / RAG_CARD_OPENAI_API_KEY
 //   node scripts/engine-repro-batch.mjs --questions FILE --out DIR --only S01,S02 \
 //        (--engine-repo PATH_TO_OCG_SIM_CORE | --engine-url URL with ENGINE_REPRO_SECRET) [--mock DIR] \
-//        [--budget-usd 2] [--planner-model gpt-6.1-sol] [--planner-effort low] [--planner-max-output 1600]
+//        [--budget-usd 2] [--planner-model gpt-6.1-sol] [--planner-effort low] [--planner-max-output 1600] \
+//        [--skip-conclusion]   (the conclusion sentence, conclusion.mjs, runs by default like in production;
+//                               with --mock it reads DIR/<qid>/conclusion.json)
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
@@ -17,6 +19,7 @@ import { createModelRunner, engineReproApiKey } from "../backend/engineRepro/mod
 import { createHttpEngineClient, createLocalEngineClient } from "../backend/engineRepro/engineClient.mjs";
 import { DEFAULT_PLANNER, identityFromCardResolution, runEngineReproduction } from "../backend/engineRepro/reproduce.mjs";
 import { STATUS } from "../backend/engineRepro/aggregate.mjs";
+import { CONCLUSION_MODEL } from "../backend/engineRepro/conclusion.mjs";
 
 const HERE = resolve(new URL(".", import.meta.url).pathname, "..");
 const { values: args } = parseArgs({ options: {
@@ -28,6 +31,7 @@ const { values: args } = parseArgs({ options: {
   "planner-max-output": { type: "string", default: String(DEFAULT_PLANNER.maxOutput) },
   "planner-max-input": { type: "string", default: String(DEFAULT_PLANNER.maxInput) },
   "include-official-qa": { type: "boolean", default: false },
+  "skip-conclusion": { type: "boolean", default: false },
 } });
 
 const outDir = resolve(args.out);
@@ -118,6 +122,7 @@ async function processQuestion(q) {
   // 3. the reproduction itself: the shared module
   const record = await runEngineReproduction({ question: q.text, identity, cardsById, cidMap, engine, clock, planner,
     includeOfficialQa: args["include-official-qa"], record: { ...base, scope },
+    conclusion: args["skip-conclusion"] ? null : { ...CONCLUSION_MODEL, enabled: true },
     modelCall: (opts) => cachedCall(q.qid, opts) });
   return finish(record, t0);
 }

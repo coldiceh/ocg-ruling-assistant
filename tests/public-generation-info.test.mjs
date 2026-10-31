@@ -75,15 +75,17 @@ test('CNY models without an individual cap report the existing shared allowance'
 });
 
 test('only a rejected official reservation switches once, reusing the same saved prompt',async()=>{
-  const preparation={profileId:'official-astra-low',pipeline:'rag_baseline',continuation:{promptBundle:{prompt:'Frozen input'}},rulingVersion:'latest',startedAt:0};
+  const preparation={profileId:'official-astra-low',pipeline:'rag_baseline',continuation:{promptBundle:{prompt:'Frozen input'}},rulingVersion:'latest',startedAt:0,requestDiagnostics:{scope:{scope:'in_scope'}}};
   const env={DEEPSEEK_API_KEY:'synthetic',OCG_FINAL_OPENAI_API_KEY:'synthetic',PUBLIC_OPENAI_BUDGET_RUN_ID:'test',PUBLIC_OPENAI_BUDGET_LIMIT_USD:'5',PUBLIC_OPENAI_BUDGET_INITIAL_USD:'0',UPSTASH_REDIS_REST_URL:'https://unused.invalid',UPSTASH_REDIS_REST_TOKEN:'synthetic'};
-  const selectProfile=async()=>({profile:{id:'official-astra-low',provider:'openai'}});
+  let clock=1000;
+  const selectProfile=async()=>{clock+=100;return {profile:{id:'official-astra-low',provider:'openai'}};};
   const calls=[];
-  const result=await finalizePublicAnswer({preparation,env,selectProfile,finalize:async input=>{
-    calls.push(input); if(calls.length===1) throw Object.assign(new Error('budget rejected'),{code:'official_daily_budget_exceeded'});
+  const result=await finalizePublicAnswer({preparation,env,selectProfile,now:()=>clock,finalize:async input=>{
+    clock+=1000; calls.push(input); if(calls.length===1) throw Object.assign(new Error('budget rejected'),{code:'official_daily_budget_exceeded'});
     return {shortAnswer:'DeepSeek original answer'};
   },addGeneration:async(answer,profile,_env,options)=>({...answer,generation:{provider:profile.provider,...options}})});
   assert.equal(calls.length,2);
+  assert.deepEqual(calls.map(input=>input.invocationStartedAt),[1000,1000]);
   assert.equal(calls[0].continuation,calls[1].continuation);
   assert.equal(calls[1].env.RAG_MODEL_PROVIDER,'deepseek');
   assert.equal(result.generation,undefined);

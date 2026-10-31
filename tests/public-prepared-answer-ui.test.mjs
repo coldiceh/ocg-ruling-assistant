@@ -165,6 +165,44 @@ test("a completed stored preparation is recovered through a read-only status req
   assert.deepEqual(clientInstance.preparedProgress, [{ totalMs: 240 }]);
 });
 
+test("recovery restores the supplemented package after refresh or interrupted finalize", async () => {
+  for (const hadFirstPackage of [false, true]) {
+    const preparationId = "7".repeat(64);
+    const firstPackage = { text: "FIRST_PACKAGE", filename: "first-evidence.txt" };
+    const supplemented = { text: "SUPPLEMENTED_PACKAGE", filename: "supplemented-evidence.txt", supplemented: true };
+    const stored = new Map([["ocg-public-answer-preparation-id", preparationId]]);
+    const requests = [];
+    const clientInstance = createClient(async (_url, options) => {
+      const body = JSON.parse(options.body);
+      requests.push(body);
+      if (body.action === "prepare") return sse(preparedEvent(preparationId, 120, firstPackage), endEvent());
+      if (body.action === "finalize") throw new TypeError("synthetic_disconnect");
+      assert.equal(body.action, "status");
+      return Response.json({ status: "completed", result: { answer: {
+        effectiveRulingVersion: "latest", verdict: "recovered-supplement", evidencePackage: supplemented,
+      } } });
+    }, { sessionStorageImpl: {
+      setItem(key, value) { stored.set(key, value); },
+      getItem(key) { return stored.get(key) ?? null; },
+      removeItem(key) { stored.delete(key); },
+    } });
+    if (hadFirstPackage) {
+      await assert.rejects(clientInstance.request("Synthetic question", "latest"));
+      assert.deepEqual(clientInstance.getPreparedEvidencePackage(), firstPackage);
+    } else {
+      assert.equal(clientInstance.getPreparedEvidencePackage(), null);
+    }
+    const beforeRecovery = requests.length;
+    const answer = await clientInstance.recover();
+    assert.equal(answer.verdict, "recovered-supplement");
+    assert.deepEqual(clientInstance.getPreparedEvidencePackage(), {
+      text: supplemented.text, filename: supplemented.filename,
+    });
+    assert.deepEqual(requests.slice(beforeRecovery), [{ action: "status", preparationId }]);
+    assert.equal(clientInstance.readStoredPreparationId(), "");
+  }
+});
+
 test("ready and running recovery poll only status for the same preparation until completion", async () => {
   const preparationId = "8".repeat(64);
   const stored = new Map([["ocg-public-answer-preparation-id", preparationId]]);
@@ -521,4 +559,63 @@ test("a prepare-only result is finalized later with one finalize request for the
   const answer = await clientInstance.requestPrepared("b".repeat(64), "latest", { requestId: 0 });
   assert.equal(answer.verdict, "synthetic");
   assert.deepEqual(requests, [{ action: "finalize", preparationId: "b".repeat(64) }], "the evidence is not prepared again");
+});
+
+test("a finalized answer from a supplementary round replaces the downloadable package", async () => {
+  const prepared = { text: "FIRST_PACKAGE", filename: "ocg-evidence.txt" };
+  const supplemented = { text: "SUPPLEMENTED_PACKAGE", filename: "ocg-evidence.txt", supplemented: true };
+  let calls = 0;
+  const clientInstance = createClient(async () => {
+    calls += 1;
+    return calls === 1
+      ? sse(preparedEvent("f".repeat(64), 120, prepared), endEvent())
+      : sse({ type: "phase_start", data: { phase: "evidence_supplement" } },
+        { type: "phase_end", data: { phase: "evidence_supplement" } },
+        { type: "answer", data: { answer: { effectiveRulingVersion: "latest", verdict: "synthetic", evidencePackage: supplemented } } },
+        endEvent());
+  });
+  const answer = await clientInstance.request("Synthetic question", "latest");
+  assert.equal(answer.verdict, "synthetic");
+  assert.deepEqual(clientInstance.getPreparedEvidencePackage(), { text: "SUPPLEMENTED_PACKAGE", filename: "ocg-evidence.txt" });
+
+  calls = 0;
+  const unchanged = createClient(async () => {
+    calls += 1;
+    return calls === 1 ? sse(preparedEvent("f".repeat(64), 120, prepared), endEvent()) : sse(answerEvent(), endEvent());
+  });
+  await unchanged.request("Synthetic question", "latest");
+  assert.deepEqual(unchanged.getPreparedEvidencePackage(), prepared);
+});
+
+test("the evidence_supplement phase tells the reader that evidence is being searched again", () => {
+  const render = app.slice(app.indexOf("function renderPendingStages"), app.indexOf("function completePendingStages"));
+  const lineStart = app.indexOf("function lt(");
+  const lt = app.slice(lineStart, app.indexOf("\n", lineStart));
+  const page = new Function("document", `
+    let selectedUiLocale = "zh-CN";
+    let pendingStageStates = [{ status: "running", durationMs: null, activeElapsedMs: 0 }];
+    let pendingStageIndex = 0;
+    let pendingPipelineStatus = "running";
+    let pendingPipelinePhase = "";
+    const ui = { pipelineStageList: { appendChild() {} }, verdictTitle: { textContent: "" }, verdictBody: { textContent: "" } };
+    function getPendingStages() { return [{ id: "generate_ruling", label: "生成裁定", body: "正在根据已准备的资料生成裁定分析。" }]; }
+    function clearElement() {}
+    function tr(value) { return value; }
+    function formatPendingStageDuration() { return ""; }
+    function renderPendingPipelineTotal() {}
+    ${lt}
+    ${render}
+    return (phase, locale) => {
+      pendingPipelinePhase = phase;
+      selectedUiLocale = locale;
+      renderPendingStages();
+      return { title: ui.verdictTitle.textContent, body: ui.verdictBody.textContent };
+    };
+  `)({ createElement: () => ({ append() {} }) });
+  const zh = page("evidence_supplement", "zh-CN");
+  assert.equal(zh.title, "证据不足，正在补充检索…");
+  assert.match(zh.body, /只补一次/u);
+  assert.equal(page("evidence_supplement", "en").title, "Evidence insufficient, running a supplementary search…");
+  assert.equal(page("evidence_supplement", "ja").title, "根拠が不足しているため、追加検索しています…");
+  assert.equal(page("", "zh-CN").title, "正在生成裁定");
 });

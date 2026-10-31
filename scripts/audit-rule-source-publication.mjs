@@ -62,7 +62,14 @@ export async function auditRuleSourcePublication({ dataDir = join(root, 'data'),
   assert.deepEqual(sorted(navigationKeys), sorted(expectedKeys), 'navigation records must equal the allowlist units');
   const toc = buildRuleToc({ rules, navigationRecordsByUnit: assets.navigationRecordsByUnit });
   const tocKeys = toc.unitKeys.filter(konami);
-  const tocKonamiLines = toc.text.split('\n').filter(line => konami(line.split('\t')[1]));
+  let tocSourceId;
+  const tocKonamiLines = toc.text.split('\n').filter(line => {
+    if (line.startsWith('来源：')) {
+      tocSourceId = line.slice('来源：'.length);
+      return false;
+    }
+    return /^\d+\t/u.test(line) && konami(tocSourceId);
+  });
   assert.deepEqual(sorted(tocKeys), sorted(expectedKeys));
   assert.equal(tocKonamiLines.length, expectedKeys.size, 'rendered ToC line count must match the allowed units');
 

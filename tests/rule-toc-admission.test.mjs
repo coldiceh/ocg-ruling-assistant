@@ -5,7 +5,7 @@ import { CLOUD_BUDGET_RESERVE } from '../backend/cloudRequestBudget.mjs';
 import { buildRuleToc, normalizeRuleTocOutput, resolveRuleTocConfig, ruleTocRequestBody,
   RULE_TOC_DESCRIPTION_CHARS } from '../backend/ruleTocAdmission.mjs';
 import { fixtureEnv, fixtureQuestion, fixtureRetrieveInput, ruleTocAssets, ruleTocProvider,
-  sha256 } from './helpers/rule-toc-fixture.mjs';
+  parseRuleTocLines, sha256 } from './helpers/rule-toc-fixture.mjs';
 
 // Golden values of this fixture with the flag off, computed on the unmodified
 // provider (commit 483b000, before the ToC stage existed). If an unrelated change
@@ -271,25 +271,54 @@ test('invalid settings fail before any model call', async () => {
     maxUnits: 8, timeoutMs: 30000, descriptionChars: RULE_TOC_DESCRIPTION_CHARS });
 });
 
-test('table lines keep identity order, one line per unit, and clip descriptions', () => {
+test('table rows keep identity order and clipped descriptions under source headers', () => {
   const long = `第一行\n${'描'.repeat(200)}`;
   const rules = { readingUnits: new Map([
     ['u1', { sourceId: 'ocg-rule:c02/页', titlePath: ['页 ¶', '小节 ¶'] }],
     ['u2', { sourceId: 'konami:book', titlePath: [], title: '章' }],
   ]) };
   const toc = buildRuleToc({ rules, navigationRecordsByUnit: new Map([['u1', { descriptionZh: long }]]) });
-  const lines = toc.text.split('\n');
+  const lines = parseRuleTocLines(toc.text);
   assert.deepEqual(toc.unitKeys, ['u1', 'u2']);
   assert.equal(lines.length, 2);
+  assert.equal(toc.lineCount, 2);
+  assert.equal(toc.text.split('\n').length, 4);
   assert.equal(lines[0], `1\tocg-rule:c02/页\t页 ¶ > 小节 ¶\t第一行 ${'描'.repeat(RULE_TOC_DESCRIPTION_CHARS - 4)}…`);
   assert.equal(lines[1], '2\tkonami:book\t章');
   const empty = new Map();
   assert.equal(buildRuleToc({ rules, navigationRecordsByUnit: empty }), buildRuleToc({ rules, navigationRecordsByUnit: empty }));
-  assert.equal(buildRuleToc({ rules, navigationRecordsByUnit: empty }).text, '1\tocg-rule:c02/页\t页 ¶ > 小节 ¶\n2\tkonami:book\t章');
+  assert.equal(buildRuleToc({ rules, navigationRecordsByUnit: empty }).text, '来源：ocg-rule:c02/页\n1\t页 ¶ > 小节 ¶\n来源：konami:book\n2\t章');
   assert.throws(() => normalizeRuleTocOutput({ selectedIds: [1] }, { unitKeys: toc.unitKeys, maxUnits: 8 }), /rule_toc_output_invalid/u);
   const body = ruleTocRequestBody({ toc, question: 'q', maxUnits: 3, resolvedCards: [
     { name: '甲', cnName: '甲', jaName: 'カ', enName: 'A', effectText: 'not sent' }, { name: '乙' }, { id: 'no-name' }] });
   assert.deepEqual(body.contents[0].parts.map(part => part.text).slice(1), [toc.text,
     JSON.stringify({ question: 'q', confirmedCards: [{ cnName: '甲', jaName: 'カ', enName: 'A' }, { name: '乙' }] })]);
   assert.deepEqual(normalizeRuleTocOutput({ result: { unitIndexes: [2] } }, { unitKeys: toc.unitKeys, maxUnits: 8 }).unitKeys, ['u2']);
+});
+
+test('source groups restore all columns when a source returns after another group', () => {
+  const rules = { readingUnits: new Map([
+    ['u1', { sourceId: 'source-a', titlePath: ['章', '甲'] }],
+    ['u2', { sourceId: 'source-a', titlePath: ['章', '乙'] }],
+    ['u3', { sourceId: 'source-b', titlePath: ['另章', '丙'] }],
+    ['u4', { sourceId: 'source-a', titlePath: ['章', '丁'] }],
+    ['u5', { title: '无来源' }],
+  ]) };
+  const navigationRecordsByUnit = new Map([
+    ['u1', { descriptionZh: '同组第一单元' }], ['u2', { descriptionZh: '同组第二单元' }],
+    ['u3', { descriptionZh: '异组单元' }], ['u4', { descriptionZh: '返回第一来源' }],
+  ]);
+  const toc = buildRuleToc({ rules, navigationRecordsByUnit });
+  assert.deepEqual(toc.unitKeys, ['u1', 'u2', 'u3', 'u4', 'u5']);
+  assert.equal(toc.lineCount, 5);
+  assert.deepEqual(toc.text.split('\n').filter(line => line.startsWith('来源：')),
+    ['来源：source-a', '来源：source-b', '来源：source-a', '来源：']);
+  assert.deepEqual(parseRuleTocLines(toc.text), [
+    '1\tsource-a\t章 > 甲\t同组第一单元',
+    '2\tsource-a\t章 > 乙\t同组第二单元',
+    '3\tsource-b\t另章 > 丙\t异组单元',
+    '4\tsource-a\t章 > 丁\t返回第一来源',
+    '5\t\t无来源',
+  ]);
+  assert.equal(buildRuleToc({ rules: { readingUnits: new Map() } }).text, '');
 });

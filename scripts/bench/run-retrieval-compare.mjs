@@ -251,7 +251,8 @@ const MODEL_HOSTS = new Set(["api.openai.com", "generativelanguage.googleapis.co
 
 export function unledgeredModelRequests(network = [], calls = []) {
   const requests = network.filter((entry) => entry.route !== "ledger" && MODEL_HOSTS.has(entry.host)
-    && !/:countTokens$/u.test(entry.path || "")).length;
+    && !/:countTokens$/u.test(entry.path || "")
+    && !(entry.host === "api.openai.com" && entry.path === "/v1/responses/input_tokens")).length;
   const tickets = calls.filter((call) => call.status !== "blocked").length;
   return { requests, tickets, ok: requests <= tickets };
 }

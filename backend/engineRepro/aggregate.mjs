@@ -23,17 +23,50 @@ const FLAG_ZH = Object.freeze({
 // Probe results the engine decided (the target was or was not offered); "not_reached" decides nothing.
 const DEFINITE_PROBE_RESULTS = new Set(["present", "present_auto", "absent"]);
 
+// Old engines could call a replay complete while a required selection was still pending, or use a
+// CHAINING event as proof of a yes/no prompt. Do not promote those responses to completed observations.
+export function probeResult(probe) {
+  if (probe?.result === "present_auto" && probe.decision_kind !== "chain") return "incomplete";
+  if (probe?.interval?.end === "chain_end" && probe.interval.completed !== true
+    && probe.result === "absent") return "incomplete";
+  return probe?.result || null;
+}
+
+export function reproductionFailure(branch) {
+  const r = branch?.engine;
+  if (r?.failure) return r.failure;
+  if (r?.status !== "replayed") return null;
+  const probes = Array.isArray(r.probes) ? r.probes : [];
+  const unfinished = probes.flatMap((p, i) => p?.interval?.end === "chain_end" && p.interval.completed !== true ? [i] : []);
+  if (unfinished.length) return { reason: "probe_interval_incomplete", probes: unfinished };
+  const undecided = probes.flatMap((p, i) => !DEFINITE_PROBE_RESULTS.has(probeResult(p)) ? [i] : []);
+  if (undecided.length) return { reason: "probe_not_reached", probes: undecided };
+  const last = (Array.isArray(r.decisions) ? r.decisions : []).at(-1);
+  const d = last?.by === "end" ? last.decision : null;
+  if (!d) return null; // Older responses without terminal metadata retain their existing contract.
+  const actionWindow = ["idle", "battle"].includes(d.kind)
+    && !d.in_activation && !d.in_resolution && !(d.chain_links > 0);
+  const observedHere = probes.some((p) => probeResult(p) === "present"
+    && (!p.interval || p.interval.completed === true)
+    && p.player === d.player && p.decision_kind === d.kind
+    && (p.windows || []).some((w) => Number.isSafeInteger(d.index) && w.decision === d.index && w.contains_target === true));
+  if (actionWindow || observedHere) return null;
+  return { reason: "required_decision_pending", step: r.setup_consumed ?? branch.actions?.setup?.length,
+    step_spec: null, decision: d };
+}
+
 // One branch result -> {ok, reason, observed}. A replay that took every setup step but left a check point
 // unreached is not ok (the engine reports action_mismatch / probe_not_reached); it still counts as observed
 // when another check point got a result, so the question reads 部分复现 with that result, not 未复现.
 export function branchOutcome(branch) {
   const r = branch.engine;
   if (!r) return { ok: false, reason: branch.planReason || "invalid_input", observed: false };
-  if (r.status === "replayed") return { ok: true, reason: null, observed: true };
+  const failure = reproductionFailure(branch);
+  if (r.status === "replayed" && !failure) return { ok: true, reason: null, observed: true };
   if (r.status === "invalid_input") return { ok: false, reason: "invalid_input", observed: false };
-  const observed = r.failure?.reason === "probe_not_reached"
-    && (Array.isArray(r.probes) ? r.probes : []).some((probe) => DEFINITE_PROBE_RESULTS.has(probe?.result));
-  return { ok: false, reason: r.reason_code || "engine_error", observed };
+  const observed = ["probe_not_reached", "probe_interval_incomplete", "required_decision_pending"].includes(failure?.reason)
+    && (Array.isArray(r.probes) ? r.probes : []).some((probe) => DEFINITE_PROBE_RESULTS.has(probeResult(probe)));
+  return { ok: false, reason: r.reason_code || (failure ? "action_mismatch" : "engine_error"), observed };
 }
 
 export function aggregateQuestion(record) {
@@ -41,7 +74,8 @@ export function aggregateQuestion(record) {
   // pre-planner outcomes
   if (record.preStatus) return { status: record.preStatus.status, reasonCodes: [record.preStatus.reason], flags: contextFlags };
   const plan = record.plan;
-  if (!plan) return { status: STATUS.FAIL, reasonCodes: [record.planFailure || "invalid_input"], flags: contextFlags };
+  // planFailure: the planner's rounds gave no valid plan (an unparsable repair leaves the invalid first plan in place)
+  if (!plan || record.planFailure) return { status: STATUS.FAIL, reasonCodes: [record.planFailure || "invalid_input"], flags: contextFlags };
   const flags = new Set(contextFlags);
   if (plan.what_not_why === true) flags.add("what_not_why");
   if (plan.applicability === "not_applicable") {
@@ -108,6 +142,9 @@ export function renderQuestion(record, summary) {
     for (const b of sq.branches || []) {
       lines.push(`· 分支 ${b.id}${b.assumption ? `（假设：${b.assumption}）` : ""}${b.repaired ? "（修复后）" : ""}`);
       if (b.observe) lines.push(`  看点：${b.observe}`);
+      if (b.engine?.status === "replayed" && reproductionFailure(b)) {
+        lines.push("  完成检查未通过：引擎仍有必需选择或观察尚未结束，下方旧回放的完成标记不代表本题已完整复现。");
+      }
       if (b.engine?.rendered_zh) {
         lines.push(...b.engine.rendered_zh.split("\n").filter((l) => !l.startsWith("实验性功能，未经评测。")).map((l) => `  ${l}`));
       }

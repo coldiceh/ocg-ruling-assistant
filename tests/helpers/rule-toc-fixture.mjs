@@ -65,6 +65,22 @@ export const fixturePlan = Object.freeze({ needs: [{ id: 'n1', question: 'alpha 
 // The first user message is the original request; a format retry appends another.
 const userText = body => body.input.find(message => message.role === 'user').content;
 
+// Reconstruct the original index/source/title/description columns from the
+// grouped wire text. Used by mocks and round-trip assertions, not production.
+export function parseRuleTocLines(text) {
+  let sourceId;
+  const rows = [];
+  for (const line of text.split('\n')) {
+    if (line.startsWith('来源：')) sourceId = line.slice('来源：'.length);
+    else if (/^\d+\t/u.test(line)) {
+      if (sourceId === undefined) throw new Error('fixture_toc_source_required');
+      const [index, ...fields] = line.split('\t');
+      rows.push([index, sourceId, ...fields].join('\t'));
+    }
+  }
+  return rows;
+}
+
 // toc(lines, body, init): returns the ToC model output object, a Response, or throws.
 // select(delivered, body): returns the selection output object or a Response.
 // budgetStore: when given, model calls use the production budget routing
@@ -73,10 +89,12 @@ const userText = body => body.input.find(message => message.role === 'user').con
 // remainingBudget: replaces the unlimited per-provider remaining budget.
 export function ruleTocProvider({ assets = ruleTocAssets(), toc, select, onEvent, plan = fixturePlan, budgetStore,
   remainingBudget = async () => Infinity,
+  inputTokenCounter, selectionUsage, frozenRetrieval,
   tocUsage = { input_tokens: 9000, output_tokens: 150, total_tokens: 9150,
     input_tokens_details: { cached_tokens: 0 }, output_tokens_details: { reasoning_tokens: 100 } } } = {}) {
-  const calls = [];
+  const calls = [], countCalls = [];
   const provider = createGeminiBoundedEvidenceProvider({
+    ...(frozenRetrieval ? { frozenRetrieval } : {}),
     loadAssets: async () => assets,
     loadDenseSearch: async ({ rules }) => ({ searchAsync: async () => [...rules.units.values()] }),
     loadQaSearch: async ({ items }) => ({ searchAsync: async () => items }),
@@ -86,6 +104,13 @@ export function ruleTocProvider({ assets = ruleTocAssets(), toc, select, onEvent
     fetchImpl: async (url, init) => {
       const body = JSON.parse(init.body);
       if (budgetStore && String(url) === budgetStore.url) return budgetStore.respond(body);
+      if (String(url).endsWith('/responses/input_tokens')) {
+        countCalls.push(body);
+        if (!inputTokenCounter) throw new Error('unexpected token count request');
+        const value = await inputTokenCounter(body);
+        return value instanceof Response ? value
+          : Response.json({ object: 'response.input_tokens', input_tokens: value });
+      }
       if (String(url).endsWith(':embedContent')) {
         return Response.json({ embedding: { values: Array(768).fill(1) }, usageMetadata: { promptTokenCount: 10 } });
       }
@@ -104,13 +129,14 @@ export function ruleTocProvider({ assets = ruleTocAssets(), toc, select, onEvent
       const last = JSON.parse(text.split('\n').at(-1));
       if (!Array.isArray(last.groups)) {
         calls.push({ kind: 'toc', url: String(url), body });
-        const lines = text.split('\n').filter(line => /^\d+\t/u.test(line));
+        const lines = parseRuleTocLines(text);
         if (typeof toc !== 'function') throw new Error('unexpected ToC request');
         const output = await toc(lines, body, init);
         if (output instanceof Response) return output;
         return Response.json({ id: 'toc-fixture', model: 'gpt-6-luna-2026-10-01', status: 'completed',
           output: [{ type: 'message', content: [{ type: 'output_text',
-            text: typeof output === 'string' ? output : JSON.stringify(output) }] }], usage: tocUsage });
+            text: typeof output === 'string' ? output : JSON.stringify(output) }] }],
+          usage: typeof tocUsage === 'function' ? tocUsage(body) : tocUsage });
       }
       calls.push({ kind: 'selection', url: String(url), body });
       const output = typeof select === 'function' ? select(last, body) : { selectedIds: last.groups.flatMap(group => [
@@ -118,10 +144,11 @@ export function ruleTocProvider({ assets = ruleTocAssets(), toc, select, onEvent
       if (output instanceof Response) return output;
       return Response.json({ id: 'selection-fixture', model: 'gpt-6-luna', status: 'completed',
         output: [{ type: 'message', content: [{ type: 'output_text', text: JSON.stringify(output) }] }],
-        usage: { input_tokens: 4000, output_tokens: 300, total_tokens: 4300, input_tokens_details: { cached_tokens: 0 } } });
+        usage: typeof selectionUsage === 'function' ? selectionUsage(body) : selectionUsage
+          ?? { input_tokens: 4000, output_tokens: 300, total_tokens: 4300, input_tokens_details: { cached_tokens: 0 } } });
     },
   });
-  return { provider, calls, assets };
+  return { provider, calls, countCalls, assets };
 }
 
 export function fixtureRetrieveInput(assets, env = fixtureEnv) {

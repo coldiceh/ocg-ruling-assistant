@@ -1,5 +1,6 @@
 import { renderReadableData } from './readableEvidenceText.mjs';
 import { evidenceBucketsToList } from "./ragEvidenceRetriever.mjs";
+import { EVIDENCE_STATUS_INSTRUCTION, evidenceSupplementEnabled } from "./evidenceStatusProtocol.mjs";
 
 export const OCG_RULE_SOURCE_POLICY = "OCG Rule（ocg-rule）是本站认可的权威规则整理，可与官方规则资料同等作为规则分析依据，不因 community_reference 标签降为仅供辅助。核对原文的适用条件、例外及更新时间；具体卡片 Q&A 与一般规则表面冲突时，先区分适用范围。保留 OCG Rule 的真实出处，不称其为 KONAMI 发布或本题官方直接 Q&A。";
 
@@ -98,6 +99,8 @@ export function buildRagRulingPromptBundle({
   evidence = {},
   env = {},
   lineageTraceSink,
+  // Explicit override for callers that pass a synthetic env (the bounded packer).
+  evidenceStatusLine,
 } = {}) {
   const traceLineage = typeof lineageTraceSink === "function";
   const warnings = [];
@@ -250,7 +253,9 @@ export function buildRagRulingPromptBundle({
   // Selection has finished under the unchanged 36k allocation envelope. Only
   // the repeated instructions are condensed; the complete payload is retained.
   const promptPayload = rendered.promptPayload;
-  const prompt = compactRagPromptInstructions(rendered.prompt, promptPayload, answerLocale);
+  const prompt = compactRagPromptInstructions(rendered.prompt, promptPayload, answerLocale, {
+    evidenceStatusLine: evidenceStatusLine ?? evidenceSupplementEnabled(env),
+  });
   const allowedEvidenceIds = promptPayload.allowedEvidenceIds;
   appendSerializedEvidenceTruncationWarnings({
     promptPayload,
@@ -319,10 +324,16 @@ export function buildRagRulingPromptBundle({
   };
 }
 
-export function compactRagPromptInstructions(prompt, selectedPayload = parseSerializedPromptPayload(prompt), answerLocale = "zh-CN") {
+export function compactRagPromptInstructions(prompt, selectedPayload = parseSerializedPromptPayload(prompt), answerLocale = "zh-CN", {
+  evidenceStatusLine = false,
+} = {}) {
   if (!selectedPayload || !Object.hasOwn(selectedPayload, "evidence")) return prompt;
   const leanPrompt = [
     ...localizedAnswerInstructions(GENERAL_INSTRUCTIONS, answerLocale),
+    // Serialized status field read by the server (evidenceStatusProtocol.mjs)
+    // and removed from the displayed answer; requested only while the
+    // supplementary evidence round is enabled.
+    ...(evidenceStatusLine ? [EVIDENCE_STATUS_INSTRUCTION] : []),
     "本次用户问题、卡片原文与检索资料如下：",
     renderReadableData(selectedPayload),
   ].join("\n");

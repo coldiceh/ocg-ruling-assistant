@@ -60,6 +60,7 @@ test("integrity checks catch silent fallbacks, unledgered calls and a stage that
   const network = [
     { route: "mock", host: "api.openai.com", path: "/v1/responses" },
     { route: "mock", host: "generativelanguage.googleapis.com", path: "/v1beta/models/m:countTokens" },
+    { route: "mock", host: "api.openai.com", path: "/v1/responses/input_tokens" },
     { route: "ledger", host: "bench-ledger.invalid", path: "/" },
     { route: "mock", host: "ygocdb.com", path: "/api/v0/" },
   ];

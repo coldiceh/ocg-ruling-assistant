@@ -7,6 +7,30 @@ import {
   DEFAULT_BAI_GENERATION_BASE_URL,
 } from "../backend/evidenceGenerationTransport.mjs";
 
+test('official input counter preserves every input-affecting field and validates its response', async () => {
+  const calls = [];
+  let result = { object: 'response.input_tokens', input_tokens: 321 };
+  const transport = createEvidenceGenerationTransport({
+    contract: { status: 'ready', providerId: 'bai', modelId: 'gpt-6-luna',
+      transportContract: { protocol: 'responses', endpoint: '/v1/responses' } },
+    env: { RAG_EVIDENCE_LUNA_CHANNEL: 'official', RAG_EVIDENCE_OPENAI_API_KEY: 'fixture-only' },
+    fetchImpl: async (url, options) => { calls.push({ url, options }); return Response.json(result); },
+  });
+  const wire = { model: 'gpt-6-luna', instructions: 'system', input: [{ role: 'user', content: '中英文 mixed' }],
+    reasoning: { effort: 'high' }, text: { format: { type: 'json_object' } },
+    stream: false, max_output_tokens: 2048, prompt_cache_options: { mode: 'explicit' } };
+  assert.equal(await transport.countInputTokens(wire), 321);
+  assert.equal(calls[0].url, 'https://api.openai.com/v1/responses/input_tokens');
+  assert.equal(calls[0].options.redirect, 'error');
+  assert.deepEqual(JSON.parse(calls[0].options.body), {
+    model: wire.model, input: wire.input, instructions: wire.instructions, reasoning: wire.reasoning, text: wire.text,
+  });
+  result = { object: 'response.input_tokens', input_tokens: 0.5 };
+  await assert.rejects(transport.countInputTokens(wire), /evidence_input_count_invalid/);
+  await assert.rejects(transport.countInputTokens({ ...wire, model: 'wrong-model' }), /model_mismatch/);
+  assert.equal(calls.length, 2);
+});
+
 const contract = {
   status: "ready",
   providerId: "bai",

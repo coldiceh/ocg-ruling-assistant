@@ -22,6 +22,10 @@ export function createPublicAnswerProgress({
   let lastStageIndex = -1;
   let finished = false;
   let started = false;
+  // A phase is a named sub-step shown inside the current stage (stages only
+  // move forward). At most one phase is active at a time.
+  let activePhase = "";
+  let activePhaseStartedAtMs = 0;
 
   function elapsedMs() {
     return offsetMs + Math.max(0, Math.floor(now() - startedAt));
@@ -60,6 +64,29 @@ export function createPublicAnswerProgress({
     return true;
   }
 
+  function phase(name) {
+    const phaseName = typeof name === "string" ? name.trim() : "";
+    if (finished || !phaseName || activePhase === phaseName) return false;
+    if (activePhase) endPhase();
+    const serverElapsedMs = elapsedMs();
+    activePhase = phaseName;
+    activePhaseStartedAtMs = serverElapsedMs;
+    safeEmit("phase_start", { phase: phaseName, serverElapsedMs });
+    return true;
+  }
+
+  function endPhase() {
+    if (!activePhase) return false;
+    const serverElapsedMs = elapsedMs();
+    safeEmit("phase_end", {
+      phase: activePhase,
+      serverElapsedMs,
+      durationMs: Math.max(0, serverElapsedMs - activePhaseStartedAtMs),
+    });
+    activePhase = "";
+    return true;
+  }
+
   function tick() {
     if (finished || !activeStageId) return null;
     const serverElapsedMs = elapsedMs();
@@ -74,6 +101,7 @@ export function createPublicAnswerProgress({
 
   function finish(status) {
     if (finished) return snapshot();
+    endPhase();
     const totalMs = elapsedMs();
     endActiveStage(totalMs, status);
     finished = true;
@@ -97,11 +125,16 @@ export function createPublicAnswerProgress({
     },
     transition,
     tick,
+    phase,
+    endPhase,
     complete: () => finish("completed"),
     fail: () => finish("failed"),
     snapshot,
     get activeStageId() {
       return activeStageId;
+    },
+    get activePhase() {
+      return activePhase;
     },
   };
 }

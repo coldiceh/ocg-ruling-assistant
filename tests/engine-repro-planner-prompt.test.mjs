@@ -14,7 +14,7 @@ test("planner prompt documents the declaration steps and their values", () => {
   assert.match(PLANNER_INSTRUCTIONS, /需要宣言不是搭不出局面的理由/u);
   // decision order measured on the pinned engine (core 3209cd8, scripts b83db1c, database 09bf7de), 2026-10-18
   assert.match(PLANNER_INSTRUCTIONS, /抹杀之指名者）：idle activate → select_place\(自己 szone 空位\) → announce_card → 双方连锁窗口/u);
-  assert.match(PLANNER_INSTRUCTIONS, /选选项、宣言、其他是否询问/u, "a declaration cannot be declined");
+  assert.match(PLANNER_INSTRUCTIONS, /宣言等必需选择则未完成/u, "a declaration cannot be declined");
   assert.match(PLANNER_INSTRUCTIONS, /属性：地1 水2 炎4 风8 光16 暗32 神64。/u);
   assert.match(PLANNER_INSTRUCTIONS, /种族：战士1 魔法师2 .* 电子界16777216 幻想魔33554432。/u);
 });
@@ -126,9 +126,11 @@ test("planner prompt: the asked action is probed, not a step; responses come bef
   // "can it be activated" probes use chain (it also counts the core's activation prompt); an effect_yn probe
   // of a trigger that did not trigger is never reached (赐炎之咎姬 ③, checked on the pinned engine)
   assert.match(PLANNER_INSTRUCTIONS, /问一个效果（包括诱发效果）能不能发动时，decision_kind 用 chain/u);
-  assert.match(PLANNER_INSTRUCTIONS, /用 effect_yn 探测只会得到“未到达”/u);
+  assert.match(PLANNER_INSTRUCTIONS, /"until":"chain_end"/u);
+  assert.match(PLANNER_INSTRUCTIONS, /连锁已结束且未出现询问是有效结果，没走完则未完成/u);
   // a question about the processing result: the short section shows the board when the replay ends
-  assert.match(PLANNER_INSTRUCTIONS, /题目问“处理结果如何”时可以不设探测，改写 result_cards：回放停在 setup 用完之后的下一个需要选择的地方/u);
+  assert.match(PLANNER_INSTRUCTIONS, /题目问“处理结果如何”时用 result_cards/u);
+  assert.doesNotMatch(PLANNER_INSTRUCTIONS, /setup 用完则回放正常结束/u);
   assert.match(PLANNER_INSTRUCTIONS, /branches\[\]\.result_cards：题目问处理结果/u);
   assert.match(PLANNER_INSTRUCTIONS, /"result_cards":\[\]/u, "the output example carries the field");
 });

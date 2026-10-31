@@ -25,6 +25,7 @@ import {
 } from "./privateEvaluationDiagnostics.mjs";
 import { normalizeRuleSearchQueryText } from "./ruleSearchQueryText.mjs";
 import { responsesOutputText } from "./responsesOutputText.mjs";
+import { extractEvidenceStatusLine } from "./evidenceStatusProtocol.mjs";
 import {
   runCloudDeepSeekRequest,
   manageCloudFinalBudget,
@@ -3794,7 +3795,11 @@ function parsePlainTextModelResult(rawValue, {
       budgetStatus,
     };
   }
-  if (!text) {
+  // The last line is the model's explicit evidence-status field. It is read as
+  // a serialized field and removed from the displayed ruling text.
+  const status = extractEvidenceStatusLine(text);
+  const body = status.text.trim();
+  if (!body) {
     return {
       answer: plainTextFailureAnswer(
         "model_plain_text_empty",
@@ -3810,17 +3815,20 @@ function parsePlainTextModelResult(rawValue, {
       budgetStatus,
     };
   }
-  const compatibleContent = decodeOptionalPlainTextContent(rawValue, text);
+  const compatibleContent = decodeOptionalPlainTextContent(typeof rawValue === "string" ? body : rawValue, body);
   return {
     answer: {
       answerLevel: "rule_analysis",
-      shortAnswer: compatibleContent?.shortAnswer || text,
+      shortAnswer: compatibleContent?.shortAnswer || body,
       reasoning: compatibleContent?.reasoning || [],
       usedCards: [],
       usedEvidence: [],
       missingInfo: compatibleContent?.missingInfo || [],
       riskFlags: [],
       confidenceSelfEstimate: "low",
+      evidenceStatus: status.evidenceStatus,
+      evidenceGap: status.evidenceGap,
+      evidenceStatusLine: status.evidenceStatusLine,
     },
     rawText,
     provider,

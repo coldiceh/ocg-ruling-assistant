@@ -124,6 +124,53 @@ test("exact official fields and evidence remain byte-for-byte unchanged", () => 
   assert.deepEqual(exact, snapshot);
 });
 
+test("a supplementary evidence round adds one plain sentence for web and external API readers", () => {
+  const footer = "\n\n实际最终模型：test；请求推理强度：low";
+  const answer = (status, answerLocale = "zh-CN", failureReason) => ({ answerLocale, shortAnswer: `裁定回答${footer}`,
+    generation: { embeddedInAnswerText: true, answerTextFooter: footer },
+    debug: { evidenceSupplement: { status, ...(failureReason ? { failureReason } : {}) } } });
+  const applied = "（首轮证据不足，已补充检索一次）";
+  const noNewEvidence = "（首轮证据不足，已补充检索一次，但未补入可用依据，以上仍为首轮回答）";
+  const failed = "（首轮证据不足，补充检索或重新作答未能完成，以上仍为首轮回答）";
+  const timedOut = "（首轮证据不足，补充检索因时间限制中止，以上仍为首轮回答）";
+  const cancelled = "（首轮证据不足，补充检索因请求中断而中止，以上仍为首轮回答）";
+
+  const web = presentPublicAnswer(answer("applied"), { channel: PUBLIC_REQUEST_CHANNELS.WEB });
+  assert.equal(web.shortAnswer, `裁定回答\n\n${applied}`);
+  assert.equal(presentPublicAnswer(web, { channel: PUBLIC_REQUEST_CHANNELS.WEB }).shortAnswer, web.shortAnswer);
+  const api = presentPublicAnswer(answer("applied"), { channel: PUBLIC_REQUEST_CHANNELS.EXTERNAL_API, env: {} });
+  assert.equal(api.shortAnswer, `裁定回答\n\n${applied}\n${webNotice}${footer}`);
+  for (const [status, note] of [["failed", failed], ["no_new_evidence", noNewEvidence]]) {
+    assert.equal(presentPublicAnswer(answer(status), { channel: PUBLIC_REQUEST_CHANNELS.WEB }).shortAnswer,
+      `裁定回答\n\n${note}`);
+  }
+  // The note follows the answer, so it refers to the answer above it.
+  assert.equal(presentPublicAnswer(answer("failed", "zh-CN", "deadline_exceeded"), { channel: PUBLIC_REQUEST_CHANNELS.WEB })
+    .shortAnswer, `裁定回答\n\n${timedOut}`);
+  assert.equal(presentPublicAnswer(answer("failed", "zh-CN", "deadline_exceeded"),
+    { channel: PUBLIC_REQUEST_CHANNELS.EXTERNAL_API, env: {} }).shortAnswer, `裁定回答\n\n${timedOut}\n${webNotice}${footer}`);
+  assert.equal(presentPublicAnswer(answer("cancelled", "zh-CN", "cancelled_during_supplement"),
+    { channel: PUBLIC_REQUEST_CHANNELS.WEB }).shortAnswer, `裁定回答\n\n${cancelled}`);
+  assert.match(presentPublicAnswer(answer("failed", "en", "deadline_exceeded"), { channel: PUBLIC_REQUEST_CHANNELS.WEB })
+    .shortAnswer, /stopped by the time limit, so the answer above is the first-round answer\.\)$/u);
+  assert.match(presentPublicAnswer(answer("no_new_evidence", "ja"), { channel: PUBLIC_REQUEST_CHANNELS.WEB }).shortAnswer,
+    /上記は初回の回答です）$/u);
+  for (const status of ["not_needed", "disabled", "skipped", undefined]) {
+    assert.equal(presentPublicAnswer(answer(status), { channel: PUBLIC_REQUEST_CHANNELS.WEB }).shortAnswer, "裁定回答");
+    assert.equal(presentPublicAnswer(answer(status), { channel: PUBLIC_REQUEST_CHANNELS.EXTERNAL_API, env: {} }).shortAnswer,
+      `裁定回答\n\n${webNotice}${footer}`);
+  }
+  assert.match(presentPublicAnswer(answer("applied", "en"), { channel: PUBLIC_REQUEST_CHANNELS.WEB }).shortAnswer,
+    /\n\n\(The first round found the evidence insufficient; one supplementary search was run\.\)$/u);
+  assert.match(presentPublicAnswer(answer("applied", "ja"), { channel: PUBLIC_REQUEST_CHANNELS.WEB }).shortAnswer,
+    /\n\n（初回の根拠が不足していたため、追加検索を1回行いました）$/u);
+  // Unknown channels and answers without text stay unchanged.
+  const raw = answer("applied");
+  assert.equal(presentPublicAnswer(raw, { channel: PUBLIC_REQUEST_CHANNELS.UNKNOWN }), raw);
+  const empty = { ...answer("applied"), shortAnswer: "" };
+  assert.equal(presentPublicAnswer(empty, { channel: PUBLIC_REQUEST_CHANNELS.WEB }), empty);
+});
+
 test("web and unknown responses never receive the external notice", () => {
   const answer = { shortAnswer: "原始回答" };
   const env = { EXTERNAL_API_TEST_NOTICE: testNotice };

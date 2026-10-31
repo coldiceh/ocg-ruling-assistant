@@ -71,17 +71,18 @@ for (const r of records) {
   const fmt = (cs) => cs.map((c) => `${((c.paid?.ms ?? c.ms) / 1000).toFixed(1)} s / ${c.output ?? "?"} tok`).join("；") || "—";
   const plan = calls("plan");
   const repair = calls("repair");
-  const totalMs = sum([...plan, ...repair].map((c) => c.paid?.ms ?? c.ms)) + (r.metrics.engineMs || 0);
+  const conclusion = calls("conclusion");
+  const totalMs = sum([...plan, ...repair, ...conclusion].map((c) => c.paid?.ms ?? c.ms)) + (r.metrics.engineMs || 0);
   latency.push({ qid: r.qid, totalMs });
-  md.push(`| ${r.qid} | ${fmt(plan)} | ${fmt(repair)} | ${r.metrics.engineMs} ms | ${(totalMs / 1000).toFixed(1)} s |`);
+  md.push(`| ${r.qid} | ${fmt(plan)} | ${fmt(repair)} | ${r.metrics.engineMs} ms | ${fmt(conclusion)} | ${(totalMs / 1000).toFixed(1)} s |`);
 }
 if (latency.length) {
   const sorted = latency.map((x) => x.totalMs).sort((a, b) => a - b);
   const pick = (q) => sorted[Math.min(sorted.length - 1, Math.round(q * (sorted.length - 1)))];
   const table = md.splice(md.length - latency.length, latency.length);
-  md.push("## 复现耗时（计划 + 修复 + 引擎，模型耗时取首次付费调用）", "",
+  md.push("## 复现耗时（计划 + 修复 + 引擎 + 结论句，模型耗时取首次付费调用）", "",
     `- 中位 ${(pick(0.5) / 1000).toFixed(1)} s，P90 ${(pick(0.9) / 1000).toFixed(1)} s，最大 ${(sorted.at(-1) / 1000).toFixed(1)} s（${latency.find((x) => x.totalMs === sorted.at(-1)).qid}）`, "",
-    "| 题 | 计划（耗时 / 输出 token） | 修复 | 引擎 | 合计 |", "|---|---|---|---|---|", ...table, "");
+    "| 题 | 计划（耗时 / 输出 token） | 修复 | 引擎 | 结论句 | 合计 |", "|---|---|---|---|---|---|", ...table, "");
   out.latency = { medianMs: pick(0.5), p90Ms: pick(0.9), maxMs: sorted.at(-1), perQuestion: latency };
 }
 const ledger = ledgerRows;

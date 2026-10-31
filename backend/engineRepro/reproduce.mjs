@@ -1,10 +1,14 @@
 // One engine reproduction for one question: identity -> planner (1 call) -> engine -> at most one
-// repair call -> question-level status. Shared by the production answer path and the batch script.
+// repair call -> question-level status -> (optional) conclusion sentence (conclusion.mjs, 1 call).
+// Shared by the production answer path and the batch script.
 // Card identity always comes from the main answer's own card resolution (no second resolver).
 // Only mechanical checks happen here: field shapes, allowed card codes, exact names, budgets.
 import { DEFAULT_DECK, DEFAULT_SEED, FILLER_CARDS, PLANNER_INSTRUCTIONS, PROMPT_VERSION, TOOL_CARD_CODES } from "./plannerPrompt.mjs";
 import { preparePlannerContext } from "./plannerContext.mjs";
-import { STATUS, aggregateQuestion, renderQuestion } from "./aggregate.mjs";
+import { STATUS, aggregateQuestion, branchOutcome, renderQuestion, reproductionFailure } from "./aggregate.mjs";
+import { engineReproDigest } from "./concise.mjs";
+import { writeConclusion } from "./conclusion.mjs";
+import { estimateTokens } from "./modelCalls.mjs";
 
 export const DEFAULT_PLANNER = Object.freeze({ model: "gpt-6.1-sol", effort: "low", maxOutput: 1600, maxInput: 16000 });
 const REASON_CODES = ["pure_rule", "archetype_level", "tournament_policy", "ruleset_version"];
@@ -156,7 +160,47 @@ async function checkPlan(plan, allowedCodes, engine) {
   return { problems, branchProblems };
 }
 
-function compactFailure(sq, b) {
+function compactDecision(d) {
+  if (!d || typeof d !== "object") return null;
+  // announce_card values are core filter opcodes, not card candidates.
+  const declarable = d.kind === "announce_number" ? { values: d.values }
+    : d.kind === "announce_race" || d.kind === "announce_attrib" ? { available: d.available, count: d.count } : {};
+  return { kind: d.kind, player: d.player, phase: d.phase, timing: d.timing?.at || undefined, turn: d.turn,
+    hint: d.hint?.text || null,
+    card: d.card || undefined, desc_text: d.desc_text || undefined, ...declarable,
+    options: (d.options || []).slice(0, 40).map((o) => ({ cmd: o.cmd, card: o.card, name: o.name, controller: o.controller,
+      from: o.from, seq: o.seq, desc: o.desc, desc_text: o.desc_text, forced: o.forced, position: o.position,
+      place: o.place, selected: o.selected })) };
+}
+
+// Match buildRepairInput: the diagnostic JSON and replay are sent separately, without
+// serializing the replay a second time as an escaped JSON string.
+function failureFeedbackTokens(value) {
+  const { replay = "", ...diagnostic } = value;
+  return estimateTokens(`${JSON.stringify(diagnostic)}\n${replay}`);
+}
+
+function fitFailureReplay(diagnostic, replay, budget) {
+  if (!replay || failureFeedbackTokens(diagnostic) >= budget) return diagnostic;
+  if (failureFeedbackTokens({ ...diagnostic, replay }) <= budget) return { ...diagnostic, replay };
+  const chars = Array.from(replay);
+  const excerpt = (count) => {
+    const head = Math.floor(count * 0.375);
+    const tail = count - head;
+    return `${chars.slice(0, head).join("")}\n…（回放节选，完整过程保留在引擎记录）…\n${tail ? chars.slice(-tail).join("") : ""}`;
+  };
+  let low = 0, high = chars.length - 1;
+  while (low < high) {
+    const mid = Math.ceil((low + high) / 2);
+    if (failureFeedbackTokens({ ...diagnostic, replay: excerpt(mid) }) <= budget) low = mid;
+    else high = mid - 1;
+  }
+  const fitted = low ? excerpt(low) : "";
+  return fitted && failureFeedbackTokens({ ...diagnostic, replay: fitted }) <= budget
+    ? { ...diagnostic, replay: fitted } : diagnostic;
+}
+
+export function compactFailure(sq, b) {
   const r = b.engine;
   const failure = { sub_question: sq.id, branch: b.id };
   if (b.planProblems) return { ...failure, reason_code: "invalid_input", problems: b.planProblems };
@@ -165,25 +209,58 @@ function compactFailure(sq, b) {
   const f = r?.failure;
   if (f) {
     failure.failure = { reason: f.reason, step: f.step, step_spec: f.step_spec, detail: f.detail };
-    const d = f.decision;
-    if (d) {
-      // What could be declared (announce_number: the offered numbers; announce_race / announce_attrib:
-      // the available bits and how many to declare). announce_card's `values` are the core's filter
-      // opcodes, not candidates, so they are left out.
-      const declarable = d.kind === "announce_number" ? { values: d.values }
-        : d.kind === "announce_race" || d.kind === "announce_attrib" ? { available: d.available, count: d.count } : {};
-      failure.decision = { kind: d.kind, player: d.player, phase: d.phase, timing: d.timing?.at || undefined, turn: d.turn,
-        hint: d.hint?.text || null,
-        card: d.card || undefined, desc_text: d.desc_text || undefined, ...declarable,
-        options: (d.options || []).slice(0, 40).map((o) => ({ cmd: o.cmd, card: o.card, name: o.name, controller: o.controller,
-          from: o.from, seq: o.seq, desc: o.desc, desc_text: o.desc_text, forced: o.forced, position: o.position,
-          place: o.place, selected: o.selected })) };
-    }
+    if (f.decision) failure.decision = compactDecision(f.decision);
   }
   if (r?.probes) failure.probes = r.probes.map((p) => ({ result: p.result, card_level_only: p.card_level_only || undefined }));
   const replay = replayExcerpt(r?.rendered_zh);
   if (replay) failure.replay = replay;
-  return failure;
+  // The old projection is the per-result envelope. Spend its replay allowance on
+  // exact failure/probe identity first, then optional progress; do not append a
+  // second copy of the successful setup prefix or the full engine state.
+  const budget = failureFeedbackTokens(failure);
+  const diagnostic = { ...failure };
+  delete diagnostic.replay;
+  const actual = reproductionFailure(b);
+  if (actual) {
+    const rejected = actual.reason === "engine_rejected_response" ? actual.last_decision : null;
+    const step = Number.isSafeInteger(actual.step) ? actual.step
+      : Number.isSafeInteger(rejected?.step) ? rejected.step : undefined;
+    const spec = Object.hasOwn(actual, "step_spec") ? actual.step_spec
+      : rejected && step !== undefined ? b.actions?.setup?.[step] : undefined;
+    diagnostic.reason_code = r?.reason_code || "action_mismatch";
+    diagnostic.failure = { reason: actual.reason, step, step_spec: spec, detail: actual.detail,
+      ...(Array.isArray(actual.probes) ? { probes: actual.probes } : {}) };
+    const decision = compactDecision(actual.decision || rejected?.decision);
+    if (decision) diagnostic.decision = decision;
+  }
+  if (Array.isArray(r?.probes)) diagnostic.probes = r.probes.map((p, index) => ({
+    index: Number.isSafeInteger(p?.index) ? p.index : index,
+    result: p?.result,
+    ...(Number.isSafeInteger(p?.after) ? { after: p.after } : {}),
+    ...(p?.player === 0 || p?.player === 1 ? { player: p.player } : {}),
+    ...(typeof p?.decision_kind === "string" ? { decision_kind: p.decision_kind } : {}),
+    ...(typeof p?.at === "string" ? { at: p.at } : {}),
+    ...(p?.target && typeof p.target === "object" ? { target: Object.fromEntries(
+      ["card", "cmd", "desc", "controller", "from", "seq"].filter((key) => p.target[key] !== undefined)
+        .map((key) => [key, p.target[key]])) } : {}),
+    ...(typeof p?.until === "string" ? { until: p.until } : {}),
+    ...(p?.interval && typeof p.interval === "object" ? { interval: {
+      end: p.interval.end, completed: p.interval.completed,
+      ...(Number.isSafeInteger(p.interval.log_index) ? { log_index: p.interval.log_index } : {}),
+    } } : {}),
+    ...(p?.card_level_only ? { card_level_only: true } : {}),
+  }));
+  const total = b.actions?.setup?.length;
+  if (Number.isSafeInteger(r?.setup_consumed) && Number.isSafeInteger(total)
+      && r.setup_consumed >= 0 && r.setup_consumed <= total) {
+    const progress = { setup_consumed: r.setup_consumed, setup_total: total,
+      ...(Number.isSafeInteger(diagnostic.failure?.step) ? { next_step: diagnostic.failure.step } : {}) };
+    if (failureFeedbackTokens({ ...diagnostic, progress }) <= budget) diagnostic.progress = progress;
+  }
+  // Essential diagnostics can exceed a legacy result that supplied neither a
+  // decision nor a replay (notably MSG_RETRY). Keep that missing failure scene;
+  // optional progress and extra replay never expand the old envelope.
+  return fitFailureReplay(diagnostic, replay, budget);
 }
 
 // The engine's own Chinese replay of a failed branch for the repair round (plannerPrompt.mjs puts it in
@@ -215,14 +292,43 @@ function summarizeEngine(r) {
  * @param modelCall    async ({stage, model, instructions, input, reasoningEffort, maxOutputTokens, maxInputTokens})
  *                     -> {status, incomplete, outputText, usage, costUsd, ms, cacheHit}
  * @param clock        () -> ms since the request started (timings are reported on that axis)
+ * @param conclusion   null (no conclusion sentence) or { enabled, model, effort, maxOutput, timeoutMs }
+ *                     (conclusion.mjs CONCLUSION_MODEL / conclusionConfigFromEnv); the call goes through
+ *                     the same modelCall, so it is charged and timed with the reproduction
  */
 export async function runEngineReproduction({ question, identity, cardsById, cidMap, engine, modelCall,
-  planner = DEFAULT_PLANNER, includeOfficialQa = false, clock = () => 0, record: base = {} }) {
+  planner = DEFAULT_PLANNER, includeOfficialQa = false, clock = () => 0, conclusion = null, record: base = {} }) {
   const record = { ...base, text: question, promptVersion: PROMPT_VERSION, planner, includeOfficialQa,
     plannerCalled: false, identity, plannerContext: [], modelUsage: [],
-    timings: { startedAtMs: clock(), plannerMs: 0, repairMs: 0, engineMs: 0 } };
-  const finish = () => {
+    timings: { startedAtMs: clock(), plannerMs: 0, repairMs: 0, engineMs: 0, conclusionMs: 0 } };
+  // The conclusion sentence (conclusion.mjs) only for a question with engine observations; it never fails
+  // the reproduction. Its time and cost are the engine section's own (timings.conclusionMs, modelUsage).
+  const addConclusion = async () => {
+    const status = record.summary.status;
+    if (status !== STATUS.OK && status !== STATUS.PARTIAL) {
+      record.conclusion = { status: "skipped", reason: "not_reproduced" };
+      return;
+    }
+    const t0 = clock();
+    let result;
+    try {
+      result = await writeConclusion({ question, digest: engineReproDigest(record), modelCall, config: conclusion });
+    } catch (error) {
+      // writeConclusion records every call outcome itself; this only catches a fault while building its input
+      result = { status: "failed", error: `conclusion_internal_error:${String(error?.message || error).slice(0, 80)}` };
+    } finally {
+      record.timings.conclusionMs += clock() - t0;
+    }
+    if (result.responded) {
+      record.modelUsage.push({ stage: "conclusion", inputTokensEstimate: result.inputTokensEstimate ?? null,
+        inputTokens: result.usage?.inputTokens ?? null, outputTokens: result.usage?.outputTokens ?? null,
+        costUsd: Number.isFinite(result.costUsd) ? result.costUsd : null });
+    }
+    record.conclusion = result;
+  };
+  const finish = async () => {
     record.summary = aggregateQuestion(record);
+    if (conclusion) await addConclusion();
     record.rendered = renderQuestion(record, record.summary);
     record.timings.finishedAtMs = clock();
     return record;
@@ -260,7 +366,10 @@ export async function runEngineReproduction({ question, identity, cardsById, cid
   if (identity.unresolved.length || unmapped.length) {
     const names = [...identity.unresolved.map((m) => `「${m.input}」`),
       ...unmapped.map((c) => `CID ${c.cid}（${cardsById.get(c.cid)?.name || "?"}）无卡号`)];
-    record.preStatus = { status: STATUS.FAIL, reason: "identity", detail: `无法确认身份：${names.join("、")}` };
+    // structured for the short section: the mentions that did not resolve, the cards without a passcode
+    record.preStatus = { status: STATUS.FAIL, reason: "identity", detail: `无法确认身份：${names.join("、")}`,
+      unresolved: identity.unresolved.map((m) => m.input).filter(Boolean),
+      unmapped: unmapped.map((c) => cardsById.get(c.cid)?.name || `CID ${c.cid}`) };
     return finish();
   }
 
@@ -317,6 +426,12 @@ export async function runEngineReproduction({ question, identity, cardsById, cid
     }
   };
 
+  // Why a planner round gave no usable plan, kept for the short section's reason (concise.mjs):
+  // truncated output, output that is not a JSON object, or plan-check problems.
+  record.planFailures = [];
+  const unparsed = (call, response) => ({ call,
+    kind: response?.incomplete?.reason === "max_output_tokens" ? "truncated" : "not_json" });
+
   // call 1: plan
   record.plannerCalled = true;
   const r1 = await timedModel(modelOpts("plan", planned.input));
@@ -325,9 +440,11 @@ export async function runEngineReproduction({ question, identity, cardsById, cid
   let planLevelProblems = [];
   try { plan = parseJsonObject(r1.outputText); } catch (e) {
     planLevelProblems = [`输出不是完整的 JSON 对象（status=${r1.status}${r1.incomplete ? `, ${JSON.stringify(r1.incomplete)}` : ""}）：${e.message}`];
+    record.planFailures.push(unparsed("plan", r1));
   }
   if (plan) {
     planLevelProblems = (await adoptPlan(plan)).problems;
+    if (planLevelProblems.length) record.planFailures.push({ call: "plan", kind: "check", problems: planLevelProblems });
     if (!planLevelProblems.length && plan.applicability === "applicable") await runBranches();
   }
   if (plan?.applicability === "not_applicable" && !planLevelProblems.length) {
@@ -338,7 +455,7 @@ export async function runEngineReproduction({ question, identity, cardsById, cid
   // call 2: one repair, only if something failed
   const failures = [];
   if (planLevelProblems.length) failures.push({ plan_level: true, problems: planLevelProblems });
-  else for (const sq of record.subQuestions) for (const b of sq.branches) if (!b.engine || b.engine.status !== "replayed") failures.push(compactFailure(sq, b));
+  else for (const sq of record.subQuestions) for (const b of sq.branches) if (!branchOutcome(b).ok) failures.push(compactFailure(sq, b));
   if (!failures.length) return finish();
   record.repairCalled = true;
   const repaired = preparePlannerContext({ ...contextOptions,
@@ -347,14 +464,20 @@ export async function runEngineReproduction({ question, identity, cardsById, cid
   const r2 = await timedModel(modelOpts("repair", repaired.input));
   record.planRaw.push({ call: "repair", status: r2.status, incomplete: r2.incomplete, text: r2.outputText });
   let fix = null;
-  try { fix = parseJsonObject(r2.outputText); } catch (e) { record.repairProblems = [`修复输出不是完整的 JSON：${e.message}`]; }
+  try { fix = parseJsonObject(r2.outputText); } catch (e) {
+    record.repairProblems = [`修复输出不是完整的 JSON：${e.message}`];
+    record.planFailures.push(unparsed("repair", r2));
+  }
   if (!fix) {
     if (planLevelProblems.length) record.planFailure = "invalid_input";
     return finish();
   }
   if (planLevelProblems.length) {
     const check = await adoptPlan(fix);
-    if (check.problems.length) { record.planFailure = "invalid_input"; record.repairProblems = check.problems; record.plan = null; }
+    if (check.problems.length) {
+      record.planFailure = "invalid_input"; record.repairProblems = check.problems; record.plan = null;
+      record.planFailures.push({ call: "repair", kind: "check", problems: check.problems });
+    }
     else if (fix.applicability === "applicable") await runBranches();
     else await verifyArchetype(fix);
     return finish();
@@ -368,7 +491,7 @@ export async function runEngineReproduction({ question, identity, cardsById, cid
     if (fsq.unrepresentable && fsq.unrepresentable !== "null") { sq.unrepresentable = fsq.unrepresentable; sq.branches = []; sq.repaired = true; continue; }
     for (const fb of fsq.branches || []) {
       const b = sq.branches.find((x) => x.id === fb.id);
-      if (!b || (b.engine && b.engine.status === "replayed")) continue;
+      if (!b || branchOutcome(b).ok) continue;
       Object.assign(b, { ...expandPlanDefaults(fb.scenario, fb.actions), observe: fb.observe || b.observe,
         resultCards: fb.result_cards !== undefined ? normalizeResultCards(fb.result_cards) : b.resultCards,
         assumption: fb.assumption ?? b.assumption, repaired: true, firstEngine: b.engine ? summarizeEngine(b.engine) : null,

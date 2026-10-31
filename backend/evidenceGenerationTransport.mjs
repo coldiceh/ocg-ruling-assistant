@@ -143,6 +143,26 @@ function createOfficialLunaResponsesTransport({ contract, env, fetchImpl }) {
     // paid prompt cache. The field is part of the measured wire body.
     prepareRequest: (body) => ({ ...convertEvidenceGenerationRequest(body, contract),
       prompt_cache_options: { ...OFFICIAL_PROMPT_CACHE_OPTIONS } }),
+    // Exact provider count for the optional shared ToC/selection input budget.
+    // It is separate from the historical theoretical accounting measurement.
+    countInputTokens: async (body, { signal } = {}) => {
+      if (body?.model !== contract.modelId) throw new Error('evidence_input_count_model_mismatch');
+      requireFetch(fetchImpl);
+      const countBody = Object.fromEntries(['model', 'input', 'instructions', 'reasoning', 'text',
+        'tools', 'tool_choice', 'parallel_tool_calls', 'conversation', 'previous_response_id', 'truncation']
+        .filter(key => Object.hasOwn(body, key)).map(key => [key, body[key]]));
+      const response = await fetchImpl(`${OFFICIAL_EVIDENCE_RESPONSES_URL}/input_tokens`, {
+        method: 'POST', redirect: 'error',
+        headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
+        body: JSON.stringify(countBody), ...(signal ? { signal } : {}),
+      });
+      const result = await readJsonResponse(response, `official_evidence_count_http_${response.status}`);
+      if (result?.object !== 'response.input_tokens'
+          || !Number.isSafeInteger(result.input_tokens) || result.input_tokens <= 0) {
+        throw new Error('evidence_input_count_invalid');
+      }
+      return result.input_tokens;
+    },
     invoke: async (body, { measurement, signal } = {}) => {
       assertMeasuredWireRequest(body, contract, measurement);
       requireFetch(fetchImpl);

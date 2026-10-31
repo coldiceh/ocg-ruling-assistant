@@ -87,7 +87,10 @@ test("not finished when the answer completes: the response waits for it; the del
       sleep: async (ms) => { await new Promise((r) => setTimeout(r, 5)); } });
   assert.equal(answer.engineRepro.status, "done");
   // the answer text carries only the short section; the full replay stays in engineRepro.rendered
-  assert.match(answer.shortAnswer, /^主回答\n\n【ygopro 引擎复现（实验性）】已复现\n\nygopro（MyCard 版核心）在下面的局面里：/u);
+  assert.match(answer.shortAnswer, /^主回答\n\n【ygopro 引擎复现（实验性）】已复现\n\nygopro（MyCard 版核心）的运行结果：\n- /u);
+  // the engine returned nothing to look at: no conclusion call was made for it
+  assert.equal(answer.engineRepro.conclusion.status, "skipped");
+  assert.equal(answer.engineRepro.timings.conclusionMs, 0);
   assert.match(answer.shortAnswer, /局面：我方手卡 灰流丽。/u);
   assert.doesNotMatch(answer.shortAnswer, /状态：|未经评测|【引擎复现】/u);
   assert.match(answer.engineRepro.rendered, /^【ygopro 引擎复现（实验性，未经评测）】\n状态：已复现/u);

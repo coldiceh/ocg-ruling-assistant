@@ -18,6 +18,7 @@ import { createOfficialModelCall } from "./modelCalls.mjs";
 import { DEFAULT_PLANNER, identityFromCardResolution, runEngineReproduction } from "./reproduce.mjs";
 import { STATUS, renderQuestion } from "./aggregate.mjs";
 import { CONCISE_HEADER, engineReproConciseText, engineReproDigest, officialQaLineApplies } from "./concise.mjs";
+import { conclusionConfigFromEnv, conclusionSummary } from "./conclusion.mjs";
 import { officialQaJudgeSummary } from "./officialQaJudge.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -87,10 +88,13 @@ export function appendEngineReproSection(answer, section, { officialQaJudge = nu
   return { ...answer, engineRepro, shortAnswer: `${body}\n\n${text}${footer && shortAnswer.endsWith(footer) ? footer : ""}` };
 }
 
+// timings and modelUsage are the engine section's own (planner, repair, engine, conclusion sentence),
+// reported apart from the main answer's.
 function sectionFromRecord(record) {
   return { status: "done", questionStatus: record.summary?.status, reasonCodes: record.summary?.reasonCodes || [],
     flags: record.summary?.flags || [], rendered: record.rendered, digest: engineReproDigest(record), timings: record.timings,
-    plannerContext: record.plannerContext || [], modelUsage: record.modelUsage || [] };
+    plannerContext: record.plannerContext || [], modelUsage: record.modelUsage || [],
+    conclusion: conclusionSummary(record.conclusion) };
 }
 
 export function plannerFromEnv(env = {}) {
@@ -105,7 +109,7 @@ export function plannerFromEnv(env = {}) {
 export function createEngineReproSession({
   env, requestStartedAt = Date.now(), auditIdPromise = Promise.resolve(null),
   fetchImpl = globalThis.fetch, now = Date.now, waitUntil = defaultWaitUntil,
-  engine = null, modelCall = null, limits = null, cidMap = null, planner = null, saveAudit = null,
+  engine = null, modelCall = null, limits = null, cidMap = null, planner = null, conclusion = null, saveAudit = null,
   command = redisCommand, warmEngine = warmHttpEngine,
 }) {
   const enabled = engineReproEnabled(env);
@@ -162,6 +166,8 @@ export function createEngineReproSession({
           return await runEngineReproduction({
             question, identity, cardsById, cidMap: cidMap || loadCidMap(), clock,
             planner: planner || plannerFromEnv(env),
+            // the conclusion sentence: on unless ENGINE_REPRO_CONCLUSION=off, same model call and budget bucket
+            conclusion: conclusion || conclusionConfigFromEnv(env),
             engine: engine || createHttpEngineClient({ baseUrl: env.ENGINE_REPRO_URL, secret: env.ENGINE_REPRO_SECRET, fetchImpl }),
             modelCall: modelCall || createOfficialModelCall({ env, limits: lim, fetchImpl }),
           });
@@ -171,7 +177,8 @@ export function createEngineReproSession({
           const previous = error.engineReproRecord;
           const record = { ...previous, text: question, identity,
             timings: { ...previous?.timings, startedAtMs: state.startedAtMs, finishedAtMs: clock() },
-            error: { code: error.code || null, message: String(error.message || error).slice(0, 300) },
+            error: { code: error.code || null, name: typeof error.name === "string" ? error.name : null,
+              message: String(error.message || error).slice(0, 300) },
             summary: { status: STATUS.FAIL, reasonCodes: [reason],
               flags: previous?.plannerContext?.some((context) => context.trimmed) ? ["context_trimmed"] : [] } };
           record.rendered = previous ? renderQuestion(record, record.summary)

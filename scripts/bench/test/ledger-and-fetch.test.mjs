@@ -157,6 +157,30 @@ test("mock responder fails closed for unknown hosts and echoes local card refere
   await assert.rejects(fetchImpl("https://example.com/x"), /bench_mock_unrouted_request/u);
 });
 
+test("mock input counting supports shared budgets without making a generation request", async () => {
+  const responder = createMockResponder();
+  const count = async (input) => {
+    const result = await responder(new URL("https://api.openai.com/v1/responses/input_tokens"), {
+      method: "POST", body: JSON.stringify({ model: "gpt-6-luna", input }),
+    });
+    assert.equal(result.task, "official_input_tokens");
+    const payload = await result.response.json();
+    assert.equal(payload.object, "response.input_tokens");
+    assert.ok(Number.isSafeInteger(payload.input_tokens) && payload.input_tokens > 0);
+    assert.equal(payload.output, undefined);
+    assert.equal(payload.usage, undefined);
+    return payload.input_tokens;
+  };
+  assert.ok(await count("reading material ".repeat(100)) > await count("short input"));
+  const input = [{ role: "user", content: "read this material" }];
+  const generated = await responder(new URL("https://api.openai.com/v1/responses"), {
+    method: "POST", body: JSON.stringify({ model: "gpt-6-luna", input,
+      max_output_tokens: 1000, prompt_cache_options: { key: "mock-cache" } }),
+  });
+  assert.equal((await generated.response.json()).usage.input_tokens, await count(input),
+    "input counting and generation usage agree despite output/cache settings");
+});
+
 test("mock responder answers the rule-ToC request with unit 101 only when the table lists it", async () => {
   const responder = createMockResponder({ getContext: () => ({ question: "题面" }) });
   const tocRequest = (table, extraUser = []) => ({ method: "POST", body: JSON.stringify({ model: "gpt-6-luna", input: [

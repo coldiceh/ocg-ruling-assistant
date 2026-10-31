@@ -17,6 +17,16 @@ function estimateTokens(text) {
   return Math.max(1, Math.ceil(Buffer.byteLength(String(text), "utf8") / 3));
 }
 
+function estimateResponsesInputTokens(bodyText) {
+  const body = JSON.parse(bodyText);
+  // The count endpoint omits output limits and cache settings. They must not
+  // make the same mocked input count differently when generation reports usage.
+  const input = Object.fromEntries(["model", "input", "instructions", "reasoning", "text",
+    "tools", "tool_choice", "parallel_tool_calls", "conversation", "previous_response_id", "truncation"]
+    .filter((key) => Object.hasOwn(body, key)).map((key) => [key, body[key]]));
+  return estimateTokens(JSON.stringify(input));
+}
+
 function pseudoVector(text, dimension) {
   const values = [];
   let block = digest(text);
@@ -30,7 +40,7 @@ function pseudoVector(text, dimension) {
 }
 
 function responsesPayload(model, text, { inputText, outputTokens = 120 }) {
-  const inputTokens = estimateTokens(inputText);
+  const inputTokens = estimateResponsesInputTokens(inputText);
   return {
     id: `mock-resp-${digest(`${inputText}\n${text}`).slice(0, 16)}`,
     object: "response",
@@ -162,6 +172,13 @@ export function createMockResponder({ getContext = () => undefined } = {}) {
   return async function respond(url, init = {}) {
     const method = String(init.method || "GET").toUpperCase();
     const bodyText = typeof init.body === "string" ? init.body : "";
+    if (url.hostname === "api.openai.com" && url.pathname === "/v1/responses/input_tokens" && method === "POST") {
+      // Deterministic fake count for the shared ToC/selection input budget.
+      // Like Gemini's countTokens mock, this does not generate output or spend a ledger ticket.
+      return { task: "official_input_tokens", response: Response.json({
+        object: "response.input_tokens", input_tokens: estimateResponsesInputTokens(bodyText),
+      }) };
+    }
     if (url.hostname === "api.openai.com" && url.pathname === "/v1/responses" && method === "POST") {
       const body = JSON.parse(bodyText);
       if (Array.isArray(body.input)) {
