@@ -27,6 +27,7 @@
     "EVIDENCE_SELECTION_PROFILE": "bai-gpt-6-luna-high-theoretical",
     "EVIDENCE_SELECTOR": "luna",
     "EVIDENCE_SUPPLEMENT_ENABLED": "true",
+    "QA_SOURCE_DISPLAY_ENABLED": "true",
     "RULE_TOC_SHARED_INPUT_BUDGET": "baseline",
     "RAG_EVIDENCE_LUNA_CHANNEL": "official",
     "EVIDENCE_GENERATION_OUTPUT_LIMIT": "provider",
@@ -56,7 +57,7 @@
     },
     "api/answer.js": {
       "maxDuration": 300,
-      "includeFiles": "{config/evidence-generation/*.json,data/{public-release.json,card-nicknames.v1.json,engine-repro/**,legacy-lua-semantic-cache-v2/**,qa-discovery-index.json,rag-data-revision-manifest.json,rag-runtime-v1/**,gemini-rule-qa-v1/**,{rule,qa}-embedding-v1/**}}",
+      "includeFiles": "{config/evidence-generation/*.json,config/qa-source-display-v1.json,data/{public-release.json,card-nicknames.v1.json,engine-repro/**,legacy-lua-semantic-cache-v2/**,qa-discovery-index.json,rag-data-revision-manifest.json,rag-runtime-v1/**,gemini-rule-qa-v1/**,{rule,qa}-embedding-v1/**}}",
       "excludeFiles": "{data/{cards,rulings,qa-index,evidence-index,ocg-rule-corpus,official-responses}.json,data/evidence-index.json.gz,data/gemini-rule-qa-v1/{canonical-manifest.json,navigation-inputs.json.gz,dense-inputs.json.gz,structure-mapping.json.gz}}"
     },
     "api/admin-model-lab.js": {

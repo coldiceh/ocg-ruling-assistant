@@ -410,7 +410,8 @@ test("the prepared event lists the evidence the final model will be given, witho
   const hidden = { id: "rule-hidden", recordType: "rule-doc", title: "未交给最终模型", text: "不显示" };
   const original = continuation.promptBundle;
   continuation.promptBundle = { ...original, modelEvidence: { rawRelatedEvidence: [visible[0], hidden], faqRelated: [visible[1]] },
-    allowedEvidenceIds: ["faq-1", "rule-1"] };
+    allowedEvidenceIds: ["faq-1", "rule-1"],
+    qaSourceDisplayTitles: [{ id: 'faq-1', original: 'FAQ 一', display: '完整问答标题' }] };
   try {
     const f = fixture();
     const first = await prepare(f);
@@ -420,6 +421,7 @@ test("the prepared event lists the evidence the final model will be given, witho
       ["rule-1", "rule-doc", "规则资料一", "https://example.invalid/rule-1"],
     ], "allowed order, prompt-visible items only");
     assert.equal(prepared.evidencePreview[0].conclusion, "回答一");
+    assert.equal(prepared.evidencePreview[0].displayTitle, '完整问答标题');
     assert.ok(!JSON.stringify(prepared.evidencePreview).includes("不显示"));
     assert.deepEqual(f.counts, { prepare: 1, final: 0 }, "listing the evidence calls no model");
   } finally {

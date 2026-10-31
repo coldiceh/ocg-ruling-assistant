@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { withQaSourceDisplayTitles } from './qaSourceDisplayRuntime.mjs';
 import { extractRagCards, findCatalogNameContainmentCandidates, normalizeCardKey } from "./ragCardExtractor.mjs";
 import { buildCardNicknameReferences, applyCardNicknameResolution } from './ragCardNicknames.mjs';
 import { loadCardNicknameData } from './ragCardNicknameData.mjs';
@@ -508,6 +509,7 @@ async function finalizePreparedRagRulingQuestionCore({
   const displayedEvidence = selectedPromptEvidenceRefs(
     promptBundle.modelEvidence,
     promptBundle.allowedEvidenceIds,
+    promptBundle.qaSourceDisplayTitles,
   );
   const authoritativeOfficialDirectId = String(
     promptBundle.authoritativeOfficialDirectId || "",
@@ -1919,7 +1921,7 @@ function sameCanonicalCardId(left = {}, right = {}) {
   return [...values(right)].some((id) => leftIds.has(id));
 }
 
-export function selectedPromptEvidenceRefs(evidence = {}, allowedEvidenceIds = []) {
+export function selectedPromptEvidenceRefs(evidence = {}, allowedEvidenceIds = [], displayTitles = []) {
   const allowed = new Set((allowedEvidenceIds || [])
     .map((id) => String(id || "").trim())
     .filter(Boolean));
@@ -1957,10 +1959,10 @@ export function selectedPromptEvidenceRefs(evidence = {}, allowedEvidenceIds = [
       });
     }
   }
-  return [...allowed].map((id) => byId.get(id)).filter(Boolean).map((source) => ({
+  return withQaSourceDisplayTitles([...allowed].map((id) => byId.get(id)).filter(Boolean).map((source) => ({
     ...source,
     sourceHash: createHash("sha256").update(JSON.stringify(source)).digest("hex"),
-  }));
+  })), displayTitles);
 }
 
 function assertRelayRuleQueryPlanAvailable(result = {}, { dryRun = false, env = {} } = {}) {

@@ -25,6 +25,7 @@ import { createDecisionsSourceResolver, createDecisionsReadingDependencies } fro
 import { RULE_TOC_CHANNEL, RULE_TOC_STAGE, RULE_TOC_CONTRACT_STAGE, RULE_TOC_RETRY_INSTRUCTION, resolveRuleTocConfig,
   buildRuleToc, ruleTocRequestBody, normalizeRuleTocOutput, summarizeRuleTocCalls } from './ruleTocAdmission.mjs';
 import { evidenceSupplementEnabled } from './evidenceStatusProtocol.mjs';
+import { applyQaSourceDisplay } from './qaSourceDisplayRuntime.mjs';
 
 const DECISIONS_SELECTION_CONTRACT = Object.freeze({ providerId: 'openai', modelId: 'gpt-6-luna',
   api: 'decisions', profileId: 'openai-decisions-v4', maxBillableOutputTokens: 0,
@@ -661,6 +662,7 @@ export function mapBoundedQaLexicalLanes({ qaTools, queries, mapResult,
 
 export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fetch,
   loadAssets = loadGeminiRuleQaAssets, budgetedRequest,
+  applySourceDisplay = applyQaSourceDisplay,
   loadDenseSearch = loadRuleDenseSearch, loadQaSearch = loadQaDenseSearch,
   loadGenerationContract = loadEvidenceGenerationContract,
   remainingBudget = currentCloudPreparationRemainingUsd,
@@ -1551,6 +1553,11 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
         || packGeminiSelection({ selection: resolved, userQuery, answerLocale, cardResolution, retrievedEvidence, maxPromptChars,
           evidenceStatusLine });
       if (result.packing.capacityExceeded) throw Object.assign(new Error('gemini_bounded_pack_capacity_exceeded'), { packing: result.packing });
+      const displayOptions = { env, maxPromptChars, dataDir: env.GEMINI_RULE_QA_DATA_DIR || undefined };
+      result.packing = await applySourceDisplay(result.packing, displayOptions);
+      // This base copy is diagnostic only; selection and its budget used the
+      // canonical package. Compare the same display as the first answer read.
+      if (supplementBase) supplementBase.packing = await applySourceDisplay(supplementBase.packing, displayOptions);
       timingsMs.packing = performance.now() - at; signal.throwIfAborted();
       timingsMs.total = performance.now() - started;
       const tokenUsage = { prompt_tokens: calls.reduce((sum, row) => sum + (row.billableUsage?.inputTokens || 0), 0),

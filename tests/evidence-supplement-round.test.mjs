@@ -11,6 +11,7 @@ import { answerRagRulingQuestion, finalizePreparedRagRulingQuestion } from "../b
 import { EVIDENCE_STATUS_INSTRUCTION, extractEvidenceStatusLine } from "../backend/evidenceStatusProtocol.mjs";
 import { decideEvidenceSupplement, EVIDENCE_SUPPLEMENT_INVOCATION_BUDGET_MS } from "../backend/evidenceSupplementRound.mjs";
 import { DEFAULT_WAIT_BUDGET_MS } from "../backend/engineRepro/session.mjs";
+import { applyQaSourceDisplay } from '../backend/qaSourceDisplayRuntime.mjs';
 
 const digest = (value) => createHash("sha256").update(value).digest("hex");
 const data = { cards: [], records: [], qaRecords: [] };
@@ -51,11 +52,12 @@ function schema3Assets(ruleRecords = defaultRuleRecords, qaRecords = defaultQaRe
 // A bounded provider over the fixture release. `select(delivered, round)`
 // returns the selected aliases; requests are recorded per round.
 function boundedFixture({ select = (delivered, round) => round === 1 ? offeredIds(delivered).slice(0, 1)
-  : [...priorOfferedIds(delivered), ...newOfferedIds(delivered).slice(0, 1)], rules, qas } = {}) {
+  : [...priorOfferedIds(delivered), ...newOfferedIds(delivered).slice(0, 1)], rules, qas, applySourceDisplay } = {}) {
   const assets = schema3Assets(rules, qas);
   const requests = [];
   let round = 0;
   const provider = createGeminiBoundedEvidenceProvider({
+    ...(applySourceDisplay ? { applySourceDisplay } : {}),
     loadAssets: async () => assets,
     loadDenseSearch: async ({ rules }) => ({ searchAsync: async () => [...rules.units.values()] }),
     loadQaSearch: async ({ items }) => ({ searchAsync: async () => items }),
@@ -130,6 +132,37 @@ function recordingProgress() {
   return { events, transition() {}, phase: (name) => events.push(["phase_start", name]),
     endPhase: () => events.push(["phase_end"]) };
 }
+
+test('first and model-requested supplementary packages use the display view with no additional model calls', async () => {
+  const displays = [];
+  const { provider, requests } = boundedFixture({ rules: [defaultRuleRecords[0]],
+    select: (delivered, round) => {
+      const ids = (delivered.groups || []).flatMap(group => (group.items || []).map(item => item.handle));
+      return round === 1 ? ids.slice(0, 1) : ids;
+    },
+    qas: [1, 2].map(n => ({ id: `display-${n}`, recordType: 'qa', title: `「<<123>>」質問${n}`,
+      question: `「<<123>>」場面${n}`, answer: `回答${n}` })),
+    applySourceDisplay: async (packing, options) => {
+      const result = await applyQaSourceDisplay(packing, { ...options,
+        loadMapping: async () => ({ mapping: { schema: 'qa-source-display-v1', records: {} } }),
+        loadCardData: async () => ({ cards: [{ id: '123', jaName: '全カード表の名前' }] }) });
+      displays.push(result);
+      return result;
+    } });
+  const env = { ...enabledEnv, QA_SOURCE_DISPLAY_ENABLED: 'true' };
+  const continuation = await prepare(provider, env);
+  assert.equal(continuation.promptBundle.qaSourceDisplay.applied, true);
+  const model = scriptedModel(INSUFFICIENT, SUFFICIENT);
+  const final = await finalizePreparedRagRulingQuestion({ continuation, env, modelInvoker: model.modelInvoker,
+    evidenceSupplementProvider: provider, cloudBudget: fakeBudget() });
+  assert.equal(final.debug.evidenceSupplement.status, 'applied');
+  assert.equal(model.prompts.length, 2, 'only the pre-existing first answer and natural supplementary answer');
+  assert.equal(requests.length, 4, 'one planning and one selection call per round');
+  assert.equal(model.prompts[0], continuation.promptBundle.prompt);
+  assert.equal(model.prompts[1], displays[1].prompt);
+  assert.ok(model.prompts.every(prompt => prompt.includes('全カード表の名前')));
+  assert.ok(final.usedEvidence.every(source => source.title.includes('<<123>>') && source.displayTitle.includes('全カード表の名前')));
+});
 
 test("the status line is read as a field, removed from the shown text, and unknown when unreadable", () => {
   assert.deepEqual(extractEvidenceStatusLine("结论\n\n证据状态：充分"),

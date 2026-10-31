@@ -2113,7 +2113,7 @@ function ragEvidenceSources(items) {
   return (Array.isArray(items) ? items : []).map((item) => ({
     ...item,
     label: tr(ragEvidenceLabel(item.type)),
-    detail: item.title || item.id || "",
+    detail: String(item.displayTitle || "").trim() || item.title || item.id || "",
     id: item.id || "",
     url: item.sourceUrl || item.url || "",
   }));
@@ -6435,11 +6435,19 @@ function sourcePageUrl(value) {
 }
 
 function buildSourceLinkMap(sources = []) {
-  return (Array.isArray(sources) ? sources : [])
+  const links = (Array.isArray(sources) ? sources : [])
     .map((source) => typeof source === "string" ? { detail: source } : source)
-    .flatMap((source) => [...new Set([source?.title || source?.detail, source?.id])]
+    .flatMap((source) => [...new Set([source?.displayTitle, source?.title || source?.detail, source?.id])]
       .map(title => ({ title: String(title || "").trim(), url: sourcePageUrl(source?.sourceUrl || source?.url) })))
     .filter((source) => source.title && source.url);
+  // A display alias must not bind a citation to a different source that has
+  // the same heading. Keep only labels that identify one destination.
+  const urlsByTitle = new Map();
+  for (const { title, url } of links) {
+    if (!urlsByTitle.has(title)) urlsByTitle.set(title, new Set());
+    urlsByTitle.get(title).add(url);
+  }
+  return links.filter(({ title }) => urlsByTitle.get(title).size === 1);
 }
 
 function startPendingStages() {
@@ -6856,7 +6864,8 @@ function renderSources(sources, { title = "" } = {}) {
     const normalizedSource = typeof source === "string" ? { label: "资料来源", detail: source } : source;
     const detail = String(normalizedSource.detail || normalizedSource.title || "").trim();
     const url = sourcePageUrl(normalizedSource.url || normalizedSource.sourceUrl || (/^https?:\/\//i.test(detail) ? detail : ""));
-    const title = String(normalizedSource.title || (detail !== url ? detail : "资料来源")).trim() || "资料来源";
+    const title = String(normalizedSource.displayTitle || "").trim()
+      || String(normalizedSource.title || (detail !== url ? detail : "资料来源")).trim() || "资料来源";
     // Only identical source URLs/titles share a row. All selected entries
     // remain available below, in their original order.
     const key = JSON.stringify([url, title, normalizedSource.label || normalizedSource.name || "资料来源"]);

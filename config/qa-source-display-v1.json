@@ -1,0 +1,175 @@
+{
+  "schema": "qa-source-display-v1",
+  "generatedAt": "2026-10-31T14:49:02.107Z",
+  "sourceFiles": {
+    "records": {
+      "path": "data/gemini-rule-qa-v1/qa-records.json.gz",
+      "sha256": "8872600afa8442f1a4a16a9a368b49ada4dc33ce067f688a949ca0e7eef7a382"
+    },
+    "cards": {
+      "path": "data/cards.json",
+      "sha256": "bae1a1989899fd80a9897a355018cf11421ef2b3b3d0bca9a735b8a3befc0f1b"
+    }
+  },
+  "records": {
+    "ygoresources-qa-24299": {
+      "recordId": "ygoresources-qa-24299",
+      "originalRecordSha256": "fcd8221fb494c1087f25f24d814c296f618f4d4c4aaf4a7d4505019ec2bb2057",
+      "originalTextSha256": "4620039b887ac002db0947a2f12ce7d291e54c7d8c725988c2bdce480ac30a65",
+      "originalTitle": "自分が「<<17263>>」の『2:自分・相手ターンに発動できる。デッキ・EXデッキからサイバース族モンスター1体を墓地へ送る。このカードは、墓地へ送ったそのモンスターと同じ属性…",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/24299",
+      "sourceLocale": "ja",
+      "fetchedAt": "2026-10-31T14:49:02.298Z",
+      "responseSha256": "03c9b58b503ef8daa85d95ff60c2d8b136e83a2000728f62e40e3fa974d29010",
+      "source": {
+        "title": "特定の属性のモンスターの効果が発動できない状況で、複数の属性を持つモンスターの効果は発動できますか？",
+        "question": "自分が「<<17263>>」の『②：自分・相手ターンに発動できる。デッキ・EXデッキからサイバース族モンスター１体を墓地へ送る。このカードは、墓地へ送ったそのモンスターと同じ属性としても扱い、攻撃力が２５００アップする』効果を発動し、風属性モンスターを墓地へ送ったことで「<<17263>>」が風属性としても扱われています。\n\nこの状況で、以下の効果が適用された場合、闇属性であり、風属性としても扱っている「<<17263>>」の②の効果は、次のターンから再び発動できますか？\n\n（A）「<<20555>>」の『このデュエル中に自分は光・地・風属性モンスターの効果を発動できない』効果\n\n（B）「<<20257>>」の『このデュエル中に自分は闇・水・炎属性モンスターの効果を発動できない』効果\n\n（C）「<<21845>>」の『このデュエル中に自分は光・闇属性モンスターの効果を発動できない』効果\n\n（D）「<<22586>>」の『このデュエル中に自分は地・水・炎・風属性モンスターの効果を発動できない』効果",
+        "answer": "いずれの場合でも発動できません。\n\n複数の属性を持つモンスターの例として、以下のモンスターが挙げられます。\n「<<7838>>」\n「<<6821>>」\n「<<20213>>」\n「<<11310>>」\n「<<16828>>」\n「<<15780>>」\n「<<12850>>」\n「<<14466>>」\n「<<14898>>」\n「<<15733>>」\n「<<6639>>」\n「<<14565>>」\n「<<19625>>」\n「<<10823>>」\n「<<22743>>」\n「<<18648>>」の効果が適用されたモンスター\n「<<19036>>」の効果によって別の属性のモンスターを装備したモンスター"
+      },
+      "sourceFieldsSha256": "bfa978d7d16686203924ee7782061054a0add0ef2b85e7cba40871a295a8c91f",
+      "reconstruction": {
+        "normalizer": "NFKC",
+        "separator": " ",
+        "parts": [
+          "question",
+          "originalTitle",
+          "answer"
+        ]
+      },
+      "cards": {
+        "6639": {
+          "id": "6639",
+          "jaName": "E・HERO エリクシーラー",
+          "cnName": "元素－英雄 万灵贤侠",
+          "enName": "Elemental HERO Electrum"
+        },
+        "6821": {
+          "id": "6821",
+          "jaName": "光と闇の竜",
+          "cnName": "光与暗之龙",
+          "enName": "Light and Darkness Dragon"
+        },
+        "7838": {
+          "id": "7838",
+          "jaName": "混沌球体",
+          "cnName": "混沌球体",
+          "enName": "Sphere of Chaos"
+        },
+        "10823": {
+          "id": "10823",
+          "jaName": "カオス・ソルジャー －宵闇の使者－",
+          "cnName": "混沌战士 -宵暗的使者-",
+          "enName": "Black Luster Soldier - Envoy of the Evening Twilight"
+        },
+        "11310": {
+          "id": "11310",
+          "jaName": "C・HERO カオス",
+          "cnName": "对极－英雄 混沌",
+          "enName": "Contrast HERO Chaos"
+        },
+        "12850": {
+          "id": "12850",
+          "jaName": "召喚獣エリュシオン",
+          "cnName": "召唤兽 埃律西昂",
+          "enName": "Invoked Elysium"
+        },
+        "14466": {
+          "id": "14466",
+          "jaName": "ダークネス・シムルグ",
+          "cnName": "黑暗冥西摩格",
+          "enName": "Simorgh of Darkness"
+        },
+        "14565": {
+          "id": "14565",
+          "jaName": "No.76 諧調光師グラディエール",
+          "cnName": "编号76 谐调光师 格拉递艾儿",
+          "enName": "Number 76: Harmonizer Gradielle"
+        },
+        "14898": {
+          "id": "14898",
+          "jaName": "夢魔鏡の天魔－ネイロス",
+          "cnName": "梦魔镜天魔－涅伊洛斯",
+          "enName": "Oneiros, the Dream Mirror Erlking"
+        },
+        "15733": {
+          "id": "15733",
+          "jaName": "夢魔鏡の魘魔－ネイロス",
+          "cnName": "梦魔镜魇魔－涅伊洛斯",
+          "enName": "Oneiros, the Dream Mirror Tormentor"
+        },
+        "15780": {
+          "id": "15780",
+          "jaName": "カオス・グレファー",
+          "cnName": "混沌斗士 格雷法",
+          "enName": "Chaos Grepher"
+        },
+        "16828": {
+          "id": "16828",
+          "jaName": "絶神鳥シムルグ",
+          "cnName": "绝神鸟 西摩格",
+          "enName": "Simorgh, Bird of Perfection"
+        },
+        "17263": {
+          "id": "17263",
+          "jaName": "ファイアウォール・ドラゴン・ダークフルード－ネオテンペスト",
+          "cnName": "防火墙龙・暗流体－新风暴",
+          "enName": "Firewall Dragon Darkfluid - Neo Tempest Terahertz"
+        },
+        "18648": {
+          "id": "18648",
+          "jaName": "千六百七十七万工房",
+          "cnName": "千六百七十七万工房",
+          "enName": "RGB Rainbowlution"
+        },
+        "19036": {
+          "id": "19036",
+          "jaName": "アーマード・エクシーズ",
+          "cnName": "装甲超量",
+          "enName": "Armored Xyz"
+        },
+        "19625": {
+          "id": "19625",
+          "jaName": "レアル・ジェネクス・ウンディーネ",
+          "cnName": "真次代机・水精灵",
+          "enName": "R-Genex Undine"
+        },
+        "20213": {
+          "id": "20213",
+          "jaName": "光と闇の竜王",
+          "cnName": "光与暗之龙王",
+          "enName": "Light and Darkness Dragonlord"
+        },
+        "20257": {
+          "id": "20257",
+          "jaName": "聖王の粉砕",
+          "cnName": "圣主王之粉碎",
+          "enName": "Dominus Purge"
+        },
+        "20555": {
+          "id": "20555",
+          "jaName": "霊王の波動",
+          "cnName": "灵主王之波动",
+          "enName": "Dominus Impulse"
+        },
+        "21845": {
+          "id": "21845",
+          "jaName": "命王の螺旋",
+          "cnName": "命主王之螺旋",
+          "enName": "Dominus Spiral"
+        },
+        "22586": {
+          "id": "22586",
+          "jaName": "霆王の閃光",
+          "cnName": "霆主王之闪光",
+          "enName": "Dominus Spark"
+        },
+        "22743": {
+          "id": "22743",
+          "jaName": "パーフェクトロン・ハイドライブ・ドラゴン",
+          "cnName": "完美电子多元驱动蛇·神龙",
+          "enName": "Perfectron Hydradrive Dragon"
+        }
+      }
+    }
+  }
+}

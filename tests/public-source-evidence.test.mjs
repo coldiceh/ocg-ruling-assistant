@@ -18,7 +18,7 @@ const api = new Function('ui', 'document', 'clearElement', 'appendText', [
   'const tr = value => value; const localeNames = {}; const lastRenderedBackendAnswer = null; let selectedUiLocale = "ja"; const syncedCards = [{ id: "22960", name: "サージ・ブリッツクリーク", jaName: "サージ・ブリッツクリーク", enName: "Surge Blitzclique" }];',
   between('function renderMarkdownInline', 'function startPendingStages'),
   between('function renderSources', 'function renderFeedbackPanel'),
-  'return { renderSources, sourcePageUrl, buildSourceLinkMap, renderMarkdownInline };',
+  'return { renderSources, sourcePageUrl, buildSourceLinkMap, renderMarkdownInline, showSourceTranslation };',
 ].join('\n'))(ui, document, node => { node.childNodes = []; }, appendText);
 function descendants(node, tag) { return node.childNodes.flatMap(child => [...(child.tagName === tag ? [child] : []), ...descendants(child, tag)]); }
 
@@ -68,4 +68,44 @@ test('bold bracket citations and stable evidence IDs resolve through supplied so
   const links = api.buildSourceLinkMap([{ id: 'R1.2', title: 'Rule title', sourceUrl: 'https://example.test/rules' }]);
   api.renderMarkdownInline(node, '**【Rule title】** / 【R1.2】', links);
   assert.deepEqual(descendants(node, 'a').map(node => node.href), ['https://example.test/rules', 'https://example.test/rules']);
+});
+
+test('display headings and both citation titles preserve the original source identity and body', () => {
+  const source = { id: 'QA1', title: 'Original heading', displayTitle: 'Readable heading',
+    sourceUrl: 'https://example.test/qa/1', sourceHash: 'a'.repeat(64),
+    text: JSON.stringify({ recordType: 'qa', title: 'Original heading', question: 'original question', answer: 'original answer' }) };
+  const before = structuredClone(source);
+  api.renderSources([source]);
+  assert.equal(descendants(ui.sourcesList, 'a')[0].textContent, 'Readable heading');
+  assert.deepEqual(descendants(ui.sourcesList, 'p').map(node => node.textContent), ['original question', 'original answer']);
+  const node = element('div');
+  api.renderMarkdownInline(node, '【Readable heading】 / 【Original heading】 / 【QA1】', api.buildSourceLinkMap([source]));
+  assert.deepEqual(descendants(node, 'a').map(link => link.href), Array(3).fill(source.sourceUrl));
+  assert.deepEqual(source, before);
+});
+
+test('a display alias shared by different sources cannot select the wrong citation destination', () => {
+  const sources = [
+    { id: 'A', title: 'Original A', displayTitle: 'Shared heading', sourceUrl: 'https://example.test/a' },
+    { id: 'B', title: 'Shared heading', sourceUrl: 'https://example.test/b' },
+  ];
+  const node = element('div');
+  api.renderMarkdownInline(node, '【Shared heading】 / 【Original A】 / 【B】', api.buildSourceLinkMap(sources));
+  assert.deepEqual(descendants(node, 'a').map(link => link.href), ['https://example.test/a', 'https://example.test/b']);
+});
+
+test('source translation changes body fields without replacing the display heading or citation aliases', () => {
+  const source = { id: 'QA1', title: 'Original heading', displayTitle: 'Readable heading',
+    sourceUrl: 'https://example.test/qa/1', sourceHash: 'a'.repeat(64),
+    text: JSON.stringify({ recordType: 'qa', question: 'original question', answer: 'original answer' }) };
+  api.renderSources([source]);
+  const linksBefore = api.buildSourceLinkMap([source]);
+  const body = descendants(ui.sourcesList, 'div').find(node => node.className === 'source-body');
+  api.showSourceTranslation({ body, actions: element('div'), targetLocale: 'en',
+    fields: [{ key: 'question', label: '问题', text: 'original question' }, { key: 'answer', label: '回答', text: 'original answer' }],
+    translated: { title: 'Translated old heading', question: 'translated question', answer: 'translated answer' } });
+  assert.equal(descendants(ui.sourcesList, 'a')[0].textContent, 'Readable heading');
+  assert.deepEqual(descendants(body, 'p').map(node => node.textContent), ['translated question', 'translated answer']);
+  assert.deepEqual(api.buildSourceLinkMap([source]), linksBefore);
+  assert(!linksBefore.some(link => link.title === 'Translated old heading'));
 });

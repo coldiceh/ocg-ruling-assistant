@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { attachEngineReproWhenReady, createEngineReproSession, engineReproWaitDeadline } from "./engineRepro/session.mjs";
 import { startOfficialQaJudge } from "./engineRepro/officialQaJudge.mjs";
 import { getPublicReleaseInfo } from './publicReleaseInfo.mjs';
+import { qaSourceDisplayReleaseInfo } from './qaSourceDisplayRuntime.mjs';
 import {
   createPublicAnswerModelEnv,
   getRagBudgetStatus,
@@ -229,7 +230,7 @@ export async function getPublicAnswerModelInfo({ env = process.env } = {}) {
       id,
       label: id === "decisions" ? "Decisions" : "Luna",
     })),
-    release: getPublicReleaseInfo(env),
+    release: { ...getPublicReleaseInfo(env), qaSourceDisplay: await qaSourceDisplayReleaseInfo(env) },
   };
 }
 

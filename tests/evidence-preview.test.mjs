@@ -12,7 +12,8 @@ const visible = [record("rule-a"), record("faq-b", { recordType: "card-faq", tit
 const hidden = record("rule-hidden", { text: "NOT-GIVEN-TO-THE-FINAL-MODEL" });
 const packing = { prompt: "EXACT_PROVIDER_PROMPT", promptChars: 21, warnings: [], promptTruncated: false,
   modelEvidence: { rawRelatedEvidence: [visible[0], hidden], faqRelated: [visible[1]] },
-  allowedEvidenceIds: ["faq-b", "rule-a"] };
+  allowedEvidenceIds: ["faq-b", "rule-a"],
+  qaSourceDisplayTitles: [{ id: 'faq-b', original: 'FAQ b', display: 'Readable FAQ b' }] };
 const evidence = { cardTexts: [], userProvidedCardTexts: [], officialQaDirectCandidates: [], officialQaRelated: [],
   provisionalOfficialResponses: [], faqRelated: [visible[1]], rawRelatedEvidence: [visible[0], hidden],
   rulebookCandidates: [], retrievedCards: [], debug: {} };
@@ -34,15 +35,21 @@ test("the evidence listed after preparation is exactly the final answer's usedEv
   assert.equal(prepared.status, "evidence_prepared");
   assert.equal(finalModelCalls, 0);
   const bundle = prepared.continuation.promptBundle;
-  const preview = selectedPromptEvidenceRefs(bundle.modelEvidence, bundle.allowedEvidenceIds);
+  const preview = selectedPromptEvidenceRefs(bundle.modelEvidence, bundle.allowedEvidenceIds, bundle.qaSourceDisplayTitles);
   assert.deepEqual(preview.map((item) => item.id), ["faq-b", "rule-a"], "allowed order");
   assert.ok(!JSON.stringify(preview).includes("NOT-GIVEN-TO-THE-FINAL-MODEL"));
+  assert.equal(preview[0].title, 'FAQ b');
+  assert.equal(preview[0].displayTitle, 'Readable FAQ b');
+  assert.equal(preview[0].sourceHash, selectedPromptEvidenceRefs(bundle.modelEvidence, bundle.allowedEvidenceIds)[0].sourceHash);
 
   const final = await finalizePreparedRagRulingQuestion({
     continuation: JSON.parse(JSON.stringify(prepared.continuation)),   // as stored between the two requests
     cloudBudget: { snapshot: () => ({ calls: [] }) },
     env,
-    modelInvoker: async () => { finalModelCalls += 1; return "mechanical final answer fixture"; },
+    modelInvoker: async ({ prompt }) => {
+      assert.equal(prompt, packing.prompt, 'finalization sends the saved string without re-rendering');
+      finalModelCalls += 1; return "mechanical final answer fixture";
+    },
   });
   assert.equal(finalModelCalls, 1);
   assert.deepEqual(final.usedEvidence, preview);
