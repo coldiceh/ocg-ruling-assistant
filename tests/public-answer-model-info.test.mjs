@@ -7,6 +7,15 @@ import {
   resolveCardExtractionProvider,
 } from "../backend/ragModelClient.mjs";
 
+test('free capability response identifies the deployed scheduler and legacy rollback', async () => {
+  for (const policy of ['legacy', 'rrf']) {
+    const info = await getPublicAnswerModelInfo({ env: { EVIDENCE_READING_SCHEDULER: policy } });
+    assert.equal(info.release.evidenceReadingScheduler.policy, policy);
+    assert.equal(info.release.evidenceReadingScheduler.contract, policy === 'rrf'
+      ? 'rrf-whole-bundle-v1' : 'original-support-need-unseen-whole-bundle-v2');
+  }
+});
+
 test("public capability reports the card extraction model selected by the runtime resolver", async () => {
   for (const { sourceEnv, expectedProvider, expectedModel } of [{
     expectedProvider: "deepseek",

@@ -3,6 +3,7 @@ import { attachEngineReproWhenReady, createEngineReproSession, engineReproWaitDe
 import { startOfficialQaJudge } from "./engineRepro/officialQaJudge.mjs";
 import { getPublicReleaseInfo } from './publicReleaseInfo.mjs';
 import { qaSourceDisplayReleaseInfo } from './qaSourceDisplayRuntime.mjs';
+import { evidenceReadingSchedulerReleaseInfo } from './evidenceReadingSchedulerPolicy.mjs';
 import {
   createPublicAnswerModelEnv,
   getRagBudgetStatus,
@@ -230,7 +231,8 @@ export async function getPublicAnswerModelInfo({ env = process.env } = {}) {
       id,
       label: id === "decisions" ? "Decisions" : "Luna",
     })),
-    release: { ...getPublicReleaseInfo(env), qaSourceDisplay: await qaSourceDisplayReleaseInfo(env) },
+    release: { ...getPublicReleaseInfo(env), qaSourceDisplay: await qaSourceDisplayReleaseInfo(env),
+      evidenceReadingScheduler: evidenceReadingSchedulerReleaseInfo(env) },
   };
 }
 

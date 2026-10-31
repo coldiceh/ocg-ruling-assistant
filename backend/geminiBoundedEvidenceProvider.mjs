@@ -11,8 +11,8 @@ import { runCloudBaiRequest, runCloudGeminiRequest, runOfficialLunaGenerationReq
   currentCloudPreparationRemainingUsd } from './cloudRequestBudget.mjs';
 import { loadRuleDenseSearch, queryEmbeddingText, RULE_EMBEDDING_MODEL,
   RULE_EMBEDDING_DIMENSION } from './geminiRuleDenseSearch.mjs';
-import { admitWholeReadingUnits, mapRankedUnits, READING_SCHEDULER_CONTRACT,
-  READING_SCHEDULER_PRIORITY_CONTRACT } from './evidenceReadingScheduler.mjs';
+import { mapRankedUnits } from './evidenceReadingScheduler.mjs';
+import { resolveEvidenceReadingScheduler } from './evidenceReadingSchedulerPolicy.mjs';
 import { createReadingMeasure, resolveReadingMeasurePolicy } from './evidenceReadingMeasure.mjs';
 import { createNavigationSearch } from './evidenceNavigationSearch.mjs';
 import { loadEvidenceGenerationContract, generationContractSha256, buildEvidenceInputMeasurement,
@@ -704,6 +704,7 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
     const maxPromptChars = offlineLimits?.maxPromptChars ?? boundedEvidenceMaxPromptChars(env);
     let maxUsd = perQuestionMaxUsd;
     const readChars = positiveConfig(env, 'GEMINI_EVIDENCE_READING_TARGET_CHARS', INITIAL_READ_CHARS);
+    const readingScheduler = resolveEvidenceReadingScheduler(env);
     const useDecisions = env.EVIDENCE_SELECTOR === 'decisions';
     // The final prompt asks for the evidence-status line only while the
     // supplementary round is enabled; otherwise packing is unchanged.
@@ -1272,7 +1273,7 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
       let readingMeasure = null, ruleTocLanes;
       const assemble = (maxChars, priorityLanes = ruleTocLanes) => {
         readingMeasure = createReadingMeasure({ exactMeasure: exactWindowChars, maxChars, policy: readingMeasurePolicy });
-        const result = admitWholeReadingUnits({ lanes, materialize, getReferences, maxChars, signal,
+        const result = readingScheduler.admitWholeReadingUnits({ lanes, materialize, getReferences, maxChars, signal,
           maxEntries: useDecisions ? 253 : Infinity, measure: readingMeasure.measure,
           ...(priorityLanes ? { priorityLanes } : {}) });
         // The admitted window is verified once against the exact serialized
@@ -1582,7 +1583,7 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
         estimatedCostUsd: spentUsd, estimatedCostCny: spentUsd * fx, actualCostKnown: false,
         costBasis: 'provider_list_theoretical', cacheProvisionUsd: 0, queryPlan,
         bounded: { calls, tokenCounts: counts, finalModelCalls: 0, reading: completedReading,
-          schedulerContract: ruleTocConfig ? READING_SCHEDULER_PRIORITY_CONTRACT : READING_SCHEDULER_CONTRACT,
+          schedulerContract: admitted.contract,
           ...(navigationPartition !== 'legacy' ? { navigationPartition } : {}),
           ...(ruleToc ? { ruleToc: ruleTocTelemetry() } : {}),
           readingMeasure: readingMeasure?.stats || null, coverageScope: assets.coverageScope,

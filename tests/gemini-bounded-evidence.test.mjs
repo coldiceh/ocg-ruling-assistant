@@ -210,6 +210,27 @@ function fixture({ assets = schema3Assets(), plan, select, countTokens = 500,
   return { provider, requests, calls };
 }
 
+test('production retrieval enables pure RRF and can restore the unchanged legacy requests', async () => {
+  const baseline = fixture(), rollback = fixture(), rrf = fixture();
+  const original = await baseline.provider.retrieve(input);
+  const restored = await rollback.provider.retrieve({ ...input,
+    env: { ...input.env, EVIDENCE_READING_SCHEDULER: 'legacy' } });
+  assert.deepEqual(rollback.requests, baseline.requests);
+  assert.deepEqual(restored.telemetry.bounded.reading, original.telemetry.bounded.reading);
+  const result = await rrf.provider.retrieve({ ...input,
+    env: { ...input.env, EVIDENCE_READING_SCHEDULER: 'rrf' } });
+  assert.equal(result.telemetry.bounded.schedulerContract, 'rrf-whole-bundle-v1');
+  assert.ok(result.telemetry.bounded.reading.offered.length > 0);
+  assert.ok(result.telemetry.bounded.reading.offered.every(row => row.admittedBy === 'rrf'));
+  assert.equal(rrf.requests.length, baseline.requests.length, 'no added model stage');
+  assert.equal(result.telemetry.bounded.readTargetChars, original.telemetry.bounded.readTargetChars);
+  assert.equal(result.telemetry.bounded.maxPromptChars, original.telemetry.bounded.maxPromptChars);
+  const invalid = fixture();
+  await assert.rejects(invalid.provider.retrieve({ ...input,
+    env: { ...input.env, EVIDENCE_READING_SCHEDULER: 'rrf_soft' } }), /evidence_reading_scheduler_config_invalid/);
+  assert.equal(invalid.requests.length, 0);
+});
+
 test('Decisions runs through production retrieval, delivers actual pack and accounts input-only usage', async () => {
   let nominations = 0;
   const events = [];

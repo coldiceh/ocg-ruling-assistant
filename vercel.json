@@ -26,6 +26,7 @@
     "EVIDENCE_PLANNING_PROFILE": "gemini-3.8-flash-medium-planning-room-theoretical",
     "EVIDENCE_SELECTION_PROFILE": "bai-gpt-6-luna-high-theoretical",
     "EVIDENCE_SELECTOR": "luna",
+    "EVIDENCE_READING_SCHEDULER": "rrf",
     "EVIDENCE_SUPPLEMENT_ENABLED": "true",
     "QA_SOURCE_DISPLAY_ENABLED": "true",
     "RULE_TOC_SHARED_INPUT_BUDGET": "baseline",
