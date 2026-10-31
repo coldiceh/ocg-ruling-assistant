@@ -911,7 +911,7 @@ function failureText(failure) {
   else if (at) {
     const what = at.card && (at.kind === "select_position" || at.kind === "select_place")
       ? `为「${at.card}」${DECISION_ZH[at.kind]}` : DECISION_ZH[at.kind] || "做别的选择";
-    detail = `引擎这时要${SIDE[at.player] || ""}先${what}${choices}，计划里没有写这一步`;
+    detail = `引擎此时要求${SIDE[at.player] || ""}${what}${choices}，与计划中的这一步不匹配`;
   } else detail = REASON_PLAIN.action_mismatch;
   return `${head}：${detail}`;
 }

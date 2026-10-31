@@ -14,7 +14,7 @@ test("planner prompt documents the declaration steps and their values", () => {
   assert.match(PLANNER_INSTRUCTIONS, /需要宣言不是搭不出局面的理由/u);
   // decision order measured on the pinned engine (core 3209cd8, scripts b83db1c, database 09bf7de), 2026-10-18
   assert.match(PLANNER_INSTRUCTIONS, /抹杀之指名者）：idle activate → select_place\(自己 szone 空位\) → announce_card → 双方连锁窗口/u);
-  assert.match(PLANNER_INSTRUCTIONS, /宣言等必需选择则未完成/u, "a declaration cannot be declined");
+  assert.match(PLANNER_INSTRUCTIONS, /必需选择仍待作答就未完成/u, "a mandatory declaration cannot be declined");
   assert.match(PLANNER_INSTRUCTIONS, /属性：地1 水2 炎4 风8 光16 暗32 神64。/u);
   assert.match(PLANNER_INSTRUCTIONS, /种族：战士1 魔法师2 .* 电子界16777216 幻想魔33554432。/u);
 });
@@ -169,7 +169,7 @@ test("the repair round reads the engine's replay of the failed branch in its own
   assert.doesNotMatch(section, /版本：|实验性功能/u);
   const failureLine = repair.split("\n").find((line) => line.startsWith("{\"sub_question\":\"q1\""));
   assert.ok(failureLine && !failureLine.includes("\"replay\""), "the failure JSON does not repeat the replay");
-  assert.match(repair, /要在某个被自动放弃的窗口发动，就把那一步移到那个窗口的位置/u);
+  assert.match(repair, /错过发动窗口应调整步骤位置/u);
 
   // a long replay keeps its beginning and its end
   const long = ["过程：", ...Array.from({ length: 1200 }, (_, i) => `  第${i}行`)].join("\n");

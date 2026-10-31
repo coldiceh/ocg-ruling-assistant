@@ -208,12 +208,12 @@ test("未复现: where the replay stopped, in words, from the engine's failure r
   // no window of that player at all after the last executed step
   const noWindow = failedRun({ reason: "not_found", step: 1, step_spec: handTrapChain, decision: idleAt }, [executed(1, "idle", 0, 0)]);
   assert.equal(text(noWindow), `${head}按计划操作到第 2 步（对方发动「测试手坑」）时卡住了：之后对方再也没有发动或连锁的机会，接着就到了我方的主要阶段1。`);
-  // a choice the plan left out (the position of a special summon during resolution)
+  // A mismatched decision does not prove a missing step: the plan may contain an extra or misordered choice.
   const position = failedRun({ reason: "not_found", step: 1, step_spec: { player: 0, decision: "idle", choose: { cmd: "summon", card: MONSTER_A } },
     decision: { kind: "select_position", player: 0, phase: "main1", card: { card: MONSTER_B, name: "测试怪兽B" },
       options: [{ id: 0, cmd: "position", position: "faceup_attack" }, { id: 1, cmd: "position", position: "faceup_defense" }] } },
   [executed(1, "idle", 0, 0)]);
-  assert.equal(text(position), `${head}按计划操作到第 2 步（我方通常召唤「测试怪兽A」）时卡住了：引擎这时要我方先为「测试怪兽B」选择表示形式（可选：表侧攻击、表侧守备），计划里没有写这一步。`);
+  assert.equal(text(position), `${head}按计划操作到第 2 步（我方通常召唤「测试怪兽A」）时卡住了：引擎此时要求我方为「测试怪兽B」选择表示形式（可选：表侧攻击、表侧守备），与计划中的这一步不匹配。`);
   // the right decision, an option it does not offer; and a step that matches more than one option
   const picked = { player: 0, decision: "select_card", choose: { cards: [{ card: MONSTER_A, controller: 1 }] } };
   const notOffered = failedRun({ reason: "not_found", step: 3, step_spec: picked, decision: { kind: "select_card", player: 0, phase: "main1",

@@ -51,6 +51,47 @@ test("optional progress is omitted when a short legacy diagnostic has no replay 
   assert.equal(tokens(result), tokens(before));
 });
 
+test("engine choice context replaces replay bytes within the unchanged legacy feedback allowance", () => {
+  const attempted = { player: 0, decision: "select_card", choose: { cards: [{ card: CARD, from: "grave" }] } };
+  const actual = { ...decision, player: 0, phase: "main1", in_activation: false, in_resolution: true,
+    chain_links: 0, count: 1, min: 1, max: 1, hint: { player: 0, hint_type: 3, id: CARD, text: null },
+    unrelated: { secret: "NOT_FEEDBACK_CONTEXT" } };
+  const branch = { id: "bad", actions: { setup: [attempted] }, engine: {
+    status: "not_reproduced", reason_code: "action_mismatch", setup_consumed: 0,
+    failure: { reason: "not_found", step: 0, step_spec: attempted, decision: actual }, rendered_zh: replay } };
+  // Frozen old projection: adding engine metadata must not enlarge this allowance.
+  const before = { sub_question: "q1", branch: "bad", reason_code: "action_mismatch",
+    failure: { reason: "not_found", step: 0, step_spec: attempted },
+    decision: { ...oldDecision, player: 0, phase: "main1" }, replay: replayExcerpt(replay) };
+  const original = structuredClone(branch);
+  const result = compactFailure(sq, branch);
+  assert.deepEqual(Object.fromEntries(["in_activation", "in_resolution", "chain_links", "count", "min", "max",
+    "hint_player", "hint_type", "hint_id"].map(key => [key, result.decision[key]])), {
+    in_activation: false, in_resolution: true, chain_links: 0, count: 1, min: 1, max: 1,
+    hint_player: 0, hint_type: 3, hint_id: CARD,
+  });
+  assert.equal(result.failure.step_spec.decision, "select_card");
+  assert.equal(result.decision.kind, "select_place", "feedback preserves the disagreement; it does not select an answer");
+  assert.deepEqual(serialized(result.decision.options), decision.options);
+  assert.ok(tokens(result) <= tokens(before));
+  assert.ok(result.replay.length < before.replay.length, "context spends the old replay allowance");
+  assert.doesNotMatch(JSON.stringify(result), /NOT_FEEDBACK_CONTEXT/u);
+  assert.deepEqual(branch, original);
+});
+
+test("extra choice context cannot silently enlarge a diagnostic with no replay allowance", () => {
+  const actual = { ...decision, in_activation: false, in_resolution: true, chain_links: 0,
+    count: 1, min: 1, max: 1, hint: { player: 1, hint_type: 3, id: CARD, text: null } };
+  const branch = { id: "bad", actions: { setup }, engine: { status: "not_reproduced", reason_code: "action_mismatch",
+    failure: { reason: "not_found", step: 0, step_spec: setup[0], decision: actual } } };
+  const before = { sub_question: "q1", branch: "bad", reason_code: "action_mismatch",
+    failure: { reason: "not_found", step: 0, step_spec: setup[0] }, decision: oldDecision };
+  const result = compactFailure(sq, branch);
+  assert.equal(tokens(result), tokens(before));
+  assert.deepEqual(serialized(result.decision), oldDecision);
+  assert.equal(result.replay, undefined);
+});
+
 test("MSG_RETRY retains the attempted step and its actual decision without raw response bytes", () => {
   const attempted = { player: 1, decision: "select_place", choose: { place: { player: 1, zone: "mzone", seq: 2 } } };
   const branch = { id: "bad", actions: { setup: [attempted] }, engine: { status: "not_reproduced", reason_code: "action_mismatch",

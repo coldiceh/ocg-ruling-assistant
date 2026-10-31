@@ -173,6 +173,28 @@ function compactDecision(d) {
       place: o.place, selected: o.selected })) };
 }
 
+// Additional context is copied as engine metadata, never interpreted as a default
+// answer. Keep the legacy projection above unchanged: it defines the existing
+// feedback allowance, which this context must share with the optional replay.
+function decisionContext(d) {
+  if (!d || typeof d !== "object") return {};
+  const context = {};
+  for (const key of ["in_activation", "in_resolution"]) {
+    if (typeof d[key] === "boolean") context[key] = d[key];
+  }
+  for (const key of ["chain_links", "count", "min", "max"]) {
+    if (Number.isSafeInteger(d[key]) && d[key] >= 0) context[key] = d[key];
+  }
+  if (d.hint && typeof d.hint === "object") {
+    for (const key of ["id", "hint_type", "player"]) {
+      if (Number.isSafeInteger(d.hint[key]) && d.hint[key] >= 0) {
+        context[key === "hint_type" ? key : `hint_${key}`] = d.hint[key];
+      }
+    }
+  }
+  return context;
+}
+
 // Match buildRepairInput: the diagnostic JSON and replay are sent separately, without
 // serializing the replay a second time as an escaped JSON string.
 function failureFeedbackTokens(value) {
@@ -221,6 +243,7 @@ export function compactFailure(sq, b) {
   const diagnostic = { ...failure };
   delete diagnostic.replay;
   const actual = reproductionFailure(b);
+  let currentDecision = f?.decision;
   if (actual) {
     const rejected = actual.reason === "engine_rejected_response" ? actual.last_decision : null;
     const step = Number.isSafeInteger(actual.step) ? actual.step
@@ -230,7 +253,8 @@ export function compactFailure(sq, b) {
     diagnostic.reason_code = r?.reason_code || "action_mismatch";
     diagnostic.failure = { reason: actual.reason, step, step_spec: spec, detail: actual.detail,
       ...(Array.isArray(actual.probes) ? { probes: actual.probes } : {}) };
-    const decision = compactDecision(actual.decision || rejected?.decision);
+    currentDecision = actual.decision || rejected?.decision;
+    const decision = compactDecision(currentDecision);
     if (decision) diagnostic.decision = decision;
   }
   if (Array.isArray(r?.probes)) diagnostic.probes = r.probes.map((p, index) => ({
@@ -250,6 +274,10 @@ export function compactFailure(sq, b) {
     } } : {}),
     ...(p?.card_level_only ? { card_level_only: true } : {}),
   }));
+  if (diagnostic.decision && currentDecision) {
+    const enriched = { ...diagnostic, decision: { ...diagnostic.decision, ...decisionContext(currentDecision) } };
+    if (failureFeedbackTokens(enriched) <= budget) diagnostic.decision = enriched.decision;
+  }
   const total = b.actions?.setup?.length;
   if (Number.isSafeInteger(r?.setup_consumed) && Number.isSafeInteger(total)
       && r.setup_consumed >= 0 && r.setup_consumed <= total) {
