@@ -6,7 +6,7 @@ import test from "node:test";
 // which finalizes the same preparation (the final model only, no second retrieval), and the
 // evidence package is no longer downloaded automatically (its button stays).
 const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
-const css = await readFile(new URL("../src/styles.css", import.meta.url), "utf8");
+const css = (await readFile(new URL("../src/styles.css", import.meta.url), "utf8")).replace(/\r\n/gu, "\n");
 const between = (from, to) => app.slice(app.indexOf(from), app.indexOf(to, app.indexOf(from)));
 const analyze = between("async function analyzeQuestion", "async function requestBackendAnswer");
 const preparedOnly = between("function renderPreparedOnly", "async function continuePreparedAnswer");

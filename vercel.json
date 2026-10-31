@@ -27,6 +27,7 @@
     "EVIDENCE_SELECTION_PROFILE": "bai-gpt-6-luna-high-theoretical",
     "EVIDENCE_SELECTOR": "luna",
     "EVIDENCE_READING_SCHEDULER": "rrf",
+    "ATTRIBUTE_CLASSIFICATION_QUERY_ENABLED": "true",
     "EVIDENCE_SUPPLEMENT_ENABLED": "true",
     "QA_SOURCE_DISPLAY_ENABLED": "true",
     "RULE_TOC_SHARED_INPUT_BUDGET": "baseline",

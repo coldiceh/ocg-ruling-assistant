@@ -4,6 +4,7 @@ import { startOfficialQaJudge } from "./engineRepro/officialQaJudge.mjs";
 import { getPublicReleaseInfo } from './publicReleaseInfo.mjs';
 import { qaSourceDisplayReleaseInfo } from './qaSourceDisplayRuntime.mjs';
 import { evidenceReadingSchedulerReleaseInfo } from './evidenceReadingSchedulerPolicy.mjs';
+import { attributeClassificationQueryReleaseInfo } from './attributeClassificationQueries.mjs';
 import {
   createPublicAnswerModelEnv,
   getRagBudgetStatus,
@@ -232,7 +233,8 @@ export async function getPublicAnswerModelInfo({ env = process.env } = {}) {
       label: id === "decisions" ? "Decisions" : "Luna",
     })),
     release: { ...getPublicReleaseInfo(env), qaSourceDisplay: await qaSourceDisplayReleaseInfo(env),
-      evidenceReadingScheduler: evidenceReadingSchedulerReleaseInfo(env) },
+      evidenceReadingScheduler: evidenceReadingSchedulerReleaseInfo(env),
+      attributeClassificationQuery: attributeClassificationQueryReleaseInfo(env) },
   };
 }
 

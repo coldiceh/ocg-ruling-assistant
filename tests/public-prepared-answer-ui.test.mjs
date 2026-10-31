@@ -27,11 +27,15 @@ function createClient(fetchImpl, {
     let analysisRequestId = ${JSON.stringify(requestId ?? 0)};
     let activeAnalysisPhase = null;
     let preparedEvidencePackage = null;
+    let preparedEvidenceDiagnostics = null;
     const ui = {
       evidencePackagePanel: { hidden: true },
       evidencePackageStatus: { textContent: "" },
       evidencePackageDownload: { hidden: true },
+      evidenceDiagnosticsDownload: { hidden: true },
     };
+    const downloads = [];
+    function downloadAdminFile(filename, text, type) { downloads.push({ filename, text, type }); }
     const preparedProgress = [];
     function applyPendingStageProgressEvent() {}
     function applyPreparedProgress(progress) {
@@ -52,6 +56,12 @@ function createClient(fetchImpl, {
       getAnalysisRequestId() { return analysisRequestId; },
       getSelectedProfile() { return selectedRulingModelProfile; },
       getPreparedEvidencePackage() { return preparedEvidencePackage; },
+      getPreparedEvidenceDiagnostics() { return preparedEvidenceDiagnostics; },
+      diagnosticsDownloadHidden() { return ui.evidenceDiagnosticsDownload.hidden; },
+      downloadEvidence: downloadPreparedEvidencePackage,
+      downloadDiagnostics: downloadPreparedEvidenceDiagnostics,
+      clearEvidence: clearPreparedEvidencePackage,
+      downloads,
       getActiveAnalysisPhase() { return activeAnalysisPhase; },
       recover: recoverStoredPublicAnswer,
       readStoredPreparationId: readStoredPublicAnswerPreparationId,
@@ -168,7 +178,8 @@ test("a completed stored preparation is recovered through a read-only status req
 test("recovery restores the supplemented package after refresh or interrupted finalize", async () => {
   for (const hadFirstPackage of [false, true]) {
     const preparationId = "7".repeat(64);
-    const firstPackage = { text: "FIRST_PACKAGE", filename: "first-evidence.txt" };
+    const initialDiagnostics = { ruleHints: { bounded: { selectedIds: ["E7"] } } };
+    const firstPackage = { text: "FIRST_PACKAGE", filename: "first-evidence.txt", diagnostics: initialDiagnostics };
     const supplemented = { text: "SUPPLEMENTED_PACKAGE", filename: "supplemented-evidence.txt", supplemented: true };
     const stored = new Map([["ocg-public-answer-preparation-id", preparationId]]);
     const requests = [];
@@ -198,6 +209,15 @@ test("recovery restores the supplemented package after refresh or interrupted fi
     assert.deepEqual(clientInstance.getPreparedEvidencePackage(), {
       text: supplemented.text, filename: supplemented.filename,
     });
+    const trace = clientInstance.getPreparedEvidenceDiagnostics();
+    if (hadFirstPackage) {
+      assert.equal(trace.currentEvidenceStage, "supplemented_finalize");
+      assert.deepEqual(trace.stages[0].diagnostics, initialDiagnostics);
+      assert.equal(trace.stages[1].diagnostics, null);
+    } else {
+      assert.equal(trace, null, "a refresh cannot reconstruct diagnostics not returned by status");
+      assert.equal(clientInstance.diagnosticsDownloadHidden(), true);
+    }
     assert.deepEqual(requests.slice(beforeRecovery), [{ action: "status", preparationId }]);
     assert.equal(clientInstance.readStoredPreparationId(), "");
   }
@@ -249,6 +269,102 @@ test("prepare-only sends one prepare request and retains the downloadable packag
   assert.equal(requests[0].action, "prepare");
   assert.equal(requests[0].evidenceSelector, "luna");
   assert.deepEqual(clientInstance.getPreparedEvidencePackage(), evidencePackage);
+});
+
+test("the page retains the initial trace and downloads it separately without changing evidence or sending requests", async () => {
+  const requests = [];
+  const ruleHints = {
+    queryPlan: { needs: [{ question: "合成子问", ruleQuery: "合成规则查询", qaQuery: "合成问答查询" }] },
+    bounded: {
+      schedulerContract: { id: "synthetic-rrf" },
+      reading: { lanes: [{ channel: "dense", hits: [{ unitKey: "rule:target", sourceRank: 10 }] }],
+        offered: [{ unitKey: "rule:target", atomIds: ["rule:target:atom:1"] }],
+        omitted: [{ unitKey: "qa:unrelated", reason: "reading_capacity" }] },
+      selectedIds: ["E12"], tokenCounts: [{ tokens: 120 }],
+    },
+  };
+  const evidencePackage = { text: "原样正文\r\n第二行\n", filename: "合成-evidence.txt", diagnostics: {
+    request: { requestId: "synthetic-request", headers: { authorization: "DO_NOT_KEEP" }, preparationId: "DO_NOT_KEEP" },
+    ruleHints: { ...ruleHints, apiKey: "DO_NOT_KEEP", nested: { requestHeaders: { cookie: "DO_NOT_KEEP" },
+      refresh_token: "DO_NOT_KEEP", requestBody: { prompt: "DO_NOT_KEEP" } } },
+    unknownTransport: { password: "DO_NOT_KEEP" },
+  } };
+  const clientInstance = createClient(async (_url, options) => {
+    requests.push(JSON.parse(options.body));
+    return requests.length === 1 ? sse(preparedEvent("d".repeat(64), 120, evidencePackage), endEvent())
+      : sse(answerEvent(), endEvent());
+  });
+  await clientInstance.request("Synthetic question", "latest");
+  assert.equal(clientInstance.diagnosticsDownloadHidden(), false);
+  assert.equal(clientInstance.downloadEvidence(), true);
+  assert.equal(clientInstance.downloadDiagnostics(), true);
+  assert.equal(requests.length, 2, "both downloads are local and do not rerun a model");
+  assert.deepEqual(clientInstance.downloads[0], {
+    filename: evidencePackage.filename, text: evidencePackage.text, type: "text/plain;charset=utf-8",
+  });
+  const traceDownload = clientInstance.downloads[1];
+  assert.equal(traceDownload.filename, "ocg-evidence-diagnostics.json");
+  assert.equal(traceDownload.type, "application/json;charset=utf-8");
+  const trace = JSON.parse(traceDownload.text);
+  assert.equal(trace.currentEvidenceStage, "initial_prepare");
+  assert.equal(trace.stages[0].diagnostics.request.requestId, "synthetic-request");
+  assert.deepEqual(trace.stages[0].diagnostics.ruleHints.queryPlan, ruleHints.queryPlan);
+  assert.deepEqual(trace.stages[0].diagnostics.ruleHints.bounded, ruleHints.bounded);
+  assert.doesNotMatch(traceDownload.text, /DO_NOT_KEEP|原样正文|authorization|headers|requestBody/iu);
+});
+
+test("a supplemented download preserves the initial trace and explicitly distinguishes missing or supplied final trace", async () => {
+  for (const withFinalDiagnostics of [false, true]) {
+    let calls = 0;
+    const initialDiagnostics = { request: { requestId: "initial-request" },
+      ruleHints: { queryPlan: { needs: [{ question: "Initial need" }] } } };
+    const finalDiagnostics = { ruleHints: { queryPlan: { needs: [{ question: "Supplement need" }] } } };
+    const firstPackage = { text: "FIRST_ONLY", filename: "first.txt", diagnostics: initialDiagnostics };
+    const supplemented = { text: "UPDATED\r\n正文", filename: "final.txt", supplemented: true,
+      ...(withFinalDiagnostics ? { diagnostics: finalDiagnostics } : {}) };
+    const clientInstance = createClient(async () => {
+      calls++;
+      return calls === 1 ? sse(preparedEvent("e".repeat(64), 120, firstPackage), endEvent())
+        : sse({ type: "answer", data: { answer: { effectiveRulingVersion: "latest", evidencePackage: supplemented } } }, endEvent());
+    });
+    await clientInstance.request("Synthetic question", "latest");
+    clientInstance.downloadEvidence();
+    clientInstance.downloadDiagnostics();
+    assert.equal(calls, 2);
+    assert.equal(clientInstance.downloads[0].text, supplemented.text);
+    assert.equal(clientInstance.downloads[0].filename, supplemented.filename);
+    const trace = JSON.parse(clientInstance.downloads[1].text);
+    assert.equal(trace.currentEvidenceStage, "supplemented_finalize");
+    assert.deepEqual(trace.stages.map((row) => row.stage), ["initial_prepare", "supplemented_finalize"]);
+    assert.deepEqual(trace.stages[0].diagnostics, initialDiagnostics);
+    assert.deepEqual(trace.stages[1].diagnostics, withFinalDiagnostics ? finalDiagnostics : null);
+    assert.doesNotMatch(clientInstance.downloads[1].text, /FIRST_ONLY|UPDATED/u);
+  }
+});
+
+test("failed finalization retains diagnostics, while a new preparation or Clear removes the previous trace", async () => {
+  let calls = 0;
+  const evidencePackage = { text: "EVIDENCE", filename: "evidence.txt", diagnostics: {
+    ruleHints: { bounded: { selectedIds: ["E3"] } },
+  } };
+  const clientInstance = createClient(async () => {
+    calls++;
+    if (calls === 2) return sse({ type: "error", data: { code: "model_provider_timeout" } });
+    return sse(preparedEvent("f".repeat(64), 120,
+      calls === 3 ? { text: "NEW_WITHOUT_TRACE", filename: "new.txt" } : evidencePackage), endEvent());
+  });
+  await assert.rejects(clientInstance.request("First question", "latest"));
+  assert.equal(clientInstance.downloadDiagnostics(), true);
+  await clientInstance.request("Second question", "latest", { prepareOnly: true });
+  assert.equal(clientInstance.downloadDiagnostics(), false);
+  assert.equal(clientInstance.diagnosticsDownloadHidden(), true);
+  assert.equal(clientInstance.getPreparedEvidenceDiagnostics(), null);
+  await clientInstance.request("Third question", "latest", { prepareOnly: true });
+  assert.equal(clientInstance.diagnosticsDownloadHidden(), false);
+  clientInstance.clearEvidence();
+  assert.equal(clientInstance.downloadEvidence(), false);
+  assert.equal(clientInstance.downloadDiagnostics(), false);
+  assert.equal(clientInstance.diagnosticsDownloadHidden(), true);
 });
 
 test("Luna choice reaches both evidence-only and complete workflows without a finalize override", async () => {

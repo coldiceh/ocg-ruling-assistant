@@ -558,6 +558,9 @@ test('selection IDs are usable without a separate model-reported ability verdict
   const result = await provider.retrieve(input);
   assert.equal(requests.length, 2, 'a complete ID selection is not retried for an absent optional verdict');
   assert.equal(result.packing.selectedEntryChars.length, 1);
+  assert.deepEqual(result.telemetry.bounded.selectedCanonicalIds, result.packing.selectedEntryChars.map(entry => entry.id));
+  assert.ok(requests.every(body => !JSON.stringify(body).includes('selectedCanonicalIds')),
+    'canonical selection IDs are output diagnostics only, never new model input');
 });
 
 test('an explicit selection failure preserves its cause and reports a known preparation failure', async () => {

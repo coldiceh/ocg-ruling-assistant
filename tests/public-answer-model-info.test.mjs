@@ -16,6 +16,15 @@ test('free capability response identifies the deployed scheduler and legacy roll
   }
 });
 
+test('free capability response reports local attribute-query expansion and its rollback', async () => {
+  for (const [value, enabled] of [[undefined, true], ['true', true], ['false', false]]) {
+    const info = await getPublicAnswerModelInfo({ env: { ATTRIBUTE_CLASSIFICATION_QUERY_ENABLED: value } });
+    assert.deepEqual(info.release.attributeClassificationQuery, {
+      enabled, contract: 'local-multi-attribute-v1', transport: 'local-only',
+    });
+  }
+});
+
 test("public capability reports the card extraction model selected by the runtime resolver", async () => {
   for (const { sourceEnv, expectedProvider, expectedModel } of [{
     expectedProvider: "deepseek",

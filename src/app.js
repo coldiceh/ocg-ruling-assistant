@@ -17,7 +17,7 @@ const uiTranslations = {
     "输入问题": "Ask a question", "输入卡片、场面、连锁和需要判断的处理节点。": "Describe the cards, game state, Chain, and decision point.",
     "裁定模型": "Ruling model", "裁定流程": "Ruling process", "准备就绪": "Ready", "仅准备证据包": "Prepare evidence only", "仅引擎复现": "Engine replay only",
     "准备证据": "Evidence preparation", "Luna（默认）": "Luna (default)",
-    "查询": "Ask", "查询中…": "Working…", "证据包已准备": "Evidence prepared", "下载证据包": "Download evidence",
+    "查询": "Ask", "查询中…": "Working…", "证据包已准备": "Evidence prepared", "下载证据包": "Download evidence", "下载诊断": "Download diagnostics",
     "裁定结论": "Ruling", "未分析": "Not analyzed", "理由": "Reasoning", "相关卡片": "Related cards",
     "资料来源": "Sources", "风险提示": "Cautions", "最终裁定今日额度": "Today's ruling allowance",
     "每日北京时间 0 点更新。": "Resets daily at midnight Beijing time.", "免责声明": "Disclaimer",
@@ -41,7 +41,7 @@ const uiTranslations = {
     "输入问题": "質問を入力", "输入卡片、场面、连锁和需要判断的处理节点。": "カード、盤面、チェーン、判断したい処理を入力してください。",
     "裁定模型": "裁定モデル", "裁定流程": "裁定の進行", "准备就绪": "準備完了", "仅准备证据包": "根拠資料のみ準備", "仅引擎复现": "エンジン再現のみ",
     "准备证据": "根拠資料の準備", "Luna（默认）": "Luna（既定）",
-    "查询": "質問する", "查询中…": "処理中…", "证据包已准备": "根拠資料の準備完了", "下载证据包": "根拠資料をダウンロード",
+    "查询": "質問する", "查询中…": "処理中…", "证据包已准备": "根拠資料の準備完了", "下载证据包": "根拠資料をダウンロード", "下载诊断": "診断情報をダウンロード",
     "裁定结论": "裁定結果", "未分析": "未分析", "理由": "理由", "相关卡片": "関連カード",
     "资料来源": "参照資料", "风险提示": "注意事項", "最终裁定今日额度": "本日の裁定枠",
     "每日北京时间 0 点更新。": "北京時間の毎日0時に更新されます。", "免责声明": "免責事項",
@@ -143,7 +143,7 @@ function applyUiLocale(locale) {
     ".model-tier-label span": "裁定模型", ".model-strip span": "裁定流程",
     "#evidenceSelectorLabel": "准备证据", "#evidenceSelectorDefault": "Luna（默认）",
     "#prepareEvidenceButton": "仅准备证据包", "#engineOnlyButton": "仅引擎复现", "#evidencePackageTitle": "证据包已准备",
-    "#evidencePackageDownload": "下载证据包", ".verdict-block .block-title span": "裁定结论",
+    "#evidencePackageDownload": "下载证据包", "#evidenceDiagnosticsDownload": "下载诊断", ".verdict-block .block-title span": "裁定结论",
     "#sourcesTitle": "资料来源", "#questionsTitle": "风险提示", "#cardsTitle": "相关卡片",
     "#budgetTitle": "最终裁定今日额度", "#disclaimerTitle": "免责声明",
     "#simulationTitle": "模拟器验证", "#cardImagePlaceholder": "暂无卡图",
@@ -205,6 +205,7 @@ const ui = {
   evidencePackagePanel: document.querySelector("#evidencePackagePanel"),
   evidencePackageStatus: document.querySelector("#evidencePackageStatus"),
   evidencePackageDownload: document.querySelector("#evidencePackageDownload"),
+  evidenceDiagnosticsDownload: document.querySelector("#evidenceDiagnosticsDownload"),
   rulingModelSelect: document.querySelector("#rulingModelSelect"),
   evidenceSelector: document.querySelector("#evidenceSelector"),
   rulingModelStatus: document.querySelector("#rulingModelStatus"),
@@ -334,6 +335,7 @@ let selectedRulingModelProfile = DEFAULT_RULING_MODEL_PROFILE;
 let rulingModelCapabilitiesAvailable = false;
 let rulingModelSelectionWasManual = false;
 let preparedEvidencePackage = null;
+let preparedEvidenceDiagnostics = null;
 // A prepare-only result the page can still finalize ({ preparationId, question, requestedRulingVersion, progress }).
 let preparedOnlyResult = null;
 let selectedRulingVersion = "latest";
@@ -996,7 +998,9 @@ async function requestPreparedAnswer(preparationId, requestedRulingVersion, { si
   clearStoredPublicAnswerPreparationId(preparationId);
   // After a supplementary search the final model read a new package; the download offers that one.
   const supplementedPackage = normalizePreparedEvidencePackage(answer?.evidencePackage);
-  if (supplementedPackage) setPreparedEvidencePackage(supplementedPackage);
+  if (supplementedPackage) setPreparedEvidencePackage(supplementedPackage, {
+    stage: answer.evidencePackage.supplemented === true ? "supplemented_finalize" : "finalize",
+  });
   return answer;
 }
 
@@ -1075,7 +1079,9 @@ async function recoverStoredPublicAnswer({
         return null;
       }
       const supplementedPackage = normalizePreparedEvidencePackage(validatedAnswer?.evidencePackage);
-      if (supplementedPackage) setPreparedEvidencePackage(supplementedPackage);
+      if (supplementedPackage) setPreparedEvidencePackage(supplementedPackage, {
+        stage: validatedAnswer.evidencePackage.supplemented === true ? "supplemented_finalize" : "finalize",
+      });
       clearStoredPublicAnswerPreparationId(preparationId);
       return validatedAnswer;
     }
@@ -1487,7 +1493,31 @@ function normalizePreparedEvidencePackage(value) {
   const filename = (rawFilename.split(/[\\/]/u).pop() || "evidence-package.txt")
     .replace(/[^\p{L}\p{N}._ -]/gu, "_")
     .slice(0, 120) || "evidence-package.txt";
-  return { text, filename };
+  const diagnostics = normalizePreparedEvidenceDiagnostics(value.diagnostics);
+  return { text, filename, ...(diagnostics ? { diagnostics } : {}) };
+}
+
+// Retain only diagnostics already returned by prepare. Transport bodies,
+// headers and credentials are not part of the downloadable trace.
+function normalizePreparedEvidenceDiagnostics(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const copy = (item) => {
+    if (item === null || ["string", "number", "boolean"].includes(typeof item)) return item;
+    if (Array.isArray(item)) return item.map(copy);
+    if (!item || typeof item !== "object") return null;
+    return Object.fromEntries(Object.entries(item).filter(([key]) => {
+      const name = key.replace(/[-_]/gu, "").toLowerCase();
+      return !/headers?$|authorization|cookie|password|secret|credential/u.test(name)
+        && !["apikey", "xgoogapikey", "token", "accesstoken", "refreshtoken", "bearertoken",
+          "preparationid", "sourcesnapshotid", "body", "requestbody", "responsebody", "raw",
+          "rawrequest", "rawresponse", "prompt", "messages"].includes(name);
+    }).map(([key, item]) => [key, copy(item)]));
+  };
+  const diagnostics = Object.fromEntries([
+    "request", "cloudCosts", "retrieval", "ruleHints", "cardLookup", "serverPreparationTimingsMs",
+  ].filter((key) => value[key] && typeof value[key] === "object" && !Array.isArray(value[key]))
+    .map((key) => [key, copy(value[key])]));
+  return Object.keys(diagnostics).length ? diagnostics : null;
 }
 
 function normalizeRulingVersion(value) {
@@ -1540,8 +1570,25 @@ function normalizeScopeFailure(value) {
   };
 }
 
-function setPreparedEvidencePackage(value) {
+function setPreparedEvidencePackage(value, { stage = "initial_prepare" } = {}) {
+  if (stage === "initial_prepare") preparedEvidenceDiagnostics = null;
   preparedEvidencePackage = value || null;
+  if (value && (value.diagnostics || preparedEvidenceDiagnostics)) {
+    const stages = preparedEvidenceDiagnostics?.stages || [];
+    preparedEvidenceDiagnostics = {
+      schemaVersion: 1,
+      currentEvidenceStage: stage,
+      stages: [...stages.filter((item) => item.stage !== stage), {
+        stage,
+        evidenceFilename: value.filename,
+        evidenceChars: value.text.length,
+        // A supplemented package often has no new trace. Do not label the
+        // retained initial trace as the selection used for that final package.
+        diagnostics: value.diagnostics || null,
+      }],
+    };
+  }
+  if (ui.evidenceDiagnosticsDownload) ui.evidenceDiagnosticsDownload.hidden = !preparedEvidenceDiagnostics;
   if (!ui.evidencePackagePanel || !ui.evidencePackageStatus || !ui.evidencePackageDownload) return;
   ui.evidencePackagePanel.hidden = !preparedEvidencePackage;
   ui.evidencePackageDownload.hidden = !preparedEvidencePackage;
@@ -1552,8 +1599,10 @@ function setPreparedEvidencePackage(value) {
 
 function clearPreparedEvidencePackage() {
   preparedEvidencePackage = null;
+  preparedEvidenceDiagnostics = null;
   if (ui.evidencePackagePanel) ui.evidencePackagePanel.hidden = true;
   if (ui.evidencePackageDownload) ui.evidencePackageDownload.hidden = true;
+  if (ui.evidenceDiagnosticsDownload) ui.evidenceDiagnosticsDownload.hidden = true;
 }
 
 function downloadPreparedEvidencePackage() {
@@ -1562,6 +1611,16 @@ function downloadPreparedEvidencePackage() {
     preparedEvidencePackage.filename,
     preparedEvidencePackage.text,
     "text/plain;charset=utf-8",
+  );
+  return true;
+}
+
+function downloadPreparedEvidenceDiagnostics() {
+  if (!preparedEvidenceDiagnostics) return false;
+  downloadAdminFile(
+    "ocg-evidence-diagnostics.json",
+    JSON.stringify(preparedEvidenceDiagnostics, null, 2),
+    "application/json;charset=utf-8",
   );
   return true;
 }
@@ -7153,6 +7212,7 @@ async function init() {
   ui.prepareEvidenceButton?.addEventListener("click", () => analyzeQuestion({ prepareOnly: true }));
   ui.engineOnlyButton?.addEventListener("click", () => analyzeQuestion({ prepareOnly: true, engineOnly: true }));
   ui.evidencePackageDownload?.addEventListener("click", downloadPreparedEvidencePackage);
+  ui.evidenceDiagnosticsDownload?.addEventListener("click", downloadPreparedEvidenceDiagnostics);
   ui.questionInput.addEventListener("input", scheduleAnalysis);
   ui.clearButton.addEventListener("click", () => {
     clearTimeout(analysisTimer);

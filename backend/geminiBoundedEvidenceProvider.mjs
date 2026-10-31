@@ -26,6 +26,7 @@ import { RULE_TOC_CHANNEL, RULE_TOC_STAGE, RULE_TOC_CONTRACT_STAGE, RULE_TOC_RET
   buildRuleToc, ruleTocRequestBody, normalizeRuleTocOutput, summarizeRuleTocCalls } from './ruleTocAdmission.mjs';
 import { evidenceSupplementEnabled } from './evidenceStatusProtocol.mjs';
 import { applyQaSourceDisplay } from './qaSourceDisplayRuntime.mjs';
+import { buildAttributeClassificationQueries } from './attributeClassificationQueries.mjs';
 
 const DECISIONS_SELECTION_CONTRACT = Object.freeze({ providerId: 'openai', modelId: 'gpt-6-luna',
   api: 'decisions', profileId: 'openai-decisions-v4', maxBillableOutputTokens: 0,
@@ -703,7 +704,7 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
         : positiveConfig(env, 'GEMINI_EVIDENCE_MAX_CNY', 0.30, 0.30) / fx)) - (supplementRound?.priorSpentUsd || 0));
     const maxPromptChars = offlineLimits?.maxPromptChars ?? boundedEvidenceMaxPromptChars(env);
     let maxUsd = perQuestionMaxUsd;
-    const readChars = positiveConfig(env, 'GEMINI_EVIDENCE_READING_TARGET_CHARS', INITIAL_READ_CHARS);
+    let readChars = positiveConfig(env, 'GEMINI_EVIDENCE_READING_TARGET_CHARS', INITIAL_READ_CHARS);
     const readingScheduler = resolveEvidenceReadingScheduler(env);
     const useDecisions = env.EVIDENCE_SELECTOR === 'decisions';
     // The final prompt asks for the evidence-status line only while the
@@ -1036,6 +1037,18 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
       let at = performance.now();
       await embedBatch(queries.map(query => query.text));
       timingsMs.queryEmbedding = performance.now() - at;
+      // Add only local retrieval lanes after embeddings have finished. The
+      // planner and selector queryPlan remain exactly as the model returned.
+      // Frozen replays use recorded lanes; supplement rounds inherit the
+      // original lanes once instead of adding another consensus vote.
+      const attributeClassification = !replay && !supplementRound
+        ? buildAttributeClassificationQueries(baseInput, { env, existingQueries: queries }) : null;
+      if (attributeClassification?.queries.length) {
+        const configuredChars = readChars;
+        readChars = Math.min(readChars, 220000);
+        attributeClassification.readingBudget = { configuredChars, effectiveChars: readChars };
+        queries.push(...attributeClassification.queries);
+      }
       const lanes = replay ? structuredClone(replay.lanes) : [];
       const searchStats = { uniqueQueries: 0, reusedQueries: 0, ...(replay ? { frozenCandidates: true } : {}) };
       if (!replay) {
@@ -1093,7 +1106,7 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
         }
         searchStats.uniqueQueries++;
         const channels = [];
-        const vector = queryVectors.get(query.text);
+        const vector = query.localOnly ? null : queryVectors.get(query.text);
         if (vector) {
           let searchAt = performance.now();
           channels.push(['rule', 'original_dense', mapRankedUnits(await searchDense(dense, vector), ruleKeys)]);
@@ -1590,6 +1603,8 @@ export function createGeminiBoundedEvidenceProvider({ fetchImpl = globalThis.fet
           ...(decisionsState ? { decisions: { acquisitionStop: decisionsState.acquisitionStop,
             modelReportedStatus: decisionsState.finalStatus, events: decisionsState.events } } : {}),
           readGroupIds: offeredBundles.map(bundle => bundle.unitKey), selectedIds: selection.selectedIds,
+          selectedCanonicalIds: selected.map(entry => entry.id),
+          ...(attributeClassification ? { attributeClassification } : {}),
           ...(selection.remappedSelectedIds ? { remappedSelectedIds: selection.remappedSelectedIds } : {}),
           omittedGroupIds: admitted.omitted.map(unit => unit.unitKey), estimatedCostUsd: spentUsd,
           maxPromptChars, deadlineMs, readTargetChars: readChars,
