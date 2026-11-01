@@ -1,12 +1,21 @@
-# Yu-Gi-Oh! OCG AI Rulings
+# Yu-Gi-Oh! OCG / TCG Ruling Assistant
 
 [中文](README.md) | [English](README.en.md) | [日本語](README.ja.md)
 
-[Use online](https://coldiceh.github.io/ocg-ruling-assistant/) · [Report an issue](https://github.com/coldiceh/ocg-ruling-assistant/issues)
+[Try TCG — English by default](https://tcg-ruling-assistant.vercel.app/) · [Use OCG](https://coldiceh.github.io/ocg-ruling-assistant/) · [Report an issue](https://github.com/coldiceh/ocg-ruling-assistant/issues)
 
-Yu-Gi-Oh! OCG AI Rulings helps OCG players analyze ruling questions with card text, publicly available rule materials, and official Q&A, while keeping the supporting sources visible.
+Analyze Yu-Gi-Oh! ruling questions with card text and sources you can inspect. The OCG assistant and TCG public preview have separate demos, with cited evidence and conditions that still need review.
 
 It is not an official KONAMI project and does not replace an event judge.
+
+## TCG public preview
+
+- [Try it now](https://tcg-ruling-assistant.vercel.app/): English by default, with Chinese and Japanese available. Your language choice is remembered.
+- Describe the full game state, Chain, and interaction; inspect the card text, analysis, and cited sources.
+- TCG and OCG have separate demos. OCG precedents are explicitly labeled and are not presented as direct official TCG rulings.
+- This early preview can make mistakes or miss conditions. The hosted service has a shared daily usage limit; available models are shown in each demo.
+
+[TCG preview overview and feedback guide](docs/tcg-public-preview.md)
 
 ## What it can do
 
@@ -26,6 +35,10 @@ It is not an official KONAMI project and does not replace an event judge.
 5. If you only need the materials, download the collected evidence and use it with another AI of your choice.
 
 AI can misread rules, miss conditions, or reach an incorrect conclusion, so answers are not guaranteed to be correct. Check the displayed evidence, and rely on official materials and the judge on site for tournament decisions.
+
+## OCG evaluation: a fixed set of 50 questions
+
+These results apply only to this OCG question set. They are not TCG accuracy figures or a guarantee of correctness on other questions.
 
 | Model | Answer mode | Accuracy | Mean time (s) | Median answer time (s) | P95 answer time (s) | Average per question (USD) |
 |---|---|---:|---:|---:|---:|---:|

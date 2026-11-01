@@ -1,12 +1,21 @@
-# 游戏王 OCG AI裁定 / Yu-Gi-Oh! OCG AI Rulings
+# 游戏王 OCG / TCG 裁定助手 · Yu-Gi-Oh! Ruling Assistant
 
 [中文](README.md) | [English](README.en.md) | [日本語](README.ja.md)
 
-[在线使用](https://coldiceh.github.io/ocg-ruling-assistant/) · [问题反馈](https://github.com/coldiceh/ocg-ruling-assistant/issues)
+[试玩 TCG（默认英文）](https://tcg-ruling-assistant.vercel.app/) · [使用 OCG](https://coldiceh.github.io/ocg-ruling-assistant/) · [问题反馈](https://github.com/coldiceh/ocg-ruling-assistant/issues)
 
-游戏王 OCG AI裁定面向所有 OCG 玩家，帮助你结合卡片文本、公开规则资料和官方 Q&A 分析裁定问题，并查看回答依据。
+结合卡片文本和可查阅的来源分析游戏王裁定问题。OCG 版与 TCG 公开试用版提供独立入口；回答会展示依据和仍需核对的地方。
 
 它不是 KONAMI 官方项目，也不替代正式比赛的现场裁判。
+
+## TCG 公开试用版
+
+- [立即试玩](https://tcg-ruling-assistant.vercel.app/)：默认英文，可切换中文或日文，并记住你的选择。
+- 描述完整场面、连锁顺序和要确认的处理，查看卡文、分析和引用来源。
+- TCG 与 OCG 使用独立站点；引用 OCG 先例时会明确标注，不能视作 TCG 官方直接裁定。
+- 试用版仍可能答错、遗漏条件；公开服务有共享每日使用额度，可用模型以站点显示为准。
+
+[TCG 试用介绍与反馈方式（English）](docs/tcg-public-preview.md)
 
 ## 可以做什么
 
@@ -33,6 +42,10 @@ AI 可能误读规则、遗漏条件或给出错误结论，无法保证回答�
 
 涉及多张卡时不会按固定张数舍弃卡片；若完整卡文超出一次请求容量，会明确提示。辅助模型负责找卡和帮助查资料，最终模型负责作答；你也可以只下载整理好的资料。检索到依据不保证 AI 一定理解正确，因此请核对相关卡片、题设条件和引用原文。
 
+
+## OCG 固定 50 题测试
+
+下表只对应这组 OCG 题目，不代表 TCG 准确率，也不保证其他问题的回答正确。
 
 | 模型 | 回答方式 | 正确率 | 平均耗时（秒） | 回答中位数（秒） | 回答P95（秒） | 每题平均（USD） |
 |---|---|---:|---:|---:|---:|---:|
