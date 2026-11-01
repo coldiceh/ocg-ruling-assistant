@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { gunzip } from "node:zlib";
 import { promisify } from "node:util";
 import test from "node:test";
+import { matchedFiles } from "./helpers/deployment-glob.mjs";
 
 import {
   clearGeminiRuleQaAssetsCacheForTests,
@@ -323,7 +324,20 @@ test("release build and sync workflow verify and include only the same-version r
   assert.match(syncSource, /report\.publishable = true/u);
   assert.match(workflow, /tests\/gemini-rule-qa-assets\.test\.mjs/u);
   assert.match(vercel, /pnpm run build:vercel/u);
-  assert.match(vercel, /gemini-rule-qa-v1\/\*\*/u);
+  const answerFiles = JSON.parse(vercel).functions["api/answer.js"];
+  const runtimeFiles = [
+    "manifest.json", "navigation-lexical-index.bm25.gz", "navigation-records.json.gz",
+    "qa-lexical-index.bm25.gz", "qa-records.json.gz", "rule-records.json.gz",
+    "structure-mapping.release.json.gz",
+  ].map((file) => `data/gemini-rule-qa-v1/${file}`).sort();
+  const buildOnlyFiles = [
+    "canonical-manifest.json", "navigation-inputs.json.gz", "dense-inputs.json.gz", "structure-mapping.json.gz",
+  ].map((file) => `data/gemini-rule-qa-v1/${file}`);
+  assert.deepEqual(
+    matchedFiles([...runtimeFiles, ...buildOnlyFiles], answerFiles.includeFiles, answerFiles.excludeFiles),
+    runtimeFiles,
+    "the answer function must package runtime assets and exclude build-only inputs",
+  );
   assert.match(vercel, /canonical-manifest\.json/u);
   assert.match(vercel, /navigation-inputs\.json\.gz/u);
   assert.match(vercel, /dense-inputs\.json\.gz/u);

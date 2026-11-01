@@ -1,50 +1,12 @@
 import assert from "node:assert/strict";
 import { readFile, readdir } from "node:fs/promises";
 import test from "node:test";
+import { matchedFiles } from "./helpers/deployment-glob.mjs";
 
 const readWorkflow = (name) =>
   readFile(new URL(`../.github/workflows/${name}`, import.meta.url), "utf8");
 const readPublication = () =>
   readFile(new URL("../scripts/publish-synced-snapshot.sh", import.meta.url), "utf8");
-
-function expandBraces(pattern) {
-  const start = pattern.indexOf("{");
-  if (start < 0) return [pattern];
-  let depth = 0;
-  let end = -1;
-  for (let index = start; index < pattern.length; index += 1) {
-    if (pattern[index] === "{") depth += 1;
-    if (pattern[index] === "}") depth -= 1;
-    if (depth === 0) {
-      end = index;
-      break;
-    }
-  }
-  assert.ok(end > start, `unclosed brace glob: ${pattern}`);
-  const choices = [];
-  let choiceStart = start + 1;
-  depth = 0;
-  for (let index = choiceStart; index < end; index += 1) {
-    if (pattern[index] === "{") depth += 1;
-    if (pattern[index] === "}") depth -= 1;
-    if (pattern[index] === "," && depth === 0) {
-      choices.push(pattern.slice(choiceStart, index));
-      choiceStart = index + 1;
-    }
-  }
-  choices.push(pattern.slice(choiceStart, end));
-  return choices.flatMap((choice) => expandBraces(
-    `${pattern.slice(0, start)}${choice}${pattern.slice(end + 1)}`,
-  ));
-}
-
-function globMatches(file, pattern) {
-  const expression = pattern.replace(/[.+^$()|[\]\\]/gu, "\\$&")
-    .replaceAll("**", "\0")
-    .replaceAll("*", "[^/]*")
-    .replaceAll("\0", ".*");
-  return new RegExp(`^${expression}$`, "u").test(file);
-}
 
 async function listFiles(relativeDirectory) {
   const root = new URL(`../${relativeDirectory}/`, import.meta.url);
@@ -58,13 +20,6 @@ async function listFiles(relativeDirectory) {
   }
   await visit(root);
   return files;
-}
-
-function matchedFiles(files, includeGlob, excludeGlob) {
-  const includes = expandBraces(includeGlob);
-  const excludes = expandBraces(excludeGlob);
-  return files.filter((file) => includes.some((pattern) => globMatches(file, pattern))
-    && !excludes.some((pattern) => globMatches(file, pattern))).sort();
 }
 
 test("pages workflow is reusable and can publish an explicit ref", async () => {
@@ -306,9 +261,15 @@ test("Vercel verifies the source, runtime, and enabled Gemini asset bindings bef
   for (const route of ["api/answer.js"]) {
     const included = String(config.functions?.[route]?.includeFiles || "");
     const excluded = String(config.functions?.[route]?.excludeFiles || "");
-    assert.match(included, /config\/evidence-generation\/(?:gemini-3\.8-flash-low\.json|\*\.json)/u);
-    assert.match(included, /gemini-rule-qa-v1\/\*\*/u);
-    assert.match(included, /\{rule,qa\}-embedding-v1\/\*\*/u);
+    const requiredConfigs = [
+      "config/evidence-generation/gemini-3.8-flash-low.json",
+      `config/evidence-generation/${config.env.EVIDENCE_PLANNING_PROFILE}.json`,
+      `config/evidence-generation/${config.env.EVIDENCE_SELECTION_PROFILE}.json`,
+      "config/qa-source-display-v1.json",
+    ].sort();
+    for (const file of requiredConfigs) await readFile(new URL(`../${file}`, import.meta.url));
+    assert.deepEqual(matchedFiles(requiredConfigs, included, excluded), requiredConfigs,
+      `${route} must package the active generation profiles and source display config`);
     assert.deepEqual(
       matchedFiles(boundedAssetFiles, included, excluded),
       expectedBoundedAssets,
