@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-03T03:05:20.610Z",
+  "generatedAt": "2026-11-04T01:38:25.084Z",
   "records": [
     {
       "alias": "“K9刑侦案件”",
@@ -15940,6 +15940,27 @@
       "cardId": "15023",
       "cardName": "珠玉兽－祖龙",
       "language": "zh"
+    },
+    {
+      "alias": "コミックキャット",
+      "normalizedAlias": "コミックキャット",
+      "cardId": "23157",
+      "cardName": "コミックキャット",
+      "language": "ja"
+    },
+    {
+      "alias": "漫画猫",
+      "normalizedAlias": "漫画猫",
+      "cardId": "23157",
+      "cardName": "コミックキャット",
+      "language": "zh"
+    },
+    {
+      "alias": "Animimicat",
+      "normalizedAlias": "animimicat",
+      "cardId": "23157",
+      "cardName": "コミックキャット",
+      "language": "en"
     },
     {
       "alias": "アンクリボー",
@@ -58047,8 +58068,8 @@
       "language": "zh"
     },
     {
-      "alias": "Chaos End Ruler - Ruler of the Beginning and the End",
-      "normalizedAlias": "chaos end ruler - ruler of the beginning and the end",
+      "alias": "Chaos End Ruler - Master of the Beginning and End",
+      "normalizedAlias": "chaos end ruler - master of the beginning and end",
       "cardId": "22741",
       "cardName": "カオスエンド・ルーラー －開闢と終焉の支配者－",
       "language": "en"
@@ -62758,8 +62779,8 @@
       "language": "zh"
     },
     {
-      "alias": "Clear Wing Synchro Dragon of the Four Heavenly Dragons",
-      "normalizedAlias": "clear wing synchro dragon of the four heavenly dragons",
+      "alias": "Clear Wing Synchro Dragon, Four Heavenly Dragons",
+      "normalizedAlias": "clear wing synchro dragon, four heavenly dragons",
       "cardId": "22729",
       "cardName": "四天の龍 クリアウィング・シンクロ・ドラゴン",
       "language": "en"
@@ -65254,27 +65275,6 @@
       "normalizedAlias": "combo master",
       "cardId": "6893",
       "cardName": "コンボマスター",
-      "language": "en"
-    },
-    {
-      "alias": "コミックキャット",
-      "normalizedAlias": "コミックキャット",
-      "cardId": "23157",
-      "cardName": "コミックキャット",
-      "language": "ja"
-    },
-    {
-      "alias": "漫画猫",
-      "normalizedAlias": "漫画猫",
-      "cardId": "23157",
-      "cardName": "コミックキャット",
-      "language": "zh"
-    },
-    {
-      "alias": "Comic Cat",
-      "normalizedAlias": "comic cat",
-      "cardId": "23157",
-      "cardName": "コミックキャット",
       "language": "en"
     },
     {
@@ -70227,8 +70227,8 @@
       "language": "zh"
     },
     {
-      "alias": "Crimson Dragon Quetzacoatl",
-      "normalizedAlias": "crimson dragon quetzacoatl",
+      "alias": "Crimson Dragon Quetzalcoatl",
+      "normalizedAlias": "crimson dragon quetzalcoatl",
       "cardId": "22722",
       "cardName": "赤き竜 ケッツァーコアトル",
       "language": "en"
@@ -75393,6 +75393,27 @@
       "language": "zh"
     },
     {
+      "alias": "機光竜－サイバー・ドラゴン",
+      "normalizedAlias": "機光竜-サイバ-・ドラゴン",
+      "cardId": "22720",
+      "cardName": "機光竜－サイバー・ドラゴン",
+      "language": "ja"
+    },
+    {
+      "alias": "机光龙－电子龙",
+      "normalizedAlias": "机光龙-电子龙",
+      "cardId": "22720",
+      "cardName": "機光竜－サイバー・ドラゴン",
+      "language": "zh"
+    },
+    {
+      "alias": "Cyber Dragon, the Luminous Mech Dragon",
+      "normalizedAlias": "cyber dragon, the luminous mech dragon",
+      "cardId": "22720",
+      "cardName": "機光竜－サイバー・ドラゴン",
+      "language": "en"
+    },
+    {
       "alias": "电子蛋天使",
       "normalizedAlias": "电子蛋天使",
       "cardId": "14171",
@@ -75533,8 +75554,8 @@
       "language": "zh"
     },
     {
-      "alias": "Cyber End Dragon the Decisive Strike Dragon",
-      "normalizedAlias": "cyber end dragon the decisive strike dragon",
+      "alias": "Cyber End Dragon, the Final Strike Dragon",
+      "normalizedAlias": "cyber end dragon, the final strike dragon",
       "cardId": "22719",
       "cardName": "終撃竜－サイバー・エンド・ドラゴン",
       "language": "en"
@@ -85018,8 +85039,8 @@
       "language": "zh"
     },
     {
-      "alias": "Dark Creator",
-      "normalizedAlias": "dark creator",
+      "alias": "Lord of Darkness",
+      "normalizedAlias": "lord of darkness",
       "cardId": "22735",
       "cardName": "闇の神－ダークゴッド",
       "language": "en"
@@ -87608,8 +87629,8 @@
       "language": "zh"
     },
     {
-      "alias": "Dark Rebellion Xyz Dragon of the Four Heavenly Dragons",
-      "normalizedAlias": "dark rebellion xyz dragon of the four heavenly dragons",
+      "alias": "Dark Rebellion Xyz Dragon, Four Heavenly Dragons",
+      "normalizedAlias": "dark rebellion xyz dragon, four heavenly dragons",
       "cardId": "22730",
       "cardName": "四天の龍 ダーク・リベリオン・エクシーズ・ドラゴン",
       "language": "en"
@@ -188660,6 +188681,27 @@
       "language": "zh"
     },
     {
+      "alias": "HRUM－アルティメット・フォース",
+      "normalizedAlias": "hrum-アルティメット・フォ-ス",
+      "cardId": "22742",
+      "cardName": "HRUM－アルティメット・フォース",
+      "language": "ja"
+    },
+    {
+      "alias": "超升阶魔法－究极之力",
+      "normalizedAlias": "超升阶魔法-究极之力",
+      "cardId": "22742",
+      "cardName": "HRUM－アルティメット・フォース",
+      "language": "zh"
+    },
+    {
+      "alias": "Hyper Rank-Up-Magic Ultimate Force",
+      "normalizedAlias": "hyper rank-up-magic ultimate force",
+      "cardId": "22742",
+      "cardName": "HRUM－アルティメット・フォース",
+      "language": "en"
+    },
+    {
       "alias": "超升阶魔法-乌托邦之力",
       "normalizedAlias": "超升阶魔法-乌托邦之力",
       "cardId": "16473",
@@ -188735,27 +188777,6 @@
       "cardId": "10371",
       "cardName": "エンシェント・シャーク ハイパー・メガロドン",
       "language": "zh"
-    },
-    {
-      "alias": "HRUM－アルティメット・フォース",
-      "normalizedAlias": "hrum-アルティメット・フォ-ス",
-      "cardId": "22742",
-      "cardName": "HRUM－アルティメット・フォース",
-      "language": "ja"
-    },
-    {
-      "alias": "超升阶魔法－究极之力",
-      "normalizedAlias": "超升阶魔法-究极之力",
-      "cardId": "22742",
-      "cardName": "HRUM－アルティメット・フォース",
-      "language": "zh"
-    },
-    {
-      "alias": "Hyper-Rank-Up-Magic Ultimate Force",
-      "normalizedAlias": "hyper-rank-up-magic ultimate force",
-      "cardId": "22742",
-      "cardName": "HRUM－アルティメット・フォース",
-      "language": "en"
     },
     {
       "alias": "超越召喚獣アイオーン",
@@ -280136,6 +280157,62 @@
       "language": "zh"
     },
     {
+      "alias": "完美世界-卡通世界",
+      "normalizedAlias": "完美世界-卡通世界",
+      "cardId": "23161",
+      "cardName": "完美世界-卡通世界",
+      "language": "zh"
+    },
+    {
+      "alias": "完全なる世界 トゥーン・ワールド",
+      "normalizedAlias": "完全なる世界 トゥ-ン・ワ-ルド",
+      "cardId": "23161",
+      "cardName": "完美世界-卡通世界",
+      "language": "ja"
+    },
+    {
+      "alias": "Perfect Toon World",
+      "normalizedAlias": "perfect toon world",
+      "cardId": "23161",
+      "cardName": "完美世界-卡通世界",
+      "language": "en"
+    },
+    {
+      "alias": "Toon World the Perfect World",
+      "normalizedAlias": "toon world the perfect world",
+      "cardId": "23161",
+      "cardName": "完美世界-卡通世界",
+      "language": "en"
+    },
+    {
+      "alias": "完美世界 卡通世界",
+      "normalizedAlias": "完美世界 卡通世界",
+      "cardId": "23161",
+      "cardName": "完美世界-卡通世界",
+      "language": "zh"
+    },
+    {
+      "alias": "完美世界卡通世界",
+      "normalizedAlias": "完美世界卡通世界",
+      "cardId": "23161",
+      "cardName": "完美世界-卡通世界",
+      "language": "zh"
+    },
+    {
+      "alias": "完美卡通世界",
+      "normalizedAlias": "完美卡通世界",
+      "cardId": "23161",
+      "cardName": "完美世界-卡通世界",
+      "language": "zh"
+    },
+    {
+      "alias": "完全的世界 卡通世界",
+      "normalizedAlias": "完全的世界 卡通世界",
+      "cardId": "23161",
+      "cardName": "完美世界-卡通世界",
+      "language": "zh"
+    },
+    {
       "alias": "究極完全態・グレート・モス",
       "normalizedAlias": "究極完全態・グレ-ト・モス",
       "cardId": "4073",
@@ -305308,8 +305385,8 @@
       "language": "zh"
     },
     {
-      "alias": "Red Dragon Archfiend's Chain",
-      "normalizedAlias": "red dragon archfiend's chain",
+      "alias": "Red Dragon Archfiend's Chains",
+      "normalizedAlias": "red dragon archfiend's chains",
       "cardId": "22724",
       "cardName": "レッド・デーモンズ・チェーン",
       "language": "en"
@@ -311627,27 +311704,6 @@
       "cardId": "7382",
       "cardName": "融合破棄",
       "language": "zh"
-    },
-    {
-      "alias": "機光竜－サイバー・ドラゴン",
-      "normalizedAlias": "機光竜-サイバ-・ドラゴン",
-      "cardId": "22720",
-      "cardName": "機光竜－サイバー・ドラゴン",
-      "language": "ja"
-    },
-    {
-      "alias": "机光龙－电子龙",
-      "normalizedAlias": "机光龙-电子龙",
-      "cardId": "22720",
-      "cardName": "機光竜－サイバー・ドラゴン",
-      "language": "zh"
-    },
-    {
-      "alias": "Revolution Cyber Dragon",
-      "normalizedAlias": "revolution cyber dragon",
-      "cardId": "22720",
-      "cardName": "機光竜－サイバー・ドラゴン",
-      "language": "en"
     },
     {
       "alias": "革命同步士",
@@ -347273,8 +347329,8 @@
       "language": "zh"
     },
     {
-      "alias": "Starving Venom Fusion Dragon of the Four Heavenly Dragons",
-      "normalizedAlias": "starving venom fusion dragon of the four heavenly dragons",
+      "alias": "Starving Venom Fusion Dragon, Four Heavenly Dragons",
+      "normalizedAlias": "starving venom fusion dragon, four heavenly dragons",
       "cardId": "22728",
       "cardName": "四天の龍 スターヴ・ヴェノム・フュージョン・ドラゴン",
       "language": "en"
@@ -366754,8 +366810,8 @@
       "language": "zh"
     },
     {
-      "alias": "The Flute of Guiding Dragon",
-      "normalizedAlias": "the flute of guiding dragon",
+      "alias": "The Guiding Flute of Summoning Dragons",
+      "normalizedAlias": "the guiding flute of summoning dragons",
       "cardId": "22718",
       "cardName": "ドラゴン・導きの呼笛",
       "language": "en"
@@ -376769,62 +376825,6 @@
       "cardId": "4798",
       "cardName": "トゥーン・ワールド",
       "language": "en"
-    },
-    {
-      "alias": "完美世界-卡通世界",
-      "normalizedAlias": "完美世界-卡通世界",
-      "cardId": "23161",
-      "cardName": "完美世界-卡通世界",
-      "language": "zh"
-    },
-    {
-      "alias": "完全なる世界 トゥーン・ワールド",
-      "normalizedAlias": "完全なる世界 トゥ-ン・ワ-ルド",
-      "cardId": "23161",
-      "cardName": "完美世界-卡通世界",
-      "language": "ja"
-    },
-    {
-      "alias": "Toon World the Perfect World",
-      "normalizedAlias": "toon world the perfect world",
-      "cardId": "23161",
-      "cardName": "完美世界-卡通世界",
-      "language": "en"
-    },
-    {
-      "alias": "完美世界 卡通世界",
-      "normalizedAlias": "完美世界 卡通世界",
-      "cardId": "23161",
-      "cardName": "完美世界-卡通世界",
-      "language": "zh"
-    },
-    {
-      "alias": "完美世界卡通世界",
-      "normalizedAlias": "完美世界卡通世界",
-      "cardId": "23161",
-      "cardName": "完美世界-卡通世界",
-      "language": "zh"
-    },
-    {
-      "alias": "Perfect Toon World",
-      "normalizedAlias": "perfect toon world",
-      "cardId": "23161",
-      "cardName": "完美世界-卡通世界",
-      "language": "en"
-    },
-    {
-      "alias": "完美卡通世界",
-      "normalizedAlias": "完美卡通世界",
-      "cardId": "23161",
-      "cardName": "完美世界-卡通世界",
-      "language": "zh"
-    },
-    {
-      "alias": "完全的世界 卡通世界",
-      "normalizedAlias": "完全的世界 卡通世界",
-      "cardId": "23161",
-      "cardName": "完美世界-卡通世界",
-      "language": "zh"
     },
     {
       "alias": "トップ・ランナー",
@@ -387936,8 +387936,8 @@
       "language": "zh"
     },
     {
-      "alias": "Unchained Enma Lord Yama",
-      "normalizedAlias": "unchained enma lord yama",
+      "alias": "Unchained Firelord of Yama",
+      "normalizedAlias": "unchained firelord of yama",
       "cardId": "23173",
       "cardName": "破械焔魔天ヤマ",
       "language": "en"
@@ -387948,6 +387948,27 @@
       "cardId": "23173",
       "cardName": "破械焔魔天ヤマ",
       "language": "zh"
+    },
+    {
+      "alias": "破械習合",
+      "normalizedAlias": "破械習合",
+      "cardId": "23176",
+      "cardName": "破械習合",
+      "language": "zh"
+    },
+    {
+      "alias": "破械习合",
+      "normalizedAlias": "破械习合",
+      "cardId": "23176",
+      "cardName": "破械習合",
+      "language": "zh"
+    },
+    {
+      "alias": "Unchained Hunger",
+      "normalizedAlias": "unchained hunger",
+      "cardId": "23176",
+      "cardName": "破械習合",
+      "language": "en"
     },
     {
       "alias": "破械冥官カムラ",
@@ -387964,8 +387985,8 @@
       "language": "zh"
     },
     {
-      "alias": "Unchained Malevolent Magistrate Kamura",
-      "normalizedAlias": "unchained malevolent magistrate kamura",
+      "alias": "Unchained Zealot - Kamra",
+      "normalizedAlias": "unchained zealot - kamra",
       "cardId": "23172",
       "cardName": "破械冥官カムラ",
       "language": "en"
@@ -387992,8 +388013,8 @@
       "language": "zh"
     },
     {
-      "alias": "Unchained Ogre Shara",
-      "normalizedAlias": "unchained ogre shara",
+      "alias": "Unchained Oni of Shara",
+      "normalizedAlias": "unchained oni of shara",
       "cardId": "23170",
       "cardName": "破械式鬼シャラ",
       "language": "en"
@@ -388020,8 +388041,8 @@
       "language": "zh"
     },
     {
-      "alias": "Unchained Ogre Shma",
-      "normalizedAlias": "unchained ogre shma",
+      "alias": "Unchained Oni of Shyma",
+      "normalizedAlias": "unchained oni of shyma",
       "cardId": "23171",
       "cardName": "破械式鬼シュマ",
       "language": "en"
@@ -388076,8 +388097,8 @@
       "language": "zh"
     },
     {
-      "alias": "Unchained Soul Rage Abominator",
-      "normalizedAlias": "unchained soul rage abominator",
+      "alias": "Unchained Soul of Abominable Rage",
+      "normalizedAlias": "unchained soul of abominable rage",
       "cardId": "23174",
       "cardName": "破械神雙ラギア",
       "language": "en"
@@ -388249,27 +388270,6 @@
       "cardId": "14670",
       "cardName": "破械神 拉基安",
       "language": "zh"
-    },
-    {
-      "alias": "破械習合",
-      "normalizedAlias": "破械習合",
-      "cardId": "23176",
-      "cardName": "破械習合",
-      "language": "zh"
-    },
-    {
-      "alias": "破械习合",
-      "normalizedAlias": "破械习合",
-      "cardId": "23176",
-      "cardName": "破械習合",
-      "language": "zh"
-    },
-    {
-      "alias": "Unchained Syncretism",
-      "normalizedAlias": "unchained syncretism",
-      "cardId": "23176",
-      "cardName": "破械習合",
-      "language": "en"
     },
     {
       "alias": "破械童子 安若般",

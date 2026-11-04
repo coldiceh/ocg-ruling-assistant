@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-03T03:05:20.610Z",
+  "generatedAt": "2026-11-04T01:38:25.084Z",
   "records": [
     {
       "id": "21385",
@@ -37413,6 +37413,77 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "15023"
+        }
+      ]
+    },
+    {
+      "id": "23157",
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Beast",
+      "monsterPropertyIds": [
+        "3",
+        "4"
+      ],
+      "monsterProperties": [
+        "Beast",
+        "Effect"
+      ],
+      "propertyIds": [
+        "3",
+        "4"
+      ],
+      "properties": [
+        "Beast",
+        "Effect"
+      ],
+      "attack": 0,
+      "atk": 0,
+      "defense": 0,
+      "def": 0,
+      "level": 1,
+      "attribute": "dark",
+      "name": "コミックキャット",
+      "cnName": "漫画猫",
+      "jaName": "コミックキャット",
+      "enName": "Animimicat",
+      "effectText": "このカード名の②の効果は１ターンに１度しか使用できない。\n①：フィールドに「トゥーン・ワールド」が存在する限り、このカードはトゥーンモンスターとして扱う。\n②：自分・相手のメインフェイズに発動できる。自分フィールドのモンスター１体をリリースし、手札・デッキから「トゥーン・ワールド」のカード名が記されたモンスター１体を召喚条件を無視して特殊召喚する。自分フィールドに「トゥーン・ワールド」が存在する場合、リリースするモンスターを相手フィールドから選ぶ事もできる。",
+      "released": true,
+      "aliases": [
+        "コミックキャット",
+        "Animimicat",
+        "漫画猫"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/23157",
+      "updatedAt": "2026-11-04T01:36:25.192Z",
+      "chineseNameSources": [
+        {
+          "name": "漫画猫",
+          "source": "baige",
+          "sourceField": "sc_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23157"
+        },
+        {
+          "name": "漫画猫",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23157"
+        },
+        {
+          "name": "漫画猫",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23157"
+        },
+        {
+          "name": "漫画猫",
+          "source": "baige",
+          "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23157"
         }
       ]
     },
@@ -137657,22 +137728,18 @@
       "race": "Warrior",
       "monsterPropertyIds": [
         "12",
-        "2",
         "4"
       ],
       "monsterProperties": [
         "Warrior",
-        "Special Summon Monster",
         "Effect"
       ],
       "propertyIds": [
         "12",
-        "2",
         "4"
       ],
       "properties": [
         "Warrior",
-        "Special Summon Monster",
         "Effect"
       ],
       "attack": 3500,
@@ -137684,18 +137751,18 @@
       "name": "カオスエンド・ルーラー －開闢と終焉の支配者－",
       "cnName": "混沌终结支配者-开辟与终焉的支配者-",
       "jaName": "カオスエンド・ルーラー －開闢と終焉の支配者－",
-      "enName": "Chaos End Ruler - Ruler of the Beginning and the End",
+      "enName": "Chaos End Ruler - Master of the Beginning and End",
       "effectText": "このカードは通常召喚できない。\n自分の墓地から戦士族・光属性と悪魔族・闇属性のモンスターを１体ずつ除外した場合のみ特殊召喚できる。\nこのカード名の③の効果は１ターンに１度しか使用できない。\n①：このカードの特殊召喚は無効化されない。\n②：このカードの特殊召喚成功時にお互いはカードの効果を発動できない。\n③：このカードが上記の方法で特殊召喚されている場合、１０００LPを払って発動できる。相手のフィールド・墓地のカードを全て除外する。その後、この効果で除外した数×５００ダメージを相手に与える。",
       "released": true,
       "aliases": [
         "カオスエンド・ルーラー －開闢と終焉の支配者－",
-        "Chaos End Ruler - Ruler of the Beginning and the End",
+        "Chaos End Ruler - Master of the Beginning and End",
         "混沌终结支配者-开辟与终焉的支配者-",
         "混沌终末统御者 －开辟与终焉的支配者－",
         "混沌终焉之王-开辟与终焉的支配者-"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/22741",
-      "updatedAt": "2026-10-26T23:04:52.869Z",
+      "updatedAt": "2026-11-04T01:36:35.632Z",
       "chineseNameSources": [
         {
           "name": "混沌终末统御者 －开辟与终焉的支配者－",
@@ -149478,18 +149545,18 @@
       "name": "四天の龍 クリアウィング・シンクロ・ドラゴン",
       "cnName": "四天之龙 幻透翼同调龙",
       "jaName": "四天の龍 クリアウィング・シンクロ・ドラゴン",
-      "enName": "Clear Wing Synchro Dragon of the Four Heavenly Dragons",
+      "enName": "Clear Wing Synchro Dragon, Four Heavenly Dragons",
       "effectText": "チューナー＋チューナー以外のモンスター１体以上\nこのカード名はルール上「スピードロイド」カードとしても扱う。\nこのカード名の①②の効果はそれぞれ１ターンに１度しか使用できない。\n①：このカードが特殊召喚した場合に発動できる。相手フィールドの効果モンスター１体を破壊し、その元々の攻撃力分だけこのカードの攻撃力をアップする。\n②：相手が効果を発動した時に発動できる。自分の手札・墓地からレベル４以下の風属性チューナー１体を効果を無効にして特殊召喚する。その後、風属性Sモンスター１体のS召喚を行う事ができる。",
       "released": true,
       "aliases": [
         "四天の龍 クリアウィング・シンクロ・ドラゴン",
-        "Clear Wing Synchro Dragon of the Four Heavenly Dragons",
+        "Clear Wing Synchro Dragon, Four Heavenly Dragons",
         "四天之龙 幻透翼同调龙",
         "四天之龙 清透翼同步龙",
         "四天之龙 清透翼同调龙"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/22729",
-      "updatedAt": "2026-10-26T23:04:53.027Z",
+      "updatedAt": "2026-11-04T01:36:36.829Z",
       "chineseNameSources": [
         {
           "name": "四天之龙 清透翼同步龙",
@@ -155668,77 +155735,6 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "6893"
-        }
-      ]
-    },
-    {
-      "id": "23157",
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Beast",
-      "monsterPropertyIds": [
-        "3",
-        "4"
-      ],
-      "monsterProperties": [
-        "Beast",
-        "Effect"
-      ],
-      "propertyIds": [
-        "3",
-        "4"
-      ],
-      "properties": [
-        "Beast",
-        "Effect"
-      ],
-      "attack": 0,
-      "atk": 0,
-      "defense": 0,
-      "def": 0,
-      "level": 1,
-      "attribute": "dark",
-      "name": "コミックキャット",
-      "jaName": "コミックキャット",
-      "enName": "Comic Cat",
-      "effectText": "このカード名の②の効果は１ターンに１度しか使用できない。\n①：フィールドに「トゥーン・ワールド」が存在する限り、このカードはトゥーンモンスターとして扱う。\n②：自分・相手のメインフェイズに発動できる。自分フィールドのモンスター１体をリリースし、手札・デッキから「トゥーン・ワールド」のカード名が記されたモンスター１体を召喚条件を無視して特殊召喚する。自分フィールドに「トゥーン・ワールド」が存在する場合、リリースするモンスターを相手フィールドから選ぶ事もできる。",
-      "released": true,
-      "aliases": [
-        "コミックキャット",
-        "Comic Cat",
-        "漫画猫"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/23157",
-      "updatedAt": "2026-09-12T21:06:13.689Z",
-      "cnName": "漫画猫",
-      "chineseNameSources": [
-        {
-          "name": "漫画猫",
-          "source": "baige",
-          "sourceField": "sc_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23157"
-        },
-        {
-          "name": "漫画猫",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23157"
-        },
-        {
-          "name": "漫画猫",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23157"
-        },
-        {
-          "name": "漫画猫",
-          "source": "baige",
-          "sourceField": "cnocg_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23157"
         }
       ]
     },
@@ -166958,18 +166954,18 @@
       "name": "赤き竜 ケッツァーコアトル",
       "cnName": "红龙 魁札尔科亚特尔",
       "jaName": "赤き竜 ケッツァーコアトル",
-      "enName": "Crimson Dragon Quetzacoatl",
+      "enName": "Crimson Dragon Quetzalcoatl",
       "effectText": "チューナー＋チューナー以外のモンスター１体以上\nこのカード名の①③の効果はそれぞれ１ターンに１度しか使用できない。\n①：このカードがS召喚した場合に発動できる。自分の墓地からドラゴン族Sモンスターを可能な限り特殊召喚する。このターン、自分はモンスターを特殊召喚できない。\n②：このカードの攻撃力は、自分フィールドの他のSモンスターの元々の攻撃力の合計分アップする。\n③：相手がモンスターの効果を発動した時に発動できる。自分フィールドの他のドラゴン族Sモンスター１体をEXデッキに戻し、その発動を無効にする。",
       "released": true,
       "aliases": [
         "赤き竜 ケッツァーコアトル",
-        "Crimson Dragon Quetzacoatl",
+        "Crimson Dragon Quetzalcoatl",
         "红龙 魁札尔科亚特尔",
         "赤龙 克察尔科亚特尔",
         "红龙 克察尔科亚特尔"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/22722",
-      "updatedAt": "2026-10-26T23:04:53.274Z",
+      "updatedAt": "2026-11-04T01:36:38.660Z",
       "chineseNameSources": [
         {
           "name": "赤龙 克察尔科亚特尔",
@@ -179663,6 +179659,85 @@
       ]
     },
     {
+      "id": "22720",
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Machine",
+      "monsterPropertyIds": [
+        "9",
+        "4"
+      ],
+      "monsterProperties": [
+        "Machine",
+        "Effect"
+      ],
+      "propertyIds": [
+        "9",
+        "4"
+      ],
+      "properties": [
+        "Machine",
+        "Effect"
+      ],
+      "attack": 2100,
+      "atk": 2100,
+      "defense": 1600,
+      "def": 1600,
+      "level": 5,
+      "attribute": "light",
+      "name": "機光竜－サイバー・ドラゴン",
+      "cnName": "机光龙-电子龙",
+      "jaName": "機光竜－サイバー・ドラゴン",
+      "enName": "Cyber Dragon, the Luminous Mech Dragon",
+      "effectText": "このカード名の②③の効果はそれぞれ１ターンに１度しか使用できない。\n①：自分フィールドにモンスターが存在しない場合、このカードは手札から特殊召喚できる。\n②：このカードが特殊召喚した場合、相手フィールドの表側表示モンスター１体を対象として発動できる。そのモンスターの効果をターン終了時まで無効にする。\n③：自分メインフェイズに発動できる。フィールドのこのカードを含む自分の手札・フィールドのモンスターを融合素材とし、機械族の融合モンスター１体を融合召喚する。",
+      "released": true,
+      "aliases": [
+        "機光竜－サイバー・ドラゴン",
+        "Cyber Dragon, the Luminous Mech Dragon",
+        "机光龙-电子龙",
+        "机光龙－电子龙"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/22720",
+      "updatedAt": "2026-11-04T01:36:39.969Z",
+      "chineseNameSources": [
+        {
+          "name": "机光龙－电子龙",
+          "source": "baige",
+          "sourceField": "sc_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "22720"
+        },
+        {
+          "name": "机光龙-电子龙",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "22720"
+        },
+        {
+          "name": "机光龙－电子龙",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "22720"
+        },
+        {
+          "name": "机光龙-电子龙",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "22720"
+        },
+        {
+          "name": "机光龙-电子龙",
+          "source": "baige",
+          "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "22720"
+        }
+      ]
+    },
+    {
       "id": "14171",
       "type": "monster",
       "cardType": "monster",
@@ -180002,17 +180077,17 @@
       "name": "終撃竜－サイバー・エンド・ドラゴン",
       "cnName": "终击龙-电子终结龙",
       "jaName": "終撃竜－サイバー・エンド・ドラゴン",
-      "enName": "Cyber End Dragon the Decisive Strike Dragon",
+      "enName": "Cyber End Dragon, the Final Strike Dragon",
       "effectText": "攻撃力２１００以上の機械族モンスター×３\nこのカードは融合召喚でしか特殊召喚できない。\nこのカード名の①の効果は１ターンに１度しか使用できない。\n①：光属性モンスターのみを素材としてこのカードが融合召喚した場合、４０００LPを払って発動できる。デッキから「リミッター解除」１枚を手札に加える。\n②：このカードが守備表示モンスターを攻撃した場合、その守備力を攻撃力が超えた分だけ相手に戦闘ダメージを与える。\n③：元々の攻撃力より高い攻撃力を持つこのカードは１度のバトルフェイズ中に３回攻撃できる。",
       "released": true,
       "aliases": [
         "終撃竜－サイバー・エンド・ドラゴン",
-        "Cyber End Dragon the Decisive Strike Dragon",
+        "Cyber End Dragon, the Final Strike Dragon",
         "终击龙-电子终结龙",
         "终击龙－电子终极龙"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/22719",
-      "updatedAt": "2026-10-26T23:04:53.453Z",
+      "updatedAt": "2026-11-04T01:36:40.025Z",
       "chineseNameSources": [
         {
           "name": "终击龙－电子终极龙",
@@ -202856,19 +202931,19 @@
       "level": 10,
       "attribute": "dark",
       "name": "闇の神－ダークゴッド",
+      "cnName": "暗之神",
       "jaName": "闇の神－ダークゴッド",
-      "enName": "Dark Creator",
+      "enName": "Lord of Darkness",
       "effectText": "①：このカードは自分フィールドの悪魔族・天使族モンスター２体をリリースして手札から特殊召喚できる。\n②：このカードは戦闘では破壊されない。\n③：１ターンに１度、発動できる。自分フィールドに「ダークゴッド・トークン」（悪魔族・闇・星１０・攻３０００／守１０００）を可能な限り特殊召喚する。このトークンは、直接攻撃できず、戦闘では破壊されず、このカードが破壊される時に破壊される。このターン、自分はモンスターを特殊召喚できない。\n④：モンスターが戦闘で破壊された場合に発動する。相手に７００ダメージを与える。",
       "released": true,
       "aliases": [
         "闇の神－ダークゴッド",
-        "Dark Creator",
+        "Lord of Darkness",
         "暗之神",
         "暗之神-黑暗神"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/22735",
-      "updatedAt": "2026-09-12T21:06:18.613Z",
-      "cnName": "暗之神",
+      "updatedAt": "2026-11-04T01:36:42.301Z",
       "chineseNameSources": [
         {
           "name": "暗之神",
@@ -208664,19 +208739,19 @@
       "name": "四天の龍 ダーク・リベリオン・エクシーズ・ドラゴン",
       "cnName": "四天之龙 暗叛逆超量龙",
       "jaName": "四天の龍 ダーク・リベリオン・エクシーズ・ドラゴン",
-      "enName": "Dark Rebellion Xyz Dragon of the Four Heavenly Dragons",
+      "enName": "Dark Rebellion Xyz Dragon, Four Heavenly Dragons",
       "effectText": "闇属性レベル４モンスター×２\nこのカード名はルール上「幻影騎士団」カードとしても扱う。\nこのカード名の①②の効果はそれぞれ１ターンに１度しか使用できない。\n①：このカードが特殊召喚した場合、自分及び相手フィールドのカードをそれぞれ同じ数だけ対象として発動できる。そのカードを破壊する。\n②：相手が効果を発動した時、このカードのX素材を１つ取り除いて発動できる。闇属性・ランク４のXモンスター１体を自分フィールドのこのカードの上に重ねてX召喚扱いでEXデッキから特殊召喚する。",
       "released": true,
       "aliases": [
         "四天の龍 ダーク・リベリオン・エクシーズ・ドラゴン",
-        "Dark Rebellion Xyz Dragon of the Four Heavenly Dragons",
+        "Dark Rebellion Xyz Dragon, Four Heavenly Dragons",
         "四天之龙 暗叛逆超量龙",
         "四天之龙 暗反叛超量龙",
         "四天之龙 暗叛逆XYZ龙",
         "四天之龙 暗反叛多维龙"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/22730",
-      "updatedAt": "2026-10-26T23:04:53.861Z",
+      "updatedAt": "2026-11-04T01:36:42.924Z",
       "chineseNameSources": [
         {
           "name": "四天之龙 暗反叛超量龙",
@@ -448607,6 +448682,55 @@
       ]
     },
     {
+      "id": "22742",
+      "type": "spell",
+      "cardType": "spell",
+      "name": "HRUM－アルティメット・フォース",
+      "cnName": "超升阶魔法-究极之力",
+      "jaName": "HRUM－アルティメット・フォース",
+      "enName": "Hyper Rank-Up-Magic Ultimate Force",
+      "effectText": "①：自分フィールドの元々の属性が光属性でランク９以下の「ホープ」Xモンスター１体を対象として発動できる。ランク１０以上の「No.」Xモンスター１体を、対象の自分のXモンスターの上に重ねてX召喚扱いでEXデッキから特殊召喚し、このカードをそのX素材にする。\n②：このカードをX素材としている「No.99」Xモンスターは以下の効果を得る。\n●相手がバトルフェイズにモンスターの効果を発動した時に発動する（同一チェーン上では１度まで）。このカードのX素材を全て取り除き、相手フィールドのモンスターを全て破壊する。",
+      "released": true,
+      "aliases": [
+        "HRUM－アルティメット・フォース",
+        "Hyper Rank-Up-Magic Ultimate Force",
+        "超升阶魔法-究极之力",
+        "超升阶魔法－究极之力"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/22742",
+      "updatedAt": "2026-11-04T01:37:07.331Z",
+      "chineseNameSources": [
+        {
+          "name": "超升阶魔法－究极之力",
+          "source": "baige",
+          "sourceField": "sc_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "22742"
+        },
+        {
+          "name": "超升阶魔法-究极之力",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "22742"
+        },
+        {
+          "name": "超升阶魔法-究极之力",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "22742"
+        },
+        {
+          "name": "超升阶魔法-究极之力",
+          "source": "baige",
+          "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "22742"
+        }
+      ]
+    },
+    {
       "id": "16473",
       "type": "spell",
       "cardType": "spell",
@@ -448807,55 +448931,6 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "10371"
-        }
-      ]
-    },
-    {
-      "id": "22742",
-      "type": "spell",
-      "cardType": "spell",
-      "name": "HRUM－アルティメット・フォース",
-      "cnName": "超升阶魔法-究极之力",
-      "jaName": "HRUM－アルティメット・フォース",
-      "enName": "Hyper-Rank-Up-Magic Ultimate Force",
-      "effectText": "①：自分フィールドの元々の属性が光属性でランク９以下の「ホープ」Xモンスター１体を対象として発動できる。ランク１０以上の「No.」Xモンスター１体を、対象の自分のXモンスターの上に重ねてX召喚扱いでEXデッキから特殊召喚し、このカードをそのX素材にする。\n②：このカードをX素材としている「No.99」Xモンスターは以下の効果を得る。\n●相手がバトルフェイズにモンスターの効果を発動した時に発動する（同一チェーン上では１度まで）。このカードのX素材を全て取り除き、相手フィールドのモンスターを全て破壊する。",
-      "released": true,
-      "aliases": [
-        "HRUM－アルティメット・フォース",
-        "Hyper-Rank-Up-Magic Ultimate Force",
-        "超升阶魔法-究极之力",
-        "超升阶魔法－究极之力"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/22742",
-      "updatedAt": "2026-10-26T23:04:57.169Z",
-      "chineseNameSources": [
-        {
-          "name": "超升阶魔法－究极之力",
-          "source": "baige",
-          "sourceField": "sc_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "22742"
-        },
-        {
-          "name": "超升阶魔法-究极之力",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "22742"
-        },
-        {
-          "name": "超升阶魔法-究极之力",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "22742"
-        },
-        {
-          "name": "超升阶魔法-究极之力",
-          "source": "baige",
-          "sourceField": "cnocg_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "22742"
         }
       ]
     },
@@ -668044,6 +668119,70 @@
       ]
     },
     {
+      "id": "23161",
+      "type": "spell",
+      "cardType": "spell",
+      "property": "field",
+      "properties": [
+        "field"
+      ],
+      "name": "完美世界-卡通世界",
+      "cnName": "完美世界-卡通世界",
+      "jaName": "完全なる世界 トゥーン・ワールド",
+      "enName": "Perfect Toon World",
+      "effectText": "このカード名の②の効果は１ターンに３度まで使用できる。\n①：このカードはフィールドゾーンに存在する限り、カード名を「トゥーン・ワールド」として扱う。\n②：１ターンに１度、自分メインフェイズに発動できる。「トゥーン」カードまたはそのカード名が記されたカード１枚をデッキから手札に加える。\n③：他のカードが発動した効果が適用される際に、自分フィールドのトゥーンモンスター１体をその効果処理後まで除外できる（このターン、このカード名のこの効果で元々のカード名が同じモンスターを除外できない）。",
+      "released": true,
+      "aliases": [
+        "完美世界-卡通世界",
+        "完全なる世界 トゥーン・ワールド",
+        "Perfect Toon World",
+        "Toon World the Perfect World",
+        "完美世界 卡通世界",
+        "完美世界卡通世界",
+        "完美卡通世界",
+        "完全的世界 卡通世界"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/23161",
+      "updatedAt": "2026-11-04T01:37:29.636Z",
+      "chineseNameSources": [
+        {
+          "name": "完美世界 卡通世界",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23161"
+        },
+        {
+          "name": "完美卡通世界",
+          "source": "baige",
+          "sourceField": "sc_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23161"
+        },
+        {
+          "name": "完美卡通世界",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23161"
+        },
+        {
+          "name": "完美世界 卡通世界",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23161"
+        },
+        {
+          "name": "完全的世界 卡通世界",
+          "source": "baige",
+          "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23161"
+        }
+      ]
+    },
+    {
       "id": "4073",
       "type": "monster",
       "cardType": "monster",
@@ -728833,18 +728972,18 @@
       "name": "レッド・デーモンズ・チェーン",
       "cnName": "红莲魔族之链",
       "jaName": "レッド・デーモンズ・チェーン",
-      "enName": "Red Dragon Archfiend's Chain",
+      "enName": "Red Dragon Archfiend's Chains",
       "effectText": "このカード名のカードは１ターンに１枚しか発動できない。\nこのカードはEXデッキの「レッド・デーモンズ・ドラゴン」１体を相手に見せ、セットしたターンに発動する事もできる。\n①：手札のモンスターを任意の数だけ相手に見せ、その内のチューナーの数＋１体だけ相手フィールドの効果モンスターを対象としてこのカードを発動できる。このカードが魔法＆罠ゾーンに存在する限り、対象のモンスターの攻撃力は手札から見せた数×１００ダウンし、効果は無効化される。対象のモンスターがフィールドに存在しない場合にこのカードは破壊される。",
       "released": true,
       "aliases": [
         "レッド・デーモンズ・チェーン",
-        "Red Dragon Archfiend's Chain",
+        "Red Dragon Archfiend's Chains",
         "红莲魔族之链",
         "暗红恶魔锁链",
         "真红恶魔之锁链"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/22724",
-      "updatedAt": "2026-10-26T23:05:01.061Z",
+      "updatedAt": "2026-11-04T01:37:35.911Z",
       "chineseNameSources": [
         {
           "name": "暗红恶魔锁链",
@@ -743794,85 +743933,6 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "7382"
-        }
-      ]
-    },
-    {
-      "id": "22720",
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Machine",
-      "monsterPropertyIds": [
-        "9",
-        "4"
-      ],
-      "monsterProperties": [
-        "Machine",
-        "Effect"
-      ],
-      "propertyIds": [
-        "9",
-        "4"
-      ],
-      "properties": [
-        "Machine",
-        "Effect"
-      ],
-      "attack": 2100,
-      "atk": 2100,
-      "defense": 1600,
-      "def": 1600,
-      "level": 5,
-      "attribute": "light",
-      "name": "機光竜－サイバー・ドラゴン",
-      "cnName": "机光龙-电子龙",
-      "jaName": "機光竜－サイバー・ドラゴン",
-      "enName": "Revolution Cyber Dragon",
-      "effectText": "このカード名の②③の効果はそれぞれ１ターンに１度しか使用できない。\n①：自分フィールドにモンスターが存在しない場合、このカードは手札から特殊召喚できる。\n②：このカードが特殊召喚した場合、相手フィールドの表側表示モンスター１体を対象として発動できる。そのモンスターの効果をターン終了時まで無効にする。\n③：自分メインフェイズに発動できる。フィールドのこのカードを含む自分の手札・フィールドのモンスターを融合素材とし、機械族の融合モンスター１体を融合召喚する。",
-      "released": true,
-      "aliases": [
-        "機光竜－サイバー・ドラゴン",
-        "Revolution Cyber Dragon",
-        "机光龙-电子龙",
-        "机光龙－电子龙"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/22720",
-      "updatedAt": "2026-10-26T23:05:01.274Z",
-      "chineseNameSources": [
-        {
-          "name": "机光龙－电子龙",
-          "source": "baige",
-          "sourceField": "sc_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "22720"
-        },
-        {
-          "name": "机光龙-电子龙",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "22720"
-        },
-        {
-          "name": "机光龙－电子龙",
-          "source": "baige",
-          "sourceField": "md_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "22720"
-        },
-        {
-          "name": "机光龙-电子龙",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "22720"
-        },
-        {
-          "name": "机光龙-电子龙",
-          "source": "baige",
-          "sourceField": "cnocg_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "22720"
         }
       ]
     },
@@ -831039,18 +831099,18 @@
       "name": "四天の龍 スターヴ・ヴェノム・フュージョン・ドラゴン",
       "cnName": "四天之龙 凶饿毒融合龙",
       "jaName": "四天の龍 スターヴ・ヴェノム・フュージョン・ドラゴン",
-      "enName": "Starving Venom Fusion Dragon of the Four Heavenly Dragons",
+      "enName": "Starving Venom Fusion Dragon, Four Heavenly Dragons",
       "effectText": "フィールドの闇属性モンスター×２\nこのカード名はルール上「捕食植物」カードとしても扱う。\nこのカード名の①②の効果はそれぞれ１ターンに１度しか使用できない。\n①：このカードが特殊召喚した場合、フィールドの他の表側表示モンスター１体を対象として発動できる。そのモンスターの攻撃力は０になり、効果は無効化され、闇属性になる。\n②：相手が効果を発動した時に発動できる。このカードを含む自分・相手フィールドの闇属性モンスターを融合素材とし、闇属性の融合モンスター１体を融合召喚する。",
       "released": true,
       "aliases": [
         "四天の龍 スターヴ・ヴェノム・フュージョン・ドラゴン",
-        "Starving Venom Fusion Dragon of the Four Heavenly Dragons",
+        "Starving Venom Fusion Dragon, Four Heavenly Dragons",
         "四天之龙 凶饿毒融合龙",
         "四天之龙 凶饿猛毒结合龙",
         "四天之龙 饥怨毒融合龙"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/22728",
-      "updatedAt": "2026-10-26T23:05:02.537Z",
+      "updatedAt": "2026-11-04T01:37:46.522Z",
       "chineseNameSources": [
         {
           "name": "四天之龙 凶饿猛毒结合龙",
@@ -879059,18 +879119,18 @@
       "name": "ドラゴン・導きの呼笛",
       "cnName": "龙引导呼笛",
       "jaName": "ドラゴン・導きの呼笛",
-      "enName": "The Flute of Guiding Dragon",
+      "enName": "The Guiding Flute of Summoning Dragons",
       "effectText": "このカード名の①②の効果はそれぞれ１ターンに１度しか使用できない。\n①：フィールドに魔法使い族モンスターが存在する場合に発動できる。デッキからレベル５以上のドラゴン族モンスター１体を特殊召喚する。相手フィールドにモンスターが２体以上存在する場合、さらに特殊召喚したモンスターの同名モンスター１体をデッキから特殊召喚できる。このターン、自分はドラゴン族・魔法使い族モンスターしか特殊召喚できない。\n②：自分メインフェイズ２に、このターンに墓地へ送られたこのカードを除外して発動できる。自分は１枚ドローする。",
       "released": true,
       "aliases": [
         "ドラゴン・導きの呼笛",
-        "The Flute of Guiding Dragon",
+        "The Guiding Flute of Summoning Dragons",
         "龙引导呼笛",
         "龙之引导唤笛",
         "龙引导的呼笛"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/22718",
-      "updatedAt": "2026-10-26T23:05:03.204Z",
+      "updatedAt": "2026-11-04T01:37:51.383Z",
       "chineseNameSources": [
         {
           "name": "龙之引导唤笛",
@@ -903183,70 +903243,6 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "4798"
-        }
-      ]
-    },
-    {
-      "id": "23161",
-      "type": "spell",
-      "cardType": "spell",
-      "property": "field",
-      "properties": [
-        "field"
-      ],
-      "name": "完美世界-卡通世界",
-      "cnName": "完美世界-卡通世界",
-      "jaName": "完全なる世界 トゥーン・ワールド",
-      "enName": "Toon World the Perfect World",
-      "effectText": "このカード名の②の効果は１ターンに３度まで使用できる。\n①：このカードはフィールドゾーンに存在する限り、カード名を「トゥーン・ワールド」として扱う。\n②：１ターンに１度、自分メインフェイズに発動できる。「トゥーン」カードまたはそのカード名が記されたカード１枚をデッキから手札に加える。\n③：他のカードが発動した効果が適用される際に、自分フィールドのトゥーンモンスター１体をその効果処理後まで除外できる（このターン、このカード名のこの効果で元々のカード名が同じモンスターを除外できない）。",
-      "released": true,
-      "aliases": [
-        "完美世界-卡通世界",
-        "完全なる世界 トゥーン・ワールド",
-        "Toon World the Perfect World",
-        "完美世界 卡通世界",
-        "完美世界卡通世界",
-        "Perfect Toon World",
-        "完美卡通世界",
-        "完全的世界 卡通世界"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/23161",
-      "updatedAt": "2026-10-26T01:50:13.313Z",
-      "chineseNameSources": [
-        {
-          "name": "完美世界 卡通世界",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23161"
-        },
-        {
-          "name": "完美卡通世界",
-          "source": "baige",
-          "sourceField": "sc_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23161"
-        },
-        {
-          "name": "完美卡通世界",
-          "source": "baige",
-          "sourceField": "md_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23161"
-        },
-        {
-          "name": "完美世界 卡通世界",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23161"
-        },
-        {
-          "name": "完全的世界 卡通世界",
-          "source": "baige",
-          "sourceField": "cnocg_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23161"
         }
       ]
     },
@@ -929208,17 +929204,17 @@
       "name": "破械焔魔天ヤマ",
       "cnName": "破械焰魔天 阎摩",
       "jaName": "破械焔魔天ヤマ",
-      "enName": "Unchained Enma Lord Yama",
+      "enName": "Unchained Firelord of Yama",
       "effectText": "「破械神」モンスターを含むモンスター２体以上\nこのカード名の①②の効果はそれぞれ１ターンに１度しか使用できない。\n①：自分エンドフェイズに、このターンに破壊された自分の墓地の悪魔族モンスターを２体まで対象として発動できる。そのモンスターを特殊召喚する。この効果で特殊召喚したモンスターが自分フィールドに表側表示で存在する限り、自分は悪魔族モンスターしか特殊召喚できない。\n②：フィールドのこのカードが戦闘・効果で破壊される場合、代わりに自分か相手のフィールドの表側表示カード１枚を破壊できる。",
       "released": true,
       "aliases": [
         "破械焔魔天ヤマ",
-        "Unchained Enma Lord Yama",
+        "Unchained Firelord of Yama",
         "破械焰魔天 阎摩",
         "破械焰魔天 阎魔"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23173",
-      "updatedAt": "2026-10-26T23:05:03.925Z",
+      "updatedAt": "2026-11-04T01:37:56.678Z",
       "chineseNameSources": [
         {
           "name": "破械焰魔天 阎魔",
@@ -929258,6 +929254,54 @@
       ]
     },
     {
+      "id": "23176",
+      "type": "trap",
+      "cardType": "trap",
+      "name": "破械習合",
+      "cnName": "破械习合",
+      "jaName": "破械習合",
+      "enName": "Unchained Hunger",
+      "effectText": "このカード名の①②の効果はそれぞれ１ターンに１度しか使用できない。\n①：自分フィールドの「破械神」Lモンスターを含む、自分・相手フィールドの表側表示モンスター２体を対象として発動できる。そのモンスター２体のみを素材として悪魔族Lモンスター１体のL召喚を行う。\n②：セットされているこのカードが効果で破壊された場合に発動できる。デッキから「破械」モンスター１体を特殊召喚する。",
+      "released": true,
+      "aliases": [
+        "破械習合",
+        "Unchained Hunger",
+        "破械习合"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/23176",
+      "updatedAt": "2026-11-04T01:37:56.678Z",
+      "chineseNameSources": [
+        {
+          "name": "破械习合",
+          "source": "baige",
+          "sourceField": "sc_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23176"
+        },
+        {
+          "name": "破械习合",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23176"
+        },
+        {
+          "name": "破械习合",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23176"
+        },
+        {
+          "name": "破械习合",
+          "source": "baige",
+          "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23176"
+        }
+      ]
+    },
+    {
       "id": "23172",
       "type": "monster",
       "cardType": "monster",
@@ -929287,17 +929331,17 @@
       "name": "破械冥官カムラ",
       "cnName": "破械冥官 篁",
       "jaName": "破械冥官カムラ",
-      "enName": "Unchained Malevolent Magistrate Kamura",
+      "enName": "Unchained Zealot - Kamra",
       "effectText": "このカード名の①②の効果はそれぞれ１ターンに１度しか使用できない。\n①：自分フィールドのカードを３枚まで対象として発動できる。そのカードを破壊し、このカードを手札から特殊召喚する。その後、破壊したカードの元々の種類によって以下の効果をそれぞれ適用できる。\n●モンスター：自分は１枚ドローする。\n●魔法：フィールドのモンスター１体の表示形式を変更する。\n●罠：フィールドの他のカード１枚を破壊する。\n②：フィールドのこのカードが効果で破壊された場合に発動できる。フィールドのモンスターを全て破壊する。",
       "released": true,
       "aliases": [
         "破械冥官カムラ",
-        "Unchained Malevolent Magistrate Kamura",
+        "Unchained Zealot - Kamra",
         "破械冥官 篁",
         "破械冥官 迦牟罗"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23172",
-      "updatedAt": "2026-10-26T23:05:03.926Z",
+      "updatedAt": "2026-11-04T01:37:56.684Z",
       "chineseNameSources": [
         {
           "name": "破械冥官 迦牟罗",
@@ -929359,17 +929403,17 @@
       "name": "破械式鬼シャラ",
       "cnName": "破械式鬼 萨拉",
       "jaName": "破械式鬼シャラ",
-      "enName": "Unchained Ogre Shara",
+      "enName": "Unchained Oni of Shara",
       "effectText": "このカード名の①②の効果はそれぞれ１ターンに１度しか使用できない。\n①：自分・相手のメインフェイズに、このカードを手札から捨てて発動できる。手札から悪魔族モンスター１体を特殊召喚する。その後、自分フィールドのカード１枚を破壊する。\n②：このカードが墓地に存在する状態で、フィールドのカードが戦闘または「破械式鬼シャラ」以外のカードの効果で破壊された場合に発動できる。このカードを手札に加えるか特殊召喚する。この効果で特殊召喚したこのカードは、フィールドから離れた場合にデッキの一番下に戻る。",
       "released": true,
       "aliases": [
         "破械式鬼シャラ",
-        "Unchained Ogre Shara",
+        "Unchained Oni of Shara",
         "破械式鬼 萨拉",
         "破械式鬼 奢罗"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23170",
-      "updatedAt": "2026-10-26T23:05:03.925Z",
+      "updatedAt": "2026-11-04T01:37:56.684Z",
       "chineseNameSources": [
         {
           "name": "破械式鬼 奢罗",
@@ -929431,17 +929475,17 @@
       "name": "破械式鬼シュマ",
       "cnName": "破械式鬼 斯玛",
       "jaName": "破械式鬼シュマ",
-      "enName": "Unchained Ogre Shma",
+      "enName": "Unchained Oni of Shyma",
       "effectText": "このカード名の①②の効果はそれぞれ１ターンに１度しか使用できない。\n①：このカードが召喚した場合に発動できる。「破械式鬼シュマ」を除く、レベル４以下の「破械」モンスター１体をデッキから特殊召喚する。その後、自分フィールドのカード１枚を破壊する。このターン、自分は悪魔族モンスターしか特殊召喚できない。\n②：フィールドのこのカードが戦闘または「破械式鬼シュマ」以外のカードの効果で破壊された場合に発動できる。手札・デッキから「破械式鬼シュマ」以外の「破械」モンスター１体を特殊召喚する。",
       "released": true,
       "aliases": [
         "破械式鬼シュマ",
-        "Unchained Ogre Shma",
+        "Unchained Oni of Shyma",
         "破械式鬼 斯玛",
         "破械式鬼 修摩"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23171",
-      "updatedAt": "2026-10-26T23:05:03.926Z",
+      "updatedAt": "2026-11-04T01:37:56.686Z",
       "chineseNameSources": [
         {
           "name": "破械式鬼 修摩",
@@ -929590,18 +929634,18 @@
       "name": "破械神雙ラギア",
       "cnName": "破械神双 罗寂刹",
       "jaName": "破械神雙ラギア",
-      "enName": "Unchained Soul Rage Abominator",
+      "enName": "Unchained Soul of Abominable Rage",
       "effectText": "悪魔族モンスターを含むモンスター２体以上\nこのカード名の①②の効果はそれぞれ１ターンに１度しか使用できない。\n①：相手がモンスターを表側表示で特殊召喚した場合、その内の１体を対象として発動できる。自分フィールドの悪魔族モンスター１体を破壊し、対象のモンスターの効果をターン終了時まで無効にする。\n②：自分フィールドにリンク４以上の「破械」Lモンスターが存在し、フィールドのモンスターの効果が発動した時、墓地のこのカードを除外して発動できる。その効果を発動したモンスターを破壊する。",
       "released": true,
       "aliases": [
         "破械神雙ラギア",
-        "Unchained Soul Rage Abominator",
+        "Unchained Soul of Abominable Rage",
         "破械神双 罗寂刹",
         "破械神双 拉基安",
         "破械神双 罗仪亚"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23174",
-      "updatedAt": "2026-10-26T23:05:03.926Z",
+      "updatedAt": "2026-11-04T01:37:56.707Z",
       "chineseNameSources": [
         {
           "name": "破械神双 拉基安",
@@ -930035,54 +930079,6 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "14670"
-        }
-      ]
-    },
-    {
-      "id": "23176",
-      "type": "trap",
-      "cardType": "trap",
-      "name": "破械習合",
-      "jaName": "破械習合",
-      "enName": "Unchained Syncretism",
-      "effectText": "このカード名の①②の効果はそれぞれ１ターンに１度しか使用できない。\n①：自分フィールドの「破械神」Lモンスターを含む、自分・相手フィールドの表側表示モンスター２体を対象として発動できる。そのモンスター２体のみを素材として悪魔族Lモンスター１体のL召喚を行う。\n②：セットされているこのカードが効果で破壊された場合に発動できる。デッキから「破械」モンスター１体を特殊召喚する。",
-      "released": true,
-      "aliases": [
-        "破械習合",
-        "Unchained Syncretism",
-        "破械习合"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/23176",
-      "updatedAt": "2026-09-12T21:07:34.413Z",
-      "cnName": "破械习合",
-      "chineseNameSources": [
-        {
-          "name": "破械习合",
-          "source": "baige",
-          "sourceField": "sc_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23176"
-        },
-        {
-          "name": "破械习合",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23176"
-        },
-        {
-          "name": "破械习合",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23176"
-        },
-        {
-          "name": "破械习合",
-          "source": "baige",
-          "sourceField": "cnocg_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23176"
         }
       ]
     },

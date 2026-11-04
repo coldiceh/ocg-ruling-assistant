@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-03T03:05:20.610Z",
+  "generatedAt": "2026-11-04T01:38:25.084Z",
   "records": [
     {
       "id": "21385",
@@ -35621,6 +35621,74 @@
       ],
       "monsterProperties": [
         "Dinosaur",
+        "Effect"
+      ]
+    },
+    {
+      "id": "23157",
+      "name": "コミックキャット",
+      "cnName": "漫画猫",
+      "jaName": "コミックキャット",
+      "enName": "Animimicat",
+      "aliases": [
+        "コミックキャット",
+        "Animimicat",
+        "漫画猫"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "漫画猫",
+          "source": "baige",
+          "sourceField": "sc_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23157"
+        },
+        {
+          "name": "漫画猫",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23157"
+        },
+        {
+          "name": "漫画猫",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23157"
+        },
+        {
+          "name": "漫画猫",
+          "source": "baige",
+          "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23157"
+        }
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Beast",
+      "attribute": "dark",
+      "attack": 0,
+      "defense": 0,
+      "atk": 0,
+      "def": 0,
+      "level": 1,
+      "propertyIds": [
+        "3",
+        "4"
+      ],
+      "properties": [
+        "Beast",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "3",
+        "4"
+      ],
+      "monsterProperties": [
+        "Beast",
         "Effect"
       ]
     },
@@ -131211,10 +131279,10 @@
       "name": "カオスエンド・ルーラー －開闢と終焉の支配者－",
       "cnName": "混沌终结支配者-开辟与终焉的支配者-",
       "jaName": "カオスエンド・ルーラー －開闢と終焉の支配者－",
-      "enName": "Chaos End Ruler - Ruler of the Beginning and the End",
+      "enName": "Chaos End Ruler - Master of the Beginning and End",
       "aliases": [
         "カオスエンド・ルーラー －開闢と終焉の支配者－",
-        "Chaos End Ruler - Ruler of the Beginning and the End",
+        "Chaos End Ruler - Master of the Beginning and End",
         "混沌终结支配者-开辟与终焉的支配者-",
         "混沌终末统御者 －开辟与终焉的支配者－",
         "混沌终焉之王-开辟与终焉的支配者-"
@@ -131261,22 +131329,18 @@
       "level": 10,
       "propertyIds": [
         "12",
-        "2",
         "4"
       ],
       "properties": [
         "Warrior",
-        "Special Summon Monster",
         "Effect"
       ],
       "monsterPropertyIds": [
         "12",
-        "2",
         "4"
       ],
       "monsterProperties": [
         "Warrior",
-        "Special Summon Monster",
         "Effect"
       ]
     },
@@ -142467,10 +142531,10 @@
       "name": "四天の龍 クリアウィング・シンクロ・ドラゴン",
       "cnName": "四天之龙 幻透翼同调龙",
       "jaName": "四天の龍 クリアウィング・シンクロ・ドラゴン",
-      "enName": "Clear Wing Synchro Dragon of the Four Heavenly Dragons",
+      "enName": "Clear Wing Synchro Dragon, Four Heavenly Dragons",
       "aliases": [
         "四天の龍 クリアウィング・シンクロ・ドラゴン",
-        "Clear Wing Synchro Dragon of the Four Heavenly Dragons",
+        "Clear Wing Synchro Dragon, Four Heavenly Dragons",
         "四天之龙 幻透翼同调龙",
         "四天之龙 清透翼同步龙",
         "四天之龙 清透翼同调龙"
@@ -148400,74 +148464,6 @@
       ],
       "monsterProperties": [
         "Warrior",
-        "Effect"
-      ]
-    },
-    {
-      "id": "23157",
-      "name": "コミックキャット",
-      "cnName": "漫画猫",
-      "jaName": "コミックキャット",
-      "enName": "Comic Cat",
-      "aliases": [
-        "コミックキャット",
-        "Comic Cat",
-        "漫画猫"
-      ],
-      "chineseNameSources": [
-        {
-          "name": "漫画猫",
-          "source": "baige",
-          "sourceField": "sc_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23157"
-        },
-        {
-          "name": "漫画猫",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23157"
-        },
-        {
-          "name": "漫画猫",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23157"
-        },
-        {
-          "name": "漫画猫",
-          "source": "baige",
-          "sourceField": "cnocg_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23157"
-        }
-      ],
-      "released": true,
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Beast",
-      "attribute": "dark",
-      "attack": 0,
-      "defense": 0,
-      "atk": 0,
-      "def": 0,
-      "level": 1,
-      "propertyIds": [
-        "3",
-        "4"
-      ],
-      "properties": [
-        "Beast",
-        "Effect"
-      ],
-      "monsterPropertyIds": [
-        "3",
-        "4"
-      ],
-      "monsterProperties": [
-        "Beast",
         "Effect"
       ]
     },
@@ -159120,10 +159116,10 @@
       "name": "赤き竜 ケッツァーコアトル",
       "cnName": "红龙 魁札尔科亚特尔",
       "jaName": "赤き竜 ケッツァーコアトル",
-      "enName": "Crimson Dragon Quetzacoatl",
+      "enName": "Crimson Dragon Quetzalcoatl",
       "aliases": [
         "赤き竜 ケッツァーコアトル",
-        "Crimson Dragon Quetzacoatl",
+        "Crimson Dragon Quetzalcoatl",
         "红龙 魁札尔科亚特尔",
         "赤龙 克察尔科亚特尔",
         "红龙 克察尔科亚特尔"
@@ -171258,6 +171254,82 @@
       ]
     },
     {
+      "id": "22720",
+      "name": "機光竜－サイバー・ドラゴン",
+      "cnName": "机光龙-电子龙",
+      "jaName": "機光竜－サイバー・ドラゴン",
+      "enName": "Cyber Dragon, the Luminous Mech Dragon",
+      "aliases": [
+        "機光竜－サイバー・ドラゴン",
+        "Cyber Dragon, the Luminous Mech Dragon",
+        "机光龙-电子龙",
+        "机光龙－电子龙"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "机光龙－电子龙",
+          "source": "baige",
+          "sourceField": "sc_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "22720"
+        },
+        {
+          "name": "机光龙-电子龙",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "22720"
+        },
+        {
+          "name": "机光龙－电子龙",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "22720"
+        },
+        {
+          "name": "机光龙-电子龙",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "22720"
+        },
+        {
+          "name": "机光龙-电子龙",
+          "source": "baige",
+          "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "22720"
+        }
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Machine",
+      "attribute": "light",
+      "attack": 2100,
+      "defense": 1600,
+      "atk": 2100,
+      "def": 1600,
+      "level": 5,
+      "propertyIds": [
+        "9",
+        "4"
+      ],
+      "properties": [
+        "Machine",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "9",
+        "4"
+      ],
+      "monsterProperties": [
+        "Machine",
+        "Effect"
+      ]
+    },
+    {
       "id": "14171",
       "name": "电子蛋天使",
       "cnName": "电子蛋天使",
@@ -171556,10 +171628,10 @@
       "name": "終撃竜－サイバー・エンド・ドラゴン",
       "cnName": "终击龙-电子终结龙",
       "jaName": "終撃竜－サイバー・エンド・ドラゴン",
-      "enName": "Cyber End Dragon the Decisive Strike Dragon",
+      "enName": "Cyber End Dragon, the Final Strike Dragon",
       "aliases": [
         "終撃竜－サイバー・エンド・ドラゴン",
-        "Cyber End Dragon the Decisive Strike Dragon",
+        "Cyber End Dragon, the Final Strike Dragon",
         "终击龙-电子终结龙",
         "终击龙－电子终极龙"
       ],
@@ -193322,10 +193394,10 @@
       "name": "闇の神－ダークゴッド",
       "cnName": "暗之神",
       "jaName": "闇の神－ダークゴッド",
-      "enName": "Dark Creator",
+      "enName": "Lord of Darkness",
       "aliases": [
         "闇の神－ダークゴッド",
-        "Dark Creator",
+        "Lord of Darkness",
         "暗之神",
         "暗之神-黑暗神"
       ],
@@ -198864,10 +198936,10 @@
       "name": "四天の龍 ダーク・リベリオン・エクシーズ・ドラゴン",
       "cnName": "四天之龙 暗叛逆超量龙",
       "jaName": "四天の龍 ダーク・リベリオン・エクシーズ・ドラゴン",
-      "enName": "Dark Rebellion Xyz Dragon of the Four Heavenly Dragons",
+      "enName": "Dark Rebellion Xyz Dragon, Four Heavenly Dragons",
       "aliases": [
         "四天の龍 ダーク・リベリオン・エクシーズ・ドラゴン",
-        "Dark Rebellion Xyz Dragon of the Four Heavenly Dragons",
+        "Dark Rebellion Xyz Dragon, Four Heavenly Dragons",
         "四天之龙 暗叛逆超量龙",
         "四天之龙 暗反叛超量龙",
         "四天之龙 暗叛逆XYZ龙",
@@ -427859,6 +427931,52 @@
       ]
     },
     {
+      "id": "22742",
+      "name": "HRUM－アルティメット・フォース",
+      "cnName": "超升阶魔法-究极之力",
+      "jaName": "HRUM－アルティメット・フォース",
+      "enName": "Hyper Rank-Up-Magic Ultimate Force",
+      "aliases": [
+        "HRUM－アルティメット・フォース",
+        "Hyper Rank-Up-Magic Ultimate Force",
+        "超升阶魔法-究极之力",
+        "超升阶魔法－究极之力"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "超升阶魔法－究极之力",
+          "source": "baige",
+          "sourceField": "sc_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "22742"
+        },
+        {
+          "name": "超升阶魔法-究极之力",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "22742"
+        },
+        {
+          "name": "超升阶魔法-究极之力",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "22742"
+        },
+        {
+          "name": "超升阶魔法-究极之力",
+          "source": "baige",
+          "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "22742"
+        }
+      ],
+      "released": true,
+      "type": "spell",
+      "cardType": "spell"
+    },
+    {
       "id": "16473",
       "name": "超升阶魔法－乌托邦之力",
       "cnName": "超升阶魔法－乌托邦之力",
@@ -428052,52 +428170,6 @@
         "Fish",
         "Effect"
       ]
-    },
-    {
-      "id": "22742",
-      "name": "HRUM－アルティメット・フォース",
-      "cnName": "超升阶魔法-究极之力",
-      "jaName": "HRUM－アルティメット・フォース",
-      "enName": "Hyper-Rank-Up-Magic Ultimate Force",
-      "aliases": [
-        "HRUM－アルティメット・フォース",
-        "Hyper-Rank-Up-Magic Ultimate Force",
-        "超升阶魔法-究极之力",
-        "超升阶魔法－究极之力"
-      ],
-      "chineseNameSources": [
-        {
-          "name": "超升阶魔法－究极之力",
-          "source": "baige",
-          "sourceField": "sc_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "22742"
-        },
-        {
-          "name": "超升阶魔法-究极之力",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "22742"
-        },
-        {
-          "name": "超升阶魔法-究极之力",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "22742"
-        },
-        {
-          "name": "超升阶魔法-究极之力",
-          "source": "baige",
-          "sourceField": "cnocg_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "22742"
-        }
-      ],
-      "released": true,
-      "type": "spell",
-      "cardType": "spell"
     },
     {
       "id": "22982",
@@ -637181,6 +637253,66 @@
       ]
     },
     {
+      "id": "23161",
+      "name": "完美世界-卡通世界",
+      "cnName": "完美世界-卡通世界",
+      "jaName": "完全なる世界 トゥーン・ワールド",
+      "enName": "Perfect Toon World",
+      "aliases": [
+        "完美世界-卡通世界",
+        "完全なる世界 トゥーン・ワールド",
+        "Perfect Toon World",
+        "Toon World the Perfect World",
+        "完美世界 卡通世界",
+        "完美世界卡通世界",
+        "完美卡通世界",
+        "完全的世界 卡通世界"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "完美世界 卡通世界",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23161"
+        },
+        {
+          "name": "完美卡通世界",
+          "source": "baige",
+          "sourceField": "sc_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23161"
+        },
+        {
+          "name": "完美卡通世界",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23161"
+        },
+        {
+          "name": "完美世界 卡通世界",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23161"
+        },
+        {
+          "name": "完全的世界 卡通世界",
+          "source": "baige",
+          "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23161"
+        }
+      ],
+      "released": true,
+      "type": "spell",
+      "cardType": "spell",
+      "properties": [
+        "field"
+      ]
+    },
+    {
       "id": "4073",
       "name": "究極完全態・グレート・モス",
       "cnName": "究极完全态大飞蛾",
@@ -694990,10 +695122,10 @@
       "name": "レッド・デーモンズ・チェーン",
       "cnName": "红莲魔族之链",
       "jaName": "レッド・デーモンズ・チェーン",
-      "enName": "Red Dragon Archfiend's Chain",
+      "enName": "Red Dragon Archfiend's Chains",
       "aliases": [
         "レッド・デーモンズ・チェーン",
-        "Red Dragon Archfiend's Chain",
+        "Red Dragon Archfiend's Chains",
         "红莲魔族之链",
         "暗红恶魔锁链",
         "真红恶魔之锁链"
@@ -709259,82 +709391,6 @@
       "released": true,
       "type": "spell",
       "cardType": "spell"
-    },
-    {
-      "id": "22720",
-      "name": "機光竜－サイバー・ドラゴン",
-      "cnName": "机光龙-电子龙",
-      "jaName": "機光竜－サイバー・ドラゴン",
-      "enName": "Revolution Cyber Dragon",
-      "aliases": [
-        "機光竜－サイバー・ドラゴン",
-        "Revolution Cyber Dragon",
-        "机光龙-电子龙",
-        "机光龙－电子龙"
-      ],
-      "chineseNameSources": [
-        {
-          "name": "机光龙－电子龙",
-          "source": "baige",
-          "sourceField": "sc_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "22720"
-        },
-        {
-          "name": "机光龙-电子龙",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "22720"
-        },
-        {
-          "name": "机光龙－电子龙",
-          "source": "baige",
-          "sourceField": "md_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "22720"
-        },
-        {
-          "name": "机光龙-电子龙",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "22720"
-        },
-        {
-          "name": "机光龙-电子龙",
-          "source": "baige",
-          "sourceField": "cnocg_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "22720"
-        }
-      ],
-      "released": true,
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Machine",
-      "attribute": "light",
-      "attack": 2100,
-      "defense": 1600,
-      "atk": 2100,
-      "def": 1600,
-      "level": 5,
-      "propertyIds": [
-        "9",
-        "4"
-      ],
-      "properties": [
-        "Machine",
-        "Effect"
-      ],
-      "monsterPropertyIds": [
-        "9",
-        "4"
-      ],
-      "monsterProperties": [
-        "Machine",
-        "Effect"
-      ]
     },
     {
       "id": "18789",
@@ -792286,10 +792342,10 @@
       "name": "四天の龍 スターヴ・ヴェノム・フュージョン・ドラゴン",
       "cnName": "四天之龙 凶饿毒融合龙",
       "jaName": "四天の龍 スターヴ・ヴェノム・フュージョン・ドラゴン",
-      "enName": "Starving Venom Fusion Dragon of the Four Heavenly Dragons",
+      "enName": "Starving Venom Fusion Dragon, Four Heavenly Dragons",
       "aliases": [
         "四天の龍 スターヴ・ヴェノム・フュージョン・ドラゴン",
-        "Starving Venom Fusion Dragon of the Four Heavenly Dragons",
+        "Starving Venom Fusion Dragon, Four Heavenly Dragons",
         "四天之龙 凶饿毒融合龙",
         "四天之龙 凶饿猛毒结合龙",
         "四天之龙 饥怨毒融合龙"
@@ -838101,10 +838157,10 @@
       "name": "ドラゴン・導きの呼笛",
       "cnName": "龙引导呼笛",
       "jaName": "ドラゴン・導きの呼笛",
-      "enName": "The Flute of Guiding Dragon",
+      "enName": "The Guiding Flute of Summoning Dragons",
       "aliases": [
         "ドラゴン・導きの呼笛",
-        "The Flute of Guiding Dragon",
+        "The Guiding Flute of Summoning Dragons",
         "龙引导呼笛",
         "龙之引导唤笛",
         "龙引导的呼笛"
@@ -861059,66 +861115,6 @@
       "cardType": "spell",
       "properties": [
         "continuous"
-      ]
-    },
-    {
-      "id": "23161",
-      "name": "完美世界-卡通世界",
-      "cnName": "完美世界-卡通世界",
-      "jaName": "完全なる世界 トゥーン・ワールド",
-      "enName": "Toon World the Perfect World",
-      "aliases": [
-        "完美世界-卡通世界",
-        "完全なる世界 トゥーン・ワールド",
-        "Toon World the Perfect World",
-        "完美世界 卡通世界",
-        "完美世界卡通世界",
-        "Perfect Toon World",
-        "完美卡通世界",
-        "完全的世界 卡通世界"
-      ],
-      "chineseNameSources": [
-        {
-          "name": "完美世界 卡通世界",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23161"
-        },
-        {
-          "name": "完美卡通世界",
-          "source": "baige",
-          "sourceField": "sc_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23161"
-        },
-        {
-          "name": "完美卡通世界",
-          "source": "baige",
-          "sourceField": "md_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23161"
-        },
-        {
-          "name": "完美世界 卡通世界",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23161"
-        },
-        {
-          "name": "完全的世界 卡通世界",
-          "source": "baige",
-          "sourceField": "cnocg_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23161"
-        }
-      ],
-      "released": true,
-      "type": "spell",
-      "cardType": "spell",
-      "properties": [
-        "field"
       ]
     },
     {
@@ -885829,10 +885825,10 @@
       "name": "破械焔魔天ヤマ",
       "cnName": "破械焰魔天 阎摩",
       "jaName": "破械焔魔天ヤマ",
-      "enName": "Unchained Enma Lord Yama",
+      "enName": "Unchained Firelord of Yama",
       "aliases": [
         "破械焔魔天ヤマ",
-        "Unchained Enma Lord Yama",
+        "Unchained Firelord of Yama",
         "破械焰魔天 阎摩",
         "破械焰魔天 阎魔"
       ],
@@ -885905,14 +885901,59 @@
       ]
     },
     {
+      "id": "23176",
+      "name": "破械習合",
+      "cnName": "破械习合",
+      "jaName": "破械習合",
+      "enName": "Unchained Hunger",
+      "aliases": [
+        "破械習合",
+        "Unchained Hunger",
+        "破械习合"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "破械习合",
+          "source": "baige",
+          "sourceField": "sc_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23176"
+        },
+        {
+          "name": "破械习合",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23176"
+        },
+        {
+          "name": "破械习合",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23176"
+        },
+        {
+          "name": "破械习合",
+          "source": "baige",
+          "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23176"
+        }
+      ],
+      "released": true,
+      "type": "trap",
+      "cardType": "trap"
+    },
+    {
       "id": "23172",
       "name": "破械冥官カムラ",
       "cnName": "破械冥官 篁",
       "jaName": "破械冥官カムラ",
-      "enName": "Unchained Malevolent Magistrate Kamura",
+      "enName": "Unchained Zealot - Kamra",
       "aliases": [
         "破械冥官カムラ",
-        "Unchained Malevolent Magistrate Kamura",
+        "Unchained Zealot - Kamra",
         "破械冥官 篁",
         "破械冥官 迦牟罗"
       ],
@@ -885978,10 +886019,10 @@
       "name": "破械式鬼シャラ",
       "cnName": "破械式鬼 萨拉",
       "jaName": "破械式鬼シャラ",
-      "enName": "Unchained Ogre Shara",
+      "enName": "Unchained Oni of Shara",
       "aliases": [
         "破械式鬼シャラ",
-        "Unchained Ogre Shara",
+        "Unchained Oni of Shara",
         "破械式鬼 萨拉",
         "破械式鬼 奢罗"
       ],
@@ -886047,10 +886088,10 @@
       "name": "破械式鬼シュマ",
       "cnName": "破械式鬼 斯玛",
       "jaName": "破械式鬼シュマ",
-      "enName": "Unchained Ogre Shma",
+      "enName": "Unchained Oni of Shyma",
       "aliases": [
         "破械式鬼シュマ",
-        "Unchained Ogre Shma",
+        "Unchained Oni of Shyma",
         "破械式鬼 斯玛",
         "破械式鬼 修摩"
       ],
@@ -886196,10 +886237,10 @@
       "name": "破械神雙ラギア",
       "cnName": "破械神双 罗寂刹",
       "jaName": "破械神雙ラギア",
-      "enName": "Unchained Soul Rage Abominator",
+      "enName": "Unchained Soul of Abominable Rage",
       "aliases": [
         "破械神雙ラギア",
-        "Unchained Soul Rage Abominator",
+        "Unchained Soul of Abominable Rage",
         "破械神双 罗寂刹",
         "破械神双 拉基安",
         "破械神双 罗仪亚"
@@ -886654,51 +886695,6 @@
         "Link",
         "Effect"
       ]
-    },
-    {
-      "id": "23176",
-      "name": "破械習合",
-      "cnName": "破械习合",
-      "jaName": "破械習合",
-      "enName": "Unchained Syncretism",
-      "aliases": [
-        "破械習合",
-        "Unchained Syncretism",
-        "破械习合"
-      ],
-      "chineseNameSources": [
-        {
-          "name": "破械习合",
-          "source": "baige",
-          "sourceField": "sc_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23176"
-        },
-        {
-          "name": "破械习合",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23176"
-        },
-        {
-          "name": "破械习合",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23176"
-        },
-        {
-          "name": "破械习合",
-          "source": "baige",
-          "sourceField": "cnocg_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23176"
-        }
-      ],
-      "released": true,
-      "type": "trap",
-      "cardType": "trap"
     },
     {
       "id": "14635",
