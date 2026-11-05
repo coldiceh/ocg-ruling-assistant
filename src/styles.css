@@ -45,6 +45,12 @@
   --panel: rgba(245, 246, 247, 0.95);
   --panel-strong: rgba(255, 255, 255, 0.98);
   --panel-soft: rgba(233, 236, 239, 0.96);
+  /* Large panels (glass) and the reading surfaces inside them. Opaque fallbacks here;
+     the translucent values apply only where backdrop-filter is supported (see below). */
+  --panel-glass: rgba(245, 246, 247, 0.94);
+  --panel-read: rgba(250, 251, 252, 0.96);
+  --plate-glass: #111417;
+  --glass-filter: none;
   --plate: #111417;
   --plate-ink: #f5f6f7;
   --plate-muted: #aab2b9;
@@ -85,7 +91,7 @@ body.theme-night {
   color-scheme: dark;
   --scene-image: url("../assets/bg-night.png");
   --scene-image-set: image-set(url("../assets/bg-night.webp") type("image/webp"), url("../assets/bg-night.png") type("image/png"));
-  --scene-scrim: linear-gradient(180deg, rgba(4, 6, 9, 0.18) 0%, rgba(4, 6, 9, 0.48) 50%, rgba(4, 6, 9, 0.84) 100%);
+  --scene-scrim: linear-gradient(180deg, rgba(4, 6, 9, 0.08) 0%, rgba(4, 6, 9, 0.3) 50%, rgba(4, 6, 9, 0.66) 100%);
   --scene-opacity: 1;
   --scanline: rgba(255, 255, 255, 0.028);
   --grid-line: rgba(91, 228, 255, 0.05);
@@ -94,6 +100,9 @@ body.theme-night {
   --panel: rgba(11, 14, 18, 0.94);
   --panel-strong: rgba(16, 20, 25, 0.97);
   --panel-soft: rgba(22, 26, 32, 0.95);
+  --panel-glass: rgba(11, 14, 18, 0.94);
+  --panel-read: rgba(14, 18, 23, 0.95);
+  --plate-glass: rgba(11, 14, 18, 0.94);
   --plate: rgba(11, 14, 18, 0.94);
   --plate-ink: #f2f6f8;
   --plate-muted: #95a1ab;
@@ -118,6 +127,26 @@ body.theme-night {
   --hatch: repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0 1px, transparent 1px 7px);
   --hazard: repeating-linear-gradient(-45deg, #0b0e12 0 5px, var(--amber) 5px 10px);
   --shadow: 0 18px 44px rgba(0, 0, 0, 0.5);
+}
+
+/* "More see-through": large panels let the scene through, blurred; reading surfaces stay calmer. */
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  :root {
+    --panel-glass: rgba(245, 246, 247, 0.85);
+    --panel-read: rgba(250, 251, 252, 0.9);
+    --panel-strong: rgba(255, 255, 255, 0.9);
+    --panel-soft: rgba(233, 236, 239, 0.9);
+    --plate-glass: rgba(17, 20, 23, 0.84);
+    --glass-filter: blur(12px) saturate(1.15);
+  }
+
+  body.theme-night {
+    --panel-glass: rgba(11, 14, 18, 0.8);
+    --panel-read: rgba(14, 18, 23, 0.88);
+    --panel-strong: rgba(16, 20, 25, 0.88);
+    --panel-soft: rgba(22, 26, 32, 0.88);
+    --plate-glass: rgba(11, 14, 18, 0.8);
+  }
 }
 
 /* Older rule names kept as aliases so the admin console needs no separate theme.
@@ -260,7 +289,9 @@ a {
   position: relative;
   padding: 12px 60px 13px 18px;
   color: var(--plate-ink);
-  background: var(--plate);
+  background: var(--plate-glass);
+  -webkit-backdrop-filter: var(--glass-filter);
+  backdrop-filter: var(--glass-filter);
   border-left: 4px solid var(--amber);
   clip-path: polygon(0 0, calc(100% - 18px) 0, 100% 18px, 100% 100%, 0 100%);
 }
@@ -401,7 +432,7 @@ h3 {
   padding-left: 18px;
   color: var(--warn);
   border-color: var(--warn);
-  background: var(--panel-strong);
+  background: var(--panel);
   white-space: normal;
   overflow-wrap: anywhere;
   position: relative;
@@ -509,7 +540,9 @@ h3 {
 .ask-panel,
 .result-block,
 dialog {
-  background: var(--panel);
+  background: var(--panel-glass);
+  -webkit-backdrop-filter: var(--glass-filter);
+  backdrop-filter: var(--glass-filter);
   border: 1px solid var(--line);
   border-radius: 0;
 }
@@ -917,7 +950,9 @@ label[for="evidenceSelector"] > span::before {
   border: 1px solid var(--line);
   border-left: 3px solid var(--amber);
   border-radius: 0;
-  background: var(--panel-soft);
+  background: var(--panel-glass);
+  -webkit-backdrop-filter: var(--glass-filter);
+  backdrop-filter: var(--glass-filter);
 }
 
 .budget-label {
@@ -1640,7 +1675,9 @@ label[for="evidenceSelector"] > span::before {
   padding: 12px 16px;
   border: 1px solid var(--line-soft);
   border-radius: 0;
-  background: var(--hatch), var(--panel-soft);
+  background: var(--hatch), var(--panel-glass);
+  -webkit-backdrop-filter: var(--glass-filter);
+  backdrop-filter: var(--glass-filter);
 }
 
 .disclaimer-panel h2 {
@@ -1722,7 +1759,6 @@ svg {
   min-width: 0;
   position: relative;
   padding: 16px 18px 18px;
-  background: var(--panel-strong);
   border-color: var(--line);
   clip-path: polygon(0 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% 100%, 0 100%);
 }
@@ -1762,6 +1798,11 @@ svg {
 
 .risk-block {
   align-self: start;
+}
+
+.verdict-block,
+.source-trace {
+  background: var(--panel-read);
 }
 
 .verdict-block {
