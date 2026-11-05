@@ -91,7 +91,7 @@ body.theme-night {
   color-scheme: dark;
   --scene-image: url("../assets/bg-night.png");
   --scene-image-set: image-set(url("../assets/bg-night.webp") type("image/webp"), url("../assets/bg-night.png") type("image/png"));
-  --scene-scrim: linear-gradient(180deg, rgba(4, 6, 9, 0.08) 0%, rgba(4, 6, 9, 0.3) 50%, rgba(4, 6, 9, 0.66) 100%);
+  --scene-scrim: linear-gradient(180deg, rgba(4, 6, 9, 0.02) 0%, rgba(4, 6, 9, 0.16) 50%, rgba(4, 6, 9, 0.48) 100%);
   --scene-opacity: 1;
   --scanline: rgba(255, 255, 255, 0.028);
   --grid-line: rgba(91, 228, 255, 0.05);
@@ -131,21 +131,23 @@ body.theme-night {
 
 /* "More see-through": large panels let the scene through, blurred; reading surfaces stay calmer. */
 @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  /* Three layers: outer panels (glass), major cards nested in the input card (read),
+     and inner reading blocks (strong/soft). */
   :root {
-    --panel-glass: rgba(245, 246, 247, 0.85);
-    --panel-read: rgba(250, 251, 252, 0.9);
-    --panel-strong: rgba(255, 255, 255, 0.9);
-    --panel-soft: rgba(233, 236, 239, 0.9);
-    --plate-glass: rgba(17, 20, 23, 0.84);
-    --glass-filter: blur(12px) saturate(1.15);
+    --panel-glass: rgba(245, 246, 247, 0.79);
+    --panel-read: rgba(250, 251, 252, 0.82);
+    --panel-strong: rgba(255, 255, 255, 0.87);
+    --panel-soft: rgba(233, 236, 239, 0.87);
+    --plate-glass: rgba(17, 20, 23, 0.8);
+    --glass-filter: blur(14px) saturate(1.15);
   }
 
   body.theme-night {
-    --panel-glass: rgba(11, 14, 18, 0.8);
-    --panel-read: rgba(14, 18, 23, 0.88);
-    --panel-strong: rgba(16, 20, 25, 0.88);
-    --panel-soft: rgba(22, 26, 32, 0.88);
-    --plate-glass: rgba(11, 14, 18, 0.8);
+    --panel-glass: rgba(11, 14, 18, 0.56);
+    --panel-read: rgba(14, 18, 23, 0.68);
+    --panel-strong: rgba(16, 20, 25, 0.8);
+    --panel-soft: rgba(22, 26, 32, 0.8);
+    --plate-glass: rgba(11, 14, 18, 0.58);
   }
 }
 
