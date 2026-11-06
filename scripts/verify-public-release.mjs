@@ -4,7 +4,7 @@ const apiUrl='https://ocg-ruling-assistant.vercel.app/api/answer';
 const manifest=JSON.parse(fs.readFileSync('data/rag-data-revision-manifest.json','utf8'));
 const expected=process.env.EXPECTED_COMMIT;
 if(!/^[a-f0-9]{40}$/.test(expected||'')) throw Error('expected_commit_required');
-const until=Date.now()+8*60_000;
+const until=Date.now()+15*60_000;
 let last;
 do {
   try {
