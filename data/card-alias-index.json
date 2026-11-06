@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-05T01:41:00.402Z",
+  "generatedAt": "2026-11-06T01:49:33.477Z",
   "records": [
     {
       "alias": "“K9刑侦案件”",
@@ -6296,6 +6296,34 @@
       "language": "zh"
     },
     {
+      "alias": "白鴉の騎士アイトワラス",
+      "normalizedAlias": "白鴉の騎士アイトワラス",
+      "cardId": "23849",
+      "cardName": "白鴉の騎士アイトワラス",
+      "language": "ja"
+    },
+    {
+      "alias": "白鸦骑士 艾特瓦拉斯",
+      "normalizedAlias": "白鸦骑士 艾特瓦拉斯",
+      "cardId": "23849",
+      "cardName": "白鴉の騎士アイトワラス",
+      "language": "zh"
+    },
+    {
+      "alias": "Aitvaras, Knight of the Winter Raven",
+      "normalizedAlias": "aitvaras, knight of the winter raven",
+      "cardId": "23849",
+      "cardName": "白鴉の騎士アイトワラス",
+      "language": "en"
+    },
+    {
+      "alias": "白鸦骑士 埃特瓦罗斯",
+      "normalizedAlias": "白鸦骑士 埃特瓦罗斯",
+      "cardId": "23849",
+      "cardName": "白鴉の騎士アイトワラス",
+      "language": "zh"
+    },
+    {
       "alias": "法の神霊アイワス",
       "normalizedAlias": "法の神霊アイワス",
       "cardId": "22965",
@@ -11070,6 +11098,27 @@
       "language": "zh"
     },
     {
+      "alias": "アマゾネス救出劇",
+      "normalizedAlias": "アマゾネス救出劇",
+      "cardId": "23885",
+      "cardName": "アマゾネス救出劇",
+      "language": "ja"
+    },
+    {
+      "alias": "亚马逊救出剧",
+      "normalizedAlias": "亚马逊救出剧",
+      "cardId": "23885",
+      "cardName": "アマゾネス救出劇",
+      "language": "zh"
+    },
+    {
+      "alias": "Amazoness Dramatic Rescue",
+      "normalizedAlias": "amazoness dramatic rescue",
+      "cardId": "23885",
+      "cardName": "アマゾネス救出劇",
+      "language": "en"
+    },
+    {
       "alias": "アマゾネス女帝",
       "normalizedAlias": "アマゾネス女帝",
       "cardId": "13148",
@@ -11628,6 +11677,27 @@
       "cardId": "13146",
       "cardName": "アマゾネスの斥候",
       "language": "zh"
+    },
+    {
+      "alias": "アマゾネスの剣聖",
+      "normalizedAlias": "アマゾネスの剣聖",
+      "cardId": "23843",
+      "cardName": "アマゾネスの剣聖",
+      "language": "ja"
+    },
+    {
+      "alias": "亚马逊剑圣",
+      "normalizedAlias": "亚马逊剑圣",
+      "cardId": "23843",
+      "cardName": "アマゾネスの剣聖",
+      "language": "zh"
+    },
+    {
+      "alias": "Amazoness Swordmaster",
+      "normalizedAlias": "amazoness swordmaster",
+      "cardId": "23843",
+      "cardName": "アマゾネスの剣聖",
+      "language": "en"
     },
     {
       "alias": "アマゾネスの剣士",
@@ -27518,6 +27588,20 @@
       "cardId": "13226",
       "cardName": "自动枪弹龙",
       "language": "zh"
+    },
+    {
+      "alias": "秋",
+      "normalizedAlias": "秋",
+      "cardId": "23882",
+      "cardName": "秋",
+      "language": "zh"
+    },
+    {
+      "alias": "Autumn",
+      "normalizedAlias": "autumn",
+      "cardId": "23882",
+      "cardName": "秋",
+      "language": "en"
     },
     {
       "alias": "荒狂奥丝",
@@ -47064,6 +47148,13 @@
       "language": "zh"
     },
     {
+      "alias": "鲁库纳斯之吸雷 布利泽",
+      "normalizedAlias": "鲁库纳斯之吸雷 布利泽",
+      "cardId": "23128",
+      "cardName": "ルクナスの吸雷 ブリーゼ",
+      "language": "zh"
+    },
+    {
       "alias": "ブライ・シンクロン",
       "normalizedAlias": "ブライ・シンクロン",
       "cardId": "9236",
@@ -50274,6 +50365,90 @@
       "normalizedAlias": "香草白兔",
       "cardId": "9719",
       "cardName": "香甜兔",
+      "language": "zh"
+    },
+    {
+      "alias": "バニリン・エキストラクト",
+      "normalizedAlias": "バニリン・エキストラクト",
+      "cardId": "23877",
+      "cardName": "バニリン・エキストラクト",
+      "language": "ja"
+    },
+    {
+      "alias": "香草白兔冰的精粹",
+      "normalizedAlias": "香草白兔冰的精粹",
+      "cardId": "23877",
+      "cardName": "バニリン・エキストラクト",
+      "language": "zh"
+    },
+    {
+      "alias": "Bunnillin Extract",
+      "normalizedAlias": "bunnillin extract",
+      "cardId": "23877",
+      "cardName": "バニリン・エキストラクト",
+      "language": "en"
+    },
+    {
+      "alias": "香草醛兔提取物",
+      "normalizedAlias": "香草醛兔提取物",
+      "cardId": "23877",
+      "cardName": "バニリン・エキストラクト",
+      "language": "zh"
+    },
+    {
+      "alias": "バニリン・ソフト",
+      "normalizedAlias": "バニリン・ソフト",
+      "cardId": "23891",
+      "cardName": "バニリン・ソフト",
+      "language": "ja"
+    },
+    {
+      "alias": "软软香草白兔冰",
+      "normalizedAlias": "软软香草白兔冰",
+      "cardId": "23891",
+      "cardName": "バニリン・ソフト",
+      "language": "zh"
+    },
+    {
+      "alias": "Bunnillin Soft",
+      "normalizedAlias": "bunnillin soft",
+      "cardId": "23891",
+      "cardName": "バニリン・ソフト",
+      "language": "en"
+    },
+    {
+      "alias": "香草醛兔软件冰淇淋",
+      "normalizedAlias": "香草醛兔软件冰淇淋",
+      "cardId": "23891",
+      "cardName": "バニリン・ソフト",
+      "language": "zh"
+    },
+    {
+      "alias": "バニリン：モカMOD",
+      "normalizedAlias": "バニリン:モカmod",
+      "cardId": "23831",
+      "cardName": "バニリン：モカMOD",
+      "language": "ja"
+    },
+    {
+      "alias": "香草白兔冰：摩卡模组",
+      "normalizedAlias": "香草白兔冰:摩卡模组",
+      "cardId": "23831",
+      "cardName": "バニリン：モカMOD",
+      "language": "zh"
+    },
+    {
+      "alias": "Bunnillin: Mocha MOD",
+      "normalizedAlias": "bunnillin: mocha mod",
+      "cardId": "23831",
+      "cardName": "バニリン：モカMOD",
+      "language": "en"
+    },
+    {
+      "alias": "香草醛兔：摩卡MOD",
+      "normalizedAlias": "香草醛兔:摩卡mod",
+      "cardId": "23831",
+      "cardName": "バニリン：モカMOD",
       "language": "zh"
     },
     {
@@ -53854,6 +54029,27 @@
       "language": "zh"
     },
     {
+      "alias": "魔獣の昂進",
+      "normalizedAlias": "魔獣の昂進",
+      "cardId": "23880",
+      "cardName": "魔獣の昂進",
+      "language": "ja"
+    },
+    {
+      "alias": "魔兽的昂进",
+      "normalizedAlias": "魔兽的昂进",
+      "cardId": "23880",
+      "cardName": "魔獣の昂進",
+      "language": "zh"
+    },
+    {
+      "alias": "Card Crawl",
+      "normalizedAlias": "card crawl",
+      "cardId": "23880",
+      "cardName": "魔獣の昂進",
+      "language": "en"
+    },
+    {
       "alias": "手牌抹杀",
       "normalizedAlias": "手牌抹杀",
       "cardId": "4821",
@@ -55133,6 +55329,34 @@
       "cardId": "10592",
       "cardName": "龙魂之城",
       "language": "en"
+    },
+    {
+      "alias": "キャッスル・オブ・ヴァンパイア",
+      "normalizedAlias": "キャッスル・オブ・ヴァンパイア",
+      "cardId": "23881",
+      "cardName": "キャッスル・オブ・ヴァンパイア",
+      "language": "ja"
+    },
+    {
+      "alias": "吸血鬼城堡",
+      "normalizedAlias": "吸血鬼城堡",
+      "cardId": "23881",
+      "cardName": "キャッスル・オブ・ヴァンパイア",
+      "language": "zh"
+    },
+    {
+      "alias": "Castle of Vampire",
+      "normalizedAlias": "castle of vampire",
+      "cardId": "23881",
+      "cardName": "キャッスル・オブ・ヴァンパイア",
+      "language": "en"
+    },
+    {
+      "alias": "吸血鬼魔城",
+      "normalizedAlias": "吸血鬼魔城",
+      "cardId": "23881",
+      "cardName": "キャッスル・オブ・ヴァンパイア",
+      "language": "zh"
     },
     {
       "alias": "猫鲨",
@@ -57737,6 +57961,27 @@
       "cardId": "18184",
       "cardName": "混沌恶魔－混元的魔神－",
       "language": "zh"
+    },
+    {
+      "alias": "カオス・バリアンズ・チェンジ",
+      "normalizedAlias": "カオス・バリアンズ・チェンジ",
+      "cardId": "23876",
+      "cardName": "カオス・バリアンズ・チェンジ",
+      "language": "ja"
+    },
+    {
+      "alias": "混沌异晶人的变身",
+      "normalizedAlias": "混沌异晶人的变身",
+      "cardId": "23876",
+      "cardName": "カオス・バリアンズ・チェンジ",
+      "language": "zh"
+    },
+    {
+      "alias": "Chaos Barian's Change",
+      "normalizedAlias": "chaos barian's change",
+      "cardId": "23876",
+      "cardName": "カオス・バリアンズ・チェンジ",
+      "language": "en"
     },
     {
       "alias": "混沌猛兽－混元的魔兽－",
@@ -69231,6 +69476,27 @@
       "cardId": "7387",
       "cardName": "カウンター・ジェム",
       "language": "zh"
+    },
+    {
+      "alias": "カウンターマジック「攻撃の無力化」",
+      "normalizedAlias": "カウンタ-マジック「攻撃の無力化」",
+      "cardId": "24035",
+      "cardName": "カウンターマジック「攻撃の無力化」",
+      "language": "ja"
+    },
+    {
+      "alias": "反击魔法「攻击无力化」",
+      "normalizedAlias": "反击魔法「攻击无力化」",
+      "cardId": "24035",
+      "cardName": "カウンターマジック「攻撃の無力化」",
+      "language": "zh"
+    },
+    {
+      "alias": "Counter Spell \"Negate Attack\"",
+      "normalizedAlias": "counter spell \"negate attack\"",
+      "cardId": "24035",
+      "cardName": "カウンターマジック「攻撃の無力化」",
+      "language": "en"
     },
     {
       "alias": "反発力",
@@ -117393,6 +117659,34 @@
       "language": "zh"
     },
     {
+      "alias": "太陽神の守護者－神・スライム",
+      "normalizedAlias": "太陽神の守護者-神・スライム",
+      "cardId": "23884",
+      "cardName": "太陽神の守護者－神・スライム",
+      "language": "ja"
+    },
+    {
+      "alias": "太阳神的守护者-神·史莱姆",
+      "normalizedAlias": "太阳神的守护者-神·史莱姆",
+      "cardId": "23884",
+      "cardName": "太陽神の守護者－神・スライム",
+      "language": "zh"
+    },
+    {
+      "alias": "Egyptian God Slime, Protector of the Sun God",
+      "normalizedAlias": "egyptian god slime, protector of the sun god",
+      "cardId": "23884",
+      "cardName": "太陽神の守護者－神・スライム",
+      "language": "en"
+    },
+    {
+      "alias": "太阳神灵的守护者-神·史莱姆",
+      "normalizedAlias": "太阳神灵的守护者-神·史莱姆",
+      "cardId": "23884",
+      "cardName": "太陽神の守護者－神・スライム",
+      "language": "zh"
+    },
+    {
       "alias": "光道武僧 爱琳",
       "normalizedAlias": "光道武僧 爱琳",
       "cardId": "7797",
@@ -132315,6 +132609,27 @@
       "cardId": "4191",
       "cardName": "コピックス",
       "language": "zh"
+    },
+    {
+      "alias": "誘惑の鏡壁",
+      "normalizedAlias": "誘惑の鏡壁",
+      "cardId": "23886",
+      "cardName": "誘惑の鏡壁",
+      "language": "ja"
+    },
+    {
+      "alias": "诱惑之镜壁",
+      "normalizedAlias": "诱惑之镜壁",
+      "cardId": "23886",
+      "cardName": "誘惑の鏡壁",
+      "language": "zh"
+    },
+    {
+      "alias": "Eyelluring Mirror Wall",
+      "normalizedAlias": "eyelluring mirror wall",
+      "cardId": "23886",
+      "cardName": "誘惑の鏡壁",
+      "language": "en"
     },
     {
       "alias": "娱乐－英雄☆盘面执行者",
@@ -182717,6 +183032,27 @@
       "language": "en"
     },
     {
+      "alias": "災禍の根絶者",
+      "normalizedAlias": "災禍の根絶者",
+      "cardId": "23832",
+      "cardName": "災禍の根絶者",
+      "language": "ja"
+    },
+    {
+      "alias": "灾祸的根绝者",
+      "normalizedAlias": "灾祸的根绝者",
+      "cardId": "23832",
+      "cardName": "災禍の根絶者",
+      "language": "zh"
+    },
+    {
+      "alias": "Heretic Eradicator",
+      "normalizedAlias": "heretic eradicator",
+      "cardId": "23832",
+      "cardName": "災禍の根絶者",
+      "language": "en"
+    },
+    {
       "alias": "异端之弗魄祀寇猧司",
       "normalizedAlias": "异端之弗魄祀寇猧司",
       "cardId": "20224",
@@ -191136,6 +191472,27 @@
       "cardId": "16839",
       "cardName": "混沌之幻像",
       "language": "zh"
+    },
+    {
+      "alias": "白鴉の魔女の幻姿",
+      "normalizedAlias": "白鴉の魔女の幻姿",
+      "cardId": "23889",
+      "cardName": "白鴉の魔女の幻姿",
+      "language": "ja"
+    },
+    {
+      "alias": "白鸦魔女的幻姿",
+      "normalizedAlias": "白鸦魔女的幻姿",
+      "cardId": "23889",
+      "cardName": "白鴉の魔女の幻姿",
+      "language": "zh"
+    },
+    {
+      "alias": "Illusion of the Winter Raven Witch",
+      "normalizedAlias": "illusion of the winter raven witch",
+      "cardId": "23889",
+      "cardName": "白鴉の魔女の幻姿",
+      "language": "en"
     },
     {
       "alias": "幻想師・ノー・フェイス",
@@ -204550,6 +204907,34 @@
       "language": "zh"
     },
     {
+      "alias": "高嶺の天仙カリン",
+      "normalizedAlias": "高嶺の天仙カリン",
+      "cardId": "23855",
+      "cardName": "高嶺の天仙カリン",
+      "language": "ja"
+    },
+    {
+      "alias": "高岭之天仙 火轮",
+      "normalizedAlias": "高岭之天仙 火轮",
+      "cardId": "23855",
+      "cardName": "高嶺の天仙カリン",
+      "language": "zh"
+    },
+    {
+      "alias": "Karin the Celestial Sage of the Highest Heights",
+      "normalizedAlias": "karin the celestial sage of the highest heights",
+      "cardId": "23855",
+      "cardName": "高嶺の天仙カリン",
+      "language": "en"
+    },
+    {
+      "alias": "高岭之天仙 迦陵",
+      "normalizedAlias": "高岭之天仙 迦陵",
+      "cardId": "23855",
+      "cardName": "高嶺の天仙カリン",
+      "language": "zh"
+    },
+    {
       "alias": "因果切断",
       "normalizedAlias": "因果切断",
       "cardId": "6619",
@@ -212660,6 +213045,34 @@
       "normalizedAlias": "熔岩魔神 焦热巨像",
       "cardId": "5496",
       "cardName": "熔岩魔神・岩浆魔像",
+      "language": "zh"
+    },
+    {
+      "alias": "太陽神の鉄檻－ラヴァ・ゴーレム",
+      "normalizedAlias": "太陽神の鉄檻-ラヴァ・ゴ-レム",
+      "cardId": "23842",
+      "cardName": "太陽神の鉄檻－ラヴァ・ゴーレム",
+      "language": "ja"
+    },
+    {
+      "alias": "太阳神的铁槛-熔岩魔神",
+      "normalizedAlias": "太阳神的铁槛-熔岩魔神",
+      "cardId": "23842",
+      "cardName": "太陽神の鉄檻－ラヴァ・ゴーレム",
+      "language": "zh"
+    },
+    {
+      "alias": "Lava Golem, Steelcage of the Sun God",
+      "normalizedAlias": "lava golem, steelcage of the sun god",
+      "cardId": "23842",
+      "cardName": "太陽神の鉄檻－ラヴァ・ゴーレム",
+      "language": "en"
+    },
+    {
+      "alias": "太阳神灵的铁槛-熔岩魔神",
+      "normalizedAlias": "太阳神灵的铁槛-熔岩魔神",
+      "cardId": "23842",
+      "cardName": "太陽神の鉄檻－ラヴァ・ゴーレム",
       "language": "zh"
     },
     {
@@ -249434,6 +249847,13 @@
       "language": "zh"
     },
     {
+      "alias": "昏淆的米库西亚",
+      "normalizedAlias": "昏淆的米库西亚",
+      "cardId": "23300",
+      "cardName": "Mixousia the Confounder",
+      "language": "zh"
+    },
+    {
       "alias": "相剑师-莫邪",
       "normalizedAlias": "相剑师-莫邪",
       "cardId": "16489",
@@ -272912,6 +273332,34 @@
       "language": "zh"
     },
     {
+      "alias": "終天獄神Ωヴィードリウム",
+      "normalizedAlias": "終天獄神ωヴィ-ドリウム",
+      "cardId": "23846",
+      "cardName": "終天獄神Ωヴィードリウム",
+      "language": "ja"
+    },
+    {
+      "alias": "终天狱神Ω比托利姆",
+      "normalizedAlias": "终天狱神ω比托利姆",
+      "cardId": "23846",
+      "cardName": "終天獄神Ωヴィードリウム",
+      "language": "zh"
+    },
+    {
+      "alias": "Omega Vidolium the Power Patron of Heaven's End",
+      "normalizedAlias": "omega vidolium the power patron of heaven's end",
+      "cardId": "23846",
+      "cardName": "終天獄神Ωヴィードリウム",
+      "language": "en"
+    },
+    {
+      "alias": "终天狱神 Ω比托利姆",
+      "normalizedAlias": "终天狱神 ω比托利姆",
+      "cardId": "23846",
+      "cardName": "終天獄神Ωヴィードリウム",
+      "language": "zh"
+    },
+    {
       "alias": "沈黙狼－カルーポ",
       "normalizedAlias": "沈黙狼-カル-ポ",
       "cardId": "17792",
@@ -289696,6 +290144,27 @@
       "cardId": "4334",
       "cardName": "ポセイドンの力",
       "language": "zh"
+    },
+    {
+      "alias": "パワー・オブ・ザ・デュエリスト",
+      "normalizedAlias": "パワ-・オブ・ザ・デュエリスト",
+      "cardId": "23878",
+      "cardName": "パワー・オブ・ザ・デュエリスト",
+      "language": "ja"
+    },
+    {
+      "alias": "决斗者之力",
+      "normalizedAlias": "决斗者之力",
+      "cardId": "23878",
+      "cardName": "パワー・オブ・ザ・デュエリスト",
+      "language": "zh"
+    },
+    {
+      "alias": "Power of the Duelist",
+      "normalizedAlias": "power of the duelist",
+      "cardId": "23878",
+      "cardName": "パワー・オブ・ザ・デュエリスト",
+      "language": "en"
     },
     {
       "alias": "守护者之力",
@@ -308094,6 +308563,118 @@
       "language": "en"
     },
     {
+      "alias": "リインゼルム・アムルサ",
+      "normalizedAlias": "リインゼルム・アムルサ",
+      "cardId": "23835",
+      "cardName": "リインゼルム・アムルサ",
+      "language": "ja"
+    },
+    {
+      "alias": "轮回虫龙 大紫蛱蝶",
+      "normalizedAlias": "轮回虫龙 大紫蛱蝶",
+      "cardId": "23835",
+      "cardName": "リインゼルム・アムルサ",
+      "language": "zh"
+    },
+    {
+      "alias": "Reindsurm Amurusa",
+      "normalizedAlias": "reindsurm amurusa",
+      "cardId": "23835",
+      "cardName": "リインゼルム・アムルサ",
+      "language": "en"
+    },
+    {
+      "alias": "无死虫龙·紫蛱蝶鳞虫",
+      "normalizedAlias": "无死虫龙·紫蛱蝶鳞虫",
+      "cardId": "23835",
+      "cardName": "リインゼルム・アムルサ",
+      "language": "zh"
+    },
+    {
+      "alias": "百竜の交戦",
+      "normalizedAlias": "百竜の交戦",
+      "cardId": "23887",
+      "cardName": "百竜の交戦",
+      "language": "ja"
+    },
+    {
+      "alias": "百龙的交战",
+      "normalizedAlias": "百龙的交战",
+      "cardId": "23887",
+      "cardName": "百竜の交戦",
+      "language": "zh"
+    },
+    {
+      "alias": "Reindsurm Encounter",
+      "normalizedAlias": "reindsurm encounter",
+      "cardId": "23887",
+      "cardName": "百竜の交戦",
+      "language": "en"
+    },
+    {
+      "alias": "リインゼルム・ギガロヴェンドラ",
+      "normalizedAlias": "リインゼルム・ギガロヴェンドラ",
+      "cardId": "23838",
+      "cardName": "リインゼルム・ギガロヴェンドラ",
+      "language": "ja"
+    },
+    {
+      "alias": "轮回虫龙 秘鲁巨人蜈蚣",
+      "normalizedAlias": "轮回虫龙 秘鲁巨人蜈蚣",
+      "cardId": "23838",
+      "cardName": "リインゼルム・ギガロヴェンドラ",
+      "language": "zh"
+    },
+    {
+      "alias": "Reindsurm Gigalovendra",
+      "normalizedAlias": "reindsurm gigalovendra",
+      "cardId": "23838",
+      "cardName": "リインゼルム・ギガロヴェンドラ",
+      "language": "en"
+    },
+    {
+      "alias": "无死虫龙·巨人蜈蚣鳞虫",
+      "normalizedAlias": "无死虫龙·巨人蜈蚣鳞虫",
+      "cardId": "23838",
+      "cardName": "リインゼルム・ギガロヴェンドラ",
+      "language": "zh"
+    },
+    {
+      "alias": "リインゼルム・ギリアカルマ",
+      "normalizedAlias": "リインゼルム・ギリアカルマ",
+      "cardId": "23839",
+      "cardName": "リインゼルム・ギリアカルマ",
+      "language": "ja"
+    },
+    {
+      "alias": "轮回虫龙 奇伦南洋大兜虫",
+      "normalizedAlias": "轮回虫龙 奇伦南洋大兜虫",
+      "cardId": "23839",
+      "cardName": "リインゼルム・ギリアカルマ",
+      "language": "zh"
+    },
+    {
+      "alias": "Reindsurm Giriakarma",
+      "normalizedAlias": "reindsurm giriakarma",
+      "cardId": "23839",
+      "cardName": "リインゼルム・ギリアカルマ",
+      "language": "en"
+    },
+    {
+      "alias": "轮回虫龙・铜身三戟龙",
+      "normalizedAlias": "轮回虫龙・铜身三戟龙",
+      "cardId": "23839",
+      "cardName": "リインゼルム・ギリアカルマ",
+      "language": "ja"
+    },
+    {
+      "alias": "无死虫龙·喀戎独角仙鳞虫",
+      "normalizedAlias": "无死虫龙·喀戎独角仙鳞虫",
+      "cardId": "23839",
+      "cardName": "リインゼルム・ギリアカルマ",
+      "language": "zh"
+    },
+    {
       "alias": "休战增援",
       "normalizedAlias": "休战增援",
       "cardId": "8354",
@@ -312137,6 +312718,20 @@
       "normalizedAlias": "rikka glamour",
       "cardId": "15119",
       "cardName": "六花绚烂",
+      "language": "en"
+    },
+    {
+      "alias": "六花水月",
+      "normalizedAlias": "六花水月",
+      "cardId": "23875",
+      "cardName": "六花水月",
+      "language": "zh"
+    },
+    {
+      "alias": "Rikka Moonlit Waters",
+      "normalizedAlias": "rikka moonlit waters",
+      "cardId": "23875",
+      "cardName": "六花水月",
       "language": "en"
     },
     {
@@ -320503,6 +321098,27 @@
       "cardId": "13938",
       "cardName": "转生炎兽之圣域",
       "language": "zh"
+    },
+    {
+      "alias": "転生炎獣の神域",
+      "normalizedAlias": "転生炎獣の神域",
+      "cardId": "23873",
+      "cardName": "転生炎獣の神域",
+      "language": "ja"
+    },
+    {
+      "alias": "转生炎兽的神域",
+      "normalizedAlias": "转生炎兽的神域",
+      "cardId": "23873",
+      "cardName": "転生炎獣の神域",
+      "language": "zh"
+    },
+    {
+      "alias": "Salamangreat Shrine",
+      "normalizedAlias": "salamangreat shrine",
+      "cardId": "23873",
+      "cardName": "転生炎獣の神域",
+      "language": "en"
     },
     {
       "alias": "转生炎兽 刺尾蜥",
@@ -344067,6 +344683,27 @@
       "language": "en"
     },
     {
+      "alias": "白鴉の魔女の光彩",
+      "normalizedAlias": "白鴉の魔女の光彩",
+      "cardId": "23888",
+      "cardName": "白鴉の魔女の光彩",
+      "language": "ja"
+    },
+    {
+      "alias": "白鸦魔女的光彩",
+      "normalizedAlias": "白鸦魔女的光彩",
+      "cardId": "23888",
+      "cardName": "白鴉の魔女の光彩",
+      "language": "zh"
+    },
+    {
+      "alias": "Splendor of the Winter Raven Witch",
+      "normalizedAlias": "splendor of the winter raven witch",
+      "cardId": "23888",
+      "cardName": "白鴉の魔女の光彩",
+      "language": "en"
+    },
+    {
       "alias": "电光闪灵・蓝精",
       "normalizedAlias": "电光闪灵・蓝精",
       "cardId": "17405",
@@ -351694,6 +352331,34 @@
       "normalizedAlias": "太阳龙因蒂",
       "cardId": "8653",
       "cardName": "太阳龙 因蒂",
+      "language": "zh"
+    },
+    {
+      "alias": "太陽神の支配",
+      "normalizedAlias": "太陽神の支配",
+      "cardId": "23883",
+      "cardName": "太陽神の支配",
+      "language": "ja"
+    },
+    {
+      "alias": "太阳神的支配",
+      "normalizedAlias": "太阳神的支配",
+      "cardId": "23883",
+      "cardName": "太陽神の支配",
+      "language": "zh"
+    },
+    {
+      "alias": "Sun God Domination",
+      "normalizedAlias": "sun god domination",
+      "cardId": "23883",
+      "cardName": "太陽神の支配",
+      "language": "en"
+    },
+    {
+      "alias": "太阳神灵的支配",
+      "normalizedAlias": "太阳神灵的支配",
+      "cardId": "23883",
+      "cardName": "太陽神の支配",
       "language": "zh"
     },
     {
@@ -365851,6 +366516,27 @@
       "language": "en"
     },
     {
+      "alias": "ウルトゥムの魔竜王",
+      "normalizedAlias": "ウルトゥムの魔竜王",
+      "cardId": "23902",
+      "cardName": "ウルトゥムの魔竜王",
+      "language": "ja"
+    },
+    {
+      "alias": "乌尔素姆之魔龙王",
+      "normalizedAlias": "乌尔素姆之魔龙王",
+      "cardId": "23902",
+      "cardName": "ウルトゥムの魔竜王",
+      "language": "zh"
+    },
+    {
+      "alias": "The Dark Dragon Lord of Ultum",
+      "normalizedAlias": "the dark dragon lord of ultum",
+      "cardId": "23902",
+      "cardName": "ウルトゥムの魔竜王",
+      "language": "en"
+    },
+    {
       "alias": "超魔导师－黑魔导师徒",
       "normalizedAlias": "超魔导师-黑魔导师徒",
       "cardId": "14905",
@@ -367993,6 +368679,27 @@
       "language": "zh"
     },
     {
+      "alias": "幻のインセクト女王",
+      "normalizedAlias": "幻のインセクト女王",
+      "cardId": "23847",
+      "cardName": "幻のインセクト女王",
+      "language": "ja"
+    },
+    {
+      "alias": "幻之昆虫女王",
+      "normalizedAlias": "幻之昆虫女王",
+      "cardId": "23847",
+      "cardName": "幻のインセクト女王",
+      "language": "zh"
+    },
+    {
+      "alias": "The Legendary Insect Queen",
+      "normalizedAlias": "the legendary insect queen",
+      "cardId": "23847",
+      "cardName": "幻のインセクト女王",
+      "language": "en"
+    },
+    {
       "alias": "融合咒印生物-光",
       "normalizedAlias": "融合咒印生物-光",
       "cardId": "6256",
@@ -369337,6 +370044,34 @@
       "language": "en"
     },
     {
+      "alias": "ケペルの金字塔",
+      "normalizedAlias": "ケペルの金字塔",
+      "cardId": "23879",
+      "cardName": "ケペルの金字塔",
+      "language": "ja"
+    },
+    {
+      "alias": "凯帕之金字塔",
+      "normalizedAlias": "凯帕之金字塔",
+      "cardId": "23879",
+      "cardName": "ケペルの金字塔",
+      "language": "zh"
+    },
+    {
+      "alias": "The Pyramid of Kepher",
+      "normalizedAlias": "the pyramid of kepher",
+      "cardId": "23879",
+      "cardName": "ケペルの金字塔",
+      "language": "en"
+    },
+    {
+      "alias": "赫普鲁金字塔",
+      "normalizedAlias": "赫普鲁金字塔",
+      "cardId": "23879",
+      "cardName": "ケペルの金字塔",
+      "language": "zh"
+    },
+    {
       "alias": "一族の掟",
       "normalizedAlias": "一族の掟",
       "cardId": "4952",
@@ -370063,6 +370798,34 @@
       "cardId": "4879",
       "cardName": "厳格な老魔術師",
       "language": "en"
+    },
+    {
+      "alias": "闇へ誘う太陽神",
+      "normalizedAlias": "闇へ誘う太陽神",
+      "cardId": "23863",
+      "cardName": "闇へ誘う太陽神",
+      "language": "ja"
+    },
+    {
+      "alias": "诱向黑暗的太阳神",
+      "normalizedAlias": "诱向黑暗的太阳神",
+      "cardId": "23863",
+      "cardName": "闇へ誘う太陽神",
+      "language": "zh"
+    },
+    {
+      "alias": "The Sun God Leading Down into Darkness",
+      "normalizedAlias": "the sun god leading down into darkness",
+      "cardId": "23863",
+      "cardName": "闇へ誘う太陽神",
+      "language": "en"
+    },
+    {
+      "alias": "诱向黑暗的太阳神灵",
+      "normalizedAlias": "诱向黑暗的太阳神灵",
+      "cardId": "23863",
+      "cardName": "闇へ誘う太陽神",
+      "language": "zh"
     },
     {
       "alias": "The Suppression Pluto",
@@ -371602,6 +372365,34 @@
       "normalizedAlias": "无垢的预幻视",
       "cardId": "21466",
       "cardName": "无垢预幻视",
+      "language": "zh"
+    },
+    {
+      "alias": "予幻なき世界に託す約束",
+      "normalizedAlias": "予幻なき世界に託す約束",
+      "cardId": "23890",
+      "cardName": "予幻なき世界に託す約束",
+      "language": "ja"
+    },
+    {
+      "alias": "向无预幻世托付的约定",
+      "normalizedAlias": "向无预幻世托付的约定",
+      "cardId": "23890",
+      "cardName": "予幻なき世界に託す約束",
+      "language": "zh"
+    },
+    {
+      "alias": "Theorealize Ephemeral Lull",
+      "normalizedAlias": "theorealize ephemeral lull",
+      "cardId": "23890",
+      "cardName": "予幻なき世界に託す約束",
+      "language": "en"
+    },
+    {
+      "alias": "托付给无预幻世界的约定",
+      "normalizedAlias": "托付给无预幻世界的约定",
+      "cardId": "23890",
+      "cardName": "予幻なき世界に託す約束",
       "language": "zh"
     },
     {
@@ -373672,6 +374463,13 @@
     {
       "alias": "雷轰诱捕稻草人",
       "normalizedAlias": "雷轰诱捕稻草人",
+      "cardId": "23299",
+      "cardName": "Thundercrash Snarecrow",
+      "language": "zh"
+    },
+    {
+      "alias": "崩电稻草人",
+      "normalizedAlias": "崩电稻草人",
       "cardId": "23299",
       "cardName": "Thundercrash Snarecrow",
       "language": "zh"
@@ -406773,6 +407571,13 @@
       "language": "zh"
     },
     {
+      "alias": "魔女工艺・育种希德",
+      "normalizedAlias": "魔女工艺・育种希德",
+      "cardId": "23416",
+      "cardName": "ウィッチクラフト・シード",
+      "language": "ja"
+    },
+    {
       "alias": "ウィッチクラフト・テラコッタン",
       "normalizedAlias": "ウィッチクラフト・テラコッタン",
       "cardId": "23163",
@@ -418806,13 +419611,6 @@
       "language": "zh"
     },
     {
-      "alias": "秋",
-      "normalizedAlias": "秋",
-      "cardId": "23882",
-      "cardName": "秋",
-      "language": "zh"
-    },
-    {
       "alias": "暗黒の太陽神－ラーの翼神竜",
       "normalizedAlias": "暗黒の太陽神-ラ-の翼神竜",
       "cardId": "23841",
@@ -418887,27 +419685,6 @@
       "normalizedAlias": "狱神封门-共灭之剑-",
       "cardId": "23871",
       "cardName": "獄神封門－共滅の剣－",
-      "language": "zh"
-    },
-    {
-      "alias": "終天獄神Ωヴィードリウム",
-      "normalizedAlias": "終天獄神ωヴィ-ドリウム",
-      "cardId": "23846",
-      "cardName": "終天獄神Ωヴィードリウム",
-      "language": "ja"
-    },
-    {
-      "alias": "终天狱神Ω比托利姆",
-      "normalizedAlias": "终天狱神ω比托利姆",
-      "cardId": "23846",
-      "cardName": "終天獄神Ωヴィードリウム",
-      "language": "zh"
-    },
-    {
-      "alias": "终天狱神 Ω比托利姆",
-      "normalizedAlias": "终天狱神 ω比托利姆",
-      "cardId": "23846",
-      "cardName": "終天獄神Ωヴィードリウム",
       "language": "zh"
     },
     {
@@ -418995,48 +419772,6 @@
       "language": "zh"
     },
     {
-      "alias": "太陽神の支配",
-      "normalizedAlias": "太陽神の支配",
-      "cardId": "23883",
-      "cardName": "太陽神の支配",
-      "language": "ja"
-    },
-    {
-      "alias": "太阳神的支配",
-      "normalizedAlias": "太阳神的支配",
-      "cardId": "23883",
-      "cardName": "太陽神の支配",
-      "language": "zh"
-    },
-    {
-      "alias": "太阳神灵的支配",
-      "normalizedAlias": "太阳神灵的支配",
-      "cardId": "23883",
-      "cardName": "太陽神の支配",
-      "language": "zh"
-    },
-    {
-      "alias": "太陽神の守護者－神・スライム",
-      "normalizedAlias": "太陽神の守護者-神・スライム",
-      "cardId": "23884",
-      "cardName": "太陽神の守護者－神・スライム",
-      "language": "ja"
-    },
-    {
-      "alias": "太阳神的守护者-神·史莱姆",
-      "normalizedAlias": "太阳神的守护者-神·史莱姆",
-      "cardId": "23884",
-      "cardName": "太陽神の守護者－神・スライム",
-      "language": "zh"
-    },
-    {
-      "alias": "太阳神灵的守护者-神·史莱姆",
-      "normalizedAlias": "太阳神灵的守护者-神·史莱姆",
-      "cardId": "23884",
-      "cardName": "太陽神の守護者－神・スライム",
-      "language": "zh"
-    },
-    {
       "alias": "太陽神の処刑人－マキュラ",
       "normalizedAlias": "太陽神の処刑人-マキュラ",
       "cardId": "23813",
@@ -419055,69 +419790,6 @@
       "normalizedAlias": "太阳神灵的处刑人-摩休罗",
       "cardId": "23813",
       "cardName": "太陽神の処刑人－マキュラ",
-      "language": "zh"
-    },
-    {
-      "alias": "太陽神の鉄檻－ラヴァ・ゴーレム",
-      "normalizedAlias": "太陽神の鉄檻-ラヴァ・ゴ-レム",
-      "cardId": "23842",
-      "cardName": "太陽神の鉄檻－ラヴァ・ゴーレム",
-      "language": "ja"
-    },
-    {
-      "alias": "太阳神的铁槛-熔岩魔神",
-      "normalizedAlias": "太阳神的铁槛-熔岩魔神",
-      "cardId": "23842",
-      "cardName": "太陽神の鉄檻－ラヴァ・ゴーレム",
-      "language": "zh"
-    },
-    {
-      "alias": "太阳神灵的铁槛-熔岩魔神",
-      "normalizedAlias": "太阳神灵的铁槛-熔岩魔神",
-      "cardId": "23842",
-      "cardName": "太陽神の鉄檻－ラヴァ・ゴーレム",
-      "language": "zh"
-    },
-    {
-      "alias": "高嶺の天仙カリン",
-      "normalizedAlias": "高嶺の天仙カリン",
-      "cardId": "23855",
-      "cardName": "高嶺の天仙カリン",
-      "language": "ja"
-    },
-    {
-      "alias": "高岭之天仙 火轮",
-      "normalizedAlias": "高岭之天仙 火轮",
-      "cardId": "23855",
-      "cardName": "高嶺の天仙カリン",
-      "language": "zh"
-    },
-    {
-      "alias": "高岭之天仙 迦陵",
-      "normalizedAlias": "高岭之天仙 迦陵",
-      "cardId": "23855",
-      "cardName": "高嶺の天仙カリン",
-      "language": "zh"
-    },
-    {
-      "alias": "白鴉の騎士アイトワラス",
-      "normalizedAlias": "白鴉の騎士アイトワラス",
-      "cardId": "23849",
-      "cardName": "白鴉の騎士アイトワラス",
-      "language": "ja"
-    },
-    {
-      "alias": "白鸦骑士 艾特瓦拉斯",
-      "normalizedAlias": "白鸦骑士 艾特瓦拉斯",
-      "cardId": "23849",
-      "cardName": "白鴉の騎士アイトワラス",
-      "language": "zh"
-    },
-    {
-      "alias": "白鸦骑士 埃特瓦罗斯",
-      "normalizedAlias": "白鸦骑士 埃特瓦罗斯",
-      "cardId": "23849",
-      "cardName": "白鴉の騎士アイトワラス",
       "language": "zh"
     },
     {
@@ -419195,34 +419867,6 @@
       "normalizedAlias": "白鸦的幽深森林",
       "cardId": "23870",
       "cardName": "白鴉の深き森",
-      "language": "zh"
-    },
-    {
-      "alias": "白鴉の魔女の光彩",
-      "normalizedAlias": "白鴉の魔女の光彩",
-      "cardId": "23888",
-      "cardName": "白鴉の魔女の光彩",
-      "language": "ja"
-    },
-    {
-      "alias": "白鸦魔女的光彩",
-      "normalizedAlias": "白鸦魔女的光彩",
-      "cardId": "23888",
-      "cardName": "白鴉の魔女の光彩",
-      "language": "zh"
-    },
-    {
-      "alias": "白鴉の魔女の幻姿",
-      "normalizedAlias": "白鴉の魔女の幻姿",
-      "cardId": "23889",
-      "cardName": "白鴉の魔女の幻姿",
-      "language": "ja"
-    },
-    {
-      "alias": "白鸦魔女的幻姿",
-      "normalizedAlias": "白鸦魔女的幻姿",
-      "cardId": "23889",
-      "cardName": "白鴉の魔女の幻姿",
       "language": "zh"
     },
     {
@@ -419345,20 +419989,6 @@
       "language": "zh"
     },
     {
-      "alias": "幻のインセクト女王",
-      "normalizedAlias": "幻のインセクト女王",
-      "cardId": "23847",
-      "cardName": "幻のインセクト女王",
-      "language": "ja"
-    },
-    {
-      "alias": "幻之昆虫女王",
-      "normalizedAlias": "幻之昆虫女王",
-      "cardId": "23847",
-      "cardName": "幻のインセクト女王",
-      "language": "zh"
-    },
-    {
       "alias": "無敵のロケット戦士",
       "normalizedAlias": "無敵のロケット戦士",
       "cardId": "23828",
@@ -419394,41 +420024,6 @@
       "language": "zh"
     },
     {
-      "alias": "闇へ誘う太陽神",
-      "normalizedAlias": "闇へ誘う太陽神",
-      "cardId": "23863",
-      "cardName": "闇へ誘う太陽神",
-      "language": "ja"
-    },
-    {
-      "alias": "诱向黑暗的太阳神",
-      "normalizedAlias": "诱向黑暗的太阳神",
-      "cardId": "23863",
-      "cardName": "闇へ誘う太陽神",
-      "language": "zh"
-    },
-    {
-      "alias": "诱向黑暗的太阳神灵",
-      "normalizedAlias": "诱向黑暗的太阳神灵",
-      "cardId": "23863",
-      "cardName": "闇へ誘う太陽神",
-      "language": "zh"
-    },
-    {
-      "alias": "誘惑の鏡壁",
-      "normalizedAlias": "誘惑の鏡壁",
-      "cardId": "23886",
-      "cardName": "誘惑の鏡壁",
-      "language": "ja"
-    },
-    {
-      "alias": "诱惑之镜壁",
-      "normalizedAlias": "诱惑之镜壁",
-      "cardId": "23886",
-      "cardName": "誘惑の鏡壁",
-      "language": "zh"
-    },
-    {
       "alias": "六花深聖ストレナエ",
       "normalizedAlias": "六花深聖ストレナエ",
       "cardId": "23853",
@@ -419438,6 +420033,13 @@
     {
       "alias": "六花深圣 力量女神花圈",
       "normalizedAlias": "六花深圣 力量女神花圈",
+      "cardId": "23853",
+      "cardName": "六花深聖ストレナエ",
+      "language": "zh"
+    },
+    {
+      "alias": "六花深圣花环",
+      "normalizedAlias": "六花深圣花环",
       "cardId": "23853",
       "cardName": "六花深聖ストレナエ",
       "language": "zh"
@@ -419464,13 +420066,6 @@
       "language": "zh"
     },
     {
-      "alias": "六花水月",
-      "normalizedAlias": "六花水月",
-      "cardId": "23875",
-      "cardName": "六花水月",
-      "language": "zh"
-    },
-    {
       "alias": "六花双精プリムローズ",
       "normalizedAlias": "六花双精プリムロ-ズ",
       "cardId": "23826",
@@ -419487,6 +420082,13 @@
     {
       "alias": "六花双精 报春花",
       "normalizedAlias": "六花双精 报春花",
+      "cardId": "23826",
+      "cardName": "六花双精プリムローズ",
+      "language": "zh"
+    },
+    {
+      "alias": "六花双精报春蔷薇",
+      "normalizedAlias": "六花双精报春蔷薇",
       "cardId": "23826",
       "cardName": "六花双精プリムローズ",
       "language": "zh"
@@ -419562,20 +420164,6 @@
       "language": "zh"
     },
     {
-      "alias": "アマゾネス救出劇",
-      "normalizedAlias": "アマゾネス救出劇",
-      "cardId": "23885",
-      "cardName": "アマゾネス救出劇",
-      "language": "ja"
-    },
-    {
-      "alias": "亚马逊救出剧",
-      "normalizedAlias": "亚马逊救出剧",
-      "cardId": "23885",
-      "cardName": "アマゾネス救出劇",
-      "language": "zh"
-    },
-    {
       "alias": "アマゾネスの格闘戦士－蹴殺の舞い－",
       "normalizedAlias": "アマゾネスの格闘戦士-蹴殺の舞い-",
       "cardId": "23817",
@@ -419608,20 +420196,6 @@
       "normalizedAlias": "亚马逊锁链使-临死的锁链舞-",
       "cardId": "23816",
       "cardName": "アマゾネスの鎖使い－死に際の鎖舞い－",
-      "language": "zh"
-    },
-    {
-      "alias": "アマゾネスの剣聖",
-      "normalizedAlias": "アマゾネスの剣聖",
-      "cardId": "23843",
-      "cardName": "アマゾネスの剣聖",
-      "language": "ja"
-    },
-    {
-      "alias": "亚马逊剑圣",
-      "normalizedAlias": "亚马逊剑圣",
-      "cardId": "23843",
-      "cardName": "アマゾネスの剣聖",
       "language": "zh"
     },
     {
@@ -419709,125 +420283,6 @@
       "language": "zh"
     },
     {
-      "alias": "ウルトゥムの魔竜王",
-      "normalizedAlias": "ウルトゥムの魔竜王",
-      "cardId": "23902",
-      "cardName": "ウルトゥムの魔竜王",
-      "language": "ja"
-    },
-    {
-      "alias": "乌尔素姆之魔龙王",
-      "normalizedAlias": "乌尔素姆之魔龙王",
-      "cardId": "23902",
-      "cardName": "ウルトゥムの魔竜王",
-      "language": "zh"
-    },
-    {
-      "alias": "予幻なき世界に託す約束",
-      "normalizedAlias": "予幻なき世界に託す約束",
-      "cardId": "23890",
-      "cardName": "予幻なき世界に託す約束",
-      "language": "ja"
-    },
-    {
-      "alias": "向无预幻世托付的约定",
-      "normalizedAlias": "向无预幻世托付的约定",
-      "cardId": "23890",
-      "cardName": "予幻なき世界に託す約束",
-      "language": "zh"
-    },
-    {
-      "alias": "托付给无预幻世界的约定",
-      "normalizedAlias": "托付给无预幻世界的约定",
-      "cardId": "23890",
-      "cardName": "予幻なき世界に託す約束",
-      "language": "zh"
-    },
-    {
-      "alias": "カウンターマジック「攻撃の無力化」",
-      "normalizedAlias": "カウンタ-マジック「攻撃の無力化」",
-      "cardId": "24035",
-      "cardName": "カウンターマジック「攻撃の無力化」",
-      "language": "ja"
-    },
-    {
-      "alias": "反击魔法「攻击无力化」",
-      "normalizedAlias": "反击魔法「攻击无力化」",
-      "cardId": "24035",
-      "cardName": "カウンターマジック「攻撃の無力化」",
-      "language": "zh"
-    },
-    {
-      "alias": "カオス・バリアンズ・チェンジ",
-      "normalizedAlias": "カオス・バリアンズ・チェンジ",
-      "cardId": "23876",
-      "cardName": "カオス・バリアンズ・チェンジ",
-      "language": "ja"
-    },
-    {
-      "alias": "混沌异晶人的变身",
-      "normalizedAlias": "混沌异晶人的变身",
-      "cardId": "23876",
-      "cardName": "カオス・バリアンズ・チェンジ",
-      "language": "zh"
-    },
-    {
-      "alias": "魔獣の昂進",
-      "normalizedAlias": "魔獣の昂進",
-      "cardId": "23880",
-      "cardName": "魔獣の昂進",
-      "language": "ja"
-    },
-    {
-      "alias": "魔兽的昂进",
-      "normalizedAlias": "魔兽的昂进",
-      "cardId": "23880",
-      "cardName": "魔獣の昂進",
-      "language": "zh"
-    },
-    {
-      "alias": "キャッスル・オブ・ヴァンパイア",
-      "normalizedAlias": "キャッスル・オブ・ヴァンパイア",
-      "cardId": "23881",
-      "cardName": "キャッスル・オブ・ヴァンパイア",
-      "language": "ja"
-    },
-    {
-      "alias": "吸血鬼城堡",
-      "normalizedAlias": "吸血鬼城堡",
-      "cardId": "23881",
-      "cardName": "キャッスル・オブ・ヴァンパイア",
-      "language": "zh"
-    },
-    {
-      "alias": "吸血鬼魔城",
-      "normalizedAlias": "吸血鬼魔城",
-      "cardId": "23881",
-      "cardName": "キャッスル・オブ・ヴァンパイア",
-      "language": "zh"
-    },
-    {
-      "alias": "ケペルの金字塔",
-      "normalizedAlias": "ケペルの金字塔",
-      "cardId": "23879",
-      "cardName": "ケペルの金字塔",
-      "language": "ja"
-    },
-    {
-      "alias": "凯帕之金字塔",
-      "normalizedAlias": "凯帕之金字塔",
-      "cardId": "23879",
-      "cardName": "ケペルの金字塔",
-      "language": "zh"
-    },
-    {
-      "alias": "赫普鲁金字塔",
-      "normalizedAlias": "赫普鲁金字塔",
-      "cardId": "23879",
-      "cardName": "ケペルの金字塔",
-      "language": "zh"
-    },
-    {
       "alias": "コダイダロス",
       "normalizedAlias": "コダイダロス",
       "cardId": "23860",
@@ -419881,20 +420336,6 @@
       "normalizedAlias": "转生炎兽的神剑",
       "cardId": "23874",
       "cardName": "転生炎獣の神剣",
-      "language": "zh"
-    },
-    {
-      "alias": "転生炎獣の神域",
-      "normalizedAlias": "転生炎獣の神域",
-      "cardId": "23873",
-      "cardName": "転生炎獣の神域",
-      "language": "ja"
-    },
-    {
-      "alias": "转生炎兽的神域",
-      "normalizedAlias": "转生炎兽的神域",
-      "cardId": "23873",
-      "cardName": "転生炎獣の神域",
       "language": "zh"
     },
     {
@@ -420010,132 +420451,6 @@
       "language": "zh"
     },
     {
-      "alias": "バニリン・エキストラクト",
-      "normalizedAlias": "バニリン・エキストラクト",
-      "cardId": "23877",
-      "cardName": "バニリン・エキストラクト",
-      "language": "ja"
-    },
-    {
-      "alias": "香草白兔冰的精粹",
-      "normalizedAlias": "香草白兔冰的精粹",
-      "cardId": "23877",
-      "cardName": "バニリン・エキストラクト",
-      "language": "zh"
-    },
-    {
-      "alias": "香草醛兔提取物",
-      "normalizedAlias": "香草醛兔提取物",
-      "cardId": "23877",
-      "cardName": "バニリン・エキストラクト",
-      "language": "zh"
-    },
-    {
-      "alias": "バニリン・ソフト",
-      "normalizedAlias": "バニリン・ソフト",
-      "cardId": "23891",
-      "cardName": "バニリン・ソフト",
-      "language": "ja"
-    },
-    {
-      "alias": "软软香草白兔冰",
-      "normalizedAlias": "软软香草白兔冰",
-      "cardId": "23891",
-      "cardName": "バニリン・ソフト",
-      "language": "zh"
-    },
-    {
-      "alias": "香草醛兔软件冰淇淋",
-      "normalizedAlias": "香草醛兔软件冰淇淋",
-      "cardId": "23891",
-      "cardName": "バニリン・ソフト",
-      "language": "zh"
-    },
-    {
-      "alias": "バニリン：モカMOD",
-      "normalizedAlias": "バニリン:モカmod",
-      "cardId": "23831",
-      "cardName": "バニリン：モカMOD",
-      "language": "ja"
-    },
-    {
-      "alias": "香草白兔冰：摩卡模组",
-      "normalizedAlias": "香草白兔冰:摩卡模组",
-      "cardId": "23831",
-      "cardName": "バニリン：モカMOD",
-      "language": "zh"
-    },
-    {
-      "alias": "香草醛兔：摩卡MOD",
-      "normalizedAlias": "香草醛兔:摩卡mod",
-      "cardId": "23831",
-      "cardName": "バニリン：モカMOD",
-      "language": "zh"
-    },
-    {
-      "alias": "パワー・オブ・ザ・デュエリスト",
-      "normalizedAlias": "パワ-・オブ・ザ・デュエリスト",
-      "cardId": "23878",
-      "cardName": "パワー・オブ・ザ・デュエリスト",
-      "language": "ja"
-    },
-    {
-      "alias": "决斗者之力",
-      "normalizedAlias": "决斗者之力",
-      "cardId": "23878",
-      "cardName": "パワー・オブ・ザ・デュエリスト",
-      "language": "zh"
-    },
-    {
-      "alias": "災禍の根絶者",
-      "normalizedAlias": "災禍の根絶者",
-      "cardId": "23832",
-      "cardName": "災禍の根絶者",
-      "language": "ja"
-    },
-    {
-      "alias": "灾祸的根绝者",
-      "normalizedAlias": "灾祸的根绝者",
-      "cardId": "23832",
-      "cardName": "災禍の根絶者",
-      "language": "zh"
-    },
-    {
-      "alias": "リインゼルム・アムルサ",
-      "normalizedAlias": "リインゼルム・アムルサ",
-      "cardId": "23835",
-      "cardName": "リインゼルム・アムルサ",
-      "language": "ja"
-    },
-    {
-      "alias": "轮回虫龙 大紫蛱蝶",
-      "normalizedAlias": "轮回虫龙 大紫蛱蝶",
-      "cardId": "23835",
-      "cardName": "リインゼルム・アムルサ",
-      "language": "zh"
-    },
-    {
-      "alias": "无死虫龙·紫蛱蝶鳞虫",
-      "normalizedAlias": "无死虫龙·紫蛱蝶鳞虫",
-      "cardId": "23835",
-      "cardName": "リインゼルム・アムルサ",
-      "language": "zh"
-    },
-    {
-      "alias": "百竜の交戦",
-      "normalizedAlias": "百竜の交戦",
-      "cardId": "23887",
-      "cardName": "百竜の交戦",
-      "language": "ja"
-    },
-    {
-      "alias": "百龙的交战",
-      "normalizedAlias": "百龙的交战",
-      "cardId": "23887",
-      "cardName": "百竜の交戦",
-      "language": "zh"
-    },
-    {
       "alias": "リインゼルム・カルカサス",
       "normalizedAlias": "リインゼルム・カルカサス",
       "cardId": "23837",
@@ -420175,55 +420490,6 @@
       "normalizedAlias": "无死虫龙的鼓动",
       "cardId": "23867",
       "cardName": "無死なる竜の鼓動",
-      "language": "zh"
-    },
-    {
-      "alias": "リインゼルム・ギガロヴェンドラ",
-      "normalizedAlias": "リインゼルム・ギガロヴェンドラ",
-      "cardId": "23838",
-      "cardName": "リインゼルム・ギガロヴェンドラ",
-      "language": "ja"
-    },
-    {
-      "alias": "轮回虫龙 秘鲁巨人蜈蚣",
-      "normalizedAlias": "轮回虫龙 秘鲁巨人蜈蚣",
-      "cardId": "23838",
-      "cardName": "リインゼルム・ギガロヴェンドラ",
-      "language": "zh"
-    },
-    {
-      "alias": "无死虫龙·巨人蜈蚣鳞虫",
-      "normalizedAlias": "无死虫龙·巨人蜈蚣鳞虫",
-      "cardId": "23838",
-      "cardName": "リインゼルム・ギガロヴェンドラ",
-      "language": "zh"
-    },
-    {
-      "alias": "リインゼルム・ギリアカルマ",
-      "normalizedAlias": "リインゼルム・ギリアカルマ",
-      "cardId": "23839",
-      "cardName": "リインゼルム・ギリアカルマ",
-      "language": "ja"
-    },
-    {
-      "alias": "轮回虫龙 奇伦南洋大兜虫",
-      "normalizedAlias": "轮回虫龙 奇伦南洋大兜虫",
-      "cardId": "23839",
-      "cardName": "リインゼルム・ギリアカルマ",
-      "language": "zh"
-    },
-    {
-      "alias": "轮回虫龙・铜身三戟龙",
-      "normalizedAlias": "轮回虫龙・铜身三戟龙",
-      "cardId": "23839",
-      "cardName": "リインゼルム・ギリアカルマ",
-      "language": "ja"
-    },
-    {
-      "alias": "无死虫龙·喀戎独角仙鳞虫",
-      "normalizedAlias": "无死虫龙·喀戎独角仙鳞虫",
-      "cardId": "23839",
-      "cardName": "リインゼルム・ギリアカルマ",
       "language": "zh"
     },
     {
