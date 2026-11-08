@@ -1,18 +1,20 @@
 // User-facing short engine-reproduction section; the full step-by-step replay stays in `rendered`
 // (collapsed on the website). Layout since 2026-10-30, top to bottom:
-//   header → 结论 (one or two sentences a model wrote for this question from the observations below,
-//   conclusion.mjs) → 依据的引擎观察值 (the observations that sentence used, listed verbatim) → 局面 →
+//   header → 结论 (a model wrote one sentence per sub-question from the observations below, conclusion.mjs;
+//   a question with one sub-question reads "结论：<sentence>", several read one "- 子问题 n「…」：<sentence>"
+//   line each, 2026-11-08) → 依据的引擎观察值 (the observations those sentences used, listed verbatim) → 局面 →
 //   假设 → why a part was not reproduced → official-Q&A line → disclaimer.
 // Without a conclusion sentence (switch off, the call failed, nothing was observed, an older record)
 // every observation is listed instead. 未复现 shows the reasons only; 不适用 one plain reason.
 //
 // Everything in this file is mechanical. It restates structured fields of the reproduction record:
-// probe results, the full state of the cards at the moment the engine stopped (every field the engine
-// can report; a field it did not report is written 未取得, never dropped), life points, cards that left
-// the field, where a failed replay stopped, the planner's own words for a part it could not build and
-// plan-check problems. It never reads the question text, never decides which observation answers the
-// question, never compares the engine result with the main answer and never judges whether either is
-// right. The wording uses players' terms (phases and timings), not replay / log vocabulary.
+// probe results, the cards a marked selection offered (select_probes, selectProbes.mjs), the full state of
+// the cards at the moment the engine stopped (every field the engine can report; a field it did not report
+// is written 未取得, never dropped), life points, cards that left the field, where a failed replay stopped,
+// the planner's own words for a part it could not build and plan-check problems. It never reads the question
+// text, never decides which observation answers the question, never compares the engine result with the main
+// answer and never judges whether either is right. The wording uses players' terms (phases and timings),
+// not replay / log vocabulary.
 // The engine is named (ygopro, MyCard core) so readers know which program produced the result.
 import { STATUS, branchOutcome, probeResult, reproductionFailure } from "./aggregate.mjs";
 import { ATTRIBUTE_BITS, FILLER_CARDS, RACE_BITS } from "./plannerPrompt.mjs";
@@ -142,7 +144,8 @@ const LINK_MARKER_BITS = Object.freeze([["左下", 0x1], ["下", 0x2], ["右下"
  * Pure view model of one reproduction record for the short section, built from structured fields only
  * (no rendered text is parsed). `observations` are the engine's results, numbered o1, o2, … in record
  * order (the conclusion call cites them by these ids); `notReproduced` are the reasons a part was not
- * reproduced; `conclusion` is the conclusion sentence with the observations it used, when there is one.
+ * reproduced; `conclusion` is the conclusion (one sentence per sub-question, or an older record's single
+ * sentence) with the observations it used, when there is one.
  */
 export function engineReproDigest(record = {}) {
   const names = cardNameIndex(record);
@@ -199,13 +202,15 @@ export function engineReproConciseText(digest, { officialQaMatches = [] } = {}) 
   }
 
   const lines = [head];
-  const conclusion = digest.conclusion && typeof digest.conclusion.text === "string" && digest.conclusion.text.trim()
-    ? digest.conclusion : null;
+  const conclusionText = conclusionBlock(digest.conclusion, digest.subQuestions);
+  const conclusion = conclusionText ? digest.conclusion : null;
   const observations = Array.isArray(digest.observations) ? digest.observations : [];
   if (conclusion) {
-    lines.push(`${CONCISE_CONCLUSION_LEAD}${sentence(conclusion.text)}`);
+    lines.push(conclusionText);
     const evidence = cleanTexts(conclusion.evidence);
     if (evidence.length) lines.push([CONCISE_EVIDENCE_LEAD, ...evidence.map((text) => `- ${text}`)].join("\n"));
+    // every sentence said what is missing and cited nothing: the engine's observations are still listed
+    else if (observations.length) lines.push([CONCISE_RESULTS_LEAD, ...fallbackItems(observations)].join("\n"));
   } else if (observations.length) {
     lines.push([CONCISE_RESULTS_LEAD, ...fallbackItems(observations)].join("\n"));
   }
@@ -266,15 +271,40 @@ function reasonsBlock(lead, items) {
   return [lead, ...shown].join("\n");
 }
 
+// "结论：<sentence>" for a question with one sub-question (and for an older record's single sentence);
+// with several sub-questions a lead line and one "- 子问题 n「…」：<sentence>" item per sub-question, in order.
+function conclusionBlock(conclusion, subQuestions = []) {
+  if (!conclusion || typeof conclusion !== "object") return "";
+  const list = Array.isArray(conclusion.perQuestion) ? conclusion.perQuestion.filter((item) => item?.sentence) : null;
+  if (!list) return typeof conclusion.text === "string" && conclusion.text.trim() ? `${CONCISE_CONCLUSION_LEAD}${sentence(conclusion.text)}` : "";
+  if (!list.length) return "";
+  const questions = Array.isArray(subQuestions) ? subQuestions : [];
+  if (questions.length <= 1 && list.length === 1) return `${CONCISE_CONCLUSION_LEAD}${sentence(list[0].sentence)}`;
+  const label = (index) => questions[index]?.label || `子问题 ${index + 1}`;
+  return [CONCISE_CONCLUSION_LEAD, ...[...list].sort((a, b) => a.index - b.index)
+    .map((item) => `- ${label(item.index)}：${sentence(item.sentence)}`)].join("\n");
+}
+
 function sentence(text) {
   const value = String(text || "").replace(/\s+/gu, " ").trim();
   return /[。！？.!?]$/u.test(value) ? value : `${value}。`;
 }
 
+// A conclusion with one sentence per sub-question (conclusion.mjs, 2026-11-08: perQuestion, each with the
+// index of its sub-question), or an older record's single sentence (text). The evidence is the union of the
+// observations the sentences used, as stored with the conclusion.
 function conclusionDigest(conclusion) {
-  if (conclusion?.status !== "done" || typeof conclusion.text !== "string" || !conclusion.text.trim()) return null;
-  return { text: conclusion.text.trim(),
-    evidence: (Array.isArray(conclusion.used) ? conclusion.used : []).map((item) => item?.text).filter((text) => typeof text === "string" && text) };
+  if (conclusion?.status !== "done") return null;
+  const evidence = (Array.isArray(conclusion.used) ? conclusion.used : []).map((item) => item?.text).filter((text) => typeof text === "string" && text);
+  if (Array.isArray(conclusion.perQuestion)) {
+    const perQuestion = conclusion.perQuestion
+      .map((item) => ({ index: Number.isSafeInteger(item?.index) ? item.index : null, verdict: item?.verdict || null,
+        sentence: typeof item?.sentence === "string" ? item.sentence.replace(/\s+/gu, " ").trim() : "" }))
+      .filter((item) => item.index !== null && item.sentence);
+    return perQuestion.length ? { perQuestion, evidence } : null;
+  }
+  if (typeof conclusion.text !== "string" || !conclusion.text.trim()) return null;
+  return { text: conclusion.text.trim(), evidence };
 }
 
 function branchDigest(branch, names, namedCodes, label) {
@@ -284,6 +314,14 @@ function branchDigest(branch, names, namedCodes, label) {
   const turnPlayers = new Map((Array.isArray(engine?.decisions) ? engine.decisions : [])
     .map((entry) => [entry?.decision?.index, entry?.decision?.turn_player]));
   const probes = (engine?.probes || []).map((probe) => probeDigest(probe, names, turnPlayers));
+  // selection check points (plan select_probes): what the engine offered there, and the candidates the plan put
+  // on both sides of the question's condition (their sides are the plan's description, not an engine result)
+  const selectProbes = (Array.isArray(branch?.selectProbeResults) ? branch.selectProbeResults : [])
+    .map((result) => selectProbeDigest(result, names));
+  const selectCandidates = (Array.isArray(branch?.selectProbes) ? branch.selectProbes : []).flatMap((probe) =>
+    (Array.isArray(probe?.candidates) ? probe.candidates : []).map((item) => ({ name: names.get(Number(item?.card)) || "卡",
+      side: item?.side || null, from: item?.from || null })));
+  const resultCards = Array.isArray(branch?.resultCards) ? branch.resultCards : [];
   return {
     label,
     assumption: typeof branch?.assumption === "string" && branch.assumption.trim() ? branch.assumption.trim() : null,
@@ -294,8 +332,13 @@ function branchDigest(branch, names, namedCodes, label) {
     probeObserved: outcome.observed === true && !outcome.ok,
     probeNotReached: ["probe_not_reached", "probe_interval_incomplete"].includes(failure?.reason),
     probes,
+    selectProbes,
+    selectCandidates,
     failure: outcome.ok ? null : failureDigest({ ...engine, failure }, names, branch?.actions?.setup),
-    end: outcome.ok && !probes.length ? endStateDigest(engine, branch?.scenario, names, branch?.resultCards) : null,
+    // the state where the engine stopped: for a branch without check points, or one whose only check points are
+    // selections when the plan names result cards
+    end: outcome.ok && !probes.length && (!(branch?.selectProbes || []).length || resultCards.length)
+      ? endStateDigest(engine, branch?.scenario, names, branch?.resultCards) : null,
     board: boardDigest(branch?.scenario, names, namedCodes),
     // the cards the plan said answer the question (plan result_cards), by name
     resultCards: (Array.isArray(branch?.resultCards) ? branch.resultCards : [])
@@ -320,9 +363,10 @@ function collectObservations(subQuestions) {
       // a branch whose check points were not all reached still reports what each of them saw
       if (!(branch.ok || branch.probeNotReached || branch.probeObserved)) return;
       // an "empty" item says the engine reported nothing to look at; it is listed but is not a result
-      const list = branch.probes.length ? branch.probes.map((probe) => ({ body: probeSentence(probe) }))
-        : branch.end ? endObservationItems(branch.end)
-          : [{ body: "引擎做完了计划里的操作，没有返回之后的局面", empty: true }];
+      const list = [...branch.probes.map((probe) => ({ body: probeSentence(probe) })),
+        ...(branch.selectProbes || []).map((probe) => ({ body: selectSentence(probe), empty: probe.status !== "observed" })),
+        ...(branch.end ? endObservationItems(branch.end) : [])];
+      if (!list.length) list.push({ body: "引擎做完了计划里的操作，没有返回之后的局面", empty: true });
       list.forEach((item, index) => items.push({ ...item, label: branch.label, branch: `${sqIndex}/${branchIndex}`,
         first: index === 0, observe: branch.observe || null }));
     });
@@ -1033,6 +1077,86 @@ function probeSentence(probe) {
 }
 
 // ---------------------------------------------------------------------------------------------------
+// Selection check points (plan select_probes, read by selectProbes.mjs from the engine's decision record).
+// ---------------------------------------------------------------------------------------------------
+
+const SELECT_SHOWN = 8;
+const SELECT_ZONE_ZH = Object.freeze({ hand: "手卡", deck: "卡组", grave: "墓地", removed: "除外区", extra: "额外卡组",
+  mzone: "场上", szone: "场上", fzone: "场地区", pzone: "灵摆区", overlay: "超量素材" });
+
+function selectProbeDigest(result, names) {
+  const decision = result?.decision && typeof result.decision === "object" ? result.decision : null;
+  const named = (card) => ({ ...card, name: (typeof card?.name === "string" && card.name) || names.get(Number(card?.card)) || "卡" });
+  return {
+    status: typeof result?.status === "string" ? result.status : null,
+    player: result?.player,
+    when: decision ? timeLabel(decision.phase, decision.turn_player, result.player, decision.at) : null,
+    chain: decision ? windowChainText(decision) : null,
+    hint: typeof decision?.hint === "string" && decision.hint.trim() ? decision.hint.trim() : null,
+    selectable: (Array.isArray(result?.selectable) ? result.selectable : []).map(named),
+    candidates: (Array.isArray(result?.candidates) ? result.candidates : []).map(named),
+    factsUnavailable: result?.factsUnavailable === true,
+  };
+}
+
+// "我方在主要阶段1（连锁 1 处理中）选择卡（提示「请选择要特殊召唤的卡」）时，可选：卡组的「A」（效果·调整 2星 光/机械
+// 200/1500）、…；不可选：卡组的「C」（…）（括号里是卡片的原本数据）". 可选 is every card the engine offered; 不可选 are the
+// plan's candidates that were in their zone at that moment and were not offered (ygopro only lists the cards a
+// selection allows, so other cards of the zone are not named). A candidate whose presence cannot be told says so.
+function selectSentence(probe) {
+  const who = SIDE[probe.player] || "";
+  if (probe.status === "not_reached" || !probe.status) return `${who}要看的那次选卡没有出现在引擎的记录里，看不出能选哪些卡`;
+  if (probe.status === "not_card_selection") return `计划要看的那次操作在引擎里不是选卡，看不出能选哪些卡`;
+  const time = probe.when ? `在${probe.when}${probe.chain ? `（${probe.chain}）` : ""}` : "";
+  const head = `${who}${time}选择卡${probe.hint ? `（提示「${probe.hint}」）` : ""}时`;
+  if (probe.status !== "observed") return `${head}，引擎没有返回可选的卡（${NOT_OBTAINED}）`;
+  const item = (card) => selectCardText(card, probe.player);
+  const parts = [];
+  const offered = probe.selectable.slice(0, SELECT_SHOWN).map(item);
+  const more = probe.selectable.length > SELECT_SHOWN ? `等 ${probe.selectable.length} 张` : "";
+  parts.push(`可选：${offered.length ? `${offered.join("、")}${more}` : "没有"}`);
+  const by = (result) => probe.candidates.filter((card) => card.result === result);
+  const notOffered = by("not_selectable");
+  if (notOffered.length) parts.push(`不可选：${notOffered.map(item).join("、")}`);
+  const zoneOf = (card) => `${card.controller !== probe.player && SIDE[card.controller] ? SIDE[card.controller] : ""}${SELECT_ZONE_ZH[card.from] || "原来的区域"}`;
+  const named = (cards) => cards.map((card) => `「${card.name}」`).join("、");
+  for (const card of by("left_zone")) parts.push(`「${card.name}」在这次选卡前已经离开${zoneOf(card)}，不在可选之列`);
+  for (const card of by("not_placed")) parts.push(`计划没有把「${card.name}」放进${zoneOf(card)}`);
+  const unknown = by("presence_unknown");
+  if (unknown.length) parts.push(`${named(unknown)}不在可选之列，但当时是否在${[...new Set(unknown.map(zoneOf))].join("、")}${NOT_OBTAINED}`);
+  if (probe.candidates.length && probe.candidates.every((card) => card.result === "selectable")) parts.push("计划放的对照候选都可以选");
+  const showsData = [...probe.selectable.slice(0, SELECT_SHOWN), ...notOffered].some((card) => cardFactsText(card.facts));
+  const note = probe.factsUnavailable ? "（卡片数据未取得）" : showsData ? "（括号里是卡片的原本数据）" : "";
+  return `${head}，${parts.join("；")}${note}`;
+}
+
+function selectCardText(card, chooser) {
+  const owner = (card.controller === 0 || card.controller === 1) && card.controller !== chooser ? SIDE[card.controller] : "";
+  const facts = cardFactsText(card.facts);
+  return `${owner}${SELECT_ZONE_ZH[card.from] || ""}的「${card.name}」${facts ? `（${facts}）` : ""}`;
+}
+
+// A card's printed data from the engine's card database, the way players write it: "效果·调整 2星 光/机械 200/1500",
+// "连接2 暗/电子界 攻1800", "魔法·速攻".
+function cardFactsText(facts) {
+  if (!facts || typeof facts !== "object") return "";
+  const types = Array.isArray(facts.types) ? facts.types : [];
+  const stat = (value) => (value < 0 ? "?" : String(value));
+  if (!types.includes("怪兽")) return types.join("·");
+  const parts = [];
+  const kinds = types.filter((type) => type !== "怪兽");
+  if (kinds.length) parts.push(kinds.join("·"));
+  if (Number.isFinite(facts.level)) parts.push(`${facts.level}星`);
+  else if (Number.isFinite(facts.rank)) parts.push(`${facts.rank}阶`);
+  else if (Number.isFinite(facts.link_rating)) parts.push(`连接${facts.link_rating}`);
+  const kind = [facts.attribute, facts.race].filter(Boolean).join("/");
+  if (kind) parts.push(kind);
+  if (Number.isFinite(facts.atk) && Number.isFinite(facts.def)) parts.push(`${stat(facts.atk)}/${stat(facts.def)}`);
+  else if (Number.isFinite(facts.atk)) parts.push(`攻${stat(facts.atk)}`);
+  return parts.join(" ");
+}
+
+// ---------------------------------------------------------------------------------------------------
 // Card names and the planned board.
 // ---------------------------------------------------------------------------------------------------
 
@@ -1060,6 +1184,13 @@ function cardNameIndex(record) {
         }
       }
       for (const event of engine.log || []) add(event?.card, event?.name);
+    }
+  }
+  for (const sq of record.subQuestions || []) {
+    for (const branch of sq?.branches || []) {
+      for (const result of branch?.selectProbeResults || []) {
+        for (const card of [...(result?.selectable || []), ...(result?.candidates || [])]) add(card?.card, card?.name);
+      }
     }
   }
   for (const card of FILLER_CARDS) add(card.code, card.name);

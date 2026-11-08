@@ -58,6 +58,8 @@ export function reproductionFailure(branch) {
 // One branch result -> {ok, reason, observed}. A replay that took every setup step but left a check point
 // unreached is not ok (the engine reports action_mismatch / probe_not_reached); it still counts as observed
 // when another check point got a result, so the question reads 部分复现 with that result, not 未复现.
+// A selection check point (select_probes, selectProbes.mjs) whose selection the engine recorded is such a
+// result too (2026-11-08).
 export function branchOutcome(branch) {
   const r = branch.engine;
   if (!r) return { ok: false, reason: branch.planReason || "invalid_input", observed: false };
@@ -65,7 +67,8 @@ export function branchOutcome(branch) {
   if (r.status === "replayed" && !failure) return { ok: true, reason: null, observed: true };
   if (r.status === "invalid_input") return { ok: false, reason: "invalid_input", observed: false };
   const observed = ["probe_not_reached", "probe_interval_incomplete", "required_decision_pending"].includes(failure?.reason)
-    && (Array.isArray(r.probes) ? r.probes : []).some((probe) => DEFINITE_PROBE_RESULTS.has(probeResult(probe)));
+    && ((Array.isArray(r.probes) ? r.probes : []).some((probe) => DEFINITE_PROBE_RESULTS.has(probeResult(probe)))
+      || (Array.isArray(branch.selectProbeResults) ? branch.selectProbeResults : []).some((result) => result?.status === "observed"));
   return { ok: false, reason: r.reason_code || (failure ? "action_mismatch" : "engine_error"), observed };
 }
 

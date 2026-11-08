@@ -9,6 +9,7 @@ import { STATUS, aggregateQuestion, branchOutcome, renderQuestion, reproductionF
 import { engineReproDigest } from "./concise.mjs";
 import { writeConclusion } from "./conclusion.mjs";
 import { estimateTokens } from "./modelCalls.mjs";
+import { checkSelectProbes, evaluateSelectProbes, normalizeSelectProbes, selectProbeCodes } from "./selectProbes.mjs";
 
 export const DEFAULT_PLANNER = Object.freeze({ model: "gpt-6.1-sol", effort: "low", maxOutput: 1600, maxInput: 16000 });
 const REASON_CODES = ["pure_rule", "archetype_level", "tournament_policy", "ruleset_version"];
@@ -154,6 +155,8 @@ async function checkPlan(plan, allowedCodes, engine) {
           }
         }
       }
+      // selection check points (selectProbes.mjs): shape, the selection step they point at, candidate cards
+      bp.push(...checkSelectProbes(b.select_probes, b.actions?.setup, allowed));
       if (bp.length) branchProblems.set(`${sq.id}/${b.id}`, [...new Set(bp)]);
     }
   }
@@ -428,7 +431,7 @@ export async function runEngineReproduction({ question, identity, cardsById, cid
       for (const b of sq.branches) {
         const key = `${sq.id}/${b.id}`;
         if (onlyKeys && !onlyKeys.has(key)) continue;
-        if (b.planProblems) { b.engine = null; continue; }
+        if (b.planProblems) { b.engine = null; if (b.selectProbeResults) delete b.selectProbeResults; continue; }
         jobs.push(b);
       }
     }
@@ -436,6 +439,27 @@ export async function runEngineReproduction({ question, identity, cardsById, cid
     const results = await enginePhase(() => Promise.all(jobs.map((b) =>
       engine("reproduce", { scenario: b.scenario, actions: b.actions }).then((r) => r.result))));
     jobs.forEach((b, i) => { b.engine = results[i]; });
+    await readSelections(jobs);
+  };
+  // The branches' selection check points (select_probes, never sent to the engine): what the engine offered at
+  // the marked selections, read from its decision record, with the printed card data of every card named there
+  // (one card-data request for the whole phase; without it the lists still name the cards).
+  const readSelections = async (branches) => {
+    for (const b of branches) if (!b.selectProbes?.length && b.selectProbeResults) delete b.selectProbeResults;
+    const probed = branches.filter((b) => b.selectProbes?.length);
+    if (!probed.length) return;
+    const codes = selectProbeCodes(probed);
+    let facts = new Map();
+    let factsUnavailable = false;
+    if (codes.length) {
+      try {
+        const response = await timedEngine("cards", { codes });
+        facts = new Map((Array.isArray(response?.cards) ? response.cards : []).map((card) => [Number(card?.code), card]));
+      } catch {
+        factsUnavailable = true;
+      }
+    }
+    for (const b of probed) b.selectProbeResults = evaluateSelectProbes(b, { facts, factsUnavailable });
   };
   const adoptPlan = async (plan) => {
     const check = await checkPlan(plan, allowed, timedEngine);
@@ -443,9 +467,13 @@ export async function runEngineReproduction({ question, identity, cardsById, cid
     record.planProblems = check.problems;
     record.subQuestions = (plan.sub_questions || []).map((sq) => ({ id: sq.id, quoted_span: sq.quoted_span,
       unrepresentable: sq.unrepresentable || null,
-      branches: (sq.unrepresentable ? [] : (sq.branches || [])).map((b) => ({ id: b.id, assumption: b.assumption || null,
-        observe: b.observe || null, resultCards: normalizeResultCards(b.result_cards), ...expandPlanDefaults(b.scenario, b.actions),
-        planProblems: check.branchProblems.get(`${sq.id}/${b.id}`) || null })) }));
+      branches: (sq.unrepresentable ? [] : (sq.branches || [])).map((b) => {
+        const selectProbes = normalizeSelectProbes(b.select_probes);
+        return { id: b.id, assumption: b.assumption || null,
+          observe: b.observe || null, resultCards: normalizeResultCards(b.result_cards), ...expandPlanDefaults(b.scenario, b.actions),
+          ...(selectProbes ? { selectProbes } : {}),
+          planProblems: check.branchProblems.get(`${sq.id}/${b.id}`) || null };
+      }) }));
     return check;
   };
   const verifyArchetype = async (plan) => {
@@ -511,17 +539,31 @@ export async function runEngineReproduction({ question, identity, cardsById, cid
     return finish();
   }
   const fixed = new Set();
-  const extraCheck = await checkPlan({ ...fix, applicability: "applicable", sub_questions: fix.sub_questions || [],
-    extra_cards: [...(record.plan.extra_cards || []), ...(fix.extra_cards || [])] }, allowed, timedEngine);
-  for (const fsq of fix.sub_questions || []) {
+  // A repaired branch that does not restate its select_probes keeps the first plan's, checked again against
+  // the repaired setup (its step numbers may have moved).
+  const fixSubQuestions = (Array.isArray(fix.sub_questions) ? fix.sub_questions : []).map((fsq) => {
+    if (!fsq || typeof fsq !== "object" || !Array.isArray(fsq.branches)) return fsq;
     const sq = record.subQuestions.find((x) => x.id === fsq.id);
+    return { ...fsq, branches: fsq.branches.map((fb) => {
+      if (!fb || typeof fb !== "object" || fb.select_probes !== undefined) return fb;
+      const previous = sq?.branches.find((x) => x.id === fb.id)?.selectProbes;
+      return previous ? { ...fb, select_probes: previous } : fb;
+    }) };
+  });
+  const extraCheck = await checkPlan({ ...fix, applicability: "applicable", sub_questions: fixSubQuestions,
+    extra_cards: [...(record.plan.extra_cards || []), ...(fix.extra_cards || [])] }, allowed, timedEngine);
+  for (const fsq of fixSubQuestions) {
+    const sq = record.subQuestions.find((x) => x.id === fsq?.id);
     if (!sq) continue;
     if (fsq.unrepresentable && fsq.unrepresentable !== "null") { sq.unrepresentable = fsq.unrepresentable; sq.branches = []; sq.repaired = true; continue; }
     for (const fb of fsq.branches || []) {
       const b = sq.branches.find((x) => x.id === fb.id);
       if (!b || branchOutcome(b).ok) continue;
+      const selectProbes = normalizeSelectProbes(fb.select_probes);
+      if (b.selectProbes && !selectProbes) delete b.selectProbes;
       Object.assign(b, { ...expandPlanDefaults(fb.scenario, fb.actions), observe: fb.observe || b.observe,
         resultCards: fb.result_cards !== undefined ? normalizeResultCards(fb.result_cards) : b.resultCards,
+        ...(selectProbes ? { selectProbes } : {}),
         assumption: fb.assumption ?? b.assumption, repaired: true, firstEngine: b.engine ? summarizeEngine(b.engine) : null,
         firstPlanProblems: b.planProblems, planProblems: extraCheck.branchProblems.get(`${sq.id}/${b.id}`) || null });
       fixed.add(`${sq.id}/${b.id}`);
