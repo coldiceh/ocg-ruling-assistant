@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-08T00:55:32.473Z",
+  "generatedAt": "2026-11-09T01:19:08.553Z",
   "records": [
     {
       "id": "21385",
@@ -25337,6 +25337,64 @@
       ]
     },
     {
+      "id": "23816",
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Warrior",
+      "monsterPropertyIds": [
+        "12",
+        "4"
+      ],
+      "monsterProperties": [
+        "Warrior",
+        "Effect"
+      ],
+      "propertyIds": [
+        "12",
+        "4"
+      ],
+      "properties": [
+        "Warrior",
+        "Effect"
+      ],
+      "attack": 1500,
+      "atk": 1500,
+      "defense": 1300,
+      "def": 1300,
+      "level": 4,
+      "attribute": "earth",
+      "name": "アマゾネスの鎖使い－死に際の鎖舞い－",
+      "cnName": "亚马逊锁链使-临终锁舞-",
+      "jaName": "アマゾネスの鎖使い－死に際の鎖舞い－",
+      "enName": "Amazoness Chain Master - Brink of Death Chain Dance",
+      "effectText": "このカード名の効果は１ターンに１度しか使用できない。\n①：このカードが墓地へ送られた場合、自分の墓地に他の「アマゾネス」モンスターが存在していれば、１０００LPを払って発動できる。相手は自身のデッキ・EXデッキからレベル１０モンスター１体を選ぶ事ができる。その場合、自分はそのモンスターを召喚条件を無視して自分フィールドに特殊召喚できる。選ばなかった場合、自分は相手の手札をランダムに１枚捨てる。この効果で特殊召喚したモンスターは、このターン効果を発動できない。",
+      "released": true,
+      "aliases": [
+        "アマゾネスの鎖使い－死に際の鎖舞い－",
+        "Amazoness Chain Master - Brink of Death Chain Dance",
+        "亚马逊锁链使-临终锁舞-",
+        "亚马逊锁链使-临死的锁链舞-"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/23816",
+      "updatedAt": "2026-11-09T01:16:25.967Z",
+      "chineseNameSources": [
+        {
+          "name": "亚马逊锁链使-临终锁舞-",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23816"
+        },
+        {
+          "name": "亚马逊锁链使-临死的锁链舞-",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23816"
+        }
+      ]
+    },
+    {
       "id": "23885",
       "type": "trap",
       "cardType": "trap",
@@ -25515,6 +25573,63 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "5295"
+        }
+      ]
+    },
+    {
+      "id": "23817",
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Warrior",
+      "monsterPropertyIds": [
+        "12",
+        "4"
+      ],
+      "monsterProperties": [
+        "Warrior",
+        "Effect"
+      ],
+      "propertyIds": [
+        "12",
+        "4"
+      ],
+      "properties": [
+        "Warrior",
+        "Effect"
+      ],
+      "attack": 1500,
+      "atk": 1500,
+      "defense": 1300,
+      "def": 1300,
+      "level": 4,
+      "attribute": "earth",
+      "name": "アマゾネスの格闘戦士－蹴殺の舞い－",
+      "cnName": "亚马逊格斗战士-蹴杀之舞-",
+      "jaName": "アマゾネスの格闘戦士－蹴殺の舞い－",
+      "enName": "Amazoness Fighter - Instant Kill Dance",
+      "effectText": "このカード名の①②③の効果はそれぞれ１ターンに１度しか使用できない。\n①：このカードがドロー以外の方法で手札に加わった場合に発動できる。このカードを特殊召喚する。\n②：このカードが召喚・特殊召喚した場合に発動できる。デッキから「ハーピィ・レディ」のカード名が記された魔法・罠カード１枚を自分フィールドにセットする。\n③：自分の「アマゾネス」モンスターが相手モンスターと戦闘を行うダメージ計算時に発動できる。その２体はその戦闘では破壊されず、その戦闘で発生する自分への戦闘ダメージは０になる。",
+      "released": true,
+      "aliases": [
+        "アマゾネスの格闘戦士－蹴殺の舞い－",
+        "Amazoness Fighter - Instant Kill Dance",
+        "亚马逊格斗战士-蹴杀之舞-"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/23817",
+      "updatedAt": "2026-11-09T01:16:26.013Z",
+      "chineseNameSources": [
+        {
+          "name": "亚马逊格斗战士-蹴杀之舞-",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23817"
+        },
+        {
+          "name": "亚马逊格斗战士-蹴杀之舞-",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23817"
         }
       ]
     },
@@ -26666,6 +26781,63 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "5296"
+        }
+      ]
+    },
+    {
+      "id": "23818",
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Warrior",
+      "monsterPropertyIds": [
+        "12",
+        "4"
+      ],
+      "monsterProperties": [
+        "Warrior",
+        "Effect"
+      ],
+      "propertyIds": [
+        "12",
+        "4"
+      ],
+      "properties": [
+        "Warrior",
+        "Effect"
+      ],
+      "attack": 400,
+      "atk": 400,
+      "defense": 800,
+      "def": 800,
+      "level": 3,
+      "attribute": "earth",
+      "name": "アマゾネスの呪詛師－呪印の舞い－",
+      "cnName": "亚马逊诅咒师-咒印之舞-",
+      "jaName": "アマゾネスの呪詛師－呪印の舞い－",
+      "enName": "Amazoness Spellcaster - Forbidden Spell Dance",
+      "effectText": "このカード名の①②③の効果はそれぞれ１ターンに１度しか使用できない。\n①：このカードが召喚・特殊召喚した場合に発動できる。デッキからレベル３以外の「アマゾネス」モンスター１体を手札に加える。\n②：自分メインフェイズに発動できる。自分の手札・フィールドのモンスターを融合素材とし、地・風属性の融合モンスター１体を融合召喚する。\n③：自分の「アマゾネス」モンスターが相手モンスターと戦闘を行うダメージ計算時、墓地のこのカードを除外して発動できる。その２体の攻撃力をターン終了時まで入れ替える。",
+      "released": true,
+      "aliases": [
+        "アマゾネスの呪詛師－呪印の舞い－",
+        "Amazoness Spellcaster - Forbidden Spell Dance",
+        "亚马逊诅咒师-咒印之舞-"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/23818",
+      "updatedAt": "2026-11-09T01:16:26.177Z",
+      "chineseNameSources": [
+        {
+          "name": "亚马逊诅咒师-咒印之舞-",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23818"
+        },
+        {
+          "name": "亚马逊诅咒师-咒印之舞-",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23818"
         }
       ]
     },
@@ -39045,6 +39217,68 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "20404"
+        }
+      ]
+    },
+    {
+      "id": "23822",
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Illusion",
+      "monsterPropertyIds": [
+        "41",
+        "20",
+        "4"
+      ],
+      "monsterProperties": [
+        "Illusion",
+        "Tuner",
+        "Effect"
+      ],
+      "propertyIds": [
+        "41",
+        "20",
+        "4"
+      ],
+      "properties": [
+        "Illusion",
+        "Tuner",
+        "Effect"
+      ],
+      "attack": 1400,
+      "atk": 1400,
+      "defense": 900,
+      "def": 900,
+      "level": 4,
+      "attribute": "light",
+      "name": "白鴉の騎士アン",
+      "cnName": "白鸦骑士 安",
+      "jaName": "白鴉の騎士アン",
+      "enName": "Anu, Knight of the Winter Raven",
+      "effectText": "このカード名の①②の効果はそれぞれ１ターンに１度しか使用できない。\n①：手札のこのカードを相手に見せて発動できる。手札から「白鴉の騎士アン」以外の「白鴉」モンスター１体を特殊召喚する。\n②：自分・相手のメインフェイズに、自分フィールドの「白鴉」モンスター１体を対象として発動できる。そのモンスターを永続魔法カード扱いで元々の持ち主の魔法＆罠ゾーンに表側表示で置き、自分の手札・墓地から「白鴉の騎士アン」以外の「白鴉」モンスター１体を特殊召喚する。",
+      "released": true,
+      "aliases": [
+        "白鴉の騎士アン",
+        "Anu, Knight of the Winter Raven",
+        "白鸦骑士 安",
+        "白鸦骑士 阿努"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/23822",
+      "updatedAt": "2026-11-09T01:16:27.786Z",
+      "chineseNameSources": [
+        {
+          "name": "白鸦骑士 安",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23822"
+        },
+        {
+          "name": "白鸦骑士 阿努",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23822"
         }
       ]
     },
@@ -55705,6 +55939,239 @@
       ]
     },
     {
+      "id": "23872",
+      "type": "spell",
+      "cardType": "spell",
+      "property": "field",
+      "properties": [
+        "field"
+      ],
+      "name": "神幻学都アルス＝マグナ",
+      "cnName": "神幻学都 无垢大艺术学园",
+      "jaName": "神幻学都アルス＝マグナ",
+      "enName": "Ars Magna Academic Arcane Apparition Acropolis",
+      "effectText": "このカード名はルール上「アルトメギア」カードとしても扱う。\n①：自分が発動した「メディウス」モンスターの効果は無効化されない。\n②：自分の墓地に「獄神」モンスターが存在する場合、自分の墓地から融合・S・Xモンスター１体を除外し、「アルス＝マグナ」Lモンスターのカード名を１つ宣言して発動できる（このターン、このカード名のこの効果を発動するために同じカード名を宣言できない）。宣言したモンスター１体をEXデッキから特殊召喚する。この効果で特殊召喚したモンスターはL素材にできない。",
+      "released": true,
+      "aliases": [
+        "神幻学都アルス＝マグナ",
+        "Ars Magna Academic Arcane Apparition Acropolis",
+        "神幻学都 无垢大艺术学园",
+        "神幻学都 无垢大艺学园"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/23872",
+      "updatedAt": "2026-11-09T01:16:29.921Z",
+      "chineseNameSources": [
+        {
+          "name": "神幻学都 无垢大艺术学园",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23872"
+        },
+        {
+          "name": "神幻学都 无垢大艺学园",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23872"
+        }
+      ]
+    },
+    {
+      "id": "23856",
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Fairy",
+      "monsterPropertyIds": [
+        "15",
+        "23",
+        "4"
+      ],
+      "monsterProperties": [
+        "Fairy",
+        "Link",
+        "Effect"
+      ],
+      "propertyIds": [
+        "15",
+        "23",
+        "4"
+      ],
+      "properties": [
+        "Fairy",
+        "Link",
+        "Effect"
+      ],
+      "attack": 2500,
+      "atk": 2500,
+      "link": 4,
+      "linkRating": 4,
+      "linkArrows": "8462",
+      "attribute": "light",
+      "name": "無垢なる絆 アルトメギア",
+      "cnName": "无垢牵绊 神艺学徒",
+      "jaName": "無垢なる絆 アルトメギア",
+      "enName": "Ars Magna Artmage",
+      "effectText": "「アルス＝マグナ」、「アルトメギア」モンスターのいずれかを含むモンスター２体以上\nこのカード名の②の効果は１ターンに１度しか使用できない。\n①：自分フィールドのリンク状態のモンスターを相手は効果の対象にできない。\n②：自分メインフェイズに発動できる。デッキから「アルス＝マグナ」、「アルトメギア」、「ドゥームズ」、「エルフェンノーツ」モンスター１体を選び、手札に加えるか特殊召喚する。その後、自分フィールドのモンスターの種族が３種類以上の場合、自分の墓地・除外状態のモンスター１体を特殊召喚できる。",
+      "released": true,
+      "aliases": [
+        "無垢なる絆 アルトメギア",
+        "Ars Magna Artmage",
+        "无垢牵绊 神艺学徒",
+        "无垢奥艺之绊 神艺",
+        "无垢大牵绊 神艺学徒"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/23856",
+      "updatedAt": "2026-11-09T01:16:29.921Z",
+      "chineseNameSources": [
+        {
+          "name": "无垢牵绊 神艺学徒",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23856"
+        },
+        {
+          "name": "无垢奥艺之绊 神艺",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23856"
+        },
+        {
+          "name": "无垢大牵绊 神艺学徒",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23856"
+        }
+      ]
+    },
+    {
+      "id": "23857",
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Dragon",
+      "monsterPropertyIds": [
+        "21",
+        "23",
+        "4"
+      ],
+      "monsterProperties": [
+        "Dragon",
+        "Link",
+        "Effect"
+      ],
+      "propertyIds": [
+        "21",
+        "23",
+        "4"
+      ],
+      "properties": [
+        "Dragon",
+        "Link",
+        "Effect"
+      ],
+      "attack": 1500,
+      "atk": 1500,
+      "link": 2,
+      "linkRating": 2,
+      "linkArrows": "41",
+      "attribute": "light",
+      "name": "無垢なる血盟 ドゥームズ",
+      "cnName": "无垢血盟 终刻龙卫",
+      "jaName": "無垢なる血盟 ドゥームズ",
+      "enName": "Ars Magna DoomZ",
+      "effectText": "「アルス＝マグナ」、「ドゥームズ」モンスターのいずれかを含むモンスター２体\nこのカード名の②③の効果はそれぞれ１ターンに１度しか使用できない。\n①：リンク状態の自分のモンスターが戦闘で破壊したモンスターは墓地へは行かず除外される。\n②：自分メインフェイズに発動できる。自分フィールドのカード１枚を選び、破壊するか除外する。その後、自分・相手の墓地のカードを合計２枚までデッキに戻す事ができる。\n③：墓地のこのカードを除外して発動できる。手札から「ドゥームズ」モンスター１体を特殊召喚する。",
+      "released": true,
+      "aliases": [
+        "無垢なる血盟 ドゥームズ",
+        "Ars Magna DoomZ",
+        "无垢血盟 终刻龙卫",
+        "无垢大血盟 终刻龙机"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/23857",
+      "updatedAt": "2026-11-09T01:16:29.927Z",
+      "chineseNameSources": [
+        {
+          "name": "无垢血盟 终刻龙卫",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23857"
+        },
+        {
+          "name": "无垢大血盟 终刻龙机",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23857"
+        }
+      ]
+    },
+    {
+      "id": "23858",
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Spellcaster",
+      "monsterPropertyIds": [
+        "8",
+        "23",
+        "4"
+      ],
+      "monsterProperties": [
+        "Spellcaster",
+        "Link",
+        "Effect"
+      ],
+      "propertyIds": [
+        "8",
+        "23",
+        "4"
+      ],
+      "properties": [
+        "Spellcaster",
+        "Link",
+        "Effect"
+      ],
+      "attack": 1500,
+      "atk": 1500,
+      "link": 2,
+      "linkRating": 2,
+      "linkArrows": "63",
+      "attribute": "light",
+      "name": "無垢なる協奏 エルフェンノーツ",
+      "cnName": "无垢协奏 耀圣诗团",
+      "jaName": "無垢なる協奏 エルフェンノーツ",
+      "enName": "Ars Magna Elfnote",
+      "effectText": "「アルス＝マグナ」、「エルフェンノーツ」モンスターのいずれかを含むモンスター２体\nこのカード名の②③の効果はそれぞれ１ターンに１度しか使用できない。\n①：自分フィールドのリンク状態のモンスターの攻撃力は、フィールドのモンスターの種族の種類×３００アップする。\n②：自分メインフェイズに発動できる。自分フィールドのカード１枚を選び、墓地へ送るか除外する。その後、フィールドのモンスター１体を手札に戻す事ができる。\n③：墓地のこのカードを除外して発動できる。手札から「エルフェンノーツ」モンスター１体を特殊召喚する。",
+      "released": true,
+      "aliases": [
+        "無垢なる協奏 エルフェンノーツ",
+        "Ars Magna Elfnote",
+        "无垢协奏 耀圣诗团",
+        "无垢大协奏 耀圣之诗"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/23858",
+      "updatedAt": "2026-11-09T01:16:29.933Z",
+      "chineseNameSources": [
+        {
+          "name": "无垢协奏 耀圣诗团",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23858"
+        },
+        {
+          "name": "无垢大协奏 耀圣之诗",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23858"
+        }
+      ]
+    },
+    {
       "id": "23340",
       "type": "monster",
       "cardType": "monster",
@@ -59621,6 +60088,66 @@
       ]
     },
     {
+      "id": "23850",
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Spellcaster",
+      "monsterPropertyIds": [
+        "8",
+        "19",
+        "4"
+      ],
+      "monsterProperties": [
+        "Spellcaster",
+        "Synchro",
+        "Effect"
+      ],
+      "propertyIds": [
+        "8",
+        "19",
+        "4"
+      ],
+      "properties": [
+        "Spellcaster",
+        "Synchro",
+        "Effect"
+      ],
+      "attack": 2400,
+      "atk": 2400,
+      "defense": 3000,
+      "def": 3000,
+      "level": 8,
+      "attribute": "wind",
+      "name": "鬼神 夜魅",
+      "cnName": "鬼神 夜魅",
+      "jaName": "鬼神 夜魅",
+      "enName": "Ashtrama Yoami",
+      "effectText": "チューナー＋チューナー以外のモンスター１体以上\nこのカード名の①②の効果はそれぞれ１ターンに１度しか使用できない。\n①：このカードが特殊召喚した場合、またはフィールドから墓地へ送られた場合に発動できる。デッキから「アシュトラ」罠カード１枚を選び、手札に加えるか自分フィールドにセットする。\n②：自分の墓地に罠カードが存在する場合に発動できる。フィールドの裏側表示カードを全て手札に戻す。その後、自分の墓地の罠カードが５枚以上の場合、相手フィールドのカードを全て手札に戻す事ができる。",
+      "released": true,
+      "aliases": [
+        "鬼神 夜魅",
+        "Ashtrama Yoami"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/23850",
+      "updatedAt": "2026-11-09T01:16:30.444Z",
+      "chineseNameSources": [
+        {
+          "name": "鬼神 夜魅",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23850"
+        },
+        {
+          "name": "鬼神 夜魅",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23850"
+        }
+      ]
+    },
+    {
       "id": "23379",
       "type": "spell",
       "cardType": "spell",
@@ -59670,6 +60197,68 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23379"
+        }
+      ]
+    },
+    {
+      "id": "23829",
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Fairy",
+      "monsterPropertyIds": [
+        "15",
+        "20",
+        "4"
+      ],
+      "monsterProperties": [
+        "Fairy",
+        "Tuner",
+        "Effect"
+      ],
+      "propertyIds": [
+        "15",
+        "20",
+        "4"
+      ],
+      "properties": [
+        "Fairy",
+        "Tuner",
+        "Effect"
+      ],
+      "attack": 0,
+      "atk": 0,
+      "defense": 0,
+      "def": 0,
+      "level": 1,
+      "attribute": "fire",
+      "name": "鬼神童鵄 タマヨリ",
+      "cnName": "鬼神童鸱 玉依",
+      "jaName": "鬼神童鵄 タマヨリ",
+      "enName": "Ashtrata Tamayori",
+      "effectText": "このカード名の①②の効果はそれぞれ１ターンに１度しか使用できない。\n①：このカードが召喚・特殊召喚した場合に発動できる。デッキからチューナー以外の「アシュトラ」モンスター１体を守備表示で特殊召喚する。その後、自分フィールドの表側表示モンスター１体を裏側守備表示にできる。このターン、自分はレベル１チューナーを素材としたS召喚でしかEXデッキからモンスターを特殊召喚できない。\n②：自分フィールドの「アシュトラ」カードか裏側表示カードが効果で破壊される場合、代わりに墓地のこのカードを除外できる。",
+      "released": true,
+      "aliases": [
+        "鬼神童鵄 タマヨリ",
+        "Ashtrata Tamayori",
+        "鬼神童鸱 玉依",
+        "鬼神童鵄 玉依"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/23829",
+      "updatedAt": "2026-11-09T01:16:30.477Z",
+      "chineseNameSources": [
+        {
+          "name": "鬼神童鸱 玉依",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23829"
+        },
+        {
+          "name": "鬼神童鵄 玉依",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23829"
         }
       ]
     },
@@ -154211,6 +154800,67 @@
       ]
     },
     {
+      "id": "23860",
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Sea Serpent",
+      "monsterPropertyIds": [
+        "17",
+        "23",
+        "4"
+      ],
+      "monsterProperties": [
+        "Sea Serpent",
+        "Link",
+        "Effect"
+      ],
+      "propertyIds": [
+        "17",
+        "23",
+        "4"
+      ],
+      "properties": [
+        "Sea Serpent",
+        "Link",
+        "Effect"
+      ],
+      "attack": 1400,
+      "atk": 1400,
+      "link": 2,
+      "linkRating": 2,
+      "linkArrows": "62",
+      "attribute": "water",
+      "name": "コダイダロス",
+      "cnName": "科泰达路斯",
+      "jaName": "コダイダロス",
+      "enName": "Codaedalus",
+      "effectText": "水属性モンスター２体\n自分は「コダイダロス」を１ターンに１度しか特殊召喚できない。\n①：このカードがL召喚した場合に発動できる。このターンのエンドフェイズに、「コダイダロス」を除く、「竜都アトランティス」のカード名が記されたカード１枚を自分の墓地から手札に加える。\n②：このカードはモンスターゾーンに存在する限り、カード名を「海」として扱う。\n③：１ターンに１度、自分フィールドの表側表示の「海」１枚を墓地へ送って発動できる。フィールドの魔法・罠カードを２枚まで墓地へ送る。",
+      "released": true,
+      "aliases": [
+        "コダイダロス",
+        "Codaedalus",
+        "科泰达路斯"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/23860",
+      "updatedAt": "2026-11-09T01:16:53.756Z",
+      "chineseNameSources": [
+        {
+          "name": "科泰达路斯",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23860"
+        },
+        {
+          "name": "科泰达路斯",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23860"
+        }
+      ]
+    },
+    {
       "id": "8643",
       "type": "monster",
       "cardType": "monster",
@@ -219766,6 +220416,45 @@
       ]
     },
     {
+      "id": "23870",
+      "type": "spell",
+      "cardType": "spell",
+      "property": "field",
+      "properties": [
+        "field"
+      ],
+      "name": "白鴉の深き森",
+      "cnName": "白鸦的大森林",
+      "jaName": "白鴉の深き森",
+      "enName": "Deep Forest of the Winter Raven",
+      "effectText": "このカード名のカードは１ターンに１枚しか発動できず、このカード名の③の効果は１ターンに１度しか使用できない。\n①：このカードの発動時の効果処理として、デッキから「白鴉」モンスター１体を手札に加える事ができる。\n②：このカードがフィールドゾーンに存在する限り、自分フィールドの「白鴉」モンスターカードは効果では破壊されない。\n③：自分エンドフェイズに発動できる。自分のデッキ・墓地から「白鴉」罠カード１枚を自分フィールドにセットする。",
+      "released": true,
+      "aliases": [
+        "白鴉の深き森",
+        "Deep Forest of the Winter Raven",
+        "白鸦的大森林",
+        "白鸦的幽深森林"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/23870",
+      "updatedAt": "2026-11-09T01:17:01.972Z",
+      "chineseNameSources": [
+        {
+          "name": "白鸦的大森林",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23870"
+        },
+        {
+          "name": "白鸦的幽深森林",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23870"
+        }
+      ]
+    },
+    {
       "id": "15047",
       "type": "spell",
       "cardType": "spell",
@@ -232536,6 +233225,76 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "21149"
+        }
+      ]
+    },
+    {
+      "id": "23845",
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Illusion",
+      "monsterPropertyIds": [
+        "41",
+        "11",
+        "4"
+      ],
+      "monsterProperties": [
+        "Illusion",
+        "Fusion",
+        "Effect"
+      ],
+      "propertyIds": [
+        "41",
+        "11",
+        "4"
+      ],
+      "properties": [
+        "Illusion",
+        "Fusion",
+        "Effect"
+      ],
+      "attack": 2500,
+      "atk": 2500,
+      "defense": 2100,
+      "def": 2100,
+      "level": 8,
+      "attribute": "light",
+      "name": "白鴉の森の女主人ディアベルゼ",
+      "cnName": "白鸦之森的女主人 迪亚贝尔泽",
+      "jaName": "白鴉の森の女主人ディアベルゼ",
+      "enName": "Diabellze, Heiress of the Winter Raven's Forest",
+      "effectText": "融合・Sモンスター＋魔法使い族・幻想魔族モンスター\nこのカード名の①の効果は１ターンに１度しか使用できない。\n①：このカードが特殊召喚した場合に発動できる。自分フィールドのモンスターを任意の数だけ選び、永続魔法カード扱いで元々の持ち主の魔法＆罠ゾーンに表側表示で置く。その後、自分フィールドの魔法・罠カードの数までフィールドのカードを手札に戻す事ができる。\n②：このカードの攻撃力・守備力は、フィールドの魔法・罠カードの数×７００アップする。\n③：融合召喚した表側表示のこのカードは融合素材にできない。",
+      "released": true,
+      "aliases": [
+        "白鴉の森の女主人ディアベルゼ",
+        "Diabellze, Heiress of the Winter Raven's Forest",
+        "白鸦之森的女主人 迪亚贝尔泽",
+        "白鸦之森的女主人 迪亚贝尔赛",
+        "白鸦森林的女主人 迪亚贝尔泽"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/23845",
+      "updatedAt": "2026-11-09T01:17:03.550Z",
+      "chineseNameSources": [
+        {
+          "name": "白鸦之森的女主人 迪亚贝尔泽",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23845"
+        },
+        {
+          "name": "白鸦之森的女主人 迪亚贝尔赛",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23845"
+        },
+        {
+          "name": "白鸦森林的女主人 迪亚贝尔泽",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23845"
         }
       ]
     },
@@ -283120,6 +283879,40 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "4324"
+        }
+      ]
+    },
+    {
+      "id": "23864",
+      "type": "spell",
+      "cardType": "spell",
+      "name": "華麗なる三面鏡",
+      "cnName": "华丽的三面镜",
+      "jaName": "華麗なる三面鏡",
+      "enName": "Elegant Tri-Mirror",
+      "effectText": "このカード名の①②の効果はそれぞれ１ターンに１度しか使用できない。\n①：デッキから「ハーピィ」モンスター１体を手札に加える。相手フィールドにのみモンスターが存在する場合、さらに「ハーピィ・レディ」またはそのカード名が記されたモンスター１体を自分の手札・墓地から特殊召喚できる。\n②：墓地のこのカードを除外して発動できる。自分の手札・フィールドのモンスターを融合素材とし、風・地属性の融合モンスター１体を融合召喚する。",
+      "released": true,
+      "aliases": [
+        "華麗なる三面鏡",
+        "Elegant Tri-Mirror",
+        "华丽的三面镜"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/23864",
+      "updatedAt": "2026-11-09T01:17:09.941Z",
+      "chineseNameSources": [
+        {
+          "name": "华丽的三面镜",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23864"
+        },
+        {
+          "name": "华丽的三面镜",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23864"
         }
       ]
     },
@@ -386212,6 +387005,64 @@
       ]
     },
     {
+      "id": "23814",
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Fiend",
+      "monsterPropertyIds": [
+        "14",
+        "4"
+      ],
+      "monsterProperties": [
+        "Fiend",
+        "Effect"
+      ],
+      "propertyIds": [
+        "14",
+        "4"
+      ],
+      "properties": [
+        "Fiend",
+        "Effect"
+      ],
+      "attack": 1800,
+      "atk": 1800,
+      "defense": 1200,
+      "def": 1200,
+      "level": 4,
+      "attribute": "dark",
+      "name": "太陽神の殺戮機－ギル・ガース",
+      "cnName": "太阳神的杀戮机-屠杀巨灵",
+      "jaName": "太陽神の殺戮機－ギル・ガース",
+      "enName": "Gil Garth, Exterminator of the Sun God",
+      "effectText": "このカード名の①②③の効果はそれぞれ１ターンに１度しか使用できない。\n①：このカードが手札に存在し、自分フィールドに「太陽神」カードが存在する場合に発動できる。このカードを特殊召喚する。\n②：このカードをリリースし、このカード以外の自分か相手の墓地のカード１枚を対象として発動できる。デッキから「太陽神」カード１枚を墓地へ送り、対象のカードをデッキの一番下に戻す。\n③：このターンに「不死なる太陽神」が自分の墓地へ送られている場合、エンドフェイズに発動できる。墓地のこのカードを手札に加える。",
+      "released": true,
+      "aliases": [
+        "太陽神の殺戮機－ギル・ガース",
+        "Gil Garth, Exterminator of the Sun God",
+        "太阳神的杀戮机-屠杀巨灵",
+        "太阳神灵的杀戮机-屠杀巨灵"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/23814",
+      "updatedAt": "2026-11-09T01:17:22.751Z",
+      "chineseNameSources": [
+        {
+          "name": "太阳神的杀戮机-屠杀巨灵",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23814"
+        },
+        {
+          "name": "太阳神灵的杀戮机-屠杀巨灵",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23814"
+        }
+      ]
+    },
+    {
       "id": "5256",
       "type": "monster",
       "cardType": "monster",
@@ -426334,6 +427185,45 @@
       ]
     },
     {
+      "id": "23865",
+      "type": "spell",
+      "cardType": "spell",
+      "property": "quickplay",
+      "properties": [
+        "quickplay"
+      ],
+      "name": "ハーピィ＆アマゾネス －羅刹の陣－",
+      "cnName": "鹰身&亚马逊 -罗刹之阵-",
+      "jaName": "ハーピィ＆アマゾネス －羅刹の陣－",
+      "enName": "Harpie & Amazoness Rakshasa Formation",
+      "effectText": "このカード名のカードは１ターンに１枚しか発動できない。\n①：自分の墓地・除外状態の「ハーピィ」モンスターか「アマゾネス」モンスター１体を対象として発動できる。そのモンスターを特殊召喚する。その後、自分フィールドの「ハーピィ・レディ」及び「アマゾネス」モンスターの数によって以下から１つを選んで適用できる。\n●１体以上：デッキから「誘惑の鏡壁」１枚を自分の魔法＆罠ゾーンに表側表示で置く。\n●２体以上：相手フィールドのモンスター１体のコントロールを得る。\n●３体以上：相手フィールドのモンスターを全て破壊する。",
+      "released": true,
+      "aliases": [
+        "ハーピィ＆アマゾネス －羅刹の陣－",
+        "Harpie & Amazoness Rakshasa Formation",
+        "鹰身&亚马逊 -罗刹之阵-",
+        "鹰身女妖与亚马逊 -罗刹之阵-"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/23865",
+      "updatedAt": "2026-11-09T01:17:27.687Z",
+      "chineseNameSources": [
+        {
+          "name": "鹰身&亚马逊 -罗刹之阵-",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23865"
+        },
+        {
+          "name": "鹰身女妖与亚马逊 -罗刹之阵-",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23865"
+        }
+      ]
+    },
+    {
       "id": "10516",
       "type": "monster",
       "cardType": "monster",
@@ -426807,6 +427697,64 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "4068"
+        }
+      ]
+    },
+    {
+      "id": "23819",
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Winged Beast",
+      "monsterPropertyIds": [
+        "35",
+        "4"
+      ],
+      "monsterProperties": [
+        "Winged Beast",
+        "Effect"
+      ],
+      "propertyIds": [
+        "35",
+        "4"
+      ],
+      "properties": [
+        "Winged Beast",
+        "Effect"
+      ],
+      "attack": 1300,
+      "atk": 1300,
+      "defense": 1400,
+      "def": 1400,
+      "level": 4,
+      "attribute": "wind",
+      "name": "ハーピィ・レディ－魅惑の舞い－",
+      "cnName": "鹰身女郎-诱惑之舞-",
+      "jaName": "ハーピィ・レディ－魅惑の舞い－",
+      "enName": "Harpie Lady - Alluring Dance",
+      "effectText": "このカード名の②③の効果はそれぞれ１ターンに１度しか使用できない。\n①：このカードのカード名は、フィールド・墓地に存在する限り「ハーピィ・レディ」として扱う。\n②：このカードが手札に存在する場合、自分・相手のメインフェイズに、自分フィールドの風・地属性モンスター１体を対象として発動できる。そのモンスターを手札・EXデッキに戻し、このカードを特殊召喚する。\n③：このカードが召喚・特殊召喚した場合に発動できる。デッキから「ハーピィ・レディ」のカード名が記された魔法・罠カード１枚を手札に加える。",
+      "released": true,
+      "aliases": [
+        "ハーピィ・レディ－魅惑の舞い－",
+        "Harpie Lady - Alluring Dance",
+        "鹰身女郎-诱惑之舞-",
+        "鹰身女郎-魅惑之舞-"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/23819",
+      "updatedAt": "2026-11-09T01:17:27.745Z",
+      "chineseNameSources": [
+        {
+          "name": "鹰身女郎-诱惑之舞-",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23819"
+        },
+        {
+          "name": "鹰身女郎-魅惑之舞-",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23819"
         }
       ]
     },
@@ -433144,6 +434092,64 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "5489"
+        }
+      ]
+    },
+    {
+      "id": "23812",
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Fiend",
+      "monsterPropertyIds": [
+        "14",
+        "4"
+      ],
+      "monsterProperties": [
+        "Fiend",
+        "Effect"
+      ],
+      "propertyIds": [
+        "14",
+        "4"
+      ],
+      "properties": [
+        "Fiend",
+        "Effect"
+      ],
+      "attack": 2000,
+      "atk": 2000,
+      "defense": 1400,
+      "def": 1400,
+      "level": 5,
+      "attribute": "dark",
+      "name": "太陽神の詩詠者－ヘルポエマー",
+      "cnName": "太阳神的诗咏者-地狱诗人",
+      "jaName": "太陽神の詩詠者－ヘルポエマー",
+      "enName": "Helpoemer, Chanter of the Sun God",
+      "effectText": "このカード名の①②③の効果はそれぞれ１ターンに１度しか使用できない。\n①：手札から他のカード１枚を捨てて発動できる。このカードを手札から特殊召喚する。\n②：このカードが特殊召喚した場合に発動できる。デッキから「太陽神の詩詠者－ヘルポエマー」以外の「太陽神」カード１枚を手札に加える。自分のLPが相手より２０００以上少ない場合、さらに相手の手札をランダムに１枚捨てる事ができる。\n③：このターンに「不死なる太陽神」が自分の墓地へ送られている場合、エンドフェイズに発動できる。墓地のこのカードを手札に加える。",
+      "released": true,
+      "aliases": [
+        "太陽神の詩詠者－ヘルポエマー",
+        "Helpoemer, Chanter of the Sun God",
+        "太阳神的诗咏者-地狱诗人",
+        "太阳神灵的诗咏者-地狱诗人"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/23812",
+      "updatedAt": "2026-11-09T01:17:28.529Z",
+      "chineseNameSources": [
+        {
+          "name": "太阳神的诗咏者-地狱诗人",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23812"
+        },
+        {
+          "name": "太阳神灵的诗咏者-地狱诗人",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23812"
         }
       ]
     },
@@ -467469,6 +468475,63 @@
       ]
     },
     {
+      "id": "23828",
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Warrior",
+      "monsterPropertyIds": [
+        "12",
+        "4"
+      ],
+      "monsterProperties": [
+        "Warrior",
+        "Effect"
+      ],
+      "propertyIds": [
+        "12",
+        "4"
+      ],
+      "properties": [
+        "Warrior",
+        "Effect"
+      ],
+      "attack": 1500,
+      "atk": 1500,
+      "defense": 1300,
+      "def": 1300,
+      "level": 4,
+      "attribute": "light",
+      "name": "無敵のロケット戦士",
+      "cnName": "无敌的火箭战士",
+      "jaName": "無敵のロケット戦士",
+      "enName": "Invincible Rocket Warrior",
+      "effectText": "このカード名の①③の効果はそれぞれ１ターンに１度しか使用できない。\n①：デッキから「時の黒魔術師」のカード名が記された魔法・罠カード１枚を墓地へ送って発動できる。このカードを手札から特殊召喚する。その後、相手フィールドのモンスター１体の攻撃力を１５００ダウンできる。この効果の発動後、ターン終了時まで自分は融合モンスターしかEXデッキから特殊召喚できない。\n②：フィールドのこのカードは効果では破壊されない。\n③：このカードの攻撃宣言時に発動できる。デッキから戦士族・レベル４モンスター１体を手札に加える。",
+      "released": true,
+      "aliases": [
+        "無敵のロケット戦士",
+        "Invincible Rocket Warrior",
+        "无敌的火箭战士"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/23828",
+      "updatedAt": "2026-11-09T01:17:32.900Z",
+      "chineseNameSources": [
+        {
+          "name": "无敌的火箭战士",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23828"
+        },
+        {
+          "name": "无敌的火箭战士",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23828"
+        }
+      ]
+    },
+    {
       "id": "4746",
       "type": "monster",
       "cardType": "monster",
@@ -473297,6 +474360,68 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "4702"
+        }
+      ]
+    },
+    {
+      "id": "23840",
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Insect",
+      "monsterPropertyIds": [
+        "34",
+        "27",
+        "4"
+      ],
+      "monsterProperties": [
+        "Insect",
+        "Ritual",
+        "Effect"
+      ],
+      "propertyIds": [
+        "34",
+        "27",
+        "4"
+      ],
+      "properties": [
+        "Insect",
+        "Ritual",
+        "Effect"
+      ],
+      "attack": 2450,
+      "atk": 2450,
+      "defense": 2550,
+      "def": 2550,
+      "level": 8,
+      "attribute": "earth",
+      "name": "盟約のジャベリンビートル",
+      "cnName": "盟约之标枪甲虫",
+      "jaName": "盟約のジャベリンビートル",
+      "enName": "Javelin Beetle of the Alliance",
+      "effectText": "「盟約のジャベリンビートル」により降臨\nこのカード名の①の効果はデュエル中に１度しか使用できない。\n①：自分・相手のメインフェイズに、手札のこのカードを相手に見せて発動できる。レベルの合計が儀式召喚するモンスターのレベル以上になるように、自分の手札・フィールドのモンスターをリリースし、手札から昆虫族の儀式モンスター１体を儀式召喚する。\n②：このカードが儀式召喚した場合、このカードと同じ縦列の他のカード１枚を対象として発動できる。そのカードを破壊し、このカードの攻撃力は６００アップする。",
+      "released": true,
+      "aliases": [
+        "盟約のジャベリンビートル",
+        "Javelin Beetle of the Alliance",
+        "盟约之标枪甲虫",
+        "盟约的标枪甲虫"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/23840",
+      "updatedAt": "2026-11-09T01:17:33.687Z",
+      "chineseNameSources": [
+        {
+          "name": "盟约之标枪甲虫",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23840"
+        },
+        {
+          "name": "盟约的标枪甲虫",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23840"
         }
       ]
     },
@@ -492489,6 +493614,76 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "5016"
+        }
+      ]
+    },
+    {
+      "id": "23859",
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Cyberse",
+      "monsterPropertyIds": [
+        "30",
+        "23",
+        "4"
+      ],
+      "monsterProperties": [
+        "Cyberse",
+        "Link",
+        "Effect"
+      ],
+      "propertyIds": [
+        "30",
+        "23",
+        "4"
+      ],
+      "properties": [
+        "Cyberse",
+        "Link",
+        "Effect"
+      ],
+      "attack": 2300,
+      "atk": 2300,
+      "link": 3,
+      "linkRating": 3,
+      "linkArrows": "813",
+      "attribute": "fire",
+      "name": "炎の平原を駆け抜ける百獣の王",
+      "cnName": "驰驱于火炎平原的百兽之王",
+      "jaName": "炎の平原を駆け抜ける百獣の王",
+      "enName": "King of Beasts, Risen from the Valley of Flames",
+      "effectText": "炎属性の効果モンスター３体\nこのカード名はルール上「転生炎獣ヒートライオ」として扱う。\nこのカード名の②の効果は１ターンに１度しか使用できない。\n①：フィールドの表側表示モンスターは炎属性になる。\n②：このカードが「転生炎獣ヒートライオ」を素材としてL召喚されている場合、自分・相手のメインフェイズに、相手フィールドのカード１枚を対象として発動できる。そのカードをデッキに戻す。その後、相手フィールドの炎属性モンスター１体の攻撃力を、自分の墓地のモンスター１体の攻撃力と同じにできる。",
+      "released": true,
+      "aliases": [
+        "炎の平原を駆け抜ける百獣の王",
+        "King of Beasts, Risen from the Valley of Flames",
+        "驰驱于火炎平原的百兽之王",
+        "驰骋横越炎之平原的百兽之王",
+        "炎之平原上奔驰而过的百兽之王"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/23859",
+      "updatedAt": "2026-11-09T01:17:35.988Z",
+      "chineseNameSources": [
+        {
+          "name": "驰驱于火炎平原的百兽之王",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23859"
+        },
+        {
+          "name": "驰骋横越炎之平原的百兽之王",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23859"
+        },
+        {
+          "name": "炎之平原上奔驰而过的百兽之王",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23859"
         }
       ]
     },
@@ -514402,6 +515597,68 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "5303"
+        }
+      ]
+    },
+    {
+      "id": "23851",
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Sea Serpent",
+      "monsterPropertyIds": [
+        "17",
+        "19",
+        "4"
+      ],
+      "monsterProperties": [
+        "Sea Serpent",
+        "Synchro",
+        "Effect"
+      ],
+      "propertyIds": [
+        "17",
+        "19",
+        "4"
+      ],
+      "properties": [
+        "Sea Serpent",
+        "Synchro",
+        "Effect"
+      ],
+      "attack": 1000,
+      "atk": 1000,
+      "defense": 2100,
+      "def": 2100,
+      "level": 8,
+      "attribute": "water",
+      "name": "ダラダラサウルス",
+      "cnName": "达懒斯龙",
+      "jaName": "ダラダラサウルス",
+      "enName": "Lethargisaurus",
+      "effectText": "守備表示チューナー＋チューナー以外の守備表示モンスター１体以上\n①：このカードが攻撃表示で特殊召喚した場合に発動する。このカードを守備表示にする。\n②：守備表示のこのカードは以下の効果を得る。\n●フィールドの表側表示モンスターは守備表示になる。\n●お互いは自身のカードの効果の発動に対してカードの効果を発動できない。\n●自分・相手のエンドフェイズに発動する。お互いはそれぞれ自身のフィールドの守備表示モンスターの数×５００LP回復する。",
+      "released": true,
+      "aliases": [
+        "ダラダラサウルス",
+        "Lethargisaurus",
+        "达懒斯龙",
+        "拖拉达拉斯龙"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/23851",
+      "updatedAt": "2026-11-09T01:17:38.691Z",
+      "chineseNameSources": [
+        {
+          "name": "达懒斯龙",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23851"
+        },
+        {
+          "name": "拖拉达拉斯龙",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23851"
         }
       ]
     },
@@ -551564,6 +552821,64 @@
       ]
     },
     {
+      "id": "23813",
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Warrior",
+      "monsterPropertyIds": [
+        "12",
+        "4"
+      ],
+      "monsterProperties": [
+        "Warrior",
+        "Effect"
+      ],
+      "propertyIds": [
+        "12",
+        "4"
+      ],
+      "properties": [
+        "Warrior",
+        "Effect"
+      ],
+      "attack": 1600,
+      "atk": 1600,
+      "defense": 1200,
+      "def": 1200,
+      "level": 4,
+      "attribute": "dark",
+      "name": "太陽神の処刑人－マキュラ",
+      "cnName": "太阳神的处刑人-摩休罗",
+      "jaName": "太陽神の処刑人－マキュラ",
+      "enName": "Makyura, Destructor of the Sun God",
+      "effectText": "このカード名の①②の効果はそれぞれ１ターンに１度しか使用できない。\n①：このカードが召喚・特殊召喚した場合、または手札・フィールドから墓地へ送られた場合に発動できる。手札・デッキから「太陽神」魔法・罠カード１枚を自分フィールドにセットする。速攻魔法・罠カードをセットした場合、そのカードはセットしたターンでも発動できる。\n②：このターンに「不死なる太陽神」が自分の墓地へ送られている場合、エンドフェイズに発動できる。墓地のこのカードを手札に加える。",
+      "released": true,
+      "aliases": [
+        "太陽神の処刑人－マキュラ",
+        "Makyura, Destructor of the Sun God",
+        "太阳神的处刑人-摩休罗",
+        "太阳神灵的处刑人-摩休罗"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/23813",
+      "updatedAt": "2026-11-09T01:17:43.423Z",
+      "chineseNameSources": [
+        {
+          "name": "太阳神的处刑人-摩休罗",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23813"
+        },
+        {
+          "name": "太阳神灵的处刑人-摩休罗",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23813"
+        }
+      ]
+    },
+    {
       "id": "11635",
       "type": "monster",
       "cardType": "monster",
@@ -560056,6 +561371,67 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "21790"
+        }
+      ]
+    },
+    {
+      "id": "23821",
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Illusion",
+      "monsterPropertyIds": [
+        "41",
+        "20",
+        "4"
+      ],
+      "monsterProperties": [
+        "Illusion",
+        "Tuner",
+        "Effect"
+      ],
+      "propertyIds": [
+        "41",
+        "20",
+        "4"
+      ],
+      "properties": [
+        "Illusion",
+        "Tuner",
+        "Effect"
+      ],
+      "attack": 1700,
+      "atk": 1700,
+      "defense": 0,
+      "def": 0,
+      "level": 4,
+      "attribute": "light",
+      "name": "白鴉の騎士マルト",
+      "cnName": "白鸦骑士 马特",
+      "jaName": "白鴉の騎士マルト",
+      "enName": "Mart, Knight of the Winter Raven",
+      "effectText": "このカード名の①②の効果はそれぞれ１ターンに１度しか使用できない。\n①：フィールドのこのカード以外の自分の手札・フィールドのカード１枚を墓地へ送って発動できる。このカードを永続魔法カード扱いで元々の持ち主の魔法＆罠ゾーンに表側表示で置き、デッキから「白鴉の騎士マルト」以外の「白鴉」モンスターを２体まで特殊召喚する（同名カードは１枚まで）。\n②：このカードが永続魔法カード扱いの場合、モンスターの攻撃宣言時に自分の魔法＆罠ゾーンの「白鴉」モンスターカード１枚を対象として発動できる。そのカードを特殊召喚する。",
+      "released": true,
+      "aliases": [
+        "白鴉の騎士マルト",
+        "Mart, Knight of the Winter Raven",
+        "白鸦骑士 马特"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/23821",
+      "updatedAt": "2026-11-09T01:17:44.471Z",
+      "chineseNameSources": [
+        {
+          "name": "白鸦骑士 马特",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23821"
+        },
+        {
+          "name": "白鸦骑士 马特",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23821"
         }
       ]
     },
@@ -616373,6 +617749,67 @@
       ]
     },
     {
+      "id": "23861",
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Dragon",
+      "monsterPropertyIds": [
+        "21",
+        "23",
+        "4"
+      ],
+      "monsterProperties": [
+        "Dragon",
+        "Link",
+        "Effect"
+      ],
+      "propertyIds": [
+        "21",
+        "23",
+        "4"
+      ],
+      "properties": [
+        "Dragon",
+        "Link",
+        "Effect"
+      ],
+      "attack": 900,
+      "atk": 900,
+      "link": 2,
+      "linkRating": 2,
+      "linkArrows": "13",
+      "attribute": "wind",
+      "name": "竜魔導の降霊師",
+      "cnName": "龙魔导降灵师",
+      "jaName": "竜魔導の降霊師",
+      "enName": "Necromancer of Dragon Magic",
+      "effectText": "効果モンスター２体\nこのカード名の効果は１ターンに１度しか使用できない。\n①：自分メインフェイズに発動できる。EXデッキの融合モンスター１体を相手に見せる。融合モンスターを除く、そのモンスターにカード名が記されたモンスター１体を自分の墓地から選び、このカードはエンドフェイズまでそのモンスターと同名カードとして扱う。その後、自分の手札・フィールド・墓地のモンスターを融合素材として除外し、見せた融合モンスターを融合召喚できる。このターン、自分は融合モンスターしかEXデッキから特殊召喚できない。",
+      "released": true,
+      "aliases": [
+        "竜魔導の降霊師",
+        "Necromancer of Dragon Magic",
+        "龙魔导降灵师"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/23861",
+      "updatedAt": "2026-11-09T01:17:51.494Z",
+      "chineseNameSources": [
+        {
+          "name": "龙魔导降灵师",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23861"
+        },
+        {
+          "name": "龙魔导降灵师",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23861"
+        }
+      ]
+    },
+    {
       "id": "20423",
       "type": "monster",
       "cardType": "monster",
@@ -625424,6 +626861,64 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "19902"
+        }
+      ]
+    },
+    {
+      "id": "23833",
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Illusion",
+      "monsterPropertyIds": [
+        "41",
+        "4"
+      ],
+      "monsterProperties": [
+        "Illusion",
+        "Effect"
+      ],
+      "propertyIds": [
+        "41",
+        "4"
+      ],
+      "properties": [
+        "Illusion",
+        "Effect"
+      ],
+      "attack": 1700,
+      "atk": 1700,
+      "defense": 1700,
+      "def": 1700,
+      "level": 4,
+      "attribute": "light",
+      "name": "幻惑の綺羅星",
+      "cnName": "幻惑的绮罗星",
+      "jaName": "幻惑の綺羅星",
+      "enName": "Nightmare Twinkle",
+      "effectText": "このカード名の①の効果は１ターンに１度しか使用できない。\n①：このカードが召喚・特殊召喚した場合に発動できる。「幻惑の綺羅星」を除く、レベル７以下の幻想魔族モンスター１体をデッキから特殊召喚する。この効果で特殊召喚したモンスターはエンドフェイズに手札に戻る。\n②：このカードがモンスターと戦闘を行う場合、その２体はその戦闘では破壊されない。\n③：１ターンに１度、モンスターが戦闘を行ったダメージステップ終了時に発動できる。フィールドの全てのモンスターの表示形式を変更する。",
+      "released": true,
+      "aliases": [
+        "幻惑の綺羅星",
+        "Nightmare Twinkle",
+        "幻惑的绮罗星",
+        "幻惑之绮罗星"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/23833",
+      "updatedAt": "2026-11-09T01:17:52.577Z",
+      "chineseNameSources": [
+        {
+          "name": "幻惑的绮罗星",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23833"
+        },
+        {
+          "name": "幻惑之绮罗星",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23833"
         }
       ]
     },
@@ -641097,6 +642592,68 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "11651"
+        }
+      ]
+    },
+    {
+      "id": "23854",
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Fiend",
+      "monsterPropertyIds": [
+        "14",
+        "18",
+        "4"
+      ],
+      "monsterProperties": [
+        "Fiend",
+        "Xyz",
+        "Effect"
+      ],
+      "propertyIds": [
+        "14",
+        "18",
+        "4"
+      ],
+      "properties": [
+        "Fiend",
+        "Xyz",
+        "Effect"
+      ],
+      "attack": 100,
+      "atk": 100,
+      "defense": 1000,
+      "def": 1000,
+      "rank": 2,
+      "attribute": "dark",
+      "name": "No.96 ブラック・マリオネッター",
+      "cnName": "No.96 黑偶",
+      "jaName": "No.96 ブラック・マリオネッター",
+      "enName": "Number 96: Dark Manipulator",
+      "effectText": "闇属性レベル２モンスター×３\nこのカード名の①②の効果はそれぞれ１ターンに１度しか使用できない。\n①：このカードのX素材を１つ取り除いて発動できる。このカードの攻撃力は、相手フィールドのモンスターの元々の攻撃力の合計分アップする。\n②：相手がカードの効果を発動した時、X素材を持っているこのカードを墓地へ送って発動できる。このカードが持っていたX素材の数まで自分の墓地から「アンブラル」、「マリスボラス」モンスターを特殊召喚する。",
+      "released": true,
+      "aliases": [
+        "No.96 ブラック・マリオネッター",
+        "Number 96: Dark Manipulator",
+        "No.96 黑偶",
+        "No.96 黑傀儡师"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/23854",
+      "updatedAt": "2026-11-09T01:17:54.434Z",
+      "chineseNameSources": [
+        {
+          "name": "No.96 黑偶",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23854"
+        },
+        {
+          "name": "No.96 黑傀儡师",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23854"
         }
       ]
     },
@@ -691972,6 +693529,40 @@
       ]
     },
     {
+      "id": "23871",
+      "type": "spell",
+      "cardType": "spell",
+      "name": "獄神封門－共滅の剣－",
+      "cnName": "狱神封门-共灭之剑-",
+      "jaName": "獄神封門－共滅の剣－",
+      "enName": "Power Patron Portal Plugging -Sword of Mutual Destruction-",
+      "effectText": "このカード名の①②の効果はそれぞれ１ターンに１度しか使用できない。\n①：手札から「獄神」カード１枚を捨てて発動できる。EXデッキから「獄神」Pモンスター１体を自分のPゾーンに置く。この効果で融合モンスターを置いた場合、さらにデッキから「獄神」Pモンスター１体を自分のPゾーンに置く事ができる。\n②：自分フィールドに「獄神」モンスターが存在する場合、墓地のこのカードを除外し、フィールドの表側表示モンスター１体を対象として発動できる。そのモンスターは攻撃力が１５００アップし、このターン攻撃できない。",
+      "released": true,
+      "aliases": [
+        "獄神封門－共滅の剣－",
+        "Power Patron Portal Plugging -Sword of Mutual Destruction-",
+        "狱神封门-共灭之剑-"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/23871",
+      "updatedAt": "2026-11-09T01:18:00.868Z",
+      "chineseNameSources": [
+        {
+          "name": "狱神封门-共灭之剑-",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23871"
+        },
+        {
+          "name": "狱神封门-共灭之剑-",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23871"
+        }
+      ]
+    },
+    {
       "id": "23020",
       "type": "trap",
       "cardType": "trap",
@@ -700327,6 +701918,72 @@
       ]
     },
     {
+      "id": "23826",
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Plant",
+      "monsterPropertyIds": [
+        "25",
+        "4"
+      ],
+      "monsterProperties": [
+        "Plant",
+        "Effect"
+      ],
+      "propertyIds": [
+        "25",
+        "4"
+      ],
+      "properties": [
+        "Plant",
+        "Effect"
+      ],
+      "attack": 2600,
+      "atk": 2600,
+      "defense": 2600,
+      "def": 2600,
+      "level": 8,
+      "attribute": "water",
+      "name": "六花双精プリムローズ",
+      "cnName": "六花双精 报春来",
+      "jaName": "六花双精プリムローズ",
+      "enName": "Primrose the Rikka Fairy Duo",
+      "effectText": "このカード名の①②③の効果はそれぞれ１ターンに１度しか使用できない。\n①：モンスターがリリースされた場合に発動できる。「六花双精プリムローズ」以外のデッキの「六花」モンスター１体と、手札のこのカードを守備表示で特殊召喚する。この効果の発動後、ターン終了時まで自分は植物族モンスターしか特殊召喚できない。\n②：自分フィールドの植物族モンスター１体を対象として発動できる。そのモンスターのレベルを２つ上げるか下げる。\n③：相手メインフェイズに発動できる。植物族Xモンスター１体のX召喚を行う。",
+      "released": true,
+      "aliases": [
+        "六花双精プリムローズ",
+        "Primrose the Rikka Fairy Duo",
+        "六花双精 报春来",
+        "六花双精 报春花",
+        "六花双精报春蔷薇"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/23826",
+      "updatedAt": "2026-11-09T01:18:01.957Z",
+      "chineseNameSources": [
+        {
+          "name": "六花双精 报春来",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23826"
+        },
+        {
+          "name": "六花双精 报春花",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23826"
+        },
+        {
+          "name": "六花双精报春蔷薇",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23826"
+        }
+      ]
+    },
+    {
       "id": "15111",
       "type": "monster",
       "cardType": "monster",
@@ -708007,6 +709664,64 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "10958"
+        }
+      ]
+    },
+    {
+      "id": "23820",
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Pyro",
+      "monsterPropertyIds": [
+        "37",
+        "4"
+      ],
+      "monsterProperties": [
+        "Pyro",
+        "Effect"
+      ],
+      "propertyIds": [
+        "37",
+        "4"
+      ],
+      "properties": [
+        "Pyro",
+        "Effect"
+      ],
+      "attack": 700,
+      "atk": 700,
+      "defense": 200,
+      "def": 200,
+      "level": 1,
+      "attribute": "fire",
+      "name": "白鴉の森の炎魔",
+      "cnName": "白鸦之森的炎魔",
+      "jaName": "白鴉の森の炎魔",
+      "enName": "Purifire of the Winter Raven's Forest",
+      "effectText": "このカード名の、①の方法による特殊召喚は１ターンに１度しかできず、②③の効果はそれぞれ１ターンに１度しか使用できない。\n①：自分フィールドに「白鴉」カードが存在する場合、このカードは手札から特殊召喚できる。\n②：このカードが召喚・特殊召喚した場合に発動できる。デッキから「白鴉」魔法・罠カードか「罪宝」カード１枚を手札に加える。\n③：自分か相手の魔法＆罠ゾーンの「白鴉」モンスターカードまたはレベル７・８のモンスターカード１枚を対象として発動できる。そのカードを自分フィールドに特殊召喚する。",
+      "released": true,
+      "aliases": [
+        "白鴉の森の炎魔",
+        "Purifire of the Winter Raven's Forest",
+        "白鸦之森的炎魔",
+        "白鸦森林的炎魔"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/23820",
+      "updatedAt": "2026-11-09T01:18:02.944Z",
+      "chineseNameSources": [
+        {
+          "name": "白鸦之森的炎魔",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23820"
+        },
+        {
+          "name": "白鸦森林的炎魔",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23820"
         }
       ]
     },
@@ -723837,6 +725552,63 @@
       ]
     },
     {
+      "id": "23830",
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Sea Serpent",
+      "monsterPropertyIds": [
+        "17",
+        "4"
+      ],
+      "monsterProperties": [
+        "Sea Serpent",
+        "Effect"
+      ],
+      "propertyIds": [
+        "17",
+        "4"
+      ],
+      "properties": [
+        "Sea Serpent",
+        "Effect"
+      ],
+      "attack": 2000,
+      "atk": 2000,
+      "defense": 2400,
+      "def": 2400,
+      "level": 5,
+      "attribute": "water",
+      "name": "アトランティスの暴翼",
+      "cnName": "亚特兰蒂斯的暴翼",
+      "jaName": "アトランティスの暴翼",
+      "enName": "Rampant Wings of Atlantis",
+      "effectText": "このカード名の①③の効果はそれぞれ１ターンに１度しか使用できない。\n①：手札のこのカードと、自分の手札・フィールド（表側表示）の魔法・罠カードか「海」１枚を墓地へ送り、相手フィールドのカード１枚を対象として発動できる。そのカードを墓地へ送る。\n②：このカードはモンスターゾーンに存在する限り、カード名を「海」として扱う。\n③：自分フィールドに「竜都アトランティス」が存在する場合、墓地のこのカードを除外して発動できる。手札・デッキからレベル４以下の海竜族モンスター１体を特殊召喚する。",
+      "released": true,
+      "aliases": [
+        "アトランティスの暴翼",
+        "Rampant Wings of Atlantis",
+        "亚特兰蒂斯的暴翼"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/23830",
+      "updatedAt": "2026-11-09T01:18:04.943Z",
+      "chineseNameSources": [
+        {
+          "name": "亚特兰蒂斯的暴翼",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23830"
+        },
+        {
+          "name": "亚特兰蒂斯的暴翼",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23830"
+        }
+      ]
+    },
+    {
       "id": "10946",
       "type": "spell",
       "cardType": "spell",
@@ -736989,6 +738761,179 @@
       ]
     },
     {
+      "id": "23868",
+      "type": "spell",
+      "cardType": "spell",
+      "name": "翅竜の羽撃",
+      "cnName": "翅龙的羽击",
+      "jaName": "翅竜の羽撃",
+      "enName": "Reindsurm Butterfly",
+      "effectText": "このカード名の①②の効果は１ターンに１度、いずれか１つしか使用できない。\n①：デッキから昆虫族モンスターを含むモンスター２体を墓地へ送る。このカードの発動後、次のターンの終了時まで、自分は昆虫族モンスターしか特殊召喚できない。\n②：このカードが墓地に存在する状態で、自分が昆虫族モンスターを儀式召喚した場合、このカードを除外して発動できる。自分フィールドの全ての「リインゼルム」モンスターの攻撃力・守備力は８００アップする。",
+      "released": true,
+      "aliases": [
+        "翅竜の羽撃",
+        "Reindsurm Butterfly",
+        "翅龙的羽击"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/23868",
+      "updatedAt": "2026-11-09T01:18:06.633Z",
+      "chineseNameSources": [
+        {
+          "name": "翅龙的羽击",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23868"
+        },
+        {
+          "name": "翅龙的羽击",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23868"
+        }
+      ]
+    },
+    {
+      "id": "23837",
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Insect",
+      "monsterPropertyIds": [
+        "34",
+        "27",
+        "4"
+      ],
+      "monsterProperties": [
+        "Insect",
+        "Ritual",
+        "Effect"
+      ],
+      "propertyIds": [
+        "34",
+        "27",
+        "4"
+      ],
+      "properties": [
+        "Insect",
+        "Ritual",
+        "Effect"
+      ],
+      "attack": 2000,
+      "atk": 2000,
+      "defense": 1300,
+      "def": 1300,
+      "level": 4,
+      "attribute": "light",
+      "name": "リインゼルム・カルカサス",
+      "cnName": "轮回虫龙 高加索南洋大兜虫",
+      "jaName": "リインゼルム・カルカサス",
+      "enName": "Reindsurm Carcasas",
+      "effectText": "「竜の骸歌」により降臨\nこのカード名の①②の効果はそれぞれ１ターンに１度しか使用できない。\n①：このカードが儀式召喚した場合に発動できる。デッキから「リインゼルム」カード２枚を墓地へ送る。\n②：このカードが戦闘以外で墓地へ送られた場合に発動できる。レベルの合計が儀式召喚するモンスターのレベル以上になるように、自分の手札・フィールドのモンスターをリリース、またはリリースの代わりに自分の墓地の昆虫族・ドラゴン族モンスターをデッキに戻し、手札から昆虫族の儀式モンスター１体を儀式召喚する。",
+      "released": true,
+      "aliases": [
+        "リインゼルム・カルカサス",
+        "Reindsurm Carcasas",
+        "轮回虫龙 高加索南洋大兜虫",
+        "无死虫龙·高加索独角仙鳞虫"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/23837",
+      "updatedAt": "2026-11-09T01:18:06.646Z",
+      "chineseNameSources": [
+        {
+          "name": "轮回虫龙 高加索南洋大兜虫",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23837"
+        },
+        {
+          "name": "无死虫龙·高加索独角仙鳞虫",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23837"
+        }
+      ]
+    },
+    {
+      "id": "23867",
+      "type": "spell",
+      "cardType": "spell",
+      "property": "field",
+      "properties": [
+        "field"
+      ],
+      "name": "無死なる竜の鼓動",
+      "cnName": "无死之龙的鼓动",
+      "jaName": "無死なる竜の鼓動",
+      "enName": "Reindsurm Carnation",
+      "effectText": "①：自分フィールドに元々のレベルが８以上の「リインゼルム」モンスターが存在する限り、または相手のフィールドか墓地にドラゴン族モンスターが存在する限り、自分が発動した「リインゼルム」モンスターの効果は無効化されない。\n②：１ターンに１度、自分の手札・フィールド（表側表示）から「リインゼルム」モンスターかドラゴン族モンスター１体を墓地へ送って発動できる。そのモンスターとは元々のカード名が異なり、元々のレベルが同じ昆虫族モンスター１体をデッキから手札に加える。",
+      "released": true,
+      "aliases": [
+        "無死なる竜の鼓動",
+        "Reindsurm Carnation",
+        "无死之龙的鼓动",
+        "无死虫龙的鼓动"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/23867",
+      "updatedAt": "2026-11-09T01:18:06.665Z",
+      "chineseNameSources": [
+        {
+          "name": "无死之龙的鼓动",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23867"
+        },
+        {
+          "name": "无死虫龙的鼓动",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23867"
+        }
+      ]
+    },
+    {
+      "id": "23866",
+      "type": "spell",
+      "cardType": "spell",
+      "property": "ritual",
+      "properties": [
+        "ritual"
+      ],
+      "name": "竜の骸歌",
+      "cnName": "龙之骸歌",
+      "jaName": "竜の骸歌",
+      "enName": "Reindsurm Conquest",
+      "effectText": "このカード名の①②の効果はそれぞれ１ターンに１度しか使用できない。\n①：レベルの合計が儀式召喚するモンスターのレベルの合計以上になるように、自分・相手の墓地の昆虫族・ドラゴン族モンスターをデッキに戻し、手札から昆虫族の儀式モンスターを任意の数だけ儀式召喚する。\n②：このカードが墓地に存在する場合、自分の手札・フィールド（表側表示）から昆虫族モンスター１体を墓地へ送って発動できる。このカードを手札に加える。",
+      "released": true,
+      "aliases": [
+        "竜の骸歌",
+        "Reindsurm Conquest",
+        "龙之骸歌"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/23866",
+      "updatedAt": "2026-11-09T01:18:06.662Z",
+      "chineseNameSources": [
+        {
+          "name": "龙之骸歌",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23866"
+        },
+        {
+          "name": "龙之骸歌",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23866"
+        }
+      ]
+    },
+    {
       "id": "23887",
       "type": "trap",
       "cardType": "trap",
@@ -737155,6 +739100,103 @@
           "sourceField": "nwbbs_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23839"
+        }
+      ]
+    },
+    {
+      "id": "23836",
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Insect",
+      "monsterPropertyIds": [
+        "34",
+        "27",
+        "4"
+      ],
+      "monsterProperties": [
+        "Insect",
+        "Ritual",
+        "Effect"
+      ],
+      "propertyIds": [
+        "34",
+        "27",
+        "4"
+      ],
+      "properties": [
+        "Insect",
+        "Ritual",
+        "Effect"
+      ],
+      "attack": 1900,
+      "atk": 1900,
+      "defense": 1100,
+      "def": 1100,
+      "level": 4,
+      "attribute": "water",
+      "name": "リインゼルム・ルヴィアン",
+      "cnName": "轮回虫龙 秘鲁蜈蚣",
+      "jaName": "リインゼルム・ルヴィアン",
+      "enName": "Reindsurm Luvian",
+      "effectText": "「竜の骸歌」により降臨\nこのカード名の①②の効果はそれぞれ１ターンに１度しか使用できない。\n①：このカードが儀式召喚した場合に発動できる。デッキから「リインゼルム」魔法・罠カード２枚を手札に加える。\n②：このカードが戦闘以外で墓地へ送られた場合に発動できる。レベルの合計が儀式召喚するモンスターのレベル以上になるように、自分の手札・フィールドのモンスターをリリース、またはリリースの代わりに自分の墓地の昆虫族・ドラゴン族モンスターをデッキに戻し、手札から昆虫族の儀式モンスター１体を儀式召喚する。",
+      "released": true,
+      "aliases": [
+        "リインゼルム・ルヴィアン",
+        "Reindsurm Luvian",
+        "轮回虫龙 秘鲁蜈蚣",
+        "无死虫龙·秘鲁蜈蚣鳞虫"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/23836",
+      "updatedAt": "2026-11-09T01:18:06.698Z",
+      "chineseNameSources": [
+        {
+          "name": "轮回虫龙 秘鲁蜈蚣",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23836"
+        },
+        {
+          "name": "无死虫龙·秘鲁蜈蚣鳞虫",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23836"
+        }
+      ]
+    },
+    {
+      "id": "23869",
+      "type": "spell",
+      "cardType": "spell",
+      "name": "角竜の修練",
+      "cnName": "角龙的修炼",
+      "jaName": "角竜の修練",
+      "enName": "Reindsurm Practice",
+      "effectText": "このカード名の①②の効果はそれぞれ１ターンに１度しか使用できない。\n①：デッキから「リインゼルム」モンスター２体を手札に加える。その後、自分の手札を１枚選んで墓地へ送る。その後、相手のフィールドか墓地にドラゴン族モンスターが存在する場合、自分の墓地から昆虫族モンスター１体を手札に加える事ができる。\n②：このカードが墓地に存在する状態で、自分が昆虫族モンスターを儀式召喚した場合、このカードを除外して発動できる。デッキから「リインゼルム」フィールド魔法カード１枚を自分フィールドに表側表示で置く。",
+      "released": true,
+      "aliases": [
+        "角竜の修練",
+        "Reindsurm Practice",
+        "角龙的修炼",
+        "角龙的修练"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/23869",
+      "updatedAt": "2026-11-09T01:18:06.705Z",
+      "chineseNameSources": [
+        {
+          "name": "角龙的修炼",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23869"
+        },
+        {
+          "name": "角龙的修练",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23869"
         }
       ]
     },
@@ -746248,6 +748290,70 @@
       ]
     },
     {
+      "id": "23827",
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Plant",
+      "monsterPropertyIds": [
+        "25",
+        "4"
+      ],
+      "monsterProperties": [
+        "Plant",
+        "Effect"
+      ],
+      "propertyIds": [
+        "25",
+        "4"
+      ],
+      "properties": [
+        "Plant",
+        "Effect"
+      ],
+      "attack": 0,
+      "atk": 0,
+      "defense": 0,
+      "def": 0,
+      "level": 6,
+      "attribute": "water",
+      "name": "六花のくろひめ",
+      "cnName": "六花的黑姬",
+      "jaName": "六花のくろひめ",
+      "enName": "Rikka Black Princess",
+      "effectText": "このカード名の①②の効果はそれぞれ１ターンに１度しか使用できない。\n①：自分フィールドのモンスターが、存在しない場合または植物族モンスターのみの場合に発動できる。このカードを手札・墓地から特殊召喚する。この効果で特殊召喚したこのカードは、フィールドから離れた場合に除外される。この効果の発動後、ターン終了時まで自分は植物族モンスターしか特殊召喚できない。\n②：自分の手札・フィールドの植物族モンスター１体をリリースして発動できる。デッキから「六花のくろひめ」以外の「六花」モンスター１体を特殊召喚する。",
+      "released": true,
+      "aliases": [
+        "六花のくろひめ",
+        "Rikka Black Princess",
+        "六花的黑姬"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/23827",
+      "updatedAt": "2026-11-09T01:18:07.910Z",
+      "chineseNameSources": [
+        {
+          "name": "六花的黑姬",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23827"
+        },
+        {
+          "name": "六花的黑姬",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23827"
+        },
+        {
+          "name": "六花的黑姬",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23827"
+        }
+      ]
+    },
+    {
       "id": "15120",
       "type": "spell",
       "cardType": "spell",
@@ -746639,6 +748745,75 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "15280"
+        }
+      ]
+    },
+    {
+      "id": "23853",
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Plant",
+      "monsterPropertyIds": [
+        "25",
+        "18",
+        "4"
+      ],
+      "monsterProperties": [
+        "Plant",
+        "Xyz",
+        "Effect"
+      ],
+      "propertyIds": [
+        "25",
+        "18",
+        "4"
+      ],
+      "properties": [
+        "Plant",
+        "Xyz",
+        "Effect"
+      ],
+      "attack": 2000,
+      "atk": 2000,
+      "defense": 2000,
+      "def": 2000,
+      "rank": 6,
+      "attribute": "water",
+      "name": "六花深聖ストレナエ",
+      "cnName": "六花深圣 力量女神花圈",
+      "jaName": "六花深聖ストレナエ",
+      "enName": "Rikka Sacred Queen Strenna",
+      "effectText": "植物族レベル６モンスター×２\nこのカード名の①②の効果はそれぞれ１ターンに１度しか使用できない。\n①：このカードのX素材を２つ取り除いて発動できる。EXデッキから「六花深聖ストレナエ」以外の植物族Xモンスター１体を守備表示で特殊召喚する。この効果で「六花」Xモンスターを特殊召喚した場合、さらにデッキから「六花」モンスター１体をそのX素材にできる。\n②：モンスターがリリースされた場合に発動できる。自分のデッキ・墓地から「六花」罠カード１枚を自分フィールドにセットする。",
+      "released": true,
+      "aliases": [
+        "六花深聖ストレナエ",
+        "Rikka Sacred Queen Strenna",
+        "六花深圣 力量女神花圈",
+        "六花深圣花环"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/23853",
+      "updatedAt": "2026-11-09T01:18:07.975Z",
+      "chineseNameSources": [
+        {
+          "name": "六花深圣 力量女神花圈",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23853"
+        },
+        {
+          "name": "六花深圣 力量女神花圈",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23853"
+        },
+        {
+          "name": "六花深圣花环",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23853"
         }
       ]
     },
@@ -764392,6 +766567,67 @@
       ]
     },
     {
+      "id": "23825",
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Cyberse",
+      "monsterPropertyIds": [
+        "30",
+        "20",
+        "4"
+      ],
+      "monsterProperties": [
+        "Cyberse",
+        "Tuner",
+        "Effect"
+      ],
+      "propertyIds": [
+        "30",
+        "20",
+        "4"
+      ],
+      "properties": [
+        "Cyberse",
+        "Tuner",
+        "Effect"
+      ],
+      "attack": 1600,
+      "atk": 1600,
+      "defense": 1000,
+      "def": 1000,
+      "level": 3,
+      "attribute": "fire",
+      "name": "転生炎獣バステラ",
+      "cnName": "转生炎兽 宽耳蝠",
+      "jaName": "転生炎獣バステラ",
+      "enName": "Salamangreat Bastella",
+      "effectText": "このカード名の①②の効果はそれぞれ１ターンに１度しか使用できない。\n①：自分フィールドのモンスターが、存在しない場合または「サラマングレイト」モンスターのみの場合に発動できる。このカードを手札から特殊召喚する。その後、フィールドのモンスター１体のレベルを１つ上げるか下げる事ができる。\n②：このカードが墓地に存在する状態で、自分がリンク３以上の炎属性LモンスターをL召喚した場合、このカードを除外して発動できる。デッキから「サラマングレイト」罠カード１枚を自分フィールドにセットする。",
+      "released": true,
+      "aliases": [
+        "転生炎獣バステラ",
+        "Salamangreat Bastella",
+        "转生炎兽 宽耳蝠"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/23825",
+      "updatedAt": "2026-11-09T01:18:10.274Z",
+      "chineseNameSources": [
+        {
+          "name": "转生炎兽 宽耳蝠",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23825"
+        },
+        {
+          "name": "转生炎兽 宽耳蝠",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23825"
+        }
+      ]
+    },
+    {
       "id": "14243",
       "type": "monster",
       "cardType": "monster",
@@ -765516,6 +767752,44 @@
       ]
     },
     {
+      "id": "23874",
+      "type": "spell",
+      "cardType": "spell",
+      "property": "equip",
+      "properties": [
+        "equip"
+      ],
+      "name": "転生炎獣の神剣",
+      "cnName": "转生炎兽的神剑",
+      "jaName": "転生炎獣の神剣",
+      "enName": "Salamangreat Gearblade",
+      "effectText": "このカード名の①②③の効果はそれぞれ１ターンに１度しか使用できない。\n①：自分の手札・墓地から「サラマングレイト」モンスター１体を特殊召喚し、このカードを装備する。\n②：デッキから「サラマングレイト」モンスター１体を墓地へ送って発動できる。装備モンスターの攻撃力は、墓地へ送ったモンスターのレベル×３００アップする。\n③：このカードが墓地に存在する場合に発動できる。自分の墓地から装備魔法カード以外の「サラマングレイト」カード３枚をデッキに戻し、このカードを手札に加える。",
+      "released": true,
+      "aliases": [
+        "転生炎獣の神剣",
+        "Salamangreat Gearblade",
+        "转生炎兽的神剑"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/23874",
+      "updatedAt": "2026-11-09T01:18:10.417Z",
+      "chineseNameSources": [
+        {
+          "name": "转生炎兽的神剑",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23874"
+        },
+        {
+          "name": "转生炎兽的神剑",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23874"
+        }
+      ]
+    },
+    {
       "id": "13954",
       "type": "trap",
       "cardType": "trap",
@@ -765733,6 +768007,63 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "13892"
+        }
+      ]
+    },
+    {
+      "id": "23824",
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Cyberse",
+      "monsterPropertyIds": [
+        "30",
+        "4"
+      ],
+      "monsterProperties": [
+        "Cyberse",
+        "Effect"
+      ],
+      "propertyIds": [
+        "30",
+        "4"
+      ],
+      "properties": [
+        "Cyberse",
+        "Effect"
+      ],
+      "attack": 300,
+      "atk": 300,
+      "defense": 2100,
+      "def": 2100,
+      "level": 4,
+      "attribute": "fire",
+      "name": "転生炎獣マーコール",
+      "cnName": "转生炎兽 捻角山羊",
+      "jaName": "転生炎獣マーコール",
+      "enName": "Salamangreat Markhor",
+      "effectText": "このカード名の①②の効果はそれぞれ１ターンに１度しか使用できず、この効果を発動するターン、自分は炎属性モンスターしか特殊召喚できない。\n①：このカードが召喚・特殊召喚した場合に発動できる。自分のデッキ・墓地から「サラマングレイト」魔法・罠カード１枚を手札に加える。\n②：このカードがリンク３以上の炎属性LモンスターのL素材として墓地へ送られた場合に発動できる。デッキからサイバース族・炎属性モンスター１体を特殊召喚する。",
+      "released": true,
+      "aliases": [
+        "転生炎獣マーコール",
+        "Salamangreat Markhor",
+        "转生炎兽 捻角山羊"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/23824",
+      "updatedAt": "2026-11-09T01:18:10.443Z",
+      "chineseNameSources": [
+        {
+          "name": "转生炎兽 捻角山羊",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23824"
+        },
+        {
+          "name": "转生炎兽 捻角山羊",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23824"
         }
       ]
     },
@@ -798005,6 +800336,68 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "20792"
+        }
+      ]
+    },
+    {
+      "id": "23823",
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Spellcaster",
+      "monsterPropertyIds": [
+        "8",
+        "20",
+        "4"
+      ],
+      "monsterProperties": [
+        "Spellcaster",
+        "Tuner",
+        "Effect"
+      ],
+      "propertyIds": [
+        "8",
+        "20",
+        "4"
+      ],
+      "properties": [
+        "Spellcaster",
+        "Tuner",
+        "Effect"
+      ],
+      "attack": 2500,
+      "atk": 2500,
+      "defense": 2000,
+      "def": 2000,
+      "level": 7,
+      "attribute": "fire",
+      "name": "白鴉の森の罪宝",
+      "cnName": "白鸦之森的罪宝",
+      "jaName": "白鴉の森の罪宝",
+      "enName": "Sinful Spoils of the Winter Raven's Forest",
+      "effectText": "このカード名の、①の方法による特殊召喚は１ターンに１度しかできず、②の効果は１ターンに１度しか使用できない。\n①：このカードは自分のフィールド（表側表示）・墓地の炎属性・レベル１のモンスターカード１枚をデッキの一番下に戻し、手札から特殊召喚できる。\n②：相手が効果を発動した時、フィールドのこのカードを手札に戻し、自分か相手のフィールド（表側表示）・墓地のモンスター１体を対象として発動できる。そのモンスターを永続魔法カード扱いで元々の持ち主の魔法＆罠ゾーンに表側表示で置く。",
+      "released": true,
+      "aliases": [
+        "白鴉の森の罪宝",
+        "Sinful Spoils of the Winter Raven's Forest",
+        "白鸦之森的罪宝",
+        "白鸦森林的罪宝"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/23823",
+      "updatedAt": "2026-11-09T01:18:14.512Z",
+      "chineseNameSources": [
+        {
+          "name": "白鸦之森的罪宝",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23823"
+        },
+        {
+          "name": "白鸦森林的罪宝",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23823"
         }
       ]
     },
@@ -869528,6 +871921,75 @@
       ]
     },
     {
+      "id": "23852",
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Plant",
+      "monsterPropertyIds": [
+        "25",
+        "18",
+        "4"
+      ],
+      "monsterProperties": [
+        "Plant",
+        "Xyz",
+        "Effect"
+      ],
+      "propertyIds": [
+        "25",
+        "18",
+        "4"
+      ],
+      "properties": [
+        "Plant",
+        "Xyz",
+        "Effect"
+      ],
+      "attack": 3200,
+      "atk": 3200,
+      "defense": 3200,
+      "def": 3200,
+      "rank": 10,
+      "attribute": "water",
+      "name": "六花深聖ティアドロップ",
+      "cnName": "六花深圣 泪滴花束雪花莲",
+      "jaName": "六花深聖ティアドロップ",
+      "enName": "Teardrop the Rikka Sacred Queen",
+      "effectText": "植物族レベル１０モンスター×２\nこのカードは自分フィールドの「六花聖ティアドロップ」の上に重ねてX召喚する事もできる。\nこのカード名の①の効果は１ターンに１度しか使用できない。\n①：自分・相手ターンに、このカードのX素材を６つまで取り除いて発動できる。その数だけフィールドの魔法・罠カードを墓地へ送る。その後、自分か相手のフィールドのモンスター１体をリリースできる。\n②：モンスターがリリースされる度に発動する。相手の墓地のカード１枚を自分フィールドの植物族Xモンスター１体のX素材にする。",
+      "released": true,
+      "aliases": [
+        "六花深聖ティアドロップ",
+        "Teardrop the Rikka Sacred Queen",
+        "六花深圣 泪滴花束雪花莲",
+        "六花深圣泪滴花束"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/23852",
+      "updatedAt": "2026-11-09T01:18:23.672Z",
+      "chineseNameSources": [
+        {
+          "name": "六花深圣 泪滴花束雪花莲",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23852"
+        },
+        {
+          "name": "六花深圣泪滴花束",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23852"
+        },
+        {
+          "name": "六花深圣 泪滴花束雪花莲",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23852"
+        }
+      ]
+    },
+    {
       "id": "18153",
       "type": "monster",
       "cardType": "monster",
@@ -882497,6 +884959,45 @@
       ]
     },
     {
+      "id": "23862",
+      "type": "spell",
+      "cardType": "spell",
+      "property": "quickplay",
+      "properties": [
+        "quickplay"
+      ],
+      "name": "不死なる太陽神",
+      "cnName": "不死的太阳神",
+      "jaName": "不死なる太陽神",
+      "enName": "The Immortal Sun God",
+      "effectText": "このカード名の①②の効果はそれぞれ１ターンに１度しか使用できない。\n①：自分の墓地・除外状態の「ラーの翼神竜」モンスター１体を召喚条件を無視して特殊召喚する。この効果で「ラーの翼神竜」を特殊召喚した場合、さらにそのモンスターを墓地へ送り、EXデッキから「ラーの翼神竜」モンスター１体を特殊召喚できる。この効果で特殊召喚したモンスターはエンドフェイズに墓地へ送られる。\n②：自分メインフェイズにこのカードが墓地に存在する場合、手札から「太陽神」カード１枚を捨てて発動できる。このカードを手札に加える。",
+      "released": true,
+      "aliases": [
+        "不死なる太陽神",
+        "The Immortal Sun God",
+        "不死的太阳神",
+        "不死的太阳神灵"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/23862",
+      "updatedAt": "2026-11-09T01:18:25.315Z",
+      "chineseNameSources": [
+        {
+          "name": "不死的太阳神",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23862"
+        },
+        {
+          "name": "不死的太阳神灵",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23862"
+        }
+      ]
+    },
+    {
       "id": "4468",
       "type": "monster",
       "cardType": "monster",
@@ -887142,6 +889643,68 @@
       ]
     },
     {
+      "id": "23834",
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Winged Beast",
+      "monsterPropertyIds": [
+        "35",
+        "20",
+        "4"
+      ],
+      "monsterProperties": [
+        "Winged Beast",
+        "Tuner",
+        "Effect"
+      ],
+      "propertyIds": [
+        "35",
+        "20",
+        "4"
+      ],
+      "properties": [
+        "Winged Beast",
+        "Tuner",
+        "Effect"
+      ],
+      "attack": 0,
+      "atk": 0,
+      "defense": 0,
+      "def": 0,
+      "level": 1,
+      "attribute": "light",
+      "name": "お返し鶴秘姫",
+      "cnName": "返身报恩的鹤秘姬",
+      "jaName": "お返し鶴秘姫",
+      "enName": "The Secret Crane Princess Who Returns A Favor",
+      "effectText": "このカード名の①②③の効果はそれぞれ１ターンに１度しか使用できない。\n①：相手エンドフェイズに発動できる。墓地のこのカードをデッキの一番上に戻す。\n②：自分・相手のメインフェイズに発動できる。フィールドのこのカードを手札に戻し、お互いはそれぞれ１枚ドローする。その後、相手は以下の効果を適用できる。\n●自分は１枚ドローし、このメインフェイズ中、相手は手札を全て公開し続ける。\n③：自分・相手ターンに、手札で公開されているこのカードを除外して発動できる。相手フィールドの表側表示カードを全て破壊する。",
+      "released": true,
+      "aliases": [
+        "お返し鶴秘姫",
+        "The Secret Crane Princess Who Returns A Favor",
+        "返身报恩的鹤秘姬",
+        "回报的鹤秘姬"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/23834",
+      "updatedAt": "2026-11-09T01:18:25.985Z",
+      "chineseNameSources": [
+        {
+          "name": "返身报恩的鹤秘姬",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23834"
+        },
+        {
+          "name": "回报的鹤秘姬",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23834"
+        }
+      ]
+    },
+    {
       "id": "5393",
       "type": "spell",
       "cardType": "spell",
@@ -891561,6 +894124,76 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "11927"
+        }
+      ]
+    },
+    {
+      "id": "23841",
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Divine-Beast",
+      "monsterPropertyIds": [
+        "39",
+        "11",
+        "4"
+      ],
+      "monsterProperties": [
+        "Divine-Beast",
+        "Fusion",
+        "Effect"
+      ],
+      "propertyIds": [
+        "39",
+        "11",
+        "4"
+      ],
+      "properties": [
+        "Divine-Beast",
+        "Fusion",
+        "Effect"
+      ],
+      "attack": -1,
+      "atk": -1,
+      "defense": -1,
+      "def": -1,
+      "level": 10,
+      "attribute": "divine",
+      "name": "暗黒の太陽神－ラーの翼神竜",
+      "cnName": "暗黑之太阳神-拉之翼神龙",
+      "jaName": "暗黒の太陽神－ラーの翼神竜",
+      "enName": "The Winged Dragon of Ra, Sun God of Darkness",
+      "effectText": "「ラーの翼神竜」＋「太陽神」モンスター×３\n①：フィールドのこのカードは他のカードの効果を受けない。\n②：１ターンに１度、自分・相手のメインフェイズに、手札から「太陽神」カードを任意の数だけ捨て、その数だけ使用している相手のメインモンスターゾーンを指定して発動できる。相手はそのゾーンのモンスターを墓地へ送らなければならない。\n③：このカードが戦闘を行う攻撃宣言時、１LPになるようにLPを払って発動できる。このカードの攻撃力・守備力は、払った数値及び自分の墓地の「太陽神」モンスターの攻撃力の合計分アップする。",
+      "released": true,
+      "aliases": [
+        "暗黒の太陽神－ラーの翼神竜",
+        "The Winged Dragon of Ra, Sun God of Darkness",
+        "暗黑之太阳神-拉之翼神龙",
+        "暗黑太阳神－拉之翼神龙",
+        "暗黑之太阳神灵-太阳神之翼神龙"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/23841",
+      "updatedAt": "2026-11-09T01:18:26.562Z",
+      "chineseNameSources": [
+        {
+          "name": "暗黑之太阳神-拉之翼神龙",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23841"
+        },
+        {
+          "name": "暗黑太阳神－拉之翼神龙",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23841"
+        },
+        {
+          "name": "暗黑之太阳神灵-太阳神之翼神龙",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23841"
         }
       ]
     },
@@ -915167,6 +917800,75 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "16252"
+        }
+      ]
+    },
+    {
+      "id": "23844",
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Winged Beast",
+      "monsterPropertyIds": [
+        "35",
+        "11",
+        "4"
+      ],
+      "monsterProperties": [
+        "Winged Beast",
+        "Fusion",
+        "Effect"
+      ],
+      "propertyIds": [
+        "35",
+        "11",
+        "4"
+      ],
+      "properties": [
+        "Winged Beast",
+        "Fusion",
+        "Effect"
+      ],
+      "attack": 3000,
+      "atk": 3000,
+      "defense": 2100,
+      "def": 2100,
+      "level": 8,
+      "attribute": "wind",
+      "name": "ハーピィ・レディ三姉妹・TX",
+      "cnName": "鹰身女郎三姐妹 三角神迷",
+      "jaName": "ハーピィ・レディ三姉妹・TX",
+      "enName": "Triangle Ecstasy Harpie Lady Sisters",
+      "effectText": "「ハーピィ・レディ」モンスター×３\nこのカードは融合召喚でのみEXデッキから特殊召喚できる。\n①：このカードのカード名は、フィールド・墓地に存在する限り「ハーピィ・レディ」として扱う。\n②：このカードの攻撃力は自分の墓地の「ハーピィ・レディ」の数×５００アップし、相手はこのカードを風属性以外のモンスターの効果の対象にできない。\n③：自分・相手ターンに１度、発動できる。相手フィールドの魔法・罠カードを全て破壊する。",
+      "released": true,
+      "aliases": [
+        "ハーピィ・レディ三姉妹・TX",
+        "Triangle Ecstasy Harpie Lady Sisters",
+        "鹰身女郎三姐妹 三角神迷",
+        "神鹰女郎三姐妹・三角狂欢"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/23844",
+      "updatedAt": "2026-11-09T01:18:29.647Z",
+      "chineseNameSources": [
+        {
+          "name": "鹰身女郎三姐妹 三角神迷",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23844"
+        },
+        {
+          "name": "神鹰女郎三姐妹・三角狂欢",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23844"
+        },
+        {
+          "name": "鹰身女郎三姐妹 三角神迷",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23844"
         }
       ]
     },
@@ -950234,6 +952936,64 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "5292"
+        }
+      ]
+    },
+    {
+      "id": "23815",
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Fiend",
+      "monsterPropertyIds": [
+        "14",
+        "4"
+      ],
+      "monsterProperties": [
+        "Fiend",
+        "Effect"
+      ],
+      "propertyIds": [
+        "14",
+        "4"
+      ],
+      "properties": [
+        "Fiend",
+        "Effect"
+      ],
+      "attack": 800,
+      "atk": 800,
+      "defense": 1200,
+      "def": 1200,
+      "level": 4,
+      "attribute": "dark",
+      "name": "太陽神の拷問具－バイサー・デス・ショック",
+      "cnName": "太阳神的拷问具-电击死亡拷问机",
+      "jaName": "太陽神の拷問具－バイサー・デス・ショック",
+      "enName": "Viser Des Shock, Tormentor of the Sun God",
+      "effectText": "このカード名の①③の効果はそれぞれ１ターンに１度しか使用できない。\n①：モンスターが相手の墓地へ送られた場合、自分フィールドに「太陽神」カードが存在していれば発動できる（ダメージステップでも発動可能）。このカードを手札から特殊召喚し、フィールドの他のカード１枚を手札・EXデッキに戻し、相手に８００ダメージを与える。\n②：このカードは戦闘では破壊されない。\n③：このターンに「不死なる太陽神」が自分の墓地へ送られている場合、エンドフェイズに発動できる。墓地のこのカードを手札に加える。",
+      "released": true,
+      "aliases": [
+        "太陽神の拷問具－バイサー・デス・ショック",
+        "Viser Des Shock, Tormentor of the Sun God",
+        "太阳神的拷问具-电击死亡拷问机",
+        "太阳神灵的拷问具-电击死亡拷问机"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/23815",
+      "updatedAt": "2026-11-09T01:18:34.059Z",
+      "chineseNameSources": [
+        {
+          "name": "太阳神的拷问具-电击死亡拷问机",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23815"
+        },
+        {
+          "name": "太阳神灵的拷问具-电击死亡拷问机",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23815"
         }
       ]
     },
@@ -996264,6 +999024,68 @@
       ]
     },
     {
+      "id": "23848",
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Illusion",
+      "monsterPropertyIds": [
+        "41",
+        "19",
+        "4"
+      ],
+      "monsterProperties": [
+        "Illusion",
+        "Synchro",
+        "Effect"
+      ],
+      "propertyIds": [
+        "41",
+        "19",
+        "4"
+      ],
+      "properties": [
+        "Illusion",
+        "Synchro",
+        "Effect"
+      ],
+      "attack": 2600,
+      "atk": 2600,
+      "defense": 1700,
+      "def": 1700,
+      "level": 5,
+      "attribute": "fire",
+      "name": "白鴉の騎士ザルティス",
+      "cnName": "白鸦骑士 扎尔蒂斯",
+      "jaName": "白鴉の騎士ザルティス",
+      "enName": "Zaltys, Knight of the Winter Raven",
+      "effectText": "幻想魔族チューナー＋チューナー以外のモンスター１体以上\nこのカード名の①②の効果はそれぞれ１ターンに１度しか使用できない。\n①：このカードが特殊召喚した場合、フィールドの魔法・罠カードを２枚まで対象として発動できる。そのカードを手札に戻す。\n②：このカードが墓地へ送られた場合、どこから墓地へ送られたかによって以下の効果を発動できる。\n●フィールド：デッキから「白鴉」罠カード１枚を自分フィールドにセットする。\n●EXデッキ：自分の墓地から「白鴉」カード１枚を手札に加える。",
+      "released": true,
+      "aliases": [
+        "白鴉の騎士ザルティス",
+        "Zaltys, Knight of the Winter Raven",
+        "白鸦骑士 扎尔蒂斯",
+        "白鸦骑士 萨尔蒂斯"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/23848",
+      "updatedAt": "2026-11-09T01:18:39.815Z",
+      "chineseNameSources": [
+        {
+          "name": "白鸦骑士 扎尔蒂斯",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23848"
+        },
+        {
+          "name": "白鸦骑士 萨尔蒂斯",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23848"
+        }
+      ]
+    },
+    {
       "id": "4099",
       "type": "monster",
       "cardType": "monster",
@@ -1002253,66 +1005075,6 @@
       ]
     },
     {
-      "id": "23854",
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Fiend",
-      "monsterPropertyIds": [
-        "14",
-        "18",
-        "4"
-      ],
-      "monsterProperties": [
-        "Fiend",
-        "Xyz",
-        "Effect"
-      ],
-      "propertyIds": [
-        "14",
-        "18",
-        "4"
-      ],
-      "properties": [
-        "Fiend",
-        "Xyz",
-        "Effect"
-      ],
-      "attack": 100,
-      "atk": 100,
-      "defense": 1000,
-      "def": 1000,
-      "rank": 2,
-      "attribute": "dark",
-      "name": "No.96 ブラック・マリオネッター",
-      "cnName": "No.96 黑偶",
-      "jaName": "No.96 ブラック・マリオネッター",
-      "effectText": "闇属性レベル２モンスター×３\nこのカード名の①②の効果はそれぞれ１ターンに１度しか使用できない。\n①：このカードのX素材を１つ取り除いて発動できる。このカードの攻撃力は、相手フィールドのモンスターの元々の攻撃力の合計分アップする。\n②：相手がカードの効果を発動した時、X素材を持っているこのカードを墓地へ送って発動できる。このカードが持っていたX素材の数まで自分の墓地から「アンブラル」、「マリスボラス」モンスターを特殊召喚する。",
-      "released": true,
-      "aliases": [
-        "No.96 ブラック・マリオネッター",
-        "No.96 黑偶",
-        "No.96 黑傀儡师"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/23854",
-      "updatedAt": "2026-10-31T01:03:49.101Z",
-      "chineseNameSources": [
-        {
-          "name": "No.96 黑偶",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23854"
-        },
-        {
-          "name": "No.96 黑傀儡师",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23854"
-        }
-      ]
-    },
-    {
       "id": "10588",
       "type": "monster",
       "cardType": "monster",
@@ -1002397,2134 +1005159,6 @@
       ]
     },
     {
-      "id": "23841",
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Divine-Beast",
-      "monsterPropertyIds": [
-        "39",
-        "11",
-        "4"
-      ],
-      "monsterProperties": [
-        "Divine-Beast",
-        "Fusion",
-        "Effect"
-      ],
-      "propertyIds": [
-        "39",
-        "11",
-        "4"
-      ],
-      "properties": [
-        "Divine-Beast",
-        "Fusion",
-        "Effect"
-      ],
-      "attack": -1,
-      "atk": -1,
-      "defense": -1,
-      "def": -1,
-      "level": 10,
-      "attribute": "divine",
-      "name": "暗黒の太陽神－ラーの翼神竜",
-      "cnName": "暗黑之太阳神-拉之翼神龙",
-      "jaName": "暗黒の太陽神－ラーの翼神竜",
-      "effectText": "「ラーの翼神竜」＋「太陽神」モンスター×３\n①：フィールドのこのカードは他のカードの効果を受けない。\n②：１ターンに１度、自分・相手のメインフェイズに、手札から「太陽神」カードを任意の数だけ捨て、その数だけ使用している相手のメインモンスターゾーンを指定して発動できる。相手はそのゾーンのモンスターを墓地へ送らなければならない。\n③：このカードが戦闘を行う攻撃宣言時、１LPになるようにLPを払って発動できる。このカードの攻撃力・守備力は、払った数値及び自分の墓地の「太陽神」モンスターの攻撃力の合計分アップする。",
-      "released": true,
-      "aliases": [
-        "暗黒の太陽神－ラーの翼神竜",
-        "暗黑之太阳神-拉之翼神龙",
-        "暗黑太阳神－拉之翼神龙",
-        "暗黑之太阳神灵-太阳神之翼神龙"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/23841",
-      "updatedAt": "2026-10-31T01:03:49.148Z",
-      "chineseNameSources": [
-        {
-          "name": "暗黑之太阳神-拉之翼神龙",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23841"
-        },
-        {
-          "name": "暗黑太阳神－拉之翼神龙",
-          "source": "baige",
-          "sourceField": "md_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23841"
-        },
-        {
-          "name": "暗黑之太阳神灵-太阳神之翼神龙",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23841"
-        }
-      ]
-    },
-    {
-      "id": "23834",
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Winged Beast",
-      "monsterPropertyIds": [
-        "35",
-        "20",
-        "4"
-      ],
-      "monsterProperties": [
-        "Winged Beast",
-        "Tuner",
-        "Effect"
-      ],
-      "propertyIds": [
-        "35",
-        "20",
-        "4"
-      ],
-      "properties": [
-        "Winged Beast",
-        "Tuner",
-        "Effect"
-      ],
-      "attack": 0,
-      "atk": 0,
-      "defense": 0,
-      "def": 0,
-      "level": 1,
-      "attribute": "light",
-      "name": "お返し鶴秘姫",
-      "cnName": "返身报恩的鹤秘姬",
-      "jaName": "お返し鶴秘姫",
-      "effectText": "このカード名の①②③の効果はそれぞれ１ターンに１度しか使用できない。\n①：相手エンドフェイズに発動できる。墓地のこのカードをデッキの一番上に戻す。\n②：自分・相手のメインフェイズに発動できる。フィールドのこのカードを手札に戻し、お互いはそれぞれ１枚ドローする。その後、相手は以下の効果を適用できる。\n●自分は１枚ドローし、このメインフェイズ中、相手は手札を全て公開し続ける。\n③：自分・相手ターンに、手札で公開されているこのカードを除外して発動できる。相手フィールドの表側表示カードを全て破壊する。",
-      "released": true,
-      "aliases": [
-        "お返し鶴秘姫",
-        "返身报恩的鹤秘姬",
-        "回报的鹤秘姬"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/23834",
-      "updatedAt": "2026-10-31T01:03:49.154Z",
-      "chineseNameSources": [
-        {
-          "name": "返身报恩的鹤秘姬",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23834"
-        },
-        {
-          "name": "回报的鹤秘姬",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23834"
-        }
-      ]
-    },
-    {
-      "id": "23864",
-      "type": "spell",
-      "cardType": "spell",
-      "name": "華麗なる三面鏡",
-      "cnName": "华丽的三面镜",
-      "jaName": "華麗なる三面鏡",
-      "effectText": "このカード名の①②の効果はそれぞれ１ターンに１度しか使用できない。\n①：デッキから「ハーピィ」モンスター１体を手札に加える。相手フィールドにのみモンスターが存在する場合、さらに「ハーピィ・レディ」またはそのカード名が記されたモンスター１体を自分の手札・墓地から特殊召喚できる。\n②：墓地のこのカードを除外して発動できる。自分の手札・フィールドのモンスターを融合素材とし、風・地属性の融合モンスター１体を融合召喚する。",
-      "released": true,
-      "aliases": [
-        "華麗なる三面鏡",
-        "华丽的三面镜"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/23864",
-      "updatedAt": "2026-10-31T01:03:49.152Z",
-      "chineseNameSources": [
-        {
-          "name": "华丽的三面镜",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23864"
-        },
-        {
-          "name": "华丽的三面镜",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23864"
-        }
-      ]
-    },
-    {
-      "id": "23871",
-      "type": "spell",
-      "cardType": "spell",
-      "name": "獄神封門－共滅の剣－",
-      "cnName": "狱神封门-共灭之剑-",
-      "jaName": "獄神封門－共滅の剣－",
-      "effectText": "このカード名の①②の効果はそれぞれ１ターンに１度しか使用できない。\n①：手札から「獄神」カード１枚を捨てて発動できる。EXデッキから「獄神」Pモンスター１体を自分のPゾーンに置く。この効果で融合モンスターを置いた場合、さらにデッキから「獄神」Pモンスター１体を自分のPゾーンに置く事ができる。\n②：自分フィールドに「獄神」モンスターが存在する場合、墓地のこのカードを除外し、フィールドの表側表示モンスター１体を対象として発動できる。そのモンスターは攻撃力が１５００アップし、このターン攻撃できない。",
-      "released": true,
-      "aliases": [
-        "獄神封門－共滅の剣－",
-        "狱神封门-共灭之剑-"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/23871",
-      "updatedAt": "2026-10-31T01:03:49.163Z",
-      "chineseNameSources": [
-        {
-          "name": "狱神封门-共灭之剑-",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23871"
-        },
-        {
-          "name": "狱神封门-共灭之剑-",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23871"
-        }
-      ]
-    },
-    {
-      "id": "23872",
-      "type": "spell",
-      "cardType": "spell",
-      "property": "field",
-      "properties": [
-        "field"
-      ],
-      "name": "神幻学都アルス＝マグナ",
-      "cnName": "神幻学都 无垢大艺术学园",
-      "jaName": "神幻学都アルス＝マグナ",
-      "effectText": "このカード名はルール上「アルトメギア」カードとしても扱う。\n①：自分が発動した「メディウス」モンスターの効果は無効化されない。\n②：自分の墓地に「獄神」モンスターが存在する場合、自分の墓地から融合・S・Xモンスター１体を除外し、「アルス＝マグナ」Lモンスターのカード名を１つ宣言して発動できる（このターン、このカード名のこの効果を発動するために同じカード名を宣言できない）。宣言したモンスター１体をEXデッキから特殊召喚する。この効果で特殊召喚したモンスターはL素材にできない。",
-      "released": true,
-      "aliases": [
-        "神幻学都アルス＝マグナ",
-        "神幻学都 无垢大艺术学园",
-        "神幻学都 无垢大艺学园"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/23872",
-      "updatedAt": "2026-10-31T01:03:49.173Z",
-      "chineseNameSources": [
-        {
-          "name": "神幻学都 无垢大艺术学园",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23872"
-        },
-        {
-          "name": "神幻学都 无垢大艺学园",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23872"
-        }
-      ]
-    },
-    {
-      "id": "23815",
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Fiend",
-      "monsterPropertyIds": [
-        "14",
-        "4"
-      ],
-      "monsterProperties": [
-        "Fiend",
-        "Effect"
-      ],
-      "propertyIds": [
-        "14",
-        "4"
-      ],
-      "properties": [
-        "Fiend",
-        "Effect"
-      ],
-      "attack": 800,
-      "atk": 800,
-      "defense": 1200,
-      "def": 1200,
-      "level": 4,
-      "attribute": "dark",
-      "name": "太陽神の拷問具－バイサー・デス・ショック",
-      "cnName": "太阳神的拷问具-电击死亡拷问机",
-      "jaName": "太陽神の拷問具－バイサー・デス・ショック",
-      "effectText": "このカード名の①③の効果はそれぞれ１ターンに１度しか使用できない。\n①：モンスターが相手の墓地へ送られた場合、自分フィールドに「太陽神」カードが存在していれば発動できる（ダメージステップでも発動可能）。このカードを手札から特殊召喚し、フィールドの他のカード１枚を手札・EXデッキに戻し、相手に８００ダメージを与える。\n②：このカードは戦闘では破壊されない。\n③：このターンに「不死なる太陽神」が自分の墓地へ送られている場合、エンドフェイズに発動できる。墓地のこのカードを手札に加える。",
-      "released": true,
-      "aliases": [
-        "太陽神の拷問具－バイサー・デス・ショック",
-        "太阳神的拷问具-电击死亡拷问机",
-        "太阳神灵的拷问具-电击死亡拷问机"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/23815",
-      "updatedAt": "2026-10-31T01:03:49.205Z",
-      "chineseNameSources": [
-        {
-          "name": "太阳神的拷问具-电击死亡拷问机",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23815"
-        },
-        {
-          "name": "太阳神灵的拷问具-电击死亡拷问机",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23815"
-        }
-      ]
-    },
-    {
-      "id": "23814",
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Fiend",
-      "monsterPropertyIds": [
-        "14",
-        "4"
-      ],
-      "monsterProperties": [
-        "Fiend",
-        "Effect"
-      ],
-      "propertyIds": [
-        "14",
-        "4"
-      ],
-      "properties": [
-        "Fiend",
-        "Effect"
-      ],
-      "attack": 1800,
-      "atk": 1800,
-      "defense": 1200,
-      "def": 1200,
-      "level": 4,
-      "attribute": "dark",
-      "name": "太陽神の殺戮機－ギル・ガース",
-      "cnName": "太阳神的杀戮机-屠杀巨灵",
-      "jaName": "太陽神の殺戮機－ギル・ガース",
-      "effectText": "このカード名の①②③の効果はそれぞれ１ターンに１度しか使用できない。\n①：このカードが手札に存在し、自分フィールドに「太陽神」カードが存在する場合に発動できる。このカードを特殊召喚する。\n②：このカードをリリースし、このカード以外の自分か相手の墓地のカード１枚を対象として発動できる。デッキから「太陽神」カード１枚を墓地へ送り、対象のカードをデッキの一番下に戻す。\n③：このターンに「不死なる太陽神」が自分の墓地へ送られている場合、エンドフェイズに発動できる。墓地のこのカードを手札に加える。",
-      "released": true,
-      "aliases": [
-        "太陽神の殺戮機－ギル・ガース",
-        "太阳神的杀戮机-屠杀巨灵",
-        "太阳神灵的杀戮机-屠杀巨灵"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/23814",
-      "updatedAt": "2026-10-31T01:03:49.204Z",
-      "chineseNameSources": [
-        {
-          "name": "太阳神的杀戮机-屠杀巨灵",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23814"
-        },
-        {
-          "name": "太阳神灵的杀戮机-屠杀巨灵",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23814"
-        }
-      ]
-    },
-    {
-      "id": "23812",
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Fiend",
-      "monsterPropertyIds": [
-        "14",
-        "4"
-      ],
-      "monsterProperties": [
-        "Fiend",
-        "Effect"
-      ],
-      "propertyIds": [
-        "14",
-        "4"
-      ],
-      "properties": [
-        "Fiend",
-        "Effect"
-      ],
-      "attack": 2000,
-      "atk": 2000,
-      "defense": 1400,
-      "def": 1400,
-      "level": 5,
-      "attribute": "dark",
-      "name": "太陽神の詩詠者－ヘルポエマー",
-      "cnName": "太阳神的诗咏者-地狱诗人",
-      "jaName": "太陽神の詩詠者－ヘルポエマー",
-      "effectText": "このカード名の①②③の効果はそれぞれ１ターンに１度しか使用できない。\n①：手札から他のカード１枚を捨てて発動できる。このカードを手札から特殊召喚する。\n②：このカードが特殊召喚した場合に発動できる。デッキから「太陽神の詩詠者－ヘルポエマー」以外の「太陽神」カード１枚を手札に加える。自分のLPが相手より２０００以上少ない場合、さらに相手の手札をランダムに１枚捨てる事ができる。\n③：このターンに「不死なる太陽神」が自分の墓地へ送られている場合、エンドフェイズに発動できる。墓地のこのカードを手札に加える。",
-      "released": true,
-      "aliases": [
-        "太陽神の詩詠者－ヘルポエマー",
-        "太阳神的诗咏者-地狱诗人",
-        "太阳神灵的诗咏者-地狱诗人"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/23812",
-      "updatedAt": "2026-10-31T01:03:49.218Z",
-      "chineseNameSources": [
-        {
-          "name": "太阳神的诗咏者-地狱诗人",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23812"
-        },
-        {
-          "name": "太阳神灵的诗咏者-地狱诗人",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23812"
-        }
-      ]
-    },
-    {
-      "id": "23813",
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Warrior",
-      "monsterPropertyIds": [
-        "12",
-        "4"
-      ],
-      "monsterProperties": [
-        "Warrior",
-        "Effect"
-      ],
-      "propertyIds": [
-        "12",
-        "4"
-      ],
-      "properties": [
-        "Warrior",
-        "Effect"
-      ],
-      "attack": 1600,
-      "atk": 1600,
-      "defense": 1200,
-      "def": 1200,
-      "level": 4,
-      "attribute": "dark",
-      "name": "太陽神の処刑人－マキュラ",
-      "cnName": "太阳神的处刑人-摩休罗",
-      "jaName": "太陽神の処刑人－マキュラ",
-      "effectText": "このカード名の①②の効果はそれぞれ１ターンに１度しか使用できない。\n①：このカードが召喚・特殊召喚した場合、または手札・フィールドから墓地へ送られた場合に発動できる。手札・デッキから「太陽神」魔法・罠カード１枚を自分フィールドにセットする。速攻魔法・罠カードをセットした場合、そのカードはセットしたターンでも発動できる。\n②：このターンに「不死なる太陽神」が自分の墓地へ送られている場合、エンドフェイズに発動できる。墓地のこのカードを手札に加える。",
-      "released": true,
-      "aliases": [
-        "太陽神の処刑人－マキュラ",
-        "太阳神的处刑人-摩休罗",
-        "太阳神灵的处刑人-摩休罗"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/23813",
-      "updatedAt": "2026-10-31T01:03:49.236Z",
-      "chineseNameSources": [
-        {
-          "name": "太阳神的处刑人-摩休罗",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23813"
-        },
-        {
-          "name": "太阳神灵的处刑人-摩休罗",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23813"
-        }
-      ]
-    },
-    {
-      "id": "23822",
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Illusion",
-      "monsterPropertyIds": [
-        "41",
-        "20",
-        "4"
-      ],
-      "monsterProperties": [
-        "Illusion",
-        "Tuner",
-        "Effect"
-      ],
-      "propertyIds": [
-        "41",
-        "20",
-        "4"
-      ],
-      "properties": [
-        "Illusion",
-        "Tuner",
-        "Effect"
-      ],
-      "attack": 1400,
-      "atk": 1400,
-      "defense": 900,
-      "def": 900,
-      "level": 4,
-      "attribute": "light",
-      "name": "白鴉の騎士アン",
-      "cnName": "白鸦骑士 安",
-      "jaName": "白鴉の騎士アン",
-      "effectText": "このカード名の①②の効果はそれぞれ１ターンに１度しか使用できない。\n①：手札のこのカードを相手に見せて発動できる。手札から「白鴉の騎士アン」以外の「白鴉」モンスター１体を特殊召喚する。\n②：自分・相手のメインフェイズに、自分フィールドの「白鴉」モンスター１体を対象として発動できる。そのモンスターを永続魔法カード扱いで元々の持ち主の魔法＆罠ゾーンに表側表示で置き、自分の手札・墓地から「白鴉の騎士アン」以外の「白鴉」モンスター１体を特殊召喚する。",
-      "released": true,
-      "aliases": [
-        "白鴉の騎士アン",
-        "白鸦骑士 安",
-        "白鸦骑士 阿努"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/23822",
-      "updatedAt": "2026-10-31T01:03:49.275Z",
-      "chineseNameSources": [
-        {
-          "name": "白鸦骑士 安",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23822"
-        },
-        {
-          "name": "白鸦骑士 阿努",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23822"
-        }
-      ]
-    },
-    {
-      "id": "23848",
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Illusion",
-      "monsterPropertyIds": [
-        "41",
-        "19",
-        "4"
-      ],
-      "monsterProperties": [
-        "Illusion",
-        "Synchro",
-        "Effect"
-      ],
-      "propertyIds": [
-        "41",
-        "19",
-        "4"
-      ],
-      "properties": [
-        "Illusion",
-        "Synchro",
-        "Effect"
-      ],
-      "attack": 2600,
-      "atk": 2600,
-      "defense": 1700,
-      "def": 1700,
-      "level": 5,
-      "attribute": "fire",
-      "name": "白鴉の騎士ザルティス",
-      "cnName": "白鸦骑士 扎尔蒂斯",
-      "jaName": "白鴉の騎士ザルティス",
-      "effectText": "幻想魔族チューナー＋チューナー以外のモンスター１体以上\nこのカード名の①②の効果はそれぞれ１ターンに１度しか使用できない。\n①：このカードが特殊召喚した場合、フィールドの魔法・罠カードを２枚まで対象として発動できる。そのカードを手札に戻す。\n②：このカードが墓地へ送られた場合、どこから墓地へ送られたかによって以下の効果を発動できる。\n●フィールド：デッキから「白鴉」罠カード１枚を自分フィールドにセットする。\n●EXデッキ：自分の墓地から「白鴉」カード１枚を手札に加える。",
-      "released": true,
-      "aliases": [
-        "白鴉の騎士ザルティス",
-        "白鸦骑士 扎尔蒂斯",
-        "白鸦骑士 萨尔蒂斯"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/23848",
-      "updatedAt": "2026-10-31T01:03:49.293Z",
-      "chineseNameSources": [
-        {
-          "name": "白鸦骑士 扎尔蒂斯",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23848"
-        },
-        {
-          "name": "白鸦骑士 萨尔蒂斯",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23848"
-        }
-      ]
-    },
-    {
-      "id": "23821",
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Illusion",
-      "monsterPropertyIds": [
-        "41",
-        "20",
-        "4"
-      ],
-      "monsterProperties": [
-        "Illusion",
-        "Tuner",
-        "Effect"
-      ],
-      "propertyIds": [
-        "41",
-        "20",
-        "4"
-      ],
-      "properties": [
-        "Illusion",
-        "Tuner",
-        "Effect"
-      ],
-      "attack": 1700,
-      "atk": 1700,
-      "defense": 0,
-      "def": 0,
-      "level": 4,
-      "attribute": "light",
-      "name": "白鴉の騎士マルト",
-      "cnName": "白鸦骑士 马特",
-      "jaName": "白鴉の騎士マルト",
-      "effectText": "このカード名の①②の効果はそれぞれ１ターンに１度しか使用できない。\n①：フィールドのこのカード以外の自分の手札・フィールドのカード１枚を墓地へ送って発動できる。このカードを永続魔法カード扱いで元々の持ち主の魔法＆罠ゾーンに表側表示で置き、デッキから「白鴉の騎士マルト」以外の「白鴉」モンスターを２体まで特殊召喚する（同名カードは１枚まで）。\n②：このカードが永続魔法カード扱いの場合、モンスターの攻撃宣言時に自分の魔法＆罠ゾーンの「白鴉」モンスターカード１枚を対象として発動できる。そのカードを特殊召喚する。",
-      "released": true,
-      "aliases": [
-        "白鴉の騎士マルト",
-        "白鸦骑士 马特"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/23821",
-      "updatedAt": "2026-10-31T01:03:49.295Z",
-      "chineseNameSources": [
-        {
-          "name": "白鸦骑士 马特",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23821"
-        },
-        {
-          "name": "白鸦骑士 马特",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23821"
-        }
-      ]
-    },
-    {
-      "id": "23870",
-      "type": "spell",
-      "cardType": "spell",
-      "property": "field",
-      "properties": [
-        "field"
-      ],
-      "name": "白鴉の深き森",
-      "cnName": "白鸦的大森林",
-      "jaName": "白鴉の深き森",
-      "effectText": "このカード名のカードは１ターンに１枚しか発動できず、このカード名の③の効果は１ターンに１度しか使用できない。\n①：このカードの発動時の効果処理として、デッキから「白鴉」モンスター１体を手札に加える事ができる。\n②：このカードがフィールドゾーンに存在する限り、自分フィールドの「白鴉」モンスターカードは効果では破壊されない。\n③：自分エンドフェイズに発動できる。自分のデッキ・墓地から「白鴉」罠カード１枚を自分フィールドにセットする。",
-      "released": true,
-      "aliases": [
-        "白鴉の深き森",
-        "白鸦的大森林",
-        "白鸦的幽深森林"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/23870",
-      "updatedAt": "2026-10-31T01:03:49.296Z",
-      "chineseNameSources": [
-        {
-          "name": "白鸦的大森林",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23870"
-        },
-        {
-          "name": "白鸦的幽深森林",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23870"
-        }
-      ]
-    },
-    {
-      "id": "23820",
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Pyro",
-      "monsterPropertyIds": [
-        "37",
-        "4"
-      ],
-      "monsterProperties": [
-        "Pyro",
-        "Effect"
-      ],
-      "propertyIds": [
-        "37",
-        "4"
-      ],
-      "properties": [
-        "Pyro",
-        "Effect"
-      ],
-      "attack": 700,
-      "atk": 700,
-      "defense": 200,
-      "def": 200,
-      "level": 1,
-      "attribute": "fire",
-      "name": "白鴉の森の炎魔",
-      "cnName": "白鸦之森的炎魔",
-      "jaName": "白鴉の森の炎魔",
-      "effectText": "このカード名の、①の方法による特殊召喚は１ターンに１度しかできず、②③の効果はそれぞれ１ターンに１度しか使用できない。\n①：自分フィールドに「白鴉」カードが存在する場合、このカードは手札から特殊召喚できる。\n②：このカードが召喚・特殊召喚した場合に発動できる。デッキから「白鴉」魔法・罠カードか「罪宝」カード１枚を手札に加える。\n③：自分か相手の魔法＆罠ゾーンの「白鴉」モンスターカードまたはレベル７・８のモンスターカード１枚を対象として発動できる。そのカードを自分フィールドに特殊召喚する。",
-      "released": true,
-      "aliases": [
-        "白鴉の森の炎魔",
-        "白鸦之森的炎魔",
-        "白鸦森林的炎魔"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/23820",
-      "updatedAt": "2026-10-31T01:03:49.315Z",
-      "chineseNameSources": [
-        {
-          "name": "白鸦之森的炎魔",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23820"
-        },
-        {
-          "name": "白鸦森林的炎魔",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23820"
-        }
-      ]
-    },
-    {
-      "id": "23845",
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Illusion",
-      "monsterPropertyIds": [
-        "41",
-        "11",
-        "4"
-      ],
-      "monsterProperties": [
-        "Illusion",
-        "Fusion",
-        "Effect"
-      ],
-      "propertyIds": [
-        "41",
-        "11",
-        "4"
-      ],
-      "properties": [
-        "Illusion",
-        "Fusion",
-        "Effect"
-      ],
-      "attack": 2500,
-      "atk": 2500,
-      "defense": 2100,
-      "def": 2100,
-      "level": 8,
-      "attribute": "light",
-      "name": "白鴉の森の女主人ディアベルゼ",
-      "cnName": "白鸦之森的女主人 迪亚贝尔泽",
-      "jaName": "白鴉の森の女主人ディアベルゼ",
-      "effectText": "融合・Sモンスター＋魔法使い族・幻想魔族モンスター\nこのカード名の①の効果は１ターンに１度しか使用できない。\n①：このカードが特殊召喚した場合に発動できる。自分フィールドのモンスターを任意の数だけ選び、永続魔法カード扱いで元々の持ち主の魔法＆罠ゾーンに表側表示で置く。その後、自分フィールドの魔法・罠カードの数までフィールドのカードを手札に戻す事ができる。\n②：このカードの攻撃力・守備力は、フィールドの魔法・罠カードの数×７００アップする。\n③：融合召喚した表側表示のこのカードは融合素材にできない。",
-      "released": true,
-      "aliases": [
-        "白鴉の森の女主人ディアベルゼ",
-        "白鸦之森的女主人 迪亚贝尔泽",
-        "白鸦之森的女主人 迪亚贝尔赛",
-        "白鸦森林的女主人 迪亚贝尔泽"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/23845",
-      "updatedAt": "2026-10-31T01:03:49.346Z",
-      "chineseNameSources": [
-        {
-          "name": "白鸦之森的女主人 迪亚贝尔泽",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23845"
-        },
-        {
-          "name": "白鸦之森的女主人 迪亚贝尔赛",
-          "source": "baige",
-          "sourceField": "md_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23845"
-        },
-        {
-          "name": "白鸦森林的女主人 迪亚贝尔泽",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23845"
-        }
-      ]
-    },
-    {
-      "id": "23823",
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Spellcaster",
-      "monsterPropertyIds": [
-        "8",
-        "20",
-        "4"
-      ],
-      "monsterProperties": [
-        "Spellcaster",
-        "Tuner",
-        "Effect"
-      ],
-      "propertyIds": [
-        "8",
-        "20",
-        "4"
-      ],
-      "properties": [
-        "Spellcaster",
-        "Tuner",
-        "Effect"
-      ],
-      "attack": 2500,
-      "atk": 2500,
-      "defense": 2000,
-      "def": 2000,
-      "level": 7,
-      "attribute": "fire",
-      "name": "白鴉の森の罪宝",
-      "cnName": "白鸦之森的罪宝",
-      "jaName": "白鴉の森の罪宝",
-      "effectText": "このカード名の、①の方法による特殊召喚は１ターンに１度しかできず、②の効果は１ターンに１度しか使用できない。\n①：このカードは自分のフィールド（表側表示）・墓地の炎属性・レベル１のモンスターカード１枚をデッキの一番下に戻し、手札から特殊召喚できる。\n②：相手が効果を発動した時、フィールドのこのカードを手札に戻し、自分か相手のフィールド（表側表示）・墓地のモンスター１体を対象として発動できる。そのモンスターを永続魔法カード扱いで元々の持ち主の魔法＆罠ゾーンに表側表示で置く。",
-      "released": true,
-      "aliases": [
-        "白鴉の森の罪宝",
-        "白鸦之森的罪宝",
-        "白鸦森林的罪宝"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/23823",
-      "updatedAt": "2026-10-31T01:03:49.347Z",
-      "chineseNameSources": [
-        {
-          "name": "白鸦之森的罪宝",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23823"
-        },
-        {
-          "name": "白鸦森林的罪宝",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23823"
-        }
-      ]
-    },
-    {
-      "id": "23862",
-      "type": "spell",
-      "cardType": "spell",
-      "property": "quickplay",
-      "properties": [
-        "quickplay"
-      ],
-      "name": "不死なる太陽神",
-      "cnName": "不死的太阳神",
-      "jaName": "不死なる太陽神",
-      "effectText": "このカード名の①②の効果はそれぞれ１ターンに１度しか使用できない。\n①：自分の墓地・除外状態の「ラーの翼神竜」モンスター１体を召喚条件を無視して特殊召喚する。この効果で「ラーの翼神竜」を特殊召喚した場合、さらにそのモンスターを墓地へ送り、EXデッキから「ラーの翼神竜」モンスター１体を特殊召喚できる。この効果で特殊召喚したモンスターはエンドフェイズに墓地へ送られる。\n②：自分メインフェイズにこのカードが墓地に存在する場合、手札から「太陽神」カード１枚を捨てて発動できる。このカードを手札に加える。",
-      "released": true,
-      "aliases": [
-        "不死なる太陽神",
-        "不死的太阳神",
-        "不死的太阳神灵"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/23862",
-      "updatedAt": "2026-10-31T01:03:49.366Z",
-      "chineseNameSources": [
-        {
-          "name": "不死的太阳神",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23862"
-        },
-        {
-          "name": "不死的太阳神灵",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23862"
-        }
-      ]
-    },
-    {
-      "id": "23859",
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Cyberse",
-      "monsterPropertyIds": [
-        "30",
-        "23",
-        "4"
-      ],
-      "monsterProperties": [
-        "Cyberse",
-        "Link",
-        "Effect"
-      ],
-      "propertyIds": [
-        "30",
-        "23",
-        "4"
-      ],
-      "properties": [
-        "Cyberse",
-        "Link",
-        "Effect"
-      ],
-      "attack": 2300,
-      "atk": 2300,
-      "link": 3,
-      "linkRating": 3,
-      "linkArrows": "813",
-      "attribute": "fire",
-      "name": "炎の平原を駆け抜ける百獣の王",
-      "cnName": "驰驱于火炎平原的百兽之王",
-      "jaName": "炎の平原を駆け抜ける百獣の王",
-      "effectText": "炎属性の効果モンスター３体\nこのカード名はルール上「転生炎獣ヒートライオ」として扱う。\nこのカード名の②の効果は１ターンに１度しか使用できない。\n①：フィールドの表側表示モンスターは炎属性になる。\n②：このカードが「転生炎獣ヒートライオ」を素材としてL召喚されている場合、自分・相手のメインフェイズに、相手フィールドのカード１枚を対象として発動できる。そのカードをデッキに戻す。その後、相手フィールドの炎属性モンスター１体の攻撃力を、自分の墓地のモンスター１体の攻撃力と同じにできる。",
-      "released": true,
-      "aliases": [
-        "炎の平原を駆け抜ける百獣の王",
-        "驰驱于火炎平原的百兽之王",
-        "驰骋横越炎之平原的百兽之王",
-        "炎之平原上奔驰而过的百兽之王"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/23859",
-      "updatedAt": "2026-10-31T01:03:49.368Z",
-      "chineseNameSources": [
-        {
-          "name": "驰驱于火炎平原的百兽之王",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23859"
-        },
-        {
-          "name": "驰骋横越炎之平原的百兽之王",
-          "source": "baige",
-          "sourceField": "md_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23859"
-        },
-        {
-          "name": "炎之平原上奔驰而过的百兽之王",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23859"
-        }
-      ]
-    },
-    {
-      "id": "23828",
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Warrior",
-      "monsterPropertyIds": [
-        "12",
-        "4"
-      ],
-      "monsterProperties": [
-        "Warrior",
-        "Effect"
-      ],
-      "propertyIds": [
-        "12",
-        "4"
-      ],
-      "properties": [
-        "Warrior",
-        "Effect"
-      ],
-      "attack": 1500,
-      "atk": 1500,
-      "defense": 1300,
-      "def": 1300,
-      "level": 4,
-      "attribute": "light",
-      "name": "無敵のロケット戦士",
-      "cnName": "无敌的火箭战士",
-      "jaName": "無敵のロケット戦士",
-      "effectText": "このカード名の①③の効果はそれぞれ１ターンに１度しか使用できない。\n①：デッキから「時の黒魔術師」のカード名が記された魔法・罠カード１枚を墓地へ送って発動できる。このカードを手札から特殊召喚する。その後、相手フィールドのモンスター１体の攻撃力を１５００ダウンできる。この効果の発動後、ターン終了時まで自分は融合モンスターしかEXデッキから特殊召喚できない。\n②：フィールドのこのカードは効果では破壊されない。\n③：このカードの攻撃宣言時に発動できる。デッキから戦士族・レベル４モンスター１体を手札に加える。",
-      "released": true,
-      "aliases": [
-        "無敵のロケット戦士",
-        "无敌的火箭战士"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/23828",
-      "updatedAt": "2026-10-31T01:03:49.380Z",
-      "chineseNameSources": [
-        {
-          "name": "无敌的火箭战士",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23828"
-        },
-        {
-          "name": "无敌的火箭战士",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23828"
-        }
-      ]
-    },
-    {
-      "id": "23840",
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Insect",
-      "monsterPropertyIds": [
-        "34",
-        "27",
-        "4"
-      ],
-      "monsterProperties": [
-        "Insect",
-        "Ritual",
-        "Effect"
-      ],
-      "propertyIds": [
-        "34",
-        "27",
-        "4"
-      ],
-      "properties": [
-        "Insect",
-        "Ritual",
-        "Effect"
-      ],
-      "attack": 2450,
-      "atk": 2450,
-      "defense": 2550,
-      "def": 2550,
-      "level": 8,
-      "attribute": "earth",
-      "name": "盟約のジャベリンビートル",
-      "cnName": "盟约之标枪甲虫",
-      "jaName": "盟約のジャベリンビートル",
-      "effectText": "「盟約のジャベリンビートル」により降臨\nこのカード名の①の効果はデュエル中に１度しか使用できない。\n①：自分・相手のメインフェイズに、手札のこのカードを相手に見せて発動できる。レベルの合計が儀式召喚するモンスターのレベル以上になるように、自分の手札・フィールドのモンスターをリリースし、手札から昆虫族の儀式モンスター１体を儀式召喚する。\n②：このカードが儀式召喚した場合、このカードと同じ縦列の他のカード１枚を対象として発動できる。そのカードを破壊し、このカードの攻撃力は６００アップする。",
-      "released": true,
-      "aliases": [
-        "盟約のジャベリンビートル",
-        "盟约之标枪甲虫",
-        "盟约的标枪甲虫"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/23840",
-      "updatedAt": "2026-10-31T01:03:49.388Z",
-      "chineseNameSources": [
-        {
-          "name": "盟约之标枪甲虫",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23840"
-        },
-        {
-          "name": "盟约的标枪甲虫",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23840"
-        }
-      ]
-    },
-    {
-      "id": "23853",
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Plant",
-      "monsterPropertyIds": [
-        "25",
-        "18",
-        "4"
-      ],
-      "monsterProperties": [
-        "Plant",
-        "Xyz",
-        "Effect"
-      ],
-      "propertyIds": [
-        "25",
-        "18",
-        "4"
-      ],
-      "properties": [
-        "Plant",
-        "Xyz",
-        "Effect"
-      ],
-      "attack": 2000,
-      "atk": 2000,
-      "defense": 2000,
-      "def": 2000,
-      "rank": 6,
-      "attribute": "water",
-      "name": "六花深聖ストレナエ",
-      "cnName": "六花深圣 力量女神花圈",
-      "jaName": "六花深聖ストレナエ",
-      "effectText": "植物族レベル６モンスター×２\nこのカード名の①②の効果はそれぞれ１ターンに１度しか使用できない。\n①：このカードのX素材を２つ取り除いて発動できる。EXデッキから「六花深聖ストレナエ」以外の植物族Xモンスター１体を守備表示で特殊召喚する。この効果で「六花」Xモンスターを特殊召喚した場合、さらにデッキから「六花」モンスター１体をそのX素材にできる。\n②：モンスターがリリースされた場合に発動できる。自分のデッキ・墓地から「六花」罠カード１枚を自分フィールドにセットする。",
-      "released": true,
-      "aliases": [
-        "六花深聖ストレナエ",
-        "六花深圣 力量女神花圈",
-        "六花深圣花环"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/23853",
-      "updatedAt": "2026-11-06T01:49:05.845Z",
-      "chineseNameSources": [
-        {
-          "name": "六花深圣 力量女神花圈",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23853"
-        },
-        {
-          "name": "六花深圣 力量女神花圈",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23853"
-        },
-        {
-          "name": "六花深圣花环",
-          "source": "baige",
-          "sourceField": "md_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23853"
-        }
-      ]
-    },
-    {
-      "id": "23852",
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Plant",
-      "monsterPropertyIds": [
-        "25",
-        "18",
-        "4"
-      ],
-      "monsterProperties": [
-        "Plant",
-        "Xyz",
-        "Effect"
-      ],
-      "propertyIds": [
-        "25",
-        "18",
-        "4"
-      ],
-      "properties": [
-        "Plant",
-        "Xyz",
-        "Effect"
-      ],
-      "attack": 3200,
-      "atk": 3200,
-      "defense": 3200,
-      "def": 3200,
-      "rank": 10,
-      "attribute": "water",
-      "name": "六花深聖ティアドロップ",
-      "cnName": "六花深圣 泪滴花束雪花莲",
-      "jaName": "六花深聖ティアドロップ",
-      "effectText": "植物族レベル１０モンスター×２\nこのカードは自分フィールドの「六花聖ティアドロップ」の上に重ねてX召喚する事もできる。\nこのカード名の①の効果は１ターンに１度しか使用できない。\n①：自分・相手ターンに、このカードのX素材を６つまで取り除いて発動できる。その数だけフィールドの魔法・罠カードを墓地へ送る。その後、自分か相手のフィールドのモンスター１体をリリースできる。\n②：モンスターがリリースされる度に発動する。相手の墓地のカード１枚を自分フィールドの植物族Xモンスター１体のX素材にする。",
-      "released": true,
-      "aliases": [
-        "六花深聖ティアドロップ",
-        "六花深圣 泪滴花束雪花莲",
-        "六花深圣泪滴花束"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/23852",
-      "updatedAt": "2026-10-31T01:03:49.436Z",
-      "chineseNameSources": [
-        {
-          "name": "六花深圣 泪滴花束雪花莲",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23852"
-        },
-        {
-          "name": "六花深圣泪滴花束",
-          "source": "baige",
-          "sourceField": "md_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23852"
-        },
-        {
-          "name": "六花深圣 泪滴花束雪花莲",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23852"
-        }
-      ]
-    },
-    {
-      "id": "23826",
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Plant",
-      "monsterPropertyIds": [
-        "25",
-        "4"
-      ],
-      "monsterProperties": [
-        "Plant",
-        "Effect"
-      ],
-      "propertyIds": [
-        "25",
-        "4"
-      ],
-      "properties": [
-        "Plant",
-        "Effect"
-      ],
-      "attack": 2600,
-      "atk": 2600,
-      "defense": 2600,
-      "def": 2600,
-      "level": 8,
-      "attribute": "water",
-      "name": "六花双精プリムローズ",
-      "cnName": "六花双精 报春来",
-      "jaName": "六花双精プリムローズ",
-      "effectText": "このカード名の①②③の効果はそれぞれ１ターンに１度しか使用できない。\n①：モンスターがリリースされた場合に発動できる。「六花双精プリムローズ」以外のデッキの「六花」モンスター１体と、手札のこのカードを守備表示で特殊召喚する。この効果の発動後、ターン終了時まで自分は植物族モンスターしか特殊召喚できない。\n②：自分フィールドの植物族モンスター１体を対象として発動できる。そのモンスターのレベルを２つ上げるか下げる。\n③：相手メインフェイズに発動できる。植物族Xモンスター１体のX召喚を行う。",
-      "released": true,
-      "aliases": [
-        "六花双精プリムローズ",
-        "六花双精 报春来",
-        "六花双精 报春花",
-        "六花双精报春蔷薇"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/23826",
-      "updatedAt": "2026-11-06T01:49:05.854Z",
-      "chineseNameSources": [
-        {
-          "name": "六花双精 报春来",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23826"
-        },
-        {
-          "name": "六花双精 报春花",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23826"
-        },
-        {
-          "name": "六花双精报春蔷薇",
-          "source": "baige",
-          "sourceField": "md_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23826"
-        }
-      ]
-    },
-    {
-      "id": "23827",
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Plant",
-      "monsterPropertyIds": [
-        "25",
-        "4"
-      ],
-      "monsterProperties": [
-        "Plant",
-        "Effect"
-      ],
-      "propertyIds": [
-        "25",
-        "4"
-      ],
-      "properties": [
-        "Plant",
-        "Effect"
-      ],
-      "attack": 0,
-      "atk": 0,
-      "defense": 0,
-      "def": 0,
-      "level": 6,
-      "attribute": "water",
-      "name": "六花のくろひめ",
-      "cnName": "六花的黑姬",
-      "jaName": "六花のくろひめ",
-      "effectText": "このカード名の①②の効果はそれぞれ１ターンに１度しか使用できない。\n①：自分フィールドのモンスターが、存在しない場合または植物族モンスターのみの場合に発動できる。このカードを手札・墓地から特殊召喚する。この効果で特殊召喚したこのカードは、フィールドから離れた場合に除外される。この効果の発動後、ターン終了時まで自分は植物族モンスターしか特殊召喚できない。\n②：自分の手札・フィールドの植物族モンスター１体をリリースして発動できる。デッキから「六花のくろひめ」以外の「六花」モンスター１体を特殊召喚する。",
-      "released": true,
-      "aliases": [
-        "六花のくろひめ",
-        "六花的黑姬"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/23827",
-      "updatedAt": "2026-11-06T01:49:05.867Z",
-      "chineseNameSources": [
-        {
-          "name": "六花的黑姬",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23827"
-        },
-        {
-          "name": "六花的黑姬",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23827"
-        },
-        {
-          "name": "六花的黑姬",
-          "source": "baige",
-          "sourceField": "md_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23827"
-        }
-      ]
-    },
-    {
-      "id": "23861",
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Dragon",
-      "monsterPropertyIds": [
-        "21",
-        "23",
-        "4"
-      ],
-      "monsterProperties": [
-        "Dragon",
-        "Link",
-        "Effect"
-      ],
-      "propertyIds": [
-        "21",
-        "23",
-        "4"
-      ],
-      "properties": [
-        "Dragon",
-        "Link",
-        "Effect"
-      ],
-      "attack": 900,
-      "atk": 900,
-      "link": 2,
-      "linkRating": 2,
-      "linkArrows": "13",
-      "attribute": "wind",
-      "name": "竜魔導の降霊師",
-      "cnName": "龙魔导降灵师",
-      "jaName": "竜魔導の降霊師",
-      "effectText": "効果モンスター２体\nこのカード名の効果は１ターンに１度しか使用できない。\n①：自分メインフェイズに発動できる。EXデッキの融合モンスター１体を相手に見せる。融合モンスターを除く、そのモンスターにカード名が記されたモンスター１体を自分の墓地から選び、このカードはエンドフェイズまでそのモンスターと同名カードとして扱う。その後、自分の手札・フィールド・墓地のモンスターを融合素材として除外し、見せた融合モンスターを融合召喚できる。このターン、自分は融合モンスターしかEXデッキから特殊召喚できない。",
-      "released": true,
-      "aliases": [
-        "竜魔導の降霊師",
-        "龙魔导降灵师"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/23861",
-      "updatedAt": "2026-10-31T01:03:49.458Z",
-      "chineseNameSources": [
-        {
-          "name": "龙魔导降灵师",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23861"
-        },
-        {
-          "name": "龙魔导降灵师",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23861"
-        }
-      ]
-    },
-    {
-      "id": "23829",
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Fairy",
-      "monsterPropertyIds": [
-        "15",
-        "20",
-        "4"
-      ],
-      "monsterProperties": [
-        "Fairy",
-        "Tuner",
-        "Effect"
-      ],
-      "propertyIds": [
-        "15",
-        "20",
-        "4"
-      ],
-      "properties": [
-        "Fairy",
-        "Tuner",
-        "Effect"
-      ],
-      "attack": 0,
-      "atk": 0,
-      "defense": 0,
-      "def": 0,
-      "level": 1,
-      "attribute": "fire",
-      "name": "鬼神童鵄 タマヨリ",
-      "cnName": "鬼神童鸱 玉依",
-      "jaName": "鬼神童鵄 タマヨリ",
-      "effectText": "このカード名の①②の効果はそれぞれ１ターンに１度しか使用できない。\n①：このカードが召喚・特殊召喚した場合に発動できる。デッキからチューナー以外の「アシュトラ」モンスター１体を守備表示で特殊召喚する。その後、自分フィールドの表側表示モンスター１体を裏側守備表示にできる。このターン、自分はレベル１チューナーを素材としたS召喚でしかEXデッキからモンスターを特殊召喚できない。\n②：自分フィールドの「アシュトラ」カードか裏側表示カードが効果で破壊される場合、代わりに墓地のこのカードを除外できる。",
-      "released": true,
-      "aliases": [
-        "鬼神童鵄 タマヨリ",
-        "鬼神童鸱 玉依",
-        "鬼神童鵄 玉依"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/23829",
-      "updatedAt": "2026-10-31T01:03:49.460Z",
-      "chineseNameSources": [
-        {
-          "name": "鬼神童鸱 玉依",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23829"
-        },
-        {
-          "name": "鬼神童鵄 玉依",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23829"
-        }
-      ]
-    },
-    {
-      "id": "23850",
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Spellcaster",
-      "monsterPropertyIds": [
-        "8",
-        "19",
-        "4"
-      ],
-      "monsterProperties": [
-        "Spellcaster",
-        "Synchro",
-        "Effect"
-      ],
-      "propertyIds": [
-        "8",
-        "19",
-        "4"
-      ],
-      "properties": [
-        "Spellcaster",
-        "Synchro",
-        "Effect"
-      ],
-      "attack": 2400,
-      "atk": 2400,
-      "defense": 3000,
-      "def": 3000,
-      "level": 8,
-      "attribute": "wind",
-      "name": "鬼神 夜魅",
-      "cnName": "鬼神 夜魅",
-      "jaName": "鬼神 夜魅",
-      "effectText": "チューナー＋チューナー以外のモンスター１体以上\nこのカード名の①②の効果はそれぞれ１ターンに１度しか使用できない。\n①：このカードが特殊召喚した場合、またはフィールドから墓地へ送られた場合に発動できる。デッキから「アシュトラ」罠カード１枚を選び、手札に加えるか自分フィールドにセットする。\n②：自分の墓地に罠カードが存在する場合に発動できる。フィールドの裏側表示カードを全て手札に戻す。その後、自分の墓地の罠カードが５枚以上の場合、相手フィールドのカードを全て手札に戻す事ができる。",
-      "released": true,
-      "aliases": [
-        "鬼神 夜魅"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/23850",
-      "updatedAt": "2026-10-31T01:03:49.490Z",
-      "chineseNameSources": [
-        {
-          "name": "鬼神 夜魅",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23850"
-        },
-        {
-          "name": "鬼神 夜魅",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23850"
-        }
-      ]
-    },
-    {
-      "id": "23830",
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Sea Serpent",
-      "monsterPropertyIds": [
-        "17",
-        "4"
-      ],
-      "monsterProperties": [
-        "Sea Serpent",
-        "Effect"
-      ],
-      "propertyIds": [
-        "17",
-        "4"
-      ],
-      "properties": [
-        "Sea Serpent",
-        "Effect"
-      ],
-      "attack": 2000,
-      "atk": 2000,
-      "defense": 2400,
-      "def": 2400,
-      "level": 5,
-      "attribute": "water",
-      "name": "アトランティスの暴翼",
-      "cnName": "亚特兰蒂斯的暴翼",
-      "jaName": "アトランティスの暴翼",
-      "effectText": "このカード名の①③の効果はそれぞれ１ターンに１度しか使用できない。\n①：手札のこのカードと、自分の手札・フィールド（表側表示）の魔法・罠カードか「海」１枚を墓地へ送り、相手フィールドのカード１枚を対象として発動できる。そのカードを墓地へ送る。\n②：このカードはモンスターゾーンに存在する限り、カード名を「海」として扱う。\n③：自分フィールドに「竜都アトランティス」が存在する場合、墓地のこのカードを除外して発動できる。手札・デッキからレベル４以下の海竜族モンスター１体を特殊召喚する。",
-      "released": true,
-      "aliases": [
-        "アトランティスの暴翼",
-        "亚特兰蒂斯的暴翼"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/23830",
-      "updatedAt": "2026-10-31T01:03:49.488Z",
-      "chineseNameSources": [
-        {
-          "name": "亚特兰蒂斯的暴翼",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23830"
-        },
-        {
-          "name": "亚特兰蒂斯的暴翼",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23830"
-        }
-      ]
-    },
-    {
-      "id": "23817",
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Warrior",
-      "monsterPropertyIds": [
-        "12",
-        "4"
-      ],
-      "monsterProperties": [
-        "Warrior",
-        "Effect"
-      ],
-      "propertyIds": [
-        "12",
-        "4"
-      ],
-      "properties": [
-        "Warrior",
-        "Effect"
-      ],
-      "attack": 1500,
-      "atk": 1500,
-      "defense": 1300,
-      "def": 1300,
-      "level": 4,
-      "attribute": "earth",
-      "name": "アマゾネスの格闘戦士－蹴殺の舞い－",
-      "cnName": "亚马逊格斗战士-蹴杀之舞-",
-      "jaName": "アマゾネスの格闘戦士－蹴殺の舞い－",
-      "effectText": "このカード名の①②③の効果はそれぞれ１ターンに１度しか使用できない。\n①：このカードがドロー以外の方法で手札に加わった場合に発動できる。このカードを特殊召喚する。\n②：このカードが召喚・特殊召喚した場合に発動できる。デッキから「ハーピィ・レディ」のカード名が記された魔法・罠カード１枚を自分フィールドにセットする。\n③：自分の「アマゾネス」モンスターが相手モンスターと戦闘を行うダメージ計算時に発動できる。その２体はその戦闘では破壊されず、その戦闘で発生する自分への戦闘ダメージは０になる。",
-      "released": true,
-      "aliases": [
-        "アマゾネスの格闘戦士－蹴殺の舞い－",
-        "亚马逊格斗战士-蹴杀之舞-"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/23817",
-      "updatedAt": "2026-10-31T01:03:49.508Z",
-      "chineseNameSources": [
-        {
-          "name": "亚马逊格斗战士-蹴杀之舞-",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23817"
-        },
-        {
-          "name": "亚马逊格斗战士-蹴杀之舞-",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23817"
-        }
-      ]
-    },
-    {
-      "id": "23816",
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Warrior",
-      "monsterPropertyIds": [
-        "12",
-        "4"
-      ],
-      "monsterProperties": [
-        "Warrior",
-        "Effect"
-      ],
-      "propertyIds": [
-        "12",
-        "4"
-      ],
-      "properties": [
-        "Warrior",
-        "Effect"
-      ],
-      "attack": 1500,
-      "atk": 1500,
-      "defense": 1300,
-      "def": 1300,
-      "level": 4,
-      "attribute": "earth",
-      "name": "アマゾネスの鎖使い－死に際の鎖舞い－",
-      "cnName": "亚马逊锁链使-临终锁舞-",
-      "jaName": "アマゾネスの鎖使い－死に際の鎖舞い－",
-      "effectText": "このカード名の効果は１ターンに１度しか使用できない。\n①：このカードが墓地へ送られた場合、自分の墓地に他の「アマゾネス」モンスターが存在していれば、１０００LPを払って発動できる。相手は自身のデッキ・EXデッキからレベル１０モンスター１体を選ぶ事ができる。その場合、自分はそのモンスターを召喚条件を無視して自分フィールドに特殊召喚できる。選ばなかった場合、自分は相手の手札をランダムに１枚捨てる。この効果で特殊召喚したモンスターは、このターン効果を発動できない。",
-      "released": true,
-      "aliases": [
-        "アマゾネスの鎖使い－死に際の鎖舞い－",
-        "亚马逊锁链使-临终锁舞-",
-        "亚马逊锁链使-临死的锁链舞-"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/23816",
-      "updatedAt": "2026-10-31T01:03:49.511Z",
-      "chineseNameSources": [
-        {
-          "name": "亚马逊锁链使-临终锁舞-",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23816"
-        },
-        {
-          "name": "亚马逊锁链使-临死的锁链舞-",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23816"
-        }
-      ]
-    },
-    {
-      "id": "23818",
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Warrior",
-      "monsterPropertyIds": [
-        "12",
-        "4"
-      ],
-      "monsterProperties": [
-        "Warrior",
-        "Effect"
-      ],
-      "propertyIds": [
-        "12",
-        "4"
-      ],
-      "properties": [
-        "Warrior",
-        "Effect"
-      ],
-      "attack": 400,
-      "atk": 400,
-      "defense": 800,
-      "def": 800,
-      "level": 3,
-      "attribute": "earth",
-      "name": "アマゾネスの呪詛師－呪印の舞い－",
-      "cnName": "亚马逊诅咒师-咒印之舞-",
-      "jaName": "アマゾネスの呪詛師－呪印の舞い－",
-      "effectText": "このカード名の①②③の効果はそれぞれ１ターンに１度しか使用できない。\n①：このカードが召喚・特殊召喚した場合に発動できる。デッキからレベル３以外の「アマゾネス」モンスター１体を手札に加える。\n②：自分メインフェイズに発動できる。自分の手札・フィールドのモンスターを融合素材とし、地・風属性の融合モンスター１体を融合召喚する。\n③：自分の「アマゾネス」モンスターが相手モンスターと戦闘を行うダメージ計算時、墓地のこのカードを除外して発動できる。その２体の攻撃力をターン終了時まで入れ替える。",
-      "released": true,
-      "aliases": [
-        "アマゾネスの呪詛師－呪印の舞い－",
-        "亚马逊诅咒师-咒印之舞-"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/23818",
-      "updatedAt": "2026-10-31T01:03:49.531Z",
-      "chineseNameSources": [
-        {
-          "name": "亚马逊诅咒师-咒印之舞-",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23818"
-        },
-        {
-          "name": "亚马逊诅咒师-咒印之舞-",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23818"
-        }
-      ]
-    },
-    {
-      "id": "23856",
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Fairy",
-      "monsterPropertyIds": [
-        "15",
-        "23",
-        "4"
-      ],
-      "monsterProperties": [
-        "Fairy",
-        "Link",
-        "Effect"
-      ],
-      "propertyIds": [
-        "15",
-        "23",
-        "4"
-      ],
-      "properties": [
-        "Fairy",
-        "Link",
-        "Effect"
-      ],
-      "attack": 2500,
-      "atk": 2500,
-      "link": 4,
-      "linkRating": 4,
-      "linkArrows": "8462",
-      "attribute": "light",
-      "name": "無垢なる絆 アルトメギア",
-      "cnName": "无垢牵绊 神艺学徒",
-      "jaName": "無垢なる絆 アルトメギア",
-      "effectText": "「アルス＝マグナ」、「アルトメギア」モンスターのいずれかを含むモンスター２体以上\nこのカード名の②の効果は１ターンに１度しか使用できない。\n①：自分フィールドのリンク状態のモンスターを相手は効果の対象にできない。\n②：自分メインフェイズに発動できる。デッキから「アルス＝マグナ」、「アルトメギア」、「ドゥームズ」、「エルフェンノーツ」モンスター１体を選び、手札に加えるか特殊召喚する。その後、自分フィールドのモンスターの種族が３種類以上の場合、自分の墓地・除外状態のモンスター１体を特殊召喚できる。",
-      "released": true,
-      "aliases": [
-        "無垢なる絆 アルトメギア",
-        "无垢牵绊 神艺学徒",
-        "无垢奥艺之绊 神艺",
-        "无垢大牵绊 神艺学徒"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/23856",
-      "updatedAt": "2026-10-31T01:03:49.531Z",
-      "chineseNameSources": [
-        {
-          "name": "无垢牵绊 神艺学徒",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23856"
-        },
-        {
-          "name": "无垢奥艺之绊 神艺",
-          "source": "baige",
-          "sourceField": "md_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23856"
-        },
-        {
-          "name": "无垢大牵绊 神艺学徒",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23856"
-        }
-      ]
-    },
-    {
-      "id": "23858",
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Spellcaster",
-      "monsterPropertyIds": [
-        "8",
-        "23",
-        "4"
-      ],
-      "monsterProperties": [
-        "Spellcaster",
-        "Link",
-        "Effect"
-      ],
-      "propertyIds": [
-        "8",
-        "23",
-        "4"
-      ],
-      "properties": [
-        "Spellcaster",
-        "Link",
-        "Effect"
-      ],
-      "attack": 1500,
-      "atk": 1500,
-      "link": 2,
-      "linkRating": 2,
-      "linkArrows": "63",
-      "attribute": "light",
-      "name": "無垢なる協奏 エルフェンノーツ",
-      "cnName": "无垢协奏 耀圣诗团",
-      "jaName": "無垢なる協奏 エルフェンノーツ",
-      "effectText": "「アルス＝マグナ」、「エルフェンノーツ」モンスターのいずれかを含むモンスター２体\nこのカード名の②③の効果はそれぞれ１ターンに１度しか使用できない。\n①：自分フィールドのリンク状態のモンスターの攻撃力は、フィールドのモンスターの種族の種類×３００アップする。\n②：自分メインフェイズに発動できる。自分フィールドのカード１枚を選び、墓地へ送るか除外する。その後、フィールドのモンスター１体を手札に戻す事ができる。\n③：墓地のこのカードを除外して発動できる。手札から「エルフェンノーツ」モンスター１体を特殊召喚する。",
-      "released": true,
-      "aliases": [
-        "無垢なる協奏 エルフェンノーツ",
-        "无垢协奏 耀圣诗团",
-        "无垢大协奏 耀圣之诗"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/23858",
-      "updatedAt": "2026-10-31T01:03:49.561Z",
-      "chineseNameSources": [
-        {
-          "name": "无垢协奏 耀圣诗团",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23858"
-        },
-        {
-          "name": "无垢大协奏 耀圣之诗",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23858"
-        }
-      ]
-    },
-    {
-      "id": "23857",
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Dragon",
-      "monsterPropertyIds": [
-        "21",
-        "23",
-        "4"
-      ],
-      "monsterProperties": [
-        "Dragon",
-        "Link",
-        "Effect"
-      ],
-      "propertyIds": [
-        "21",
-        "23",
-        "4"
-      ],
-      "properties": [
-        "Dragon",
-        "Link",
-        "Effect"
-      ],
-      "attack": 1500,
-      "atk": 1500,
-      "link": 2,
-      "linkRating": 2,
-      "linkArrows": "41",
-      "attribute": "light",
-      "name": "無垢なる血盟 ドゥームズ",
-      "cnName": "无垢血盟 终刻龙卫",
-      "jaName": "無垢なる血盟 ドゥームズ",
-      "effectText": "「アルス＝マグナ」、「ドゥームズ」モンスターのいずれかを含むモンスター２体\nこのカード名の②③の効果はそれぞれ１ターンに１度しか使用できない。\n①：リンク状態の自分のモンスターが戦闘で破壊したモンスターは墓地へは行かず除外される。\n②：自分メインフェイズに発動できる。自分フィールドのカード１枚を選び、破壊するか除外する。その後、自分・相手の墓地のカードを合計２枚までデッキに戻す事ができる。\n③：墓地のこのカードを除外して発動できる。手札から「ドゥームズ」モンスター１体を特殊召喚する。",
-      "released": true,
-      "aliases": [
-        "無垢なる血盟 ドゥームズ",
-        "无垢血盟 终刻龙卫",
-        "无垢大血盟 终刻龙机"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/23857",
-      "updatedAt": "2026-10-31T01:03:49.560Z",
-      "chineseNameSources": [
-        {
-          "name": "无垢血盟 终刻龙卫",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23857"
-        },
-        {
-          "name": "无垢大血盟 终刻龙机",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23857"
-        }
-      ]
-    },
-    {
-      "id": "23860",
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Sea Serpent",
-      "monsterPropertyIds": [
-        "17",
-        "23",
-        "4"
-      ],
-      "monsterProperties": [
-        "Sea Serpent",
-        "Link",
-        "Effect"
-      ],
-      "propertyIds": [
-        "17",
-        "23",
-        "4"
-      ],
-      "properties": [
-        "Sea Serpent",
-        "Link",
-        "Effect"
-      ],
-      "attack": 1400,
-      "atk": 1400,
-      "link": 2,
-      "linkRating": 2,
-      "linkArrows": "62",
-      "attribute": "water",
-      "name": "コダイダロス",
-      "cnName": "科泰达路斯",
-      "jaName": "コダイダロス",
-      "effectText": "水属性モンスター２体\n自分は「コダイダロス」を１ターンに１度しか特殊召喚できない。\n①：このカードがL召喚した場合に発動できる。このターンのエンドフェイズに、「コダイダロス」を除く、「竜都アトランティス」のカード名が記されたカード１枚を自分の墓地から手札に加える。\n②：このカードはモンスターゾーンに存在する限り、カード名を「海」として扱う。\n③：１ターンに１度、自分フィールドの表側表示の「海」１枚を墓地へ送って発動できる。フィールドの魔法・罠カードを２枚まで墓地へ送る。",
-      "released": true,
-      "aliases": [
-        "コダイダロス",
-        "科泰达路斯"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/23860",
-      "updatedAt": "2026-10-31T01:03:49.631Z",
-      "chineseNameSources": [
-        {
-          "name": "科泰达路斯",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23860"
-        },
-        {
-          "name": "科泰达路斯",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23860"
-        }
-      ]
-    },
-    {
-      "id": "23825",
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Cyberse",
-      "monsterPropertyIds": [
-        "30",
-        "20",
-        "4"
-      ],
-      "monsterProperties": [
-        "Cyberse",
-        "Tuner",
-        "Effect"
-      ],
-      "propertyIds": [
-        "30",
-        "20",
-        "4"
-      ],
-      "properties": [
-        "Cyberse",
-        "Tuner",
-        "Effect"
-      ],
-      "attack": 1600,
-      "atk": 1600,
-      "defense": 1000,
-      "def": 1000,
-      "level": 3,
-      "attribute": "fire",
-      "name": "転生炎獣バステラ",
-      "cnName": "转生炎兽 宽耳蝠",
-      "jaName": "転生炎獣バステラ",
-      "effectText": "このカード名の①②の効果はそれぞれ１ターンに１度しか使用できない。\n①：自分フィールドのモンスターが、存在しない場合または「サラマングレイト」モンスターのみの場合に発動できる。このカードを手札から特殊召喚する。その後、フィールドのモンスター１体のレベルを１つ上げるか下げる事ができる。\n②：このカードが墓地に存在する状態で、自分がリンク３以上の炎属性LモンスターをL召喚した場合、このカードを除外して発動できる。デッキから「サラマングレイト」罠カード１枚を自分フィールドにセットする。",
-      "released": true,
-      "aliases": [
-        "転生炎獣バステラ",
-        "转生炎兽 宽耳蝠"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/23825",
-      "updatedAt": "2026-10-31T01:03:49.652Z",
-      "chineseNameSources": [
-        {
-          "name": "转生炎兽 宽耳蝠",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23825"
-        },
-        {
-          "name": "转生炎兽 宽耳蝠",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23825"
-        }
-      ]
-    },
-    {
-      "id": "23824",
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Cyberse",
-      "monsterPropertyIds": [
-        "30",
-        "4"
-      ],
-      "monsterProperties": [
-        "Cyberse",
-        "Effect"
-      ],
-      "propertyIds": [
-        "30",
-        "4"
-      ],
-      "properties": [
-        "Cyberse",
-        "Effect"
-      ],
-      "attack": 300,
-      "atk": 300,
-      "defense": 2100,
-      "def": 2100,
-      "level": 4,
-      "attribute": "fire",
-      "name": "転生炎獣マーコール",
-      "cnName": "转生炎兽 捻角山羊",
-      "jaName": "転生炎獣マーコール",
-      "effectText": "このカード名の①②の効果はそれぞれ１ターンに１度しか使用できず、この効果を発動するターン、自分は炎属性モンスターしか特殊召喚できない。\n①：このカードが召喚・特殊召喚した場合に発動できる。自分のデッキ・墓地から「サラマングレイト」魔法・罠カード１枚を手札に加える。\n②：このカードがリンク３以上の炎属性LモンスターのL素材として墓地へ送られた場合に発動できる。デッキからサイバース族・炎属性モンスター１体を特殊召喚する。",
-      "released": true,
-      "aliases": [
-        "転生炎獣マーコール",
-        "转生炎兽 捻角山羊"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/23824",
-      "updatedAt": "2026-10-31T01:03:49.652Z",
-      "chineseNameSources": [
-        {
-          "name": "转生炎兽 捻角山羊",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23824"
-        },
-        {
-          "name": "转生炎兽 捻角山羊",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23824"
-        }
-      ]
-    },
-    {
-      "id": "23874",
-      "type": "spell",
-      "cardType": "spell",
-      "property": "equip",
-      "properties": [
-        "equip"
-      ],
-      "name": "転生炎獣の神剣",
-      "cnName": "转生炎兽的神剑",
-      "jaName": "転生炎獣の神剣",
-      "effectText": "このカード名の①②③の効果はそれぞれ１ターンに１度しか使用できない。\n①：自分の手札・墓地から「サラマングレイト」モンスター１体を特殊召喚し、このカードを装備する。\n②：デッキから「サラマングレイト」モンスター１体を墓地へ送って発動できる。装備モンスターの攻撃力は、墓地へ送ったモンスターのレベル×３００アップする。\n③：このカードが墓地に存在する場合に発動できる。自分の墓地から装備魔法カード以外の「サラマングレイト」カード３枚をデッキに戻し、このカードを手札に加える。",
-      "released": true,
-      "aliases": [
-        "転生炎獣の神剣",
-        "转生炎兽的神剑"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/23874",
-      "updatedAt": "2026-10-31T01:03:49.651Z",
-      "chineseNameSources": [
-        {
-          "name": "转生炎兽的神剑",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23874"
-        },
-        {
-          "name": "转生炎兽的神剑",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23874"
-        }
-      ]
-    },
-    {
       "id": "6053",
       "type": "spell",
       "cardType": "spell",
@@ -1004572,540 +1005206,6 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "6053"
-        }
-      ]
-    },
-    {
-      "id": "23851",
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Sea Serpent",
-      "monsterPropertyIds": [
-        "17",
-        "19",
-        "4"
-      ],
-      "monsterProperties": [
-        "Sea Serpent",
-        "Synchro",
-        "Effect"
-      ],
-      "propertyIds": [
-        "17",
-        "19",
-        "4"
-      ],
-      "properties": [
-        "Sea Serpent",
-        "Synchro",
-        "Effect"
-      ],
-      "attack": 1000,
-      "atk": 1000,
-      "defense": 2100,
-      "def": 2100,
-      "level": 8,
-      "attribute": "water",
-      "name": "ダラダラサウルス",
-      "cnName": "达懒斯龙",
-      "jaName": "ダラダラサウルス",
-      "effectText": "守備表示チューナー＋チューナー以外の守備表示モンスター１体以上\n①：このカードが攻撃表示で特殊召喚した場合に発動する。このカードを守備表示にする。\n②：守備表示のこのカードは以下の効果を得る。\n●フィールドの表側表示モンスターは守備表示になる。\n●お互いは自身のカードの効果の発動に対してカードの効果を発動できない。\n●自分・相手のエンドフェイズに発動する。お互いはそれぞれ自身のフィールドの守備表示モンスターの数×５００LP回復する。",
-      "released": true,
-      "aliases": [
-        "ダラダラサウルス",
-        "达懒斯龙",
-        "拖拉达拉斯龙"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/23851",
-      "updatedAt": "2026-10-31T01:03:49.674Z",
-      "chineseNameSources": [
-        {
-          "name": "达懒斯龙",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23851"
-        },
-        {
-          "name": "拖拉达拉斯龙",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23851"
-        }
-      ]
-    },
-    {
-      "id": "23833",
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Illusion",
-      "monsterPropertyIds": [
-        "41",
-        "4"
-      ],
-      "monsterProperties": [
-        "Illusion",
-        "Effect"
-      ],
-      "propertyIds": [
-        "41",
-        "4"
-      ],
-      "properties": [
-        "Illusion",
-        "Effect"
-      ],
-      "attack": 1700,
-      "atk": 1700,
-      "defense": 1700,
-      "def": 1700,
-      "level": 4,
-      "attribute": "light",
-      "name": "幻惑の綺羅星",
-      "cnName": "幻惑的绮罗星",
-      "jaName": "幻惑の綺羅星",
-      "effectText": "このカード名の①の効果は１ターンに１度しか使用できない。\n①：このカードが召喚・特殊召喚した場合に発動できる。「幻惑の綺羅星」を除く、レベル７以下の幻想魔族モンスター１体をデッキから特殊召喚する。この効果で特殊召喚したモンスターはエンドフェイズに手札に戻る。\n②：このカードがモンスターと戦闘を行う場合、その２体はその戦闘では破壊されない。\n③：１ターンに１度、モンスターが戦闘を行ったダメージステップ終了時に発動できる。フィールドの全てのモンスターの表示形式を変更する。",
-      "released": true,
-      "aliases": [
-        "幻惑の綺羅星",
-        "幻惑的绮罗星",
-        "幻惑之绮罗星"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/23833",
-      "updatedAt": "2026-10-31T01:03:49.704Z",
-      "chineseNameSources": [
-        {
-          "name": "幻惑的绮罗星",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23833"
-        },
-        {
-          "name": "幻惑之绮罗星",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23833"
-        }
-      ]
-    },
-    {
-      "id": "23865",
-      "type": "spell",
-      "cardType": "spell",
-      "property": "quickplay",
-      "properties": [
-        "quickplay"
-      ],
-      "name": "ハーピィ＆アマゾネス －羅刹の陣－",
-      "cnName": "鹰身&亚马逊 -罗刹之阵-",
-      "jaName": "ハーピィ＆アマゾネス －羅刹の陣－",
-      "effectText": "このカード名のカードは１ターンに１枚しか発動できない。\n①：自分の墓地・除外状態の「ハーピィ」モンスターか「アマゾネス」モンスター１体を対象として発動できる。そのモンスターを特殊召喚する。その後、自分フィールドの「ハーピィ・レディ」及び「アマゾネス」モンスターの数によって以下から１つを選んで適用できる。\n●１体以上：デッキから「誘惑の鏡壁」１枚を自分の魔法＆罠ゾーンに表側表示で置く。\n●２体以上：相手フィールドのモンスター１体のコントロールを得る。\n●３体以上：相手フィールドのモンスターを全て破壊する。",
-      "released": true,
-      "aliases": [
-        "ハーピィ＆アマゾネス －羅刹の陣－",
-        "鹰身&亚马逊 -罗刹之阵-",
-        "鹰身女妖与亚马逊 -罗刹之阵-"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/23865",
-      "updatedAt": "2026-10-31T01:03:49.703Z",
-      "chineseNameSources": [
-        {
-          "name": "鹰身&亚马逊 -罗刹之阵-",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23865"
-        },
-        {
-          "name": "鹰身女妖与亚马逊 -罗刹之阵-",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23865"
-        }
-      ]
-    },
-    {
-      "id": "23844",
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Winged Beast",
-      "monsterPropertyIds": [
-        "35",
-        "11",
-        "4"
-      ],
-      "monsterProperties": [
-        "Winged Beast",
-        "Fusion",
-        "Effect"
-      ],
-      "propertyIds": [
-        "35",
-        "11",
-        "4"
-      ],
-      "properties": [
-        "Winged Beast",
-        "Fusion",
-        "Effect"
-      ],
-      "attack": 3000,
-      "atk": 3000,
-      "defense": 2100,
-      "def": 2100,
-      "level": 8,
-      "attribute": "wind",
-      "name": "ハーピィ・レディ三姉妹・TX",
-      "cnName": "鹰身女郎三姐妹 三角神迷",
-      "jaName": "ハーピィ・レディ三姉妹・TX",
-      "effectText": "「ハーピィ・レディ」モンスター×３\nこのカードは融合召喚でのみEXデッキから特殊召喚できる。\n①：このカードのカード名は、フィールド・墓地に存在する限り「ハーピィ・レディ」として扱う。\n②：このカードの攻撃力は自分の墓地の「ハーピィ・レディ」の数×５００アップし、相手はこのカードを風属性以外のモンスターの効果の対象にできない。\n③：自分・相手ターンに１度、発動できる。相手フィールドの魔法・罠カードを全て破壊する。",
-      "released": true,
-      "aliases": [
-        "ハーピィ・レディ三姉妹・TX",
-        "鹰身女郎三姐妹 三角神迷",
-        "神鹰女郎三姐妹・三角狂欢"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/23844",
-      "updatedAt": "2026-10-31T01:03:49.724Z",
-      "chineseNameSources": [
-        {
-          "name": "鹰身女郎三姐妹 三角神迷",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23844"
-        },
-        {
-          "name": "神鹰女郎三姐妹・三角狂欢",
-          "source": "baige",
-          "sourceField": "md_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23844"
-        },
-        {
-          "name": "鹰身女郎三姐妹 三角神迷",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23844"
-        }
-      ]
-    },
-    {
-      "id": "23819",
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Winged Beast",
-      "monsterPropertyIds": [
-        "35",
-        "4"
-      ],
-      "monsterProperties": [
-        "Winged Beast",
-        "Effect"
-      ],
-      "propertyIds": [
-        "35",
-        "4"
-      ],
-      "properties": [
-        "Winged Beast",
-        "Effect"
-      ],
-      "attack": 1300,
-      "atk": 1300,
-      "defense": 1400,
-      "def": 1400,
-      "level": 4,
-      "attribute": "wind",
-      "name": "ハーピィ・レディ－魅惑の舞い－",
-      "cnName": "鹰身女郎-诱惑之舞-",
-      "jaName": "ハーピィ・レディ－魅惑の舞い－",
-      "effectText": "このカード名の②③の効果はそれぞれ１ターンに１度しか使用できない。\n①：このカードのカード名は、フィールド・墓地に存在する限り「ハーピィ・レディ」として扱う。\n②：このカードが手札に存在する場合、自分・相手のメインフェイズに、自分フィールドの風・地属性モンスター１体を対象として発動できる。そのモンスターを手札・EXデッキに戻し、このカードを特殊召喚する。\n③：このカードが召喚・特殊召喚した場合に発動できる。デッキから「ハーピィ・レディ」のカード名が記された魔法・罠カード１枚を手札に加える。",
-      "released": true,
-      "aliases": [
-        "ハーピィ・レディ－魅惑の舞い－",
-        "鹰身女郎-诱惑之舞-",
-        "鹰身女郎-魅惑之舞-"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/23819",
-      "updatedAt": "2026-10-31T01:03:49.722Z",
-      "chineseNameSources": [
-        {
-          "name": "鹰身女郎-诱惑之舞-",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23819"
-        },
-        {
-          "name": "鹰身女郎-魅惑之舞-",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23819"
-        }
-      ]
-    },
-    {
-      "id": "23837",
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Insect",
-      "monsterPropertyIds": [
-        "34",
-        "27",
-        "4"
-      ],
-      "monsterProperties": [
-        "Insect",
-        "Ritual",
-        "Effect"
-      ],
-      "propertyIds": [
-        "34",
-        "27",
-        "4"
-      ],
-      "properties": [
-        "Insect",
-        "Ritual",
-        "Effect"
-      ],
-      "attack": 2000,
-      "atk": 2000,
-      "defense": 1300,
-      "def": 1300,
-      "level": 4,
-      "attribute": "light",
-      "name": "リインゼルム・カルカサス",
-      "cnName": "轮回虫龙 高加索南洋大兜虫",
-      "jaName": "リインゼルム・カルカサス",
-      "effectText": "「竜の骸歌」により降臨\nこのカード名の①②の効果はそれぞれ１ターンに１度しか使用できない。\n①：このカードが儀式召喚した場合に発動できる。デッキから「リインゼルム」カード２枚を墓地へ送る。\n②：このカードが戦闘以外で墓地へ送られた場合に発動できる。レベルの合計が儀式召喚するモンスターのレベル以上になるように、自分の手札・フィールドのモンスターをリリース、またはリリースの代わりに自分の墓地の昆虫族・ドラゴン族モンスターをデッキに戻し、手札から昆虫族の儀式モンスター１体を儀式召喚する。",
-      "released": true,
-      "aliases": [
-        "リインゼルム・カルカサス",
-        "轮回虫龙 高加索南洋大兜虫",
-        "无死虫龙·高加索独角仙鳞虫"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/23837",
-      "updatedAt": "2026-10-31T01:03:49.793Z",
-      "chineseNameSources": [
-        {
-          "name": "轮回虫龙 高加索南洋大兜虫",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23837"
-        },
-        {
-          "name": "无死虫龙·高加索独角仙鳞虫",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23837"
-        }
-      ]
-    },
-    {
-      "id": "23867",
-      "type": "spell",
-      "cardType": "spell",
-      "property": "field",
-      "properties": [
-        "field"
-      ],
-      "name": "無死なる竜の鼓動",
-      "cnName": "无死之龙的鼓动",
-      "jaName": "無死なる竜の鼓動",
-      "effectText": "①：自分フィールドに元々のレベルが８以上の「リインゼルム」モンスターが存在する限り、または相手のフィールドか墓地にドラゴン族モンスターが存在する限り、自分が発動した「リインゼルム」モンスターの効果は無効化されない。\n②：１ターンに１度、自分の手札・フィールド（表側表示）から「リインゼルム」モンスターかドラゴン族モンスター１体を墓地へ送って発動できる。そのモンスターとは元々のカード名が異なり、元々のレベルが同じ昆虫族モンスター１体をデッキから手札に加える。",
-      "released": true,
-      "aliases": [
-        "無死なる竜の鼓動",
-        "无死之龙的鼓动",
-        "无死虫龙的鼓动"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/23867",
-      "updatedAt": "2026-10-31T01:03:49.795Z",
-      "chineseNameSources": [
-        {
-          "name": "无死之龙的鼓动",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23867"
-        },
-        {
-          "name": "无死虫龙的鼓动",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23867"
-        }
-      ]
-    },
-    {
-      "id": "23866",
-      "type": "spell",
-      "cardType": "spell",
-      "property": "ritual",
-      "properties": [
-        "ritual"
-      ],
-      "name": "竜の骸歌",
-      "cnName": "龙之骸歌",
-      "jaName": "竜の骸歌",
-      "effectText": "このカード名の①②の効果はそれぞれ１ターンに１度しか使用できない。\n①：レベルの合計が儀式召喚するモンスターのレベルの合計以上になるように、自分・相手の墓地の昆虫族・ドラゴン族モンスターをデッキに戻し、手札から昆虫族の儀式モンスターを任意の数だけ儀式召喚する。\n②：このカードが墓地に存在する場合、自分の手札・フィールド（表側表示）から昆虫族モンスター１体を墓地へ送って発動できる。このカードを手札に加える。",
-      "released": true,
-      "aliases": [
-        "竜の骸歌",
-        "龙之骸歌"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/23866",
-      "updatedAt": "2026-10-31T01:03:49.815Z",
-      "chineseNameSources": [
-        {
-          "name": "龙之骸歌",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23866"
-        },
-        {
-          "name": "龙之骸歌",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23866"
-        }
-      ]
-    },
-    {
-      "id": "23868",
-      "type": "spell",
-      "cardType": "spell",
-      "name": "翅竜の羽撃",
-      "cnName": "翅龙的羽击",
-      "jaName": "翅竜の羽撃",
-      "effectText": "このカード名の①②の効果は１ターンに１度、いずれか１つしか使用できない。\n①：デッキから昆虫族モンスターを含むモンスター２体を墓地へ送る。このカードの発動後、次のターンの終了時まで、自分は昆虫族モンスターしか特殊召喚できない。\n②：このカードが墓地に存在する状態で、自分が昆虫族モンスターを儀式召喚した場合、このカードを除外して発動できる。自分フィールドの全ての「リインゼルム」モンスターの攻撃力・守備力は８００アップする。",
-      "released": true,
-      "aliases": [
-        "翅竜の羽撃",
-        "翅龙的羽击"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/23868",
-      "updatedAt": "2026-10-31T01:03:49.848Z",
-      "chineseNameSources": [
-        {
-          "name": "翅龙的羽击",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23868"
-        },
-        {
-          "name": "翅龙的羽击",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23868"
-        }
-      ]
-    },
-    {
-      "id": "23869",
-      "type": "spell",
-      "cardType": "spell",
-      "name": "角竜の修練",
-      "cnName": "角龙的修炼",
-      "jaName": "角竜の修練",
-      "effectText": "このカード名の①②の効果はそれぞれ１ターンに１度しか使用できない。\n①：デッキから「リインゼルム」モンスター２体を手札に加える。その後、自分の手札を１枚選んで墓地へ送る。その後、相手のフィールドか墓地にドラゴン族モンスターが存在する場合、自分の墓地から昆虫族モンスター１体を手札に加える事ができる。\n②：このカードが墓地に存在する状態で、自分が昆虫族モンスターを儀式召喚した場合、このカードを除外して発動できる。デッキから「リインゼルム」フィールド魔法カード１枚を自分フィールドに表側表示で置く。",
-      "released": true,
-      "aliases": [
-        "角竜の修練",
-        "角龙的修炼",
-        "角龙的修练"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/23869",
-      "updatedAt": "2026-10-31T01:03:49.845Z",
-      "chineseNameSources": [
-        {
-          "name": "角龙的修炼",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23869"
-        },
-        {
-          "name": "角龙的修练",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23869"
-        }
-      ]
-    },
-    {
-      "id": "23836",
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Insect",
-      "monsterPropertyIds": [
-        "34",
-        "27",
-        "4"
-      ],
-      "monsterProperties": [
-        "Insect",
-        "Ritual",
-        "Effect"
-      ],
-      "propertyIds": [
-        "34",
-        "27",
-        "4"
-      ],
-      "properties": [
-        "Insect",
-        "Ritual",
-        "Effect"
-      ],
-      "attack": 1900,
-      "atk": 1900,
-      "defense": 1100,
-      "def": 1100,
-      "level": 4,
-      "attribute": "water",
-      "name": "リインゼルム・ルヴィアン",
-      "cnName": "轮回虫龙 秘鲁蜈蚣",
-      "jaName": "リインゼルム・ルヴィアン",
-      "effectText": "「竜の骸歌」により降臨\nこのカード名の①②の効果はそれぞれ１ターンに１度しか使用できない。\n①：このカードが儀式召喚した場合に発動できる。デッキから「リインゼルム」魔法・罠カード２枚を手札に加える。\n②：このカードが戦闘以外で墓地へ送られた場合に発動できる。レベルの合計が儀式召喚するモンスターのレベル以上になるように、自分の手札・フィールドのモンスターをリリース、またはリリースの代わりに自分の墓地の昆虫族・ドラゴン族モンスターをデッキに戻し、手札から昆虫族の儀式モンスター１体を儀式召喚する。",
-      "released": true,
-      "aliases": [
-        "リインゼルム・ルヴィアン",
-        "轮回虫龙 秘鲁蜈蚣",
-        "无死虫龙·秘鲁蜈蚣鳞虫"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/23836",
-      "updatedAt": "2026-10-31T01:03:49.864Z",
-      "chineseNameSources": [
-        {
-          "name": "轮回虫龙 秘鲁蜈蚣",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23836"
-        },
-        {
-          "name": "无死虫龙·秘鲁蜈蚣鳞虫",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23836"
         }
       ]
     }

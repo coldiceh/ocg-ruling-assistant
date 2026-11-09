@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-08T00:55:48.345Z",
+  "generatedAt": "2026-11-09T01:19:26.177Z",
   "source": {
     "name": "OCG Rule tests",
     "url": "https://ocg-rule.readthedocs.io/zh-cn/latest/",
@@ -13,7 +13,7 @@
     "failedCount": 0,
     "successRatio": 1.051282,
     "previousRecordCount": 41,
-    "contentHash": "9ad851f4eab868718b5d74fc52ebca02c7789accdf9d8602d98e07cf1aed4ec6",
+    "contentHash": "2be466a718f869eb6b6bdf88acaca6e183add793fc00fda9f8f62914777bb0ad",
     "previousContentHash": "9ad851f4eab868718b5d74fc52ebca02c7789accdf9d8602d98e07cf1aed4ec6",
     "failedDocnames": [],
     "testCount": 7,
@@ -10074,7 +10074,7 @@
           },
           {
             "fromBlockKey": "ocg-rule:c05/规则测试2017#%E8%A7%84%E5%88%99%E6%B5%8B%E8%AF%952017%20%C2%B6~1/%E6%AD%A3%E6%96%87%20%C2%B6~1::list-1",
-            "sourceHref": "https://ygocdb.com/card/name/拉之翼神龙",
+            "sourceHref": "https://ygocdb.com/?search=拉之翼神龙",
             "linkOrdinal": 22
           },
           {

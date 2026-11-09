@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-08T00:55:32.473Z",
+  "generatedAt": "2026-11-09T01:19:08.553Z",
   "records": [
     {
       "id": "21385",
@@ -24140,6 +24140,61 @@
       ]
     },
     {
+      "id": "23816",
+      "name": "アマゾネスの鎖使い－死に際の鎖舞い－",
+      "cnName": "亚马逊锁链使-临终锁舞-",
+      "jaName": "アマゾネスの鎖使い－死に際の鎖舞い－",
+      "enName": "Amazoness Chain Master - Brink of Death Chain Dance",
+      "aliases": [
+        "アマゾネスの鎖使い－死に際の鎖舞い－",
+        "Amazoness Chain Master - Brink of Death Chain Dance",
+        "亚马逊锁链使-临终锁舞-",
+        "亚马逊锁链使-临死的锁链舞-"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "亚马逊锁链使-临终锁舞-",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23816"
+        },
+        {
+          "name": "亚马逊锁链使-临死的锁链舞-",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23816"
+        }
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Warrior",
+      "attribute": "earth",
+      "attack": 1500,
+      "defense": 1300,
+      "atk": 1500,
+      "def": 1300,
+      "level": 4,
+      "propertyIds": [
+        "12",
+        "4"
+      ],
+      "properties": [
+        "Warrior",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "12",
+        "4"
+      ],
+      "monsterProperties": [
+        "Warrior",
+        "Effect"
+      ]
+    },
+    {
       "id": "23885",
       "name": "アマゾネス救出劇",
       "cnName": "亚马逊救出剧",
@@ -24283,6 +24338,60 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "5295"
+        }
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Warrior",
+      "attribute": "earth",
+      "attack": 1500,
+      "defense": 1300,
+      "atk": 1500,
+      "def": 1300,
+      "level": 4,
+      "propertyIds": [
+        "12",
+        "4"
+      ],
+      "properties": [
+        "Warrior",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "12",
+        "4"
+      ],
+      "monsterProperties": [
+        "Warrior",
+        "Effect"
+      ]
+    },
+    {
+      "id": "23817",
+      "name": "アマゾネスの格闘戦士－蹴殺の舞い－",
+      "cnName": "亚马逊格斗战士-蹴杀之舞-",
+      "jaName": "アマゾネスの格闘戦士－蹴殺の舞い－",
+      "enName": "Amazoness Fighter - Instant Kill Dance",
+      "aliases": [
+        "アマゾネスの格闘戦士－蹴殺の舞い－",
+        "Amazoness Fighter - Instant Kill Dance",
+        "亚马逊格斗战士-蹴杀之舞-"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "亚马逊格斗战士-蹴杀之舞-",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23817"
+        },
+        {
+          "name": "亚马逊格斗战士-蹴杀之舞-",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23817"
         }
       ],
       "released": true,
@@ -25398,6 +25507,60 @@
       "released": true,
       "type": "spell",
       "cardType": "spell"
+    },
+    {
+      "id": "23818",
+      "name": "アマゾネスの呪詛師－呪印の舞い－",
+      "cnName": "亚马逊诅咒师-咒印之舞-",
+      "jaName": "アマゾネスの呪詛師－呪印の舞い－",
+      "enName": "Amazoness Spellcaster - Forbidden Spell Dance",
+      "aliases": [
+        "アマゾネスの呪詛師－呪印の舞い－",
+        "Amazoness Spellcaster - Forbidden Spell Dance",
+        "亚马逊诅咒师-咒印之舞-"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "亚马逊诅咒师-咒印之舞-",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23818"
+        },
+        {
+          "name": "亚马逊诅咒师-咒印之舞-",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23818"
+        }
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Warrior",
+      "attribute": "earth",
+      "attack": 400,
+      "defense": 800,
+      "atk": 400,
+      "def": 800,
+      "level": 3,
+      "propertyIds": [
+        "12",
+        "4"
+      ],
+      "properties": [
+        "Warrior",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "12",
+        "4"
+      ],
+      "monsterProperties": [
+        "Warrior",
+        "Effect"
+      ]
     },
     {
       "id": "13146",
@@ -37168,6 +37331,65 @@
       "monsterProperties": [
         "Machine",
         "Xyz",
+        "Effect"
+      ]
+    },
+    {
+      "id": "23822",
+      "name": "白鴉の騎士アン",
+      "cnName": "白鸦骑士 安",
+      "jaName": "白鴉の騎士アン",
+      "enName": "Anu, Knight of the Winter Raven",
+      "aliases": [
+        "白鴉の騎士アン",
+        "Anu, Knight of the Winter Raven",
+        "白鸦骑士 安",
+        "白鸦骑士 阿努"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "白鸦骑士 安",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23822"
+        },
+        {
+          "name": "白鸦骑士 阿努",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23822"
+        }
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Illusion",
+      "attribute": "light",
+      "attack": 1400,
+      "defense": 900,
+      "atk": 1400,
+      "def": 900,
+      "level": 4,
+      "propertyIds": [
+        "41",
+        "20",
+        "4"
+      ],
+      "properties": [
+        "Illusion",
+        "Tuner",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "41",
+        "20",
+        "4"
+      ],
+      "monsterProperties": [
+        "Illusion",
+        "Tuner",
         "Effect"
       ]
     },
@@ -53058,6 +53280,226 @@
       "cardType": "trap"
     },
     {
+      "id": "23872",
+      "name": "神幻学都アルス＝マグナ",
+      "cnName": "神幻学都 无垢大艺术学园",
+      "jaName": "神幻学都アルス＝マグナ",
+      "enName": "Ars Magna Academic Arcane Apparition Acropolis",
+      "aliases": [
+        "神幻学都アルス＝マグナ",
+        "Ars Magna Academic Arcane Apparition Acropolis",
+        "神幻学都 无垢大艺术学园",
+        "神幻学都 无垢大艺学园"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "神幻学都 无垢大艺术学园",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23872"
+        },
+        {
+          "name": "神幻学都 无垢大艺学园",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23872"
+        }
+      ],
+      "released": true,
+      "type": "spell",
+      "cardType": "spell",
+      "properties": [
+        "field"
+      ]
+    },
+    {
+      "id": "23856",
+      "name": "無垢なる絆 アルトメギア",
+      "cnName": "无垢牵绊 神艺学徒",
+      "jaName": "無垢なる絆 アルトメギア",
+      "enName": "Ars Magna Artmage",
+      "aliases": [
+        "無垢なる絆 アルトメギア",
+        "Ars Magna Artmage",
+        "无垢牵绊 神艺学徒",
+        "无垢奥艺之绊 神艺",
+        "无垢大牵绊 神艺学徒"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "无垢牵绊 神艺学徒",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23856"
+        },
+        {
+          "name": "无垢奥艺之绊 神艺",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23856"
+        },
+        {
+          "name": "无垢大牵绊 神艺学徒",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23856"
+        }
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Fairy",
+      "attribute": "light",
+      "attack": 2500,
+      "atk": 2500,
+      "link": 4,
+      "linkRating": 4,
+      "linkArrows": "8462",
+      "propertyIds": [
+        "15",
+        "23",
+        "4"
+      ],
+      "properties": [
+        "Fairy",
+        "Link",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "15",
+        "23",
+        "4"
+      ],
+      "monsterProperties": [
+        "Fairy",
+        "Link",
+        "Effect"
+      ]
+    },
+    {
+      "id": "23857",
+      "name": "無垢なる血盟 ドゥームズ",
+      "cnName": "无垢血盟 终刻龙卫",
+      "jaName": "無垢なる血盟 ドゥームズ",
+      "enName": "Ars Magna DoomZ",
+      "aliases": [
+        "無垢なる血盟 ドゥームズ",
+        "Ars Magna DoomZ",
+        "无垢血盟 终刻龙卫",
+        "无垢大血盟 终刻龙机"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "无垢血盟 终刻龙卫",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23857"
+        },
+        {
+          "name": "无垢大血盟 终刻龙机",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23857"
+        }
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Dragon",
+      "attribute": "light",
+      "attack": 1500,
+      "atk": 1500,
+      "link": 2,
+      "linkRating": 2,
+      "linkArrows": "41",
+      "propertyIds": [
+        "21",
+        "23",
+        "4"
+      ],
+      "properties": [
+        "Dragon",
+        "Link",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "21",
+        "23",
+        "4"
+      ],
+      "monsterProperties": [
+        "Dragon",
+        "Link",
+        "Effect"
+      ]
+    },
+    {
+      "id": "23858",
+      "name": "無垢なる協奏 エルフェンノーツ",
+      "cnName": "无垢协奏 耀圣诗团",
+      "jaName": "無垢なる協奏 エルフェンノーツ",
+      "enName": "Ars Magna Elfnote",
+      "aliases": [
+        "無垢なる協奏 エルフェンノーツ",
+        "Ars Magna Elfnote",
+        "无垢协奏 耀圣诗团",
+        "无垢大协奏 耀圣之诗"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "无垢协奏 耀圣诗团",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23858"
+        },
+        {
+          "name": "无垢大协奏 耀圣之诗",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23858"
+        }
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Spellcaster",
+      "attribute": "light",
+      "attack": 1500,
+      "atk": 1500,
+      "link": 2,
+      "linkRating": 2,
+      "linkArrows": "63",
+      "propertyIds": [
+        "8",
+        "23",
+        "4"
+      ],
+      "properties": [
+        "Spellcaster",
+        "Link",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "8",
+        "23",
+        "4"
+      ],
+      "monsterProperties": [
+        "Spellcaster",
+        "Link",
+        "Effect"
+      ]
+    },
+    {
       "id": "23340",
       "name": "無限と有限のアルス＝マグナ",
       "cnName": "无限与有限之无垢大艺术",
@@ -56795,6 +57237,63 @@
       ]
     },
     {
+      "id": "23850",
+      "name": "鬼神 夜魅",
+      "cnName": "鬼神 夜魅",
+      "jaName": "鬼神 夜魅",
+      "enName": "Ashtrama Yoami",
+      "aliases": [
+        "鬼神 夜魅",
+        "Ashtrama Yoami"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "鬼神 夜魅",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23850"
+        },
+        {
+          "name": "鬼神 夜魅",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23850"
+        }
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Spellcaster",
+      "attribute": "wind",
+      "attack": 2400,
+      "defense": 3000,
+      "atk": 2400,
+      "def": 3000,
+      "level": 8,
+      "propertyIds": [
+        "8",
+        "19",
+        "4"
+      ],
+      "properties": [
+        "Spellcaster",
+        "Synchro",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "8",
+        "19",
+        "4"
+      ],
+      "monsterProperties": [
+        "Spellcaster",
+        "Synchro",
+        "Effect"
+      ]
+    },
+    {
       "id": "23379",
       "name": "艮神鬼門 三千世界",
       "cnName": "艮神鬼门 三千世界",
@@ -56841,6 +57340,65 @@
       "cardType": "spell",
       "properties": [
         "field"
+      ]
+    },
+    {
+      "id": "23829",
+      "name": "鬼神童鵄 タマヨリ",
+      "cnName": "鬼神童鸱 玉依",
+      "jaName": "鬼神童鵄 タマヨリ",
+      "enName": "Ashtrata Tamayori",
+      "aliases": [
+        "鬼神童鵄 タマヨリ",
+        "Ashtrata Tamayori",
+        "鬼神童鸱 玉依",
+        "鬼神童鵄 玉依"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "鬼神童鸱 玉依",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23829"
+        },
+        {
+          "name": "鬼神童鵄 玉依",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23829"
+        }
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Fairy",
+      "attribute": "fire",
+      "attack": 0,
+      "defense": 0,
+      "atk": 0,
+      "def": 0,
+      "level": 1,
+      "propertyIds": [
+        "15",
+        "20",
+        "4"
+      ],
+      "properties": [
+        "Fairy",
+        "Tuner",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "15",
+        "20",
+        "4"
+      ],
+      "monsterProperties": [
+        "Fairy",
+        "Tuner",
+        "Effect"
       ]
     },
     {
@@ -146996,6 +147554,64 @@
       ]
     },
     {
+      "id": "23860",
+      "name": "コダイダロス",
+      "cnName": "科泰达路斯",
+      "jaName": "コダイダロス",
+      "enName": "Codaedalus",
+      "aliases": [
+        "コダイダロス",
+        "Codaedalus",
+        "科泰达路斯"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "科泰达路斯",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23860"
+        },
+        {
+          "name": "科泰达路斯",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23860"
+        }
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Sea Serpent",
+      "attribute": "water",
+      "attack": 1400,
+      "atk": 1400,
+      "link": 2,
+      "linkRating": 2,
+      "linkArrows": "62",
+      "propertyIds": [
+        "17",
+        "23",
+        "4"
+      ],
+      "properties": [
+        "Sea Serpent",
+        "Link",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "17",
+        "23",
+        "4"
+      ],
+      "monsterProperties": [
+        "Sea Serpent",
+        "Link",
+        "Effect"
+      ]
+    },
+    {
       "id": "8643",
       "name": "コダロス",
       "cnName": "科达路斯",
@@ -209471,6 +210087,41 @@
       ]
     },
     {
+      "id": "23870",
+      "name": "白鴉の深き森",
+      "cnName": "白鸦的大森林",
+      "jaName": "白鴉の深き森",
+      "enName": "Deep Forest of the Winter Raven",
+      "aliases": [
+        "白鴉の深き森",
+        "Deep Forest of the Winter Raven",
+        "白鸦的大森林",
+        "白鸦的幽深森林"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "白鸦的大森林",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23870"
+        },
+        {
+          "name": "白鸦的幽深森林",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23870"
+        }
+      ],
+      "released": true,
+      "type": "spell",
+      "cardType": "spell",
+      "properties": [
+        "field"
+      ]
+    },
+    {
       "id": "15047",
       "name": "深海的咏叹调",
       "cnName": "深海的咏叹调",
@@ -221673,6 +222324,73 @@
       ],
       "monsterProperties": [
         "Illusion",
+        "Effect"
+      ]
+    },
+    {
+      "id": "23845",
+      "name": "白鴉の森の女主人ディアベルゼ",
+      "cnName": "白鸦之森的女主人 迪亚贝尔泽",
+      "jaName": "白鴉の森の女主人ディアベルゼ",
+      "enName": "Diabellze, Heiress of the Winter Raven's Forest",
+      "aliases": [
+        "白鴉の森の女主人ディアベルゼ",
+        "Diabellze, Heiress of the Winter Raven's Forest",
+        "白鸦之森的女主人 迪亚贝尔泽",
+        "白鸦之森的女主人 迪亚贝尔赛",
+        "白鸦森林的女主人 迪亚贝尔泽"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "白鸦之森的女主人 迪亚贝尔泽",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23845"
+        },
+        {
+          "name": "白鸦之森的女主人 迪亚贝尔赛",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23845"
+        },
+        {
+          "name": "白鸦森林的女主人 迪亚贝尔泽",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23845"
+        }
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Illusion",
+      "attribute": "light",
+      "attack": 2500,
+      "defense": 2100,
+      "atk": 2500,
+      "def": 2100,
+      "level": 8,
+      "propertyIds": [
+        "41",
+        "11",
+        "4"
+      ],
+      "properties": [
+        "Illusion",
+        "Fusion",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "41",
+        "11",
+        "4"
+      ],
+      "monsterProperties": [
+        "Illusion",
+        "Fusion",
         "Effect"
       ]
     },
@@ -269845,6 +270563,37 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "4324"
+        }
+      ],
+      "released": true,
+      "type": "spell",
+      "cardType": "spell"
+    },
+    {
+      "id": "23864",
+      "name": "華麗なる三面鏡",
+      "cnName": "华丽的三面镜",
+      "jaName": "華麗なる三面鏡",
+      "enName": "Elegant Tri-Mirror",
+      "aliases": [
+        "華麗なる三面鏡",
+        "Elegant Tri-Mirror",
+        "华丽的三面镜"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "华丽的三面镜",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23864"
+        },
+        {
+          "name": "华丽的三面镜",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23864"
         }
       ],
       "released": true,
@@ -368254,6 +369003,61 @@
       ]
     },
     {
+      "id": "23814",
+      "name": "太陽神の殺戮機－ギル・ガース",
+      "cnName": "太阳神的杀戮机-屠杀巨灵",
+      "jaName": "太陽神の殺戮機－ギル・ガース",
+      "enName": "Gil Garth, Exterminator of the Sun God",
+      "aliases": [
+        "太陽神の殺戮機－ギル・ガース",
+        "Gil Garth, Exterminator of the Sun God",
+        "太阳神的杀戮机-屠杀巨灵",
+        "太阳神灵的杀戮机-屠杀巨灵"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "太阳神的杀戮机-屠杀巨灵",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23814"
+        },
+        {
+          "name": "太阳神灵的杀戮机-屠杀巨灵",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23814"
+        }
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Fiend",
+      "attribute": "dark",
+      "attack": 1800,
+      "defense": 1200,
+      "atk": 1800,
+      "def": 1200,
+      "level": 4,
+      "propertyIds": [
+        "14",
+        "4"
+      ],
+      "properties": [
+        "Fiend",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "14",
+        "4"
+      ],
+      "monsterProperties": [
+        "Fiend",
+        "Effect"
+      ]
+    },
+    {
       "id": "5256",
       "name": "俊足之基拉龙",
       "cnName": "俊足之基拉龙",
@@ -406583,6 +407387,41 @@
       "cardType": "trap"
     },
     {
+      "id": "23865",
+      "name": "ハーピィ＆アマゾネス －羅刹の陣－",
+      "cnName": "鹰身&亚马逊 -罗刹之阵-",
+      "jaName": "ハーピィ＆アマゾネス －羅刹の陣－",
+      "enName": "Harpie & Amazoness Rakshasa Formation",
+      "aliases": [
+        "ハーピィ＆アマゾネス －羅刹の陣－",
+        "Harpie & Amazoness Rakshasa Formation",
+        "鹰身&亚马逊 -罗刹之阵-",
+        "鹰身女妖与亚马逊 -罗刹之阵-"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "鹰身&亚马逊 -罗刹之阵-",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23865"
+        },
+        {
+          "name": "鹰身女妖与亚马逊 -罗刹之阵-",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23865"
+        }
+      ],
+      "released": true,
+      "type": "spell",
+      "cardType": "spell",
+      "properties": [
+        "quickplay"
+      ]
+    },
+    {
       "id": "10516",
       "name": "神鹰通灵者",
       "cnName": "神鹰通灵者",
@@ -407039,6 +407878,61 @@
       "monsterProperties": [
         "Winged Beast",
         "Normal"
+      ]
+    },
+    {
+      "id": "23819",
+      "name": "ハーピィ・レディ－魅惑の舞い－",
+      "cnName": "鹰身女郎-诱惑之舞-",
+      "jaName": "ハーピィ・レディ－魅惑の舞い－",
+      "enName": "Harpie Lady - Alluring Dance",
+      "aliases": [
+        "ハーピィ・レディ－魅惑の舞い－",
+        "Harpie Lady - Alluring Dance",
+        "鹰身女郎-诱惑之舞-",
+        "鹰身女郎-魅惑之舞-"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "鹰身女郎-诱惑之舞-",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23819"
+        },
+        {
+          "name": "鹰身女郎-魅惑之舞-",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23819"
+        }
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Winged Beast",
+      "attribute": "wind",
+      "attack": 1300,
+      "defense": 1400,
+      "atk": 1300,
+      "def": 1400,
+      "level": 4,
+      "propertyIds": [
+        "35",
+        "4"
+      ],
+      "properties": [
+        "Winged Beast",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "35",
+        "4"
+      ],
+      "monsterProperties": [
+        "Winged Beast",
+        "Effect"
       ]
     },
     {
@@ -413066,6 +413960,61 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "5489"
+        }
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Fiend",
+      "attribute": "dark",
+      "attack": 2000,
+      "defense": 1400,
+      "atk": 2000,
+      "def": 1400,
+      "level": 5,
+      "propertyIds": [
+        "14",
+        "4"
+      ],
+      "properties": [
+        "Fiend",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "14",
+        "4"
+      ],
+      "monsterProperties": [
+        "Fiend",
+        "Effect"
+      ]
+    },
+    {
+      "id": "23812",
+      "name": "太陽神の詩詠者－ヘルポエマー",
+      "cnName": "太阳神的诗咏者-地狱诗人",
+      "jaName": "太陽神の詩詠者－ヘルポエマー",
+      "enName": "Helpoemer, Chanter of the Sun God",
+      "aliases": [
+        "太陽神の詩詠者－ヘルポエマー",
+        "Helpoemer, Chanter of the Sun God",
+        "太阳神的诗咏者-地狱诗人",
+        "太阳神灵的诗咏者-地狱诗人"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "太阳神的诗咏者-地狱诗人",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23812"
+        },
+        {
+          "name": "太阳神灵的诗咏者-地狱诗人",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23812"
         }
       ],
       "released": true,
@@ -445806,6 +446755,60 @@
       ]
     },
     {
+      "id": "23828",
+      "name": "無敵のロケット戦士",
+      "cnName": "无敌的火箭战士",
+      "jaName": "無敵のロケット戦士",
+      "enName": "Invincible Rocket Warrior",
+      "aliases": [
+        "無敵のロケット戦士",
+        "Invincible Rocket Warrior",
+        "无敌的火箭战士"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "无敌的火箭战士",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23828"
+        },
+        {
+          "name": "无敌的火箭战士",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23828"
+        }
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Warrior",
+      "attribute": "light",
+      "attack": 1500,
+      "defense": 1300,
+      "atk": 1500,
+      "def": 1300,
+      "level": 4,
+      "propertyIds": [
+        "12",
+        "4"
+      ],
+      "properties": [
+        "Warrior",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "12",
+        "4"
+      ],
+      "monsterProperties": [
+        "Warrior",
+        "Effect"
+      ]
+    },
+    {
       "id": "4746",
       "name": "暗黒の眠りを誘うルシファー",
       "cnName": "诱发暗黑长眠的路西法",
@@ -451348,6 +452351,65 @@
       "cardType": "spell",
       "properties": [
         "ritual"
+      ]
+    },
+    {
+      "id": "23840",
+      "name": "盟約のジャベリンビートル",
+      "cnName": "盟约之标枪甲虫",
+      "jaName": "盟約のジャベリンビートル",
+      "enName": "Javelin Beetle of the Alliance",
+      "aliases": [
+        "盟約のジャベリンビートル",
+        "Javelin Beetle of the Alliance",
+        "盟约之标枪甲虫",
+        "盟约的标枪甲虫"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "盟约之标枪甲虫",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23840"
+        },
+        {
+          "name": "盟约的标枪甲虫",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23840"
+        }
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Insect",
+      "attribute": "earth",
+      "attack": 2450,
+      "defense": 2550,
+      "atk": 2450,
+      "def": 2550,
+      "level": 8,
+      "propertyIds": [
+        "34",
+        "27",
+        "4"
+      ],
+      "properties": [
+        "Insect",
+        "Ritual",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "34",
+        "27",
+        "4"
+      ],
+      "monsterProperties": [
+        "Insect",
+        "Ritual",
+        "Effect"
       ]
     },
     {
@@ -469712,6 +470774,73 @@
       ],
       "monsterProperties": [
         "Beast",
+        "Effect"
+      ]
+    },
+    {
+      "id": "23859",
+      "name": "炎の平原を駆け抜ける百獣の王",
+      "cnName": "驰驱于火炎平原的百兽之王",
+      "jaName": "炎の平原を駆け抜ける百獣の王",
+      "enName": "King of Beasts, Risen from the Valley of Flames",
+      "aliases": [
+        "炎の平原を駆け抜ける百獣の王",
+        "King of Beasts, Risen from the Valley of Flames",
+        "驰驱于火炎平原的百兽之王",
+        "驰骋横越炎之平原的百兽之王",
+        "炎之平原上奔驰而过的百兽之王"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "驰驱于火炎平原的百兽之王",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23859"
+        },
+        {
+          "name": "驰骋横越炎之平原的百兽之王",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23859"
+        },
+        {
+          "name": "炎之平原上奔驰而过的百兽之王",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23859"
+        }
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Cyberse",
+      "attribute": "fire",
+      "attack": 2300,
+      "atk": 2300,
+      "link": 3,
+      "linkRating": 3,
+      "linkArrows": "813",
+      "propertyIds": [
+        "30",
+        "23",
+        "4"
+      ],
+      "properties": [
+        "Cyberse",
+        "Link",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "30",
+        "23",
+        "4"
+      ],
+      "monsterProperties": [
+        "Cyberse",
+        "Link",
         "Effect"
       ]
     },
@@ -490654,6 +491783,65 @@
       ],
       "monsterProperties": [
         "Fiend",
+        "Effect"
+      ]
+    },
+    {
+      "id": "23851",
+      "name": "ダラダラサウルス",
+      "cnName": "达懒斯龙",
+      "jaName": "ダラダラサウルス",
+      "enName": "Lethargisaurus",
+      "aliases": [
+        "ダラダラサウルス",
+        "Lethargisaurus",
+        "达懒斯龙",
+        "拖拉达拉斯龙"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "达懒斯龙",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23851"
+        },
+        {
+          "name": "拖拉达拉斯龙",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23851"
+        }
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Sea Serpent",
+      "attribute": "water",
+      "attack": 1000,
+      "defense": 2100,
+      "atk": 1000,
+      "def": 2100,
+      "level": 8,
+      "propertyIds": [
+        "17",
+        "19",
+        "4"
+      ],
+      "properties": [
+        "Sea Serpent",
+        "Synchro",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "17",
+        "19",
+        "4"
+      ],
+      "monsterProperties": [
+        "Sea Serpent",
+        "Synchro",
         "Effect"
       ]
     },
@@ -526049,6 +527237,61 @@
       ]
     },
     {
+      "id": "23813",
+      "name": "太陽神の処刑人－マキュラ",
+      "cnName": "太阳神的处刑人-摩休罗",
+      "jaName": "太陽神の処刑人－マキュラ",
+      "enName": "Makyura, Destructor of the Sun God",
+      "aliases": [
+        "太陽神の処刑人－マキュラ",
+        "Makyura, Destructor of the Sun God",
+        "太阳神的处刑人-摩休罗",
+        "太阳神灵的处刑人-摩休罗"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "太阳神的处刑人-摩休罗",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23813"
+        },
+        {
+          "name": "太阳神灵的处刑人-摩休罗",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23813"
+        }
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Warrior",
+      "attribute": "dark",
+      "attack": 1600,
+      "defense": 1200,
+      "atk": 1600,
+      "def": 1200,
+      "level": 4,
+      "propertyIds": [
+        "12",
+        "4"
+      ],
+      "properties": [
+        "Warrior",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "12",
+        "4"
+      ],
+      "monsterProperties": [
+        "Warrior",
+        "Effect"
+      ]
+    },
+    {
       "id": "11635",
       "name": "彼岸鬼神 赫尔雷卡",
       "cnName": "彼岸鬼神 赫尔雷卡",
@@ -534164,6 +535407,64 @@
       ],
       "monsterProperties": [
         "Beast",
+        "Effect"
+      ]
+    },
+    {
+      "id": "23821",
+      "name": "白鴉の騎士マルト",
+      "cnName": "白鸦骑士 马特",
+      "jaName": "白鴉の騎士マルト",
+      "enName": "Mart, Knight of the Winter Raven",
+      "aliases": [
+        "白鴉の騎士マルト",
+        "Mart, Knight of the Winter Raven",
+        "白鸦骑士 马特"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "白鸦骑士 马特",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23821"
+        },
+        {
+          "name": "白鸦骑士 马特",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23821"
+        }
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Illusion",
+      "attribute": "light",
+      "attack": 1700,
+      "defense": 0,
+      "atk": 1700,
+      "def": 0,
+      "level": 4,
+      "propertyIds": [
+        "41",
+        "20",
+        "4"
+      ],
+      "properties": [
+        "Illusion",
+        "Tuner",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "41",
+        "20",
+        "4"
+      ],
+      "monsterProperties": [
+        "Illusion",
+        "Tuner",
         "Effect"
       ]
     },
@@ -587872,6 +589173,64 @@
       ]
     },
     {
+      "id": "23861",
+      "name": "竜魔導の降霊師",
+      "cnName": "龙魔导降灵师",
+      "jaName": "竜魔導の降霊師",
+      "enName": "Necromancer of Dragon Magic",
+      "aliases": [
+        "竜魔導の降霊師",
+        "Necromancer of Dragon Magic",
+        "龙魔导降灵师"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "龙魔导降灵师",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23861"
+        },
+        {
+          "name": "龙魔导降灵师",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23861"
+        }
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Dragon",
+      "attribute": "wind",
+      "attack": 900,
+      "atk": 900,
+      "link": 2,
+      "linkRating": 2,
+      "linkArrows": "13",
+      "propertyIds": [
+        "21",
+        "23",
+        "4"
+      ],
+      "properties": [
+        "Dragon",
+        "Link",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "21",
+        "23",
+        "4"
+      ],
+      "monsterProperties": [
+        "Dragon",
+        "Link",
+        "Effect"
+      ]
+    },
+    {
       "id": "20423",
       "name": "优丽的灵镜姬",
       "cnName": "优丽的灵镜姬",
@@ -596518,6 +597877,61 @@
       "cardType": "spell",
       "properties": [
         "field"
+      ]
+    },
+    {
+      "id": "23833",
+      "name": "幻惑の綺羅星",
+      "cnName": "幻惑的绮罗星",
+      "jaName": "幻惑の綺羅星",
+      "enName": "Nightmare Twinkle",
+      "aliases": [
+        "幻惑の綺羅星",
+        "Nightmare Twinkle",
+        "幻惑的绮罗星",
+        "幻惑之绮罗星"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "幻惑的绮罗星",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23833"
+        },
+        {
+          "name": "幻惑之绮罗星",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23833"
+        }
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Illusion",
+      "attribute": "light",
+      "attack": 1700,
+      "defense": 1700,
+      "atk": 1700,
+      "def": 1700,
+      "level": 4,
+      "propertyIds": [
+        "41",
+        "4"
+      ],
+      "properties": [
+        "Illusion",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "41",
+        "4"
+      ],
+      "monsterProperties": [
+        "Illusion",
+        "Effect"
       ]
     },
     {
@@ -611522,6 +612936,65 @@
       ],
       "monsterProperties": [
         "Dragon",
+        "Xyz",
+        "Effect"
+      ]
+    },
+    {
+      "id": "23854",
+      "name": "No.96 ブラック・マリオネッター",
+      "cnName": "No.96 黑偶",
+      "jaName": "No.96 ブラック・マリオネッター",
+      "enName": "Number 96: Dark Manipulator",
+      "aliases": [
+        "No.96 ブラック・マリオネッター",
+        "Number 96: Dark Manipulator",
+        "No.96 黑偶",
+        "No.96 黑傀儡师"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "No.96 黑偶",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23854"
+        },
+        {
+          "name": "No.96 黑傀儡师",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23854"
+        }
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Fiend",
+      "attribute": "dark",
+      "attack": 100,
+      "defense": 1000,
+      "atk": 100,
+      "def": 1000,
+      "rank": 2,
+      "propertyIds": [
+        "14",
+        "18",
+        "4"
+      ],
+      "properties": [
+        "Fiend",
+        "Xyz",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "14",
+        "18",
+        "4"
+      ],
+      "monsterProperties": [
+        "Fiend",
         "Xyz",
         "Effect"
       ]
@@ -659885,6 +661358,37 @@
       ]
     },
     {
+      "id": "23871",
+      "name": "獄神封門－共滅の剣－",
+      "cnName": "狱神封门-共灭之剑-",
+      "jaName": "獄神封門－共滅の剣－",
+      "enName": "Power Patron Portal Plugging -Sword of Mutual Destruction-",
+      "aliases": [
+        "獄神封門－共滅の剣－",
+        "Power Patron Portal Plugging -Sword of Mutual Destruction-",
+        "狱神封门-共灭之剑-"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "狱神封门-共灭之剑-",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23871"
+        },
+        {
+          "name": "狱神封门-共灭之剑-",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23871"
+        }
+      ],
+      "released": true,
+      "type": "spell",
+      "cardType": "spell"
+    },
+    {
       "id": "23020",
       "name": "終刻なる獄神影",
       "cnName": "终刻的狱神影",
@@ -667819,6 +669323,69 @@
       ]
     },
     {
+      "id": "23826",
+      "name": "六花双精プリムローズ",
+      "cnName": "六花双精 报春来",
+      "jaName": "六花双精プリムローズ",
+      "enName": "Primrose the Rikka Fairy Duo",
+      "aliases": [
+        "六花双精プリムローズ",
+        "Primrose the Rikka Fairy Duo",
+        "六花双精 报春来",
+        "六花双精 报春花",
+        "六花双精报春蔷薇"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "六花双精 报春来",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23826"
+        },
+        {
+          "name": "六花双精 报春花",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23826"
+        },
+        {
+          "name": "六花双精报春蔷薇",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23826"
+        }
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Plant",
+      "attribute": "water",
+      "attack": 2600,
+      "defense": 2600,
+      "atk": 2600,
+      "def": 2600,
+      "level": 8,
+      "propertyIds": [
+        "25",
+        "4"
+      ],
+      "properties": [
+        "Plant",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "25",
+        "4"
+      ],
+      "monsterProperties": [
+        "Plant",
+        "Effect"
+      ]
+    },
+    {
       "id": "15111",
       "name": "六花精报春花",
       "cnName": "六花精报春花",
@@ -675151,6 +676718,61 @@
       "released": true,
       "type": "trap",
       "cardType": "trap"
+    },
+    {
+      "id": "23820",
+      "name": "白鴉の森の炎魔",
+      "cnName": "白鸦之森的炎魔",
+      "jaName": "白鴉の森の炎魔",
+      "enName": "Purifire of the Winter Raven's Forest",
+      "aliases": [
+        "白鴉の森の炎魔",
+        "Purifire of the Winter Raven's Forest",
+        "白鸦之森的炎魔",
+        "白鸦森林的炎魔"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "白鸦之森的炎魔",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23820"
+        },
+        {
+          "name": "白鸦森林的炎魔",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23820"
+        }
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Pyro",
+      "attribute": "fire",
+      "attack": 700,
+      "defense": 200,
+      "atk": 700,
+      "def": 200,
+      "level": 1,
+      "propertyIds": [
+        "37",
+        "4"
+      ],
+      "properties": [
+        "Pyro",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "37",
+        "4"
+      ],
+      "monsterProperties": [
+        "Pyro",
+        "Effect"
+      ]
     },
     {
       "id": "12911",
@@ -690251,6 +691873,60 @@
       ]
     },
     {
+      "id": "23830",
+      "name": "アトランティスの暴翼",
+      "cnName": "亚特兰蒂斯的暴翼",
+      "jaName": "アトランティスの暴翼",
+      "enName": "Rampant Wings of Atlantis",
+      "aliases": [
+        "アトランティスの暴翼",
+        "Rampant Wings of Atlantis",
+        "亚特兰蒂斯的暴翼"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "亚特兰蒂斯的暴翼",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23830"
+        },
+        {
+          "name": "亚特兰蒂斯的暴翼",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23830"
+        }
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Sea Serpent",
+      "attribute": "water",
+      "attack": 2000,
+      "defense": 2400,
+      "atk": 2000,
+      "def": 2400,
+      "level": 5,
+      "propertyIds": [
+        "17",
+        "4"
+      ],
+      "properties": [
+        "Sea Serpent",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "17",
+        "4"
+      ],
+      "monsterProperties": [
+        "Sea Serpent",
+        "Effect"
+      ]
+    },
+    {
       "id": "10946",
       "name": "降阶魔法－源数之落",
       "cnName": "降阶魔法－源数之落",
@@ -702771,6 +704447,165 @@
       ]
     },
     {
+      "id": "23868",
+      "name": "翅竜の羽撃",
+      "cnName": "翅龙的羽击",
+      "jaName": "翅竜の羽撃",
+      "enName": "Reindsurm Butterfly",
+      "aliases": [
+        "翅竜の羽撃",
+        "Reindsurm Butterfly",
+        "翅龙的羽击"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "翅龙的羽击",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23868"
+        },
+        {
+          "name": "翅龙的羽击",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23868"
+        }
+      ],
+      "released": true,
+      "type": "spell",
+      "cardType": "spell"
+    },
+    {
+      "id": "23837",
+      "name": "リインゼルム・カルカサス",
+      "cnName": "轮回虫龙 高加索南洋大兜虫",
+      "jaName": "リインゼルム・カルカサス",
+      "enName": "Reindsurm Carcasas",
+      "aliases": [
+        "リインゼルム・カルカサス",
+        "Reindsurm Carcasas",
+        "轮回虫龙 高加索南洋大兜虫",
+        "无死虫龙·高加索独角仙鳞虫"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "轮回虫龙 高加索南洋大兜虫",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23837"
+        },
+        {
+          "name": "无死虫龙·高加索独角仙鳞虫",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23837"
+        }
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Insect",
+      "attribute": "light",
+      "attack": 2000,
+      "defense": 1300,
+      "atk": 2000,
+      "def": 1300,
+      "level": 4,
+      "propertyIds": [
+        "34",
+        "27",
+        "4"
+      ],
+      "properties": [
+        "Insect",
+        "Ritual",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "34",
+        "27",
+        "4"
+      ],
+      "monsterProperties": [
+        "Insect",
+        "Ritual",
+        "Effect"
+      ]
+    },
+    {
+      "id": "23867",
+      "name": "無死なる竜の鼓動",
+      "cnName": "无死之龙的鼓动",
+      "jaName": "無死なる竜の鼓動",
+      "enName": "Reindsurm Carnation",
+      "aliases": [
+        "無死なる竜の鼓動",
+        "Reindsurm Carnation",
+        "无死之龙的鼓动",
+        "无死虫龙的鼓动"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "无死之龙的鼓动",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23867"
+        },
+        {
+          "name": "无死虫龙的鼓动",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23867"
+        }
+      ],
+      "released": true,
+      "type": "spell",
+      "cardType": "spell",
+      "properties": [
+        "field"
+      ]
+    },
+    {
+      "id": "23866",
+      "name": "竜の骸歌",
+      "cnName": "龙之骸歌",
+      "jaName": "竜の骸歌",
+      "enName": "Reindsurm Conquest",
+      "aliases": [
+        "竜の骸歌",
+        "Reindsurm Conquest",
+        "龙之骸歌"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "龙之骸歌",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23866"
+        },
+        {
+          "name": "龙之骸歌",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23866"
+        }
+      ],
+      "released": true,
+      "type": "spell",
+      "cardType": "spell",
+      "properties": [
+        "ritual"
+      ]
+    },
+    {
       "id": "23887",
       "name": "百竜の交戦",
       "cnName": "百龙的交战",
@@ -702929,6 +704764,97 @@
         "Ritual",
         "Effect"
       ]
+    },
+    {
+      "id": "23836",
+      "name": "リインゼルム・ルヴィアン",
+      "cnName": "轮回虫龙 秘鲁蜈蚣",
+      "jaName": "リインゼルム・ルヴィアン",
+      "enName": "Reindsurm Luvian",
+      "aliases": [
+        "リインゼルム・ルヴィアン",
+        "Reindsurm Luvian",
+        "轮回虫龙 秘鲁蜈蚣",
+        "无死虫龙·秘鲁蜈蚣鳞虫"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "轮回虫龙 秘鲁蜈蚣",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23836"
+        },
+        {
+          "name": "无死虫龙·秘鲁蜈蚣鳞虫",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23836"
+        }
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Insect",
+      "attribute": "water",
+      "attack": 1900,
+      "defense": 1100,
+      "atk": 1900,
+      "def": 1100,
+      "level": 4,
+      "propertyIds": [
+        "34",
+        "27",
+        "4"
+      ],
+      "properties": [
+        "Insect",
+        "Ritual",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "34",
+        "27",
+        "4"
+      ],
+      "monsterProperties": [
+        "Insect",
+        "Ritual",
+        "Effect"
+      ]
+    },
+    {
+      "id": "23869",
+      "name": "角竜の修練",
+      "cnName": "角龙的修炼",
+      "jaName": "角竜の修練",
+      "enName": "Reindsurm Practice",
+      "aliases": [
+        "角竜の修練",
+        "Reindsurm Practice",
+        "角龙的修炼",
+        "角龙的修练"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "角龙的修炼",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23869"
+        },
+        {
+          "name": "角龙的修练",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23869"
+        }
+      ],
+      "released": true,
+      "type": "spell",
+      "cardType": "spell"
     },
     {
       "id": "8354",
@@ -711575,6 +713501,67 @@
       ]
     },
     {
+      "id": "23827",
+      "name": "六花のくろひめ",
+      "cnName": "六花的黑姬",
+      "jaName": "六花のくろひめ",
+      "enName": "Rikka Black Princess",
+      "aliases": [
+        "六花のくろひめ",
+        "Rikka Black Princess",
+        "六花的黑姬"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "六花的黑姬",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23827"
+        },
+        {
+          "name": "六花的黑姬",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23827"
+        },
+        {
+          "name": "六花的黑姬",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23827"
+        }
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Plant",
+      "attribute": "water",
+      "attack": 0,
+      "defense": 0,
+      "atk": 0,
+      "def": 0,
+      "level": 6,
+      "propertyIds": [
+        "25",
+        "4"
+      ],
+      "properties": [
+        "Plant",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "25",
+        "4"
+      ],
+      "monsterProperties": [
+        "Plant",
+        "Effect"
+      ]
+    },
+    {
       "id": "15120",
       "name": "六花风花",
       "cnName": "六花风花",
@@ -711929,6 +713916,72 @@
       "atk": 2000,
       "def": 2000,
       "rank": 4,
+      "propertyIds": [
+        "25",
+        "18",
+        "4"
+      ],
+      "properties": [
+        "Plant",
+        "Xyz",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "25",
+        "18",
+        "4"
+      ],
+      "monsterProperties": [
+        "Plant",
+        "Xyz",
+        "Effect"
+      ]
+    },
+    {
+      "id": "23853",
+      "name": "六花深聖ストレナエ",
+      "cnName": "六花深圣 力量女神花圈",
+      "jaName": "六花深聖ストレナエ",
+      "enName": "Rikka Sacred Queen Strenna",
+      "aliases": [
+        "六花深聖ストレナエ",
+        "Rikka Sacred Queen Strenna",
+        "六花深圣 力量女神花圈",
+        "六花深圣花环"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "六花深圣 力量女神花圈",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23853"
+        },
+        {
+          "name": "六花深圣 力量女神花圈",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23853"
+        },
+        {
+          "name": "六花深圣花环",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23853"
+        }
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Plant",
+      "attribute": "water",
+      "attack": 2000,
+      "defense": 2000,
+      "atk": 2000,
+      "def": 2000,
+      "rank": 6,
       "propertyIds": [
         "25",
         "18",
@@ -728845,6 +730898,64 @@
       ]
     },
     {
+      "id": "23825",
+      "name": "転生炎獣バステラ",
+      "cnName": "转生炎兽 宽耳蝠",
+      "jaName": "転生炎獣バステラ",
+      "enName": "Salamangreat Bastella",
+      "aliases": [
+        "転生炎獣バステラ",
+        "Salamangreat Bastella",
+        "转生炎兽 宽耳蝠"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "转生炎兽 宽耳蝠",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23825"
+        },
+        {
+          "name": "转生炎兽 宽耳蝠",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23825"
+        }
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Cyberse",
+      "attribute": "fire",
+      "attack": 1600,
+      "defense": 1000,
+      "atk": 1600,
+      "def": 1000,
+      "level": 3,
+      "propertyIds": [
+        "30",
+        "20",
+        "4"
+      ],
+      "properties": [
+        "Cyberse",
+        "Tuner",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "30",
+        "20",
+        "4"
+      ],
+      "monsterProperties": [
+        "Cyberse",
+        "Tuner",
+        "Effect"
+      ]
+    },
+    {
       "id": "14243",
       "name": "转生炎兽 B野牛",
       "cnName": "转生炎兽 B野牛",
@@ -729920,6 +732031,40 @@
       ]
     },
     {
+      "id": "23874",
+      "name": "転生炎獣の神剣",
+      "cnName": "转生炎兽的神剑",
+      "jaName": "転生炎獣の神剣",
+      "enName": "Salamangreat Gearblade",
+      "aliases": [
+        "転生炎獣の神剣",
+        "Salamangreat Gearblade",
+        "转生炎兽的神剑"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "转生炎兽的神剑",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23874"
+        },
+        {
+          "name": "转生炎兽的神剑",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23874"
+        }
+      ],
+      "released": true,
+      "type": "spell",
+      "cardType": "spell",
+      "properties": [
+        "equip"
+      ]
+    },
+    {
       "id": "13954",
       "name": "转生炎兽的赠礼",
       "cnName": "转生炎兽的赠礼",
@@ -730112,6 +732257,60 @@
       "defense": 1200,
       "atk": 1800,
       "def": 1200,
+      "level": 4,
+      "propertyIds": [
+        "30",
+        "4"
+      ],
+      "properties": [
+        "Cyberse",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "30",
+        "4"
+      ],
+      "monsterProperties": [
+        "Cyberse",
+        "Effect"
+      ]
+    },
+    {
+      "id": "23824",
+      "name": "転生炎獣マーコール",
+      "cnName": "转生炎兽 捻角山羊",
+      "jaName": "転生炎獣マーコール",
+      "enName": "Salamangreat Markhor",
+      "aliases": [
+        "転生炎獣マーコール",
+        "Salamangreat Markhor",
+        "转生炎兽 捻角山羊"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "转生炎兽 捻角山羊",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23824"
+        },
+        {
+          "name": "转生炎兽 捻角山羊",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23824"
+        }
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Cyberse",
+      "attribute": "fire",
+      "attack": 300,
+      "defense": 2100,
+      "atk": 300,
+      "def": 2100,
       "level": 4,
       "propertyIds": [
         "30",
@@ -760890,6 +763089,65 @@
       "cardType": "spell",
       "properties": [
         "quickplay"
+      ]
+    },
+    {
+      "id": "23823",
+      "name": "白鴉の森の罪宝",
+      "cnName": "白鸦之森的罪宝",
+      "jaName": "白鴉の森の罪宝",
+      "enName": "Sinful Spoils of the Winter Raven's Forest",
+      "aliases": [
+        "白鴉の森の罪宝",
+        "Sinful Spoils of the Winter Raven's Forest",
+        "白鸦之森的罪宝",
+        "白鸦森林的罪宝"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "白鸦之森的罪宝",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23823"
+        },
+        {
+          "name": "白鸦森林的罪宝",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23823"
+        }
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Spellcaster",
+      "attribute": "fire",
+      "attack": 2500,
+      "defense": 2000,
+      "atk": 2500,
+      "def": 2000,
+      "level": 7,
+      "propertyIds": [
+        "8",
+        "20",
+        "4"
+      ],
+      "properties": [
+        "Spellcaster",
+        "Tuner",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "8",
+        "20",
+        "4"
+      ],
+      "monsterProperties": [
+        "Spellcaster",
+        "Tuner",
+        "Effect"
       ]
     },
     {
@@ -828972,6 +831230,72 @@
       ]
     },
     {
+      "id": "23852",
+      "name": "六花深聖ティアドロップ",
+      "cnName": "六花深圣 泪滴花束雪花莲",
+      "jaName": "六花深聖ティアドロップ",
+      "enName": "Teardrop the Rikka Sacred Queen",
+      "aliases": [
+        "六花深聖ティアドロップ",
+        "Teardrop the Rikka Sacred Queen",
+        "六花深圣 泪滴花束雪花莲",
+        "六花深圣泪滴花束"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "六花深圣 泪滴花束雪花莲",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23852"
+        },
+        {
+          "name": "六花深圣泪滴花束",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23852"
+        },
+        {
+          "name": "六花深圣 泪滴花束雪花莲",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23852"
+        }
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Plant",
+      "attribute": "water",
+      "attack": 3200,
+      "defense": 3200,
+      "atk": 3200,
+      "def": 3200,
+      "rank": 10,
+      "propertyIds": [
+        "25",
+        "18",
+        "4"
+      ],
+      "properties": [
+        "Plant",
+        "Xyz",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "25",
+        "18",
+        "4"
+      ],
+      "monsterProperties": [
+        "Plant",
+        "Xyz",
+        "Effect"
+      ]
+    },
+    {
       "id": "18153",
       "name": "泪冠哀歌・怒刹帝利",
       "cnName": "泪冠哀歌・怒刹帝利",
@@ -841335,6 +843659,41 @@
       ]
     },
     {
+      "id": "23862",
+      "name": "不死なる太陽神",
+      "cnName": "不死的太阳神",
+      "jaName": "不死なる太陽神",
+      "enName": "The Immortal Sun God",
+      "aliases": [
+        "不死なる太陽神",
+        "The Immortal Sun God",
+        "不死的太阳神",
+        "不死的太阳神灵"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "不死的太阳神",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23862"
+        },
+        {
+          "name": "不死的太阳神灵",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23862"
+        }
+      ],
+      "released": true,
+      "type": "spell",
+      "cardType": "spell",
+      "properties": [
+        "quickplay"
+      ]
+    },
+    {
       "id": "4468",
       "name": "雷仙人",
       "cnName": "雷仙人",
@@ -845742,6 +848101,65 @@
       ]
     },
     {
+      "id": "23834",
+      "name": "お返し鶴秘姫",
+      "cnName": "返身报恩的鹤秘姬",
+      "jaName": "お返し鶴秘姫",
+      "enName": "The Secret Crane Princess Who Returns A Favor",
+      "aliases": [
+        "お返し鶴秘姫",
+        "The Secret Crane Princess Who Returns A Favor",
+        "返身报恩的鹤秘姬",
+        "回报的鹤秘姬"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "返身报恩的鹤秘姬",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23834"
+        },
+        {
+          "name": "回报的鹤秘姬",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23834"
+        }
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Winged Beast",
+      "attribute": "light",
+      "attack": 0,
+      "defense": 0,
+      "atk": 0,
+      "def": 0,
+      "level": 1,
+      "propertyIds": [
+        "35",
+        "20",
+        "4"
+      ],
+      "properties": [
+        "Winged Beast",
+        "Tuner",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "35",
+        "20",
+        "4"
+      ],
+      "monsterProperties": [
+        "Winged Beast",
+        "Tuner",
+        "Effect"
+      ]
+    },
+    {
       "id": "5393",
       "name": "盗賊の極意",
       "cnName": "盗贼的极意",
@@ -849945,6 +852363,73 @@
       ],
       "monsterProperties": [
         "Divine-Beast",
+        "Effect"
+      ]
+    },
+    {
+      "id": "23841",
+      "name": "暗黒の太陽神－ラーの翼神竜",
+      "cnName": "暗黑之太阳神-拉之翼神龙",
+      "jaName": "暗黒の太陽神－ラーの翼神竜",
+      "enName": "The Winged Dragon of Ra, Sun God of Darkness",
+      "aliases": [
+        "暗黒の太陽神－ラーの翼神竜",
+        "The Winged Dragon of Ra, Sun God of Darkness",
+        "暗黑之太阳神-拉之翼神龙",
+        "暗黑太阳神－拉之翼神龙",
+        "暗黑之太阳神灵-太阳神之翼神龙"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "暗黑之太阳神-拉之翼神龙",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23841"
+        },
+        {
+          "name": "暗黑太阳神－拉之翼神龙",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23841"
+        },
+        {
+          "name": "暗黑之太阳神灵-太阳神之翼神龙",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23841"
+        }
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Divine-Beast",
+      "attribute": "divine",
+      "attack": -1,
+      "defense": -1,
+      "atk": -1,
+      "def": -1,
+      "level": 10,
+      "propertyIds": [
+        "39",
+        "11",
+        "4"
+      ],
+      "properties": [
+        "Divine-Beast",
+        "Fusion",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "39",
+        "11",
+        "4"
+      ],
+      "monsterProperties": [
+        "Divine-Beast",
+        "Fusion",
         "Effect"
       ]
     },
@@ -872447,6 +874932,72 @@
       "cardType": "spell",
       "properties": [
         "continuous"
+      ]
+    },
+    {
+      "id": "23844",
+      "name": "ハーピィ・レディ三姉妹・TX",
+      "cnName": "鹰身女郎三姐妹 三角神迷",
+      "jaName": "ハーピィ・レディ三姉妹・TX",
+      "enName": "Triangle Ecstasy Harpie Lady Sisters",
+      "aliases": [
+        "ハーピィ・レディ三姉妹・TX",
+        "Triangle Ecstasy Harpie Lady Sisters",
+        "鹰身女郎三姐妹 三角神迷",
+        "神鹰女郎三姐妹・三角狂欢"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "鹰身女郎三姐妹 三角神迷",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23844"
+        },
+        {
+          "name": "神鹰女郎三姐妹・三角狂欢",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23844"
+        },
+        {
+          "name": "鹰身女郎三姐妹 三角神迷",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23844"
+        }
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Winged Beast",
+      "attribute": "wind",
+      "attack": 3000,
+      "defense": 2100,
+      "atk": 3000,
+      "def": 2100,
+      "level": 8,
+      "propertyIds": [
+        "35",
+        "11",
+        "4"
+      ],
+      "properties": [
+        "Winged Beast",
+        "Fusion",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "35",
+        "11",
+        "4"
+      ],
+      "monsterProperties": [
+        "Winged Beast",
+        "Fusion",
+        "Effect"
       ]
     },
     {
@@ -905848,6 +908399,61 @@
       "attack": 500,
       "defense": 1200,
       "atk": 500,
+      "def": 1200,
+      "level": 4,
+      "propertyIds": [
+        "14",
+        "4"
+      ],
+      "properties": [
+        "Fiend",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "14",
+        "4"
+      ],
+      "monsterProperties": [
+        "Fiend",
+        "Effect"
+      ]
+    },
+    {
+      "id": "23815",
+      "name": "太陽神の拷問具－バイサー・デス・ショック",
+      "cnName": "太阳神的拷问具-电击死亡拷问机",
+      "jaName": "太陽神の拷問具－バイサー・デス・ショック",
+      "enName": "Viser Des Shock, Tormentor of the Sun God",
+      "aliases": [
+        "太陽神の拷問具－バイサー・デス・ショック",
+        "Viser Des Shock, Tormentor of the Sun God",
+        "太阳神的拷问具-电击死亡拷问机",
+        "太阳神灵的拷问具-电击死亡拷问机"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "太阳神的拷问具-电击死亡拷问机",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23815"
+        },
+        {
+          "name": "太阳神灵的拷问具-电击死亡拷问机",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23815"
+        }
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Fiend",
+      "attribute": "dark",
+      "attack": 800,
+      "defense": 1200,
+      "atk": 800,
       "def": 1200,
       "level": 4,
       "propertyIds": [
@@ -949772,6 +952378,65 @@
       ]
     },
     {
+      "id": "23848",
+      "name": "白鴉の騎士ザルティス",
+      "cnName": "白鸦骑士 扎尔蒂斯",
+      "jaName": "白鴉の騎士ザルティス",
+      "enName": "Zaltys, Knight of the Winter Raven",
+      "aliases": [
+        "白鴉の騎士ザルティス",
+        "Zaltys, Knight of the Winter Raven",
+        "白鸦骑士 扎尔蒂斯",
+        "白鸦骑士 萨尔蒂斯"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "白鸦骑士 扎尔蒂斯",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23848"
+        },
+        {
+          "name": "白鸦骑士 萨尔蒂斯",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23848"
+        }
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Illusion",
+      "attribute": "fire",
+      "attack": 2600,
+      "defense": 1700,
+      "atk": 2600,
+      "def": 1700,
+      "level": 5,
+      "propertyIds": [
+        "41",
+        "19",
+        "4"
+      ],
+      "properties": [
+        "Illusion",
+        "Synchro",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "41",
+        "19",
+        "4"
+      ],
+      "monsterProperties": [
+        "Illusion",
+        "Synchro",
+        "Effect"
+      ]
+    },
+    {
       "id": "4099",
       "name": "鎧武者斬鬼",
       "cnName": "铠武者 斩鬼",
@@ -955481,63 +958146,6 @@
       ]
     },
     {
-      "id": "23854",
-      "name": "No.96 ブラック・マリオネッター",
-      "cnName": "No.96 黑偶",
-      "jaName": "No.96 ブラック・マリオネッター",
-      "aliases": [
-        "No.96 ブラック・マリオネッター",
-        "No.96 黑偶",
-        "No.96 黑傀儡师"
-      ],
-      "chineseNameSources": [
-        {
-          "name": "No.96 黑偶",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23854"
-        },
-        {
-          "name": "No.96 黑傀儡师",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23854"
-        }
-      ],
-      "released": true,
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Fiend",
-      "attribute": "dark",
-      "attack": 100,
-      "defense": 1000,
-      "atk": 100,
-      "def": 1000,
-      "rank": 2,
-      "propertyIds": [
-        "14",
-        "18",
-        "4"
-      ],
-      "properties": [
-        "Fiend",
-        "Xyz",
-        "Effect"
-      ],
-      "monsterPropertyIds": [
-        "14",
-        "18",
-        "4"
-      ],
-      "monsterProperties": [
-        "Fiend",
-        "Xyz",
-        "Effect"
-      ]
-    },
-    {
       "id": "10588",
       "name": "青之眼少女",
       "cnName": "青之眼少女",
@@ -955619,2016 +958227,6 @@
       ]
     },
     {
-      "id": "23841",
-      "name": "暗黒の太陽神－ラーの翼神竜",
-      "cnName": "暗黑之太阳神-拉之翼神龙",
-      "jaName": "暗黒の太陽神－ラーの翼神竜",
-      "aliases": [
-        "暗黒の太陽神－ラーの翼神竜",
-        "暗黑之太阳神-拉之翼神龙",
-        "暗黑太阳神－拉之翼神龙",
-        "暗黑之太阳神灵-太阳神之翼神龙"
-      ],
-      "chineseNameSources": [
-        {
-          "name": "暗黑之太阳神-拉之翼神龙",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23841"
-        },
-        {
-          "name": "暗黑太阳神－拉之翼神龙",
-          "source": "baige",
-          "sourceField": "md_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23841"
-        },
-        {
-          "name": "暗黑之太阳神灵-太阳神之翼神龙",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23841"
-        }
-      ],
-      "released": true,
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Divine-Beast",
-      "attribute": "divine",
-      "attack": -1,
-      "defense": -1,
-      "atk": -1,
-      "def": -1,
-      "level": 10,
-      "propertyIds": [
-        "39",
-        "11",
-        "4"
-      ],
-      "properties": [
-        "Divine-Beast",
-        "Fusion",
-        "Effect"
-      ],
-      "monsterPropertyIds": [
-        "39",
-        "11",
-        "4"
-      ],
-      "monsterProperties": [
-        "Divine-Beast",
-        "Fusion",
-        "Effect"
-      ]
-    },
-    {
-      "id": "23834",
-      "name": "お返し鶴秘姫",
-      "cnName": "返身报恩的鹤秘姬",
-      "jaName": "お返し鶴秘姫",
-      "aliases": [
-        "お返し鶴秘姫",
-        "返身报恩的鹤秘姬",
-        "回报的鹤秘姬"
-      ],
-      "chineseNameSources": [
-        {
-          "name": "返身报恩的鹤秘姬",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23834"
-        },
-        {
-          "name": "回报的鹤秘姬",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23834"
-        }
-      ],
-      "released": true,
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Winged Beast",
-      "attribute": "light",
-      "attack": 0,
-      "defense": 0,
-      "atk": 0,
-      "def": 0,
-      "level": 1,
-      "propertyIds": [
-        "35",
-        "20",
-        "4"
-      ],
-      "properties": [
-        "Winged Beast",
-        "Tuner",
-        "Effect"
-      ],
-      "monsterPropertyIds": [
-        "35",
-        "20",
-        "4"
-      ],
-      "monsterProperties": [
-        "Winged Beast",
-        "Tuner",
-        "Effect"
-      ]
-    },
-    {
-      "id": "23864",
-      "name": "華麗なる三面鏡",
-      "cnName": "华丽的三面镜",
-      "jaName": "華麗なる三面鏡",
-      "aliases": [
-        "華麗なる三面鏡",
-        "华丽的三面镜"
-      ],
-      "chineseNameSources": [
-        {
-          "name": "华丽的三面镜",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23864"
-        },
-        {
-          "name": "华丽的三面镜",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23864"
-        }
-      ],
-      "released": true,
-      "type": "spell",
-      "cardType": "spell"
-    },
-    {
-      "id": "23871",
-      "name": "獄神封門－共滅の剣－",
-      "cnName": "狱神封门-共灭之剑-",
-      "jaName": "獄神封門－共滅の剣－",
-      "aliases": [
-        "獄神封門－共滅の剣－",
-        "狱神封门-共灭之剑-"
-      ],
-      "chineseNameSources": [
-        {
-          "name": "狱神封门-共灭之剑-",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23871"
-        },
-        {
-          "name": "狱神封门-共灭之剑-",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23871"
-        }
-      ],
-      "released": true,
-      "type": "spell",
-      "cardType": "spell"
-    },
-    {
-      "id": "23872",
-      "name": "神幻学都アルス＝マグナ",
-      "cnName": "神幻学都 无垢大艺术学园",
-      "jaName": "神幻学都アルス＝マグナ",
-      "aliases": [
-        "神幻学都アルス＝マグナ",
-        "神幻学都 无垢大艺术学园",
-        "神幻学都 无垢大艺学园"
-      ],
-      "chineseNameSources": [
-        {
-          "name": "神幻学都 无垢大艺术学园",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23872"
-        },
-        {
-          "name": "神幻学都 无垢大艺学园",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23872"
-        }
-      ],
-      "released": true,
-      "type": "spell",
-      "cardType": "spell",
-      "properties": [
-        "field"
-      ]
-    },
-    {
-      "id": "23815",
-      "name": "太陽神の拷問具－バイサー・デス・ショック",
-      "cnName": "太阳神的拷问具-电击死亡拷问机",
-      "jaName": "太陽神の拷問具－バイサー・デス・ショック",
-      "aliases": [
-        "太陽神の拷問具－バイサー・デス・ショック",
-        "太阳神的拷问具-电击死亡拷问机",
-        "太阳神灵的拷问具-电击死亡拷问机"
-      ],
-      "chineseNameSources": [
-        {
-          "name": "太阳神的拷问具-电击死亡拷问机",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23815"
-        },
-        {
-          "name": "太阳神灵的拷问具-电击死亡拷问机",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23815"
-        }
-      ],
-      "released": true,
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Fiend",
-      "attribute": "dark",
-      "attack": 800,
-      "defense": 1200,
-      "atk": 800,
-      "def": 1200,
-      "level": 4,
-      "propertyIds": [
-        "14",
-        "4"
-      ],
-      "properties": [
-        "Fiend",
-        "Effect"
-      ],
-      "monsterPropertyIds": [
-        "14",
-        "4"
-      ],
-      "monsterProperties": [
-        "Fiend",
-        "Effect"
-      ]
-    },
-    {
-      "id": "23814",
-      "name": "太陽神の殺戮機－ギル・ガース",
-      "cnName": "太阳神的杀戮机-屠杀巨灵",
-      "jaName": "太陽神の殺戮機－ギル・ガース",
-      "aliases": [
-        "太陽神の殺戮機－ギル・ガース",
-        "太阳神的杀戮机-屠杀巨灵",
-        "太阳神灵的杀戮机-屠杀巨灵"
-      ],
-      "chineseNameSources": [
-        {
-          "name": "太阳神的杀戮机-屠杀巨灵",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23814"
-        },
-        {
-          "name": "太阳神灵的杀戮机-屠杀巨灵",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23814"
-        }
-      ],
-      "released": true,
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Fiend",
-      "attribute": "dark",
-      "attack": 1800,
-      "defense": 1200,
-      "atk": 1800,
-      "def": 1200,
-      "level": 4,
-      "propertyIds": [
-        "14",
-        "4"
-      ],
-      "properties": [
-        "Fiend",
-        "Effect"
-      ],
-      "monsterPropertyIds": [
-        "14",
-        "4"
-      ],
-      "monsterProperties": [
-        "Fiend",
-        "Effect"
-      ]
-    },
-    {
-      "id": "23812",
-      "name": "太陽神の詩詠者－ヘルポエマー",
-      "cnName": "太阳神的诗咏者-地狱诗人",
-      "jaName": "太陽神の詩詠者－ヘルポエマー",
-      "aliases": [
-        "太陽神の詩詠者－ヘルポエマー",
-        "太阳神的诗咏者-地狱诗人",
-        "太阳神灵的诗咏者-地狱诗人"
-      ],
-      "chineseNameSources": [
-        {
-          "name": "太阳神的诗咏者-地狱诗人",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23812"
-        },
-        {
-          "name": "太阳神灵的诗咏者-地狱诗人",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23812"
-        }
-      ],
-      "released": true,
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Fiend",
-      "attribute": "dark",
-      "attack": 2000,
-      "defense": 1400,
-      "atk": 2000,
-      "def": 1400,
-      "level": 5,
-      "propertyIds": [
-        "14",
-        "4"
-      ],
-      "properties": [
-        "Fiend",
-        "Effect"
-      ],
-      "monsterPropertyIds": [
-        "14",
-        "4"
-      ],
-      "monsterProperties": [
-        "Fiend",
-        "Effect"
-      ]
-    },
-    {
-      "id": "23813",
-      "name": "太陽神の処刑人－マキュラ",
-      "cnName": "太阳神的处刑人-摩休罗",
-      "jaName": "太陽神の処刑人－マキュラ",
-      "aliases": [
-        "太陽神の処刑人－マキュラ",
-        "太阳神的处刑人-摩休罗",
-        "太阳神灵的处刑人-摩休罗"
-      ],
-      "chineseNameSources": [
-        {
-          "name": "太阳神的处刑人-摩休罗",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23813"
-        },
-        {
-          "name": "太阳神灵的处刑人-摩休罗",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23813"
-        }
-      ],
-      "released": true,
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Warrior",
-      "attribute": "dark",
-      "attack": 1600,
-      "defense": 1200,
-      "atk": 1600,
-      "def": 1200,
-      "level": 4,
-      "propertyIds": [
-        "12",
-        "4"
-      ],
-      "properties": [
-        "Warrior",
-        "Effect"
-      ],
-      "monsterPropertyIds": [
-        "12",
-        "4"
-      ],
-      "monsterProperties": [
-        "Warrior",
-        "Effect"
-      ]
-    },
-    {
-      "id": "23822",
-      "name": "白鴉の騎士アン",
-      "cnName": "白鸦骑士 安",
-      "jaName": "白鴉の騎士アン",
-      "aliases": [
-        "白鴉の騎士アン",
-        "白鸦骑士 安",
-        "白鸦骑士 阿努"
-      ],
-      "chineseNameSources": [
-        {
-          "name": "白鸦骑士 安",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23822"
-        },
-        {
-          "name": "白鸦骑士 阿努",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23822"
-        }
-      ],
-      "released": true,
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Illusion",
-      "attribute": "light",
-      "attack": 1400,
-      "defense": 900,
-      "atk": 1400,
-      "def": 900,
-      "level": 4,
-      "propertyIds": [
-        "41",
-        "20",
-        "4"
-      ],
-      "properties": [
-        "Illusion",
-        "Tuner",
-        "Effect"
-      ],
-      "monsterPropertyIds": [
-        "41",
-        "20",
-        "4"
-      ],
-      "monsterProperties": [
-        "Illusion",
-        "Tuner",
-        "Effect"
-      ]
-    },
-    {
-      "id": "23848",
-      "name": "白鴉の騎士ザルティス",
-      "cnName": "白鸦骑士 扎尔蒂斯",
-      "jaName": "白鴉の騎士ザルティス",
-      "aliases": [
-        "白鴉の騎士ザルティス",
-        "白鸦骑士 扎尔蒂斯",
-        "白鸦骑士 萨尔蒂斯"
-      ],
-      "chineseNameSources": [
-        {
-          "name": "白鸦骑士 扎尔蒂斯",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23848"
-        },
-        {
-          "name": "白鸦骑士 萨尔蒂斯",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23848"
-        }
-      ],
-      "released": true,
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Illusion",
-      "attribute": "fire",
-      "attack": 2600,
-      "defense": 1700,
-      "atk": 2600,
-      "def": 1700,
-      "level": 5,
-      "propertyIds": [
-        "41",
-        "19",
-        "4"
-      ],
-      "properties": [
-        "Illusion",
-        "Synchro",
-        "Effect"
-      ],
-      "monsterPropertyIds": [
-        "41",
-        "19",
-        "4"
-      ],
-      "monsterProperties": [
-        "Illusion",
-        "Synchro",
-        "Effect"
-      ]
-    },
-    {
-      "id": "23821",
-      "name": "白鴉の騎士マルト",
-      "cnName": "白鸦骑士 马特",
-      "jaName": "白鴉の騎士マルト",
-      "aliases": [
-        "白鴉の騎士マルト",
-        "白鸦骑士 马特"
-      ],
-      "chineseNameSources": [
-        {
-          "name": "白鸦骑士 马特",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23821"
-        },
-        {
-          "name": "白鸦骑士 马特",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23821"
-        }
-      ],
-      "released": true,
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Illusion",
-      "attribute": "light",
-      "attack": 1700,
-      "defense": 0,
-      "atk": 1700,
-      "def": 0,
-      "level": 4,
-      "propertyIds": [
-        "41",
-        "20",
-        "4"
-      ],
-      "properties": [
-        "Illusion",
-        "Tuner",
-        "Effect"
-      ],
-      "monsterPropertyIds": [
-        "41",
-        "20",
-        "4"
-      ],
-      "monsterProperties": [
-        "Illusion",
-        "Tuner",
-        "Effect"
-      ]
-    },
-    {
-      "id": "23870",
-      "name": "白鴉の深き森",
-      "cnName": "白鸦的大森林",
-      "jaName": "白鴉の深き森",
-      "aliases": [
-        "白鴉の深き森",
-        "白鸦的大森林",
-        "白鸦的幽深森林"
-      ],
-      "chineseNameSources": [
-        {
-          "name": "白鸦的大森林",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23870"
-        },
-        {
-          "name": "白鸦的幽深森林",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23870"
-        }
-      ],
-      "released": true,
-      "type": "spell",
-      "cardType": "spell",
-      "properties": [
-        "field"
-      ]
-    },
-    {
-      "id": "23820",
-      "name": "白鴉の森の炎魔",
-      "cnName": "白鸦之森的炎魔",
-      "jaName": "白鴉の森の炎魔",
-      "aliases": [
-        "白鴉の森の炎魔",
-        "白鸦之森的炎魔",
-        "白鸦森林的炎魔"
-      ],
-      "chineseNameSources": [
-        {
-          "name": "白鸦之森的炎魔",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23820"
-        },
-        {
-          "name": "白鸦森林的炎魔",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23820"
-        }
-      ],
-      "released": true,
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Pyro",
-      "attribute": "fire",
-      "attack": 700,
-      "defense": 200,
-      "atk": 700,
-      "def": 200,
-      "level": 1,
-      "propertyIds": [
-        "37",
-        "4"
-      ],
-      "properties": [
-        "Pyro",
-        "Effect"
-      ],
-      "monsterPropertyIds": [
-        "37",
-        "4"
-      ],
-      "monsterProperties": [
-        "Pyro",
-        "Effect"
-      ]
-    },
-    {
-      "id": "23845",
-      "name": "白鴉の森の女主人ディアベルゼ",
-      "cnName": "白鸦之森的女主人 迪亚贝尔泽",
-      "jaName": "白鴉の森の女主人ディアベルゼ",
-      "aliases": [
-        "白鴉の森の女主人ディアベルゼ",
-        "白鸦之森的女主人 迪亚贝尔泽",
-        "白鸦之森的女主人 迪亚贝尔赛",
-        "白鸦森林的女主人 迪亚贝尔泽"
-      ],
-      "chineseNameSources": [
-        {
-          "name": "白鸦之森的女主人 迪亚贝尔泽",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23845"
-        },
-        {
-          "name": "白鸦之森的女主人 迪亚贝尔赛",
-          "source": "baige",
-          "sourceField": "md_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23845"
-        },
-        {
-          "name": "白鸦森林的女主人 迪亚贝尔泽",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23845"
-        }
-      ],
-      "released": true,
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Illusion",
-      "attribute": "light",
-      "attack": 2500,
-      "defense": 2100,
-      "atk": 2500,
-      "def": 2100,
-      "level": 8,
-      "propertyIds": [
-        "41",
-        "11",
-        "4"
-      ],
-      "properties": [
-        "Illusion",
-        "Fusion",
-        "Effect"
-      ],
-      "monsterPropertyIds": [
-        "41",
-        "11",
-        "4"
-      ],
-      "monsterProperties": [
-        "Illusion",
-        "Fusion",
-        "Effect"
-      ]
-    },
-    {
-      "id": "23823",
-      "name": "白鴉の森の罪宝",
-      "cnName": "白鸦之森的罪宝",
-      "jaName": "白鴉の森の罪宝",
-      "aliases": [
-        "白鴉の森の罪宝",
-        "白鸦之森的罪宝",
-        "白鸦森林的罪宝"
-      ],
-      "chineseNameSources": [
-        {
-          "name": "白鸦之森的罪宝",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23823"
-        },
-        {
-          "name": "白鸦森林的罪宝",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23823"
-        }
-      ],
-      "released": true,
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Spellcaster",
-      "attribute": "fire",
-      "attack": 2500,
-      "defense": 2000,
-      "atk": 2500,
-      "def": 2000,
-      "level": 7,
-      "propertyIds": [
-        "8",
-        "20",
-        "4"
-      ],
-      "properties": [
-        "Spellcaster",
-        "Tuner",
-        "Effect"
-      ],
-      "monsterPropertyIds": [
-        "8",
-        "20",
-        "4"
-      ],
-      "monsterProperties": [
-        "Spellcaster",
-        "Tuner",
-        "Effect"
-      ]
-    },
-    {
-      "id": "23862",
-      "name": "不死なる太陽神",
-      "cnName": "不死的太阳神",
-      "jaName": "不死なる太陽神",
-      "aliases": [
-        "不死なる太陽神",
-        "不死的太阳神",
-        "不死的太阳神灵"
-      ],
-      "chineseNameSources": [
-        {
-          "name": "不死的太阳神",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23862"
-        },
-        {
-          "name": "不死的太阳神灵",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23862"
-        }
-      ],
-      "released": true,
-      "type": "spell",
-      "cardType": "spell",
-      "properties": [
-        "quickplay"
-      ]
-    },
-    {
-      "id": "23859",
-      "name": "炎の平原を駆け抜ける百獣の王",
-      "cnName": "驰驱于火炎平原的百兽之王",
-      "jaName": "炎の平原を駆け抜ける百獣の王",
-      "aliases": [
-        "炎の平原を駆け抜ける百獣の王",
-        "驰驱于火炎平原的百兽之王",
-        "驰骋横越炎之平原的百兽之王",
-        "炎之平原上奔驰而过的百兽之王"
-      ],
-      "chineseNameSources": [
-        {
-          "name": "驰驱于火炎平原的百兽之王",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23859"
-        },
-        {
-          "name": "驰骋横越炎之平原的百兽之王",
-          "source": "baige",
-          "sourceField": "md_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23859"
-        },
-        {
-          "name": "炎之平原上奔驰而过的百兽之王",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23859"
-        }
-      ],
-      "released": true,
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Cyberse",
-      "attribute": "fire",
-      "attack": 2300,
-      "atk": 2300,
-      "link": 3,
-      "linkRating": 3,
-      "linkArrows": "813",
-      "propertyIds": [
-        "30",
-        "23",
-        "4"
-      ],
-      "properties": [
-        "Cyberse",
-        "Link",
-        "Effect"
-      ],
-      "monsterPropertyIds": [
-        "30",
-        "23",
-        "4"
-      ],
-      "monsterProperties": [
-        "Cyberse",
-        "Link",
-        "Effect"
-      ]
-    },
-    {
-      "id": "23828",
-      "name": "無敵のロケット戦士",
-      "cnName": "无敌的火箭战士",
-      "jaName": "無敵のロケット戦士",
-      "aliases": [
-        "無敵のロケット戦士",
-        "无敌的火箭战士"
-      ],
-      "chineseNameSources": [
-        {
-          "name": "无敌的火箭战士",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23828"
-        },
-        {
-          "name": "无敌的火箭战士",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23828"
-        }
-      ],
-      "released": true,
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Warrior",
-      "attribute": "light",
-      "attack": 1500,
-      "defense": 1300,
-      "atk": 1500,
-      "def": 1300,
-      "level": 4,
-      "propertyIds": [
-        "12",
-        "4"
-      ],
-      "properties": [
-        "Warrior",
-        "Effect"
-      ],
-      "monsterPropertyIds": [
-        "12",
-        "4"
-      ],
-      "monsterProperties": [
-        "Warrior",
-        "Effect"
-      ]
-    },
-    {
-      "id": "23840",
-      "name": "盟約のジャベリンビートル",
-      "cnName": "盟约之标枪甲虫",
-      "jaName": "盟約のジャベリンビートル",
-      "aliases": [
-        "盟約のジャベリンビートル",
-        "盟约之标枪甲虫",
-        "盟约的标枪甲虫"
-      ],
-      "chineseNameSources": [
-        {
-          "name": "盟约之标枪甲虫",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23840"
-        },
-        {
-          "name": "盟约的标枪甲虫",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23840"
-        }
-      ],
-      "released": true,
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Insect",
-      "attribute": "earth",
-      "attack": 2450,
-      "defense": 2550,
-      "atk": 2450,
-      "def": 2550,
-      "level": 8,
-      "propertyIds": [
-        "34",
-        "27",
-        "4"
-      ],
-      "properties": [
-        "Insect",
-        "Ritual",
-        "Effect"
-      ],
-      "monsterPropertyIds": [
-        "34",
-        "27",
-        "4"
-      ],
-      "monsterProperties": [
-        "Insect",
-        "Ritual",
-        "Effect"
-      ]
-    },
-    {
-      "id": "23853",
-      "name": "六花深聖ストレナエ",
-      "cnName": "六花深圣 力量女神花圈",
-      "jaName": "六花深聖ストレナエ",
-      "aliases": [
-        "六花深聖ストレナエ",
-        "六花深圣 力量女神花圈",
-        "六花深圣花环"
-      ],
-      "chineseNameSources": [
-        {
-          "name": "六花深圣 力量女神花圈",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23853"
-        },
-        {
-          "name": "六花深圣 力量女神花圈",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23853"
-        },
-        {
-          "name": "六花深圣花环",
-          "source": "baige",
-          "sourceField": "md_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23853"
-        }
-      ],
-      "released": true,
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Plant",
-      "attribute": "water",
-      "attack": 2000,
-      "defense": 2000,
-      "atk": 2000,
-      "def": 2000,
-      "rank": 6,
-      "propertyIds": [
-        "25",
-        "18",
-        "4"
-      ],
-      "properties": [
-        "Plant",
-        "Xyz",
-        "Effect"
-      ],
-      "monsterPropertyIds": [
-        "25",
-        "18",
-        "4"
-      ],
-      "monsterProperties": [
-        "Plant",
-        "Xyz",
-        "Effect"
-      ]
-    },
-    {
-      "id": "23852",
-      "name": "六花深聖ティアドロップ",
-      "cnName": "六花深圣 泪滴花束雪花莲",
-      "jaName": "六花深聖ティアドロップ",
-      "aliases": [
-        "六花深聖ティアドロップ",
-        "六花深圣 泪滴花束雪花莲",
-        "六花深圣泪滴花束"
-      ],
-      "chineseNameSources": [
-        {
-          "name": "六花深圣 泪滴花束雪花莲",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23852"
-        },
-        {
-          "name": "六花深圣泪滴花束",
-          "source": "baige",
-          "sourceField": "md_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23852"
-        },
-        {
-          "name": "六花深圣 泪滴花束雪花莲",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23852"
-        }
-      ],
-      "released": true,
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Plant",
-      "attribute": "water",
-      "attack": 3200,
-      "defense": 3200,
-      "atk": 3200,
-      "def": 3200,
-      "rank": 10,
-      "propertyIds": [
-        "25",
-        "18",
-        "4"
-      ],
-      "properties": [
-        "Plant",
-        "Xyz",
-        "Effect"
-      ],
-      "monsterPropertyIds": [
-        "25",
-        "18",
-        "4"
-      ],
-      "monsterProperties": [
-        "Plant",
-        "Xyz",
-        "Effect"
-      ]
-    },
-    {
-      "id": "23826",
-      "name": "六花双精プリムローズ",
-      "cnName": "六花双精 报春来",
-      "jaName": "六花双精プリムローズ",
-      "aliases": [
-        "六花双精プリムローズ",
-        "六花双精 报春来",
-        "六花双精 报春花",
-        "六花双精报春蔷薇"
-      ],
-      "chineseNameSources": [
-        {
-          "name": "六花双精 报春来",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23826"
-        },
-        {
-          "name": "六花双精 报春花",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23826"
-        },
-        {
-          "name": "六花双精报春蔷薇",
-          "source": "baige",
-          "sourceField": "md_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23826"
-        }
-      ],
-      "released": true,
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Plant",
-      "attribute": "water",
-      "attack": 2600,
-      "defense": 2600,
-      "atk": 2600,
-      "def": 2600,
-      "level": 8,
-      "propertyIds": [
-        "25",
-        "4"
-      ],
-      "properties": [
-        "Plant",
-        "Effect"
-      ],
-      "monsterPropertyIds": [
-        "25",
-        "4"
-      ],
-      "monsterProperties": [
-        "Plant",
-        "Effect"
-      ]
-    },
-    {
-      "id": "23827",
-      "name": "六花のくろひめ",
-      "cnName": "六花的黑姬",
-      "jaName": "六花のくろひめ",
-      "aliases": [
-        "六花のくろひめ",
-        "六花的黑姬"
-      ],
-      "chineseNameSources": [
-        {
-          "name": "六花的黑姬",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23827"
-        },
-        {
-          "name": "六花的黑姬",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23827"
-        },
-        {
-          "name": "六花的黑姬",
-          "source": "baige",
-          "sourceField": "md_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23827"
-        }
-      ],
-      "released": true,
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Plant",
-      "attribute": "water",
-      "attack": 0,
-      "defense": 0,
-      "atk": 0,
-      "def": 0,
-      "level": 6,
-      "propertyIds": [
-        "25",
-        "4"
-      ],
-      "properties": [
-        "Plant",
-        "Effect"
-      ],
-      "monsterPropertyIds": [
-        "25",
-        "4"
-      ],
-      "monsterProperties": [
-        "Plant",
-        "Effect"
-      ]
-    },
-    {
-      "id": "23861",
-      "name": "竜魔導の降霊師",
-      "cnName": "龙魔导降灵师",
-      "jaName": "竜魔導の降霊師",
-      "aliases": [
-        "竜魔導の降霊師",
-        "龙魔导降灵师"
-      ],
-      "chineseNameSources": [
-        {
-          "name": "龙魔导降灵师",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23861"
-        },
-        {
-          "name": "龙魔导降灵师",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23861"
-        }
-      ],
-      "released": true,
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Dragon",
-      "attribute": "wind",
-      "attack": 900,
-      "atk": 900,
-      "link": 2,
-      "linkRating": 2,
-      "linkArrows": "13",
-      "propertyIds": [
-        "21",
-        "23",
-        "4"
-      ],
-      "properties": [
-        "Dragon",
-        "Link",
-        "Effect"
-      ],
-      "monsterPropertyIds": [
-        "21",
-        "23",
-        "4"
-      ],
-      "monsterProperties": [
-        "Dragon",
-        "Link",
-        "Effect"
-      ]
-    },
-    {
-      "id": "23829",
-      "name": "鬼神童鵄 タマヨリ",
-      "cnName": "鬼神童鸱 玉依",
-      "jaName": "鬼神童鵄 タマヨリ",
-      "aliases": [
-        "鬼神童鵄 タマヨリ",
-        "鬼神童鸱 玉依",
-        "鬼神童鵄 玉依"
-      ],
-      "chineseNameSources": [
-        {
-          "name": "鬼神童鸱 玉依",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23829"
-        },
-        {
-          "name": "鬼神童鵄 玉依",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23829"
-        }
-      ],
-      "released": true,
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Fairy",
-      "attribute": "fire",
-      "attack": 0,
-      "defense": 0,
-      "atk": 0,
-      "def": 0,
-      "level": 1,
-      "propertyIds": [
-        "15",
-        "20",
-        "4"
-      ],
-      "properties": [
-        "Fairy",
-        "Tuner",
-        "Effect"
-      ],
-      "monsterPropertyIds": [
-        "15",
-        "20",
-        "4"
-      ],
-      "monsterProperties": [
-        "Fairy",
-        "Tuner",
-        "Effect"
-      ]
-    },
-    {
-      "id": "23850",
-      "name": "鬼神 夜魅",
-      "cnName": "鬼神 夜魅",
-      "jaName": "鬼神 夜魅",
-      "aliases": [
-        "鬼神 夜魅"
-      ],
-      "chineseNameSources": [
-        {
-          "name": "鬼神 夜魅",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23850"
-        },
-        {
-          "name": "鬼神 夜魅",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23850"
-        }
-      ],
-      "released": true,
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Spellcaster",
-      "attribute": "wind",
-      "attack": 2400,
-      "defense": 3000,
-      "atk": 2400,
-      "def": 3000,
-      "level": 8,
-      "propertyIds": [
-        "8",
-        "19",
-        "4"
-      ],
-      "properties": [
-        "Spellcaster",
-        "Synchro",
-        "Effect"
-      ],
-      "monsterPropertyIds": [
-        "8",
-        "19",
-        "4"
-      ],
-      "monsterProperties": [
-        "Spellcaster",
-        "Synchro",
-        "Effect"
-      ]
-    },
-    {
-      "id": "23830",
-      "name": "アトランティスの暴翼",
-      "cnName": "亚特兰蒂斯的暴翼",
-      "jaName": "アトランティスの暴翼",
-      "aliases": [
-        "アトランティスの暴翼",
-        "亚特兰蒂斯的暴翼"
-      ],
-      "chineseNameSources": [
-        {
-          "name": "亚特兰蒂斯的暴翼",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23830"
-        },
-        {
-          "name": "亚特兰蒂斯的暴翼",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23830"
-        }
-      ],
-      "released": true,
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Sea Serpent",
-      "attribute": "water",
-      "attack": 2000,
-      "defense": 2400,
-      "atk": 2000,
-      "def": 2400,
-      "level": 5,
-      "propertyIds": [
-        "17",
-        "4"
-      ],
-      "properties": [
-        "Sea Serpent",
-        "Effect"
-      ],
-      "monsterPropertyIds": [
-        "17",
-        "4"
-      ],
-      "monsterProperties": [
-        "Sea Serpent",
-        "Effect"
-      ]
-    },
-    {
-      "id": "23817",
-      "name": "アマゾネスの格闘戦士－蹴殺の舞い－",
-      "cnName": "亚马逊格斗战士-蹴杀之舞-",
-      "jaName": "アマゾネスの格闘戦士－蹴殺の舞い－",
-      "aliases": [
-        "アマゾネスの格闘戦士－蹴殺の舞い－",
-        "亚马逊格斗战士-蹴杀之舞-"
-      ],
-      "chineseNameSources": [
-        {
-          "name": "亚马逊格斗战士-蹴杀之舞-",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23817"
-        },
-        {
-          "name": "亚马逊格斗战士-蹴杀之舞-",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23817"
-        }
-      ],
-      "released": true,
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Warrior",
-      "attribute": "earth",
-      "attack": 1500,
-      "defense": 1300,
-      "atk": 1500,
-      "def": 1300,
-      "level": 4,
-      "propertyIds": [
-        "12",
-        "4"
-      ],
-      "properties": [
-        "Warrior",
-        "Effect"
-      ],
-      "monsterPropertyIds": [
-        "12",
-        "4"
-      ],
-      "monsterProperties": [
-        "Warrior",
-        "Effect"
-      ]
-    },
-    {
-      "id": "23816",
-      "name": "アマゾネスの鎖使い－死に際の鎖舞い－",
-      "cnName": "亚马逊锁链使-临终锁舞-",
-      "jaName": "アマゾネスの鎖使い－死に際の鎖舞い－",
-      "aliases": [
-        "アマゾネスの鎖使い－死に際の鎖舞い－",
-        "亚马逊锁链使-临终锁舞-",
-        "亚马逊锁链使-临死的锁链舞-"
-      ],
-      "chineseNameSources": [
-        {
-          "name": "亚马逊锁链使-临终锁舞-",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23816"
-        },
-        {
-          "name": "亚马逊锁链使-临死的锁链舞-",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23816"
-        }
-      ],
-      "released": true,
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Warrior",
-      "attribute": "earth",
-      "attack": 1500,
-      "defense": 1300,
-      "atk": 1500,
-      "def": 1300,
-      "level": 4,
-      "propertyIds": [
-        "12",
-        "4"
-      ],
-      "properties": [
-        "Warrior",
-        "Effect"
-      ],
-      "monsterPropertyIds": [
-        "12",
-        "4"
-      ],
-      "monsterProperties": [
-        "Warrior",
-        "Effect"
-      ]
-    },
-    {
-      "id": "23818",
-      "name": "アマゾネスの呪詛師－呪印の舞い－",
-      "cnName": "亚马逊诅咒师-咒印之舞-",
-      "jaName": "アマゾネスの呪詛師－呪印の舞い－",
-      "aliases": [
-        "アマゾネスの呪詛師－呪印の舞い－",
-        "亚马逊诅咒师-咒印之舞-"
-      ],
-      "chineseNameSources": [
-        {
-          "name": "亚马逊诅咒师-咒印之舞-",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23818"
-        },
-        {
-          "name": "亚马逊诅咒师-咒印之舞-",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23818"
-        }
-      ],
-      "released": true,
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Warrior",
-      "attribute": "earth",
-      "attack": 400,
-      "defense": 800,
-      "atk": 400,
-      "def": 800,
-      "level": 3,
-      "propertyIds": [
-        "12",
-        "4"
-      ],
-      "properties": [
-        "Warrior",
-        "Effect"
-      ],
-      "monsterPropertyIds": [
-        "12",
-        "4"
-      ],
-      "monsterProperties": [
-        "Warrior",
-        "Effect"
-      ]
-    },
-    {
-      "id": "23856",
-      "name": "無垢なる絆 アルトメギア",
-      "cnName": "无垢牵绊 神艺学徒",
-      "jaName": "無垢なる絆 アルトメギア",
-      "aliases": [
-        "無垢なる絆 アルトメギア",
-        "无垢牵绊 神艺学徒",
-        "无垢奥艺之绊 神艺",
-        "无垢大牵绊 神艺学徒"
-      ],
-      "chineseNameSources": [
-        {
-          "name": "无垢牵绊 神艺学徒",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23856"
-        },
-        {
-          "name": "无垢奥艺之绊 神艺",
-          "source": "baige",
-          "sourceField": "md_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23856"
-        },
-        {
-          "name": "无垢大牵绊 神艺学徒",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23856"
-        }
-      ],
-      "released": true,
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Fairy",
-      "attribute": "light",
-      "attack": 2500,
-      "atk": 2500,
-      "link": 4,
-      "linkRating": 4,
-      "linkArrows": "8462",
-      "propertyIds": [
-        "15",
-        "23",
-        "4"
-      ],
-      "properties": [
-        "Fairy",
-        "Link",
-        "Effect"
-      ],
-      "monsterPropertyIds": [
-        "15",
-        "23",
-        "4"
-      ],
-      "monsterProperties": [
-        "Fairy",
-        "Link",
-        "Effect"
-      ]
-    },
-    {
-      "id": "23858",
-      "name": "無垢なる協奏 エルフェンノーツ",
-      "cnName": "无垢协奏 耀圣诗团",
-      "jaName": "無垢なる協奏 エルフェンノーツ",
-      "aliases": [
-        "無垢なる協奏 エルフェンノーツ",
-        "无垢协奏 耀圣诗团",
-        "无垢大协奏 耀圣之诗"
-      ],
-      "chineseNameSources": [
-        {
-          "name": "无垢协奏 耀圣诗团",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23858"
-        },
-        {
-          "name": "无垢大协奏 耀圣之诗",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23858"
-        }
-      ],
-      "released": true,
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Spellcaster",
-      "attribute": "light",
-      "attack": 1500,
-      "atk": 1500,
-      "link": 2,
-      "linkRating": 2,
-      "linkArrows": "63",
-      "propertyIds": [
-        "8",
-        "23",
-        "4"
-      ],
-      "properties": [
-        "Spellcaster",
-        "Link",
-        "Effect"
-      ],
-      "monsterPropertyIds": [
-        "8",
-        "23",
-        "4"
-      ],
-      "monsterProperties": [
-        "Spellcaster",
-        "Link",
-        "Effect"
-      ]
-    },
-    {
-      "id": "23857",
-      "name": "無垢なる血盟 ドゥームズ",
-      "cnName": "无垢血盟 终刻龙卫",
-      "jaName": "無垢なる血盟 ドゥームズ",
-      "aliases": [
-        "無垢なる血盟 ドゥームズ",
-        "无垢血盟 终刻龙卫",
-        "无垢大血盟 终刻龙机"
-      ],
-      "chineseNameSources": [
-        {
-          "name": "无垢血盟 终刻龙卫",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23857"
-        },
-        {
-          "name": "无垢大血盟 终刻龙机",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23857"
-        }
-      ],
-      "released": true,
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Dragon",
-      "attribute": "light",
-      "attack": 1500,
-      "atk": 1500,
-      "link": 2,
-      "linkRating": 2,
-      "linkArrows": "41",
-      "propertyIds": [
-        "21",
-        "23",
-        "4"
-      ],
-      "properties": [
-        "Dragon",
-        "Link",
-        "Effect"
-      ],
-      "monsterPropertyIds": [
-        "21",
-        "23",
-        "4"
-      ],
-      "monsterProperties": [
-        "Dragon",
-        "Link",
-        "Effect"
-      ]
-    },
-    {
-      "id": "23860",
-      "name": "コダイダロス",
-      "cnName": "科泰达路斯",
-      "jaName": "コダイダロス",
-      "aliases": [
-        "コダイダロス",
-        "科泰达路斯"
-      ],
-      "chineseNameSources": [
-        {
-          "name": "科泰达路斯",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23860"
-        },
-        {
-          "name": "科泰达路斯",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23860"
-        }
-      ],
-      "released": true,
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Sea Serpent",
-      "attribute": "water",
-      "attack": 1400,
-      "atk": 1400,
-      "link": 2,
-      "linkRating": 2,
-      "linkArrows": "62",
-      "propertyIds": [
-        "17",
-        "23",
-        "4"
-      ],
-      "properties": [
-        "Sea Serpent",
-        "Link",
-        "Effect"
-      ],
-      "monsterPropertyIds": [
-        "17",
-        "23",
-        "4"
-      ],
-      "monsterProperties": [
-        "Sea Serpent",
-        "Link",
-        "Effect"
-      ]
-    },
-    {
-      "id": "23825",
-      "name": "転生炎獣バステラ",
-      "cnName": "转生炎兽 宽耳蝠",
-      "jaName": "転生炎獣バステラ",
-      "aliases": [
-        "転生炎獣バステラ",
-        "转生炎兽 宽耳蝠"
-      ],
-      "chineseNameSources": [
-        {
-          "name": "转生炎兽 宽耳蝠",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23825"
-        },
-        {
-          "name": "转生炎兽 宽耳蝠",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23825"
-        }
-      ],
-      "released": true,
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Cyberse",
-      "attribute": "fire",
-      "attack": 1600,
-      "defense": 1000,
-      "atk": 1600,
-      "def": 1000,
-      "level": 3,
-      "propertyIds": [
-        "30",
-        "20",
-        "4"
-      ],
-      "properties": [
-        "Cyberse",
-        "Tuner",
-        "Effect"
-      ],
-      "monsterPropertyIds": [
-        "30",
-        "20",
-        "4"
-      ],
-      "monsterProperties": [
-        "Cyberse",
-        "Tuner",
-        "Effect"
-      ]
-    },
-    {
-      "id": "23824",
-      "name": "転生炎獣マーコール",
-      "cnName": "转生炎兽 捻角山羊",
-      "jaName": "転生炎獣マーコール",
-      "aliases": [
-        "転生炎獣マーコール",
-        "转生炎兽 捻角山羊"
-      ],
-      "chineseNameSources": [
-        {
-          "name": "转生炎兽 捻角山羊",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23824"
-        },
-        {
-          "name": "转生炎兽 捻角山羊",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23824"
-        }
-      ],
-      "released": true,
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Cyberse",
-      "attribute": "fire",
-      "attack": 300,
-      "defense": 2100,
-      "atk": 300,
-      "def": 2100,
-      "level": 4,
-      "propertyIds": [
-        "30",
-        "4"
-      ],
-      "properties": [
-        "Cyberse",
-        "Effect"
-      ],
-      "monsterPropertyIds": [
-        "30",
-        "4"
-      ],
-      "monsterProperties": [
-        "Cyberse",
-        "Effect"
-      ]
-    },
-    {
-      "id": "23874",
-      "name": "転生炎獣の神剣",
-      "cnName": "转生炎兽的神剑",
-      "jaName": "転生炎獣の神剣",
-      "aliases": [
-        "転生炎獣の神剣",
-        "转生炎兽的神剑"
-      ],
-      "chineseNameSources": [
-        {
-          "name": "转生炎兽的神剑",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23874"
-        },
-        {
-          "name": "转生炎兽的神剑",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23874"
-        }
-      ],
-      "released": true,
-      "type": "spell",
-      "cardType": "spell",
-      "properties": [
-        "equip"
-      ]
-    },
-    {
       "id": "6053",
       "name": "7",
       "cnName": "7",
@@ -957673,504 +958271,6 @@
       "cardType": "spell",
       "properties": [
         "continuous"
-      ]
-    },
-    {
-      "id": "23851",
-      "name": "ダラダラサウルス",
-      "cnName": "达懒斯龙",
-      "jaName": "ダラダラサウルス",
-      "aliases": [
-        "ダラダラサウルス",
-        "达懒斯龙",
-        "拖拉达拉斯龙"
-      ],
-      "chineseNameSources": [
-        {
-          "name": "达懒斯龙",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23851"
-        },
-        {
-          "name": "拖拉达拉斯龙",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23851"
-        }
-      ],
-      "released": true,
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Sea Serpent",
-      "attribute": "water",
-      "attack": 1000,
-      "defense": 2100,
-      "atk": 1000,
-      "def": 2100,
-      "level": 8,
-      "propertyIds": [
-        "17",
-        "19",
-        "4"
-      ],
-      "properties": [
-        "Sea Serpent",
-        "Synchro",
-        "Effect"
-      ],
-      "monsterPropertyIds": [
-        "17",
-        "19",
-        "4"
-      ],
-      "monsterProperties": [
-        "Sea Serpent",
-        "Synchro",
-        "Effect"
-      ]
-    },
-    {
-      "id": "23833",
-      "name": "幻惑の綺羅星",
-      "cnName": "幻惑的绮罗星",
-      "jaName": "幻惑の綺羅星",
-      "aliases": [
-        "幻惑の綺羅星",
-        "幻惑的绮罗星",
-        "幻惑之绮罗星"
-      ],
-      "chineseNameSources": [
-        {
-          "name": "幻惑的绮罗星",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23833"
-        },
-        {
-          "name": "幻惑之绮罗星",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23833"
-        }
-      ],
-      "released": true,
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Illusion",
-      "attribute": "light",
-      "attack": 1700,
-      "defense": 1700,
-      "atk": 1700,
-      "def": 1700,
-      "level": 4,
-      "propertyIds": [
-        "41",
-        "4"
-      ],
-      "properties": [
-        "Illusion",
-        "Effect"
-      ],
-      "monsterPropertyIds": [
-        "41",
-        "4"
-      ],
-      "monsterProperties": [
-        "Illusion",
-        "Effect"
-      ]
-    },
-    {
-      "id": "23865",
-      "name": "ハーピィ＆アマゾネス －羅刹の陣－",
-      "cnName": "鹰身&亚马逊 -罗刹之阵-",
-      "jaName": "ハーピィ＆アマゾネス －羅刹の陣－",
-      "aliases": [
-        "ハーピィ＆アマゾネス －羅刹の陣－",
-        "鹰身&亚马逊 -罗刹之阵-",
-        "鹰身女妖与亚马逊 -罗刹之阵-"
-      ],
-      "chineseNameSources": [
-        {
-          "name": "鹰身&亚马逊 -罗刹之阵-",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23865"
-        },
-        {
-          "name": "鹰身女妖与亚马逊 -罗刹之阵-",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23865"
-        }
-      ],
-      "released": true,
-      "type": "spell",
-      "cardType": "spell",
-      "properties": [
-        "quickplay"
-      ]
-    },
-    {
-      "id": "23844",
-      "name": "ハーピィ・レディ三姉妹・TX",
-      "cnName": "鹰身女郎三姐妹 三角神迷",
-      "jaName": "ハーピィ・レディ三姉妹・TX",
-      "aliases": [
-        "ハーピィ・レディ三姉妹・TX",
-        "鹰身女郎三姐妹 三角神迷",
-        "神鹰女郎三姐妹・三角狂欢"
-      ],
-      "chineseNameSources": [
-        {
-          "name": "鹰身女郎三姐妹 三角神迷",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23844"
-        },
-        {
-          "name": "神鹰女郎三姐妹・三角狂欢",
-          "source": "baige",
-          "sourceField": "md_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23844"
-        },
-        {
-          "name": "鹰身女郎三姐妹 三角神迷",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23844"
-        }
-      ],
-      "released": true,
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Winged Beast",
-      "attribute": "wind",
-      "attack": 3000,
-      "defense": 2100,
-      "atk": 3000,
-      "def": 2100,
-      "level": 8,
-      "propertyIds": [
-        "35",
-        "11",
-        "4"
-      ],
-      "properties": [
-        "Winged Beast",
-        "Fusion",
-        "Effect"
-      ],
-      "monsterPropertyIds": [
-        "35",
-        "11",
-        "4"
-      ],
-      "monsterProperties": [
-        "Winged Beast",
-        "Fusion",
-        "Effect"
-      ]
-    },
-    {
-      "id": "23819",
-      "name": "ハーピィ・レディ－魅惑の舞い－",
-      "cnName": "鹰身女郎-诱惑之舞-",
-      "jaName": "ハーピィ・レディ－魅惑の舞い－",
-      "aliases": [
-        "ハーピィ・レディ－魅惑の舞い－",
-        "鹰身女郎-诱惑之舞-",
-        "鹰身女郎-魅惑之舞-"
-      ],
-      "chineseNameSources": [
-        {
-          "name": "鹰身女郎-诱惑之舞-",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23819"
-        },
-        {
-          "name": "鹰身女郎-魅惑之舞-",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23819"
-        }
-      ],
-      "released": true,
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Winged Beast",
-      "attribute": "wind",
-      "attack": 1300,
-      "defense": 1400,
-      "atk": 1300,
-      "def": 1400,
-      "level": 4,
-      "propertyIds": [
-        "35",
-        "4"
-      ],
-      "properties": [
-        "Winged Beast",
-        "Effect"
-      ],
-      "monsterPropertyIds": [
-        "35",
-        "4"
-      ],
-      "monsterProperties": [
-        "Winged Beast",
-        "Effect"
-      ]
-    },
-    {
-      "id": "23837",
-      "name": "リインゼルム・カルカサス",
-      "cnName": "轮回虫龙 高加索南洋大兜虫",
-      "jaName": "リインゼルム・カルカサス",
-      "aliases": [
-        "リインゼルム・カルカサス",
-        "轮回虫龙 高加索南洋大兜虫",
-        "无死虫龙·高加索独角仙鳞虫"
-      ],
-      "chineseNameSources": [
-        {
-          "name": "轮回虫龙 高加索南洋大兜虫",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23837"
-        },
-        {
-          "name": "无死虫龙·高加索独角仙鳞虫",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23837"
-        }
-      ],
-      "released": true,
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Insect",
-      "attribute": "light",
-      "attack": 2000,
-      "defense": 1300,
-      "atk": 2000,
-      "def": 1300,
-      "level": 4,
-      "propertyIds": [
-        "34",
-        "27",
-        "4"
-      ],
-      "properties": [
-        "Insect",
-        "Ritual",
-        "Effect"
-      ],
-      "monsterPropertyIds": [
-        "34",
-        "27",
-        "4"
-      ],
-      "monsterProperties": [
-        "Insect",
-        "Ritual",
-        "Effect"
-      ]
-    },
-    {
-      "id": "23867",
-      "name": "無死なる竜の鼓動",
-      "cnName": "无死之龙的鼓动",
-      "jaName": "無死なる竜の鼓動",
-      "aliases": [
-        "無死なる竜の鼓動",
-        "无死之龙的鼓动",
-        "无死虫龙的鼓动"
-      ],
-      "chineseNameSources": [
-        {
-          "name": "无死之龙的鼓动",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23867"
-        },
-        {
-          "name": "无死虫龙的鼓动",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23867"
-        }
-      ],
-      "released": true,
-      "type": "spell",
-      "cardType": "spell",
-      "properties": [
-        "field"
-      ]
-    },
-    {
-      "id": "23866",
-      "name": "竜の骸歌",
-      "cnName": "龙之骸歌",
-      "jaName": "竜の骸歌",
-      "aliases": [
-        "竜の骸歌",
-        "龙之骸歌"
-      ],
-      "chineseNameSources": [
-        {
-          "name": "龙之骸歌",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23866"
-        },
-        {
-          "name": "龙之骸歌",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23866"
-        }
-      ],
-      "released": true,
-      "type": "spell",
-      "cardType": "spell",
-      "properties": [
-        "ritual"
-      ]
-    },
-    {
-      "id": "23868",
-      "name": "翅竜の羽撃",
-      "cnName": "翅龙的羽击",
-      "jaName": "翅竜の羽撃",
-      "aliases": [
-        "翅竜の羽撃",
-        "翅龙的羽击"
-      ],
-      "chineseNameSources": [
-        {
-          "name": "翅龙的羽击",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23868"
-        },
-        {
-          "name": "翅龙的羽击",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23868"
-        }
-      ],
-      "released": true,
-      "type": "spell",
-      "cardType": "spell"
-    },
-    {
-      "id": "23869",
-      "name": "角竜の修練",
-      "cnName": "角龙的修炼",
-      "jaName": "角竜の修練",
-      "aliases": [
-        "角竜の修練",
-        "角龙的修炼",
-        "角龙的修练"
-      ],
-      "chineseNameSources": [
-        {
-          "name": "角龙的修炼",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23869"
-        },
-        {
-          "name": "角龙的修练",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23869"
-        }
-      ],
-      "released": true,
-      "type": "spell",
-      "cardType": "spell"
-    },
-    {
-      "id": "23836",
-      "name": "リインゼルム・ルヴィアン",
-      "cnName": "轮回虫龙 秘鲁蜈蚣",
-      "jaName": "リインゼルム・ルヴィアン",
-      "aliases": [
-        "リインゼルム・ルヴィアン",
-        "轮回虫龙 秘鲁蜈蚣",
-        "无死虫龙·秘鲁蜈蚣鳞虫"
-      ],
-      "chineseNameSources": [
-        {
-          "name": "轮回虫龙 秘鲁蜈蚣",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23836"
-        },
-        {
-          "name": "无死虫龙·秘鲁蜈蚣鳞虫",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23836"
-        }
-      ],
-      "released": true,
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Insect",
-      "attribute": "water",
-      "attack": 1900,
-      "defense": 1100,
-      "atk": 1900,
-      "def": 1100,
-      "level": 4,
-      "propertyIds": [
-        "34",
-        "27",
-        "4"
-      ],
-      "properties": [
-        "Insect",
-        "Ritual",
-        "Effect"
-      ],
-      "monsterPropertyIds": [
-        "34",
-        "27",
-        "4"
-      ],
-      "monsterProperties": [
-        "Insect",
-        "Ritual",
-        "Effect"
       ]
     }
   ]

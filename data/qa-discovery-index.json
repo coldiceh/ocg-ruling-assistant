@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-08T00:55:32.473Z",
-  "sourceRevision": "33005",
+  "generatedAt": "2026-11-09T01:19:08.553Z",
+  "sourceRevision": "33062",
   "complete": true,
   "cardCount": 14422,
-  "linkedCardCount": 8644,
+  "linkedCardCount": 8646,
   "qaCount": 11464,
-  "relationCount": 36415,
+  "relationCount": 36419,
   "records": [
     {
       "cardId": "4007",
@@ -100659,6 +100659,7 @@
     {
       "cardId": "22966",
       "qaIds": [
+        "23949",
         "24364"
       ]
     },
@@ -101514,6 +101515,7 @@
         "20844",
         "21135",
         "23560",
+        "23949",
         "24365",
         "24367",
         "24374",
@@ -102553,7 +102555,9 @@
     },
     {
       "cardId": "23855",
-      "qaIds": []
+      "qaIds": [
+        "23949"
+      ]
     },
     {
       "cardId": "23856",
@@ -102753,7 +102757,9 @@
     },
     {
       "cardId": "24035",
-      "qaIds": []
+      "qaIds": [
+        "23949"
+      ]
     }
   ]
 }
