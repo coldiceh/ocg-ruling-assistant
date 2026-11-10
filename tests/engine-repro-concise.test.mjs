@@ -96,6 +96,23 @@ test("已复现: two sub-questions, one core auto-activation; board, assumptions
   assertConcise(text);
 });
 
+test("已复现 on a pre-release script: the section says which named cards used one", () => {
+  const idle = decision(3, "idle", 0, [{ id: 0, cmd: "activate", card: SPELL, name: "测试融合魔法", controller: 0, from: "hand" }]);
+  const record = finished({
+    cards: cards.map((card) => (card.code === SPELL ? { ...card, script: "prerelease", twinOf: 9100001 }
+      : card.code === MONSTER_A ? { ...card, script: "stable" } : card)),
+    plan: { applicability: "applicable", assumptions: [], extra_cards: [] },
+    subQuestions: [{ id: "q1", quoted_span: "能发动吗", unrepresentable: null, branches: [{ id: "b1", assumption: null,
+      scenario: board(), engine: replayed([{ index: 0, after: 0, player: 0, decision_kind: "idle", target: { card: SPELL },
+        result: "present", windows: [window(idle, true)], ambiguous: false }], [idle]) }] }],
+  });
+  assert.equal(record.summary.status, "已复现");
+  assert.match(record.rendered, /先行卡脚本：「测试融合魔法」\(9000001\) 用的是萌卡超先行脚本（正式卡号 9100001 萌卡还没有脚本）。/u);
+  const paragraphs = engineReproConciseText(engineReproDigest(record)).split("\n\n");
+  assert.deepEqual(paragraphs.slice(-2), ["「测试融合魔法」用的是萌卡超先行（先行卡）脚本，可能和正式版不同。", CONCISE_DISCLAIMER]);
+  assertConcise(paragraphs.join("\n\n"));
+});
+
 test("对照分支: one line per assumption; differing boards are labelled the same way", () => {
   const chain = decision(5, "chain", 1, [{ id: 0, cmd: "chain", card: HAND_TRAP, name: "测试手坑", controller: 1, from: "hand" }]);
   const without = board();

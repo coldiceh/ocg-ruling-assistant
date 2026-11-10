@@ -176,6 +176,9 @@ export function engineReproDigest(record = {}) {
     observations: collectObservations(subQuestions),
     notReproduced: notReproducedReasons(record, subQuestions, errorCode),
     conclusion: conclusionDigest(record.conclusion),
+    // named cards that ran on a MyCard pre-release ("超先行") script
+    prereleaseCards: [...new Set((record.cards || []).filter((card) => card?.script === "prerelease")
+      .map((card) => card?.engineName).filter((name) => typeof name === "string" && name.trim()).map((name) => name.trim()))],
   };
 }
 
@@ -224,6 +227,8 @@ export function engineReproConciseText(digest, { officialQaMatches = [] } = {}) 
   if (unreproduced.length) lines.push(reasonsBlock("没能复现的部分：", unreproduced));
   const officialQaLine = officialQaLineApplies(digest) ? officialQaExactLine(officialQaMatches) : "";
   if (officialQaLine) lines.push(officialQaLine);
+  const prerelease = cleanTexts(digest.prereleaseCards);
+  if (prerelease.length) lines.push(`${prerelease.map((name) => `「${name}」`).join("、")}用的是萌卡超先行（先行卡）脚本，可能和正式版不同。`);
   lines.push(CONCISE_DISCLAIMER);
   return lines.join("\n\n");
 }

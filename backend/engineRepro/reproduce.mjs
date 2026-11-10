@@ -405,16 +405,36 @@ export async function runEngineReproduction({ question, identity, cardsById, cid
   }
 
   // planner context: engine facts by passcode + the main answer's card text by CID
-  const codes = identity.resolved.map((c) => cidMap[c.cid]);
-  const [factsResponse, relatedResponse, toolCards] = await enginePhase(() => Promise.all([
+  const mapped = identity.resolved.map((c) => cidMap[c.cid]);
+  let codes = mapped;
+  let [factsResponse, relatedResponse, toolCards] = await enginePhase(() => Promise.all([
     engine("cards", { codes }), engine("related", { codes }), toolCardsFor(engine)]));
+  // A released card MyCard has not converted yet: an official code with no script, and the engine names
+  // the pre-release code of the same card that has one (its "twin"). That code is the one that runs.
+  const twins = factsResponse.cards.map((f) => (f?.exists && f.script === null && Number.isSafeInteger(f.twin) ? f.twin : null));
+  if (twins.some((twin) => twin !== null)) {
+    codes = mapped.map((code, i) => twins[i] ?? code);
+    [factsResponse, relatedResponse] = await enginePhase(() => Promise.all([
+      engine("cards", { codes }), engine("related", { codes })]));
+  }
   const facts = factsResponse.cards;
+  const missing = identity.resolved.map((c, i) => ({ cid: c.cid, code: codes[i] })).filter((_, i) => facts[i]?.exists === false);
+  if (missing.length) {
+    // the passcode is not in this engine build's card pool (the CID map was made against another build)
+    const name = (cid) => cardsById.get(cid)?.name;
+    record.preStatus = { status: STATUS.FAIL, reason: "identity",
+      detail: `无法确认身份：${missing.map((m) => `CID ${m.cid}（${name(m.cid) || "?"}）的卡号 ${m.code} 不在引擎卡库`).join("、")}`,
+      unresolved: [], unmapped: missing.map((m) => name(m.cid) || `CID ${m.cid}`) };
+    return finish();
+  }
   const cards = identity.resolved.map((c, i) => {
     const raw = cardsById.get(c.cid) || {};
     return { code: codes[i], cid: c.cid, engineName: facts[i].name, engine: facts[i], mentionedAs: c.mentionedAs,
       effectText: raw.effectText || "", pendulumEffectText: raw.pendulumEffectText || "" };
   });
-  record.cards = cards.map((c) => ({ code: c.code, cid: c.cid, engineName: c.engineName, mentionedAs: c.mentionedAs }));
+  record.cards = cards.map((c, i) => ({ code: c.code, cid: c.cid, engineName: c.engineName, mentionedAs: c.mentionedAs,
+    ...(typeof facts[i].script === "string" ? { script: facts[i].script } : {}),
+    ...(twins[i] !== null ? { twinOf: mapped[i] } : {}) }));
   const relatedCards = relatedResponse.related;
   record.relatedRefs = relatedCards.map((e) => ({ ref: e.ref, kind: e.kind, total: e.total ?? e.cards.length, shown: e.cards.length }));
   const allowed = [...codes, ...FILLER_CARDS.map((c) => c.code), ...TOOL_CARD_CODES,

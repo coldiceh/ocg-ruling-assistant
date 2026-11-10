@@ -129,6 +129,11 @@ export function renderQuestion(record, summary) {
   const plan = record.plan;
   if (record.error) lines.push(`复现错误：${record.error.code || record.error.message}`);
   if (record.preStatus?.detail) lines.push(record.preStatus.detail);
+  for (const card of record.cards || []) {
+    if (card?.script !== "prerelease") continue;
+    lines.push(`先行卡脚本：「${card.engineName}」(${card.code}) 用的是萌卡超先行脚本`
+      + `${card.twinOf ? `（正式卡号 ${card.twinOf} 萌卡还没有脚本）` : ""}。`);
+  }
   if (plan?.quoted_span) lines.push(`题面依据：「${plan.quoted_span}」`);
   if (summary.status === STATUS.NA) {
     const name = plan?.reason_code === "archetype_level" && record.archetypeVerified ? `（字段：${plan.archetype_name}）` : "";
