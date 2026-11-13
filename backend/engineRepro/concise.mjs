@@ -64,6 +64,7 @@ export const ADMISSION_LIMIT_LINES = Object.freeze({
 // carries nothing more specific (the specific reasons are built in notReproducedReasons below).
 export const REASON_PLAIN = Object.freeze({
   identity: "题目里的卡名没有解析出来",
+  no_script: "题目里的卡在 ygopro 里还没有效果脚本",
   unrepresentable: "引擎搭不出题目描述的局面",
   action_mismatch: "计划里有一步在引擎里做不到，没能走到题目要看的时点",
   engine_error: "引擎运行出错",
@@ -750,7 +751,11 @@ function notReproducedReasons(record, subQuestions, errorCode) {
     if (Object.hasOwn(ADMISSION_LIMIT_LINES, errorCode)) return [];
     return [{ label: "", text: errorText(record.error, record.summary?.reasonCodes?.[0]) }];
   }
-  if (record.preStatus) return record.preStatus.reason === "identity" ? [{ label: "", text: identityText(record.preStatus) }] : [];
+  if (record.preStatus) {
+    if (record.preStatus.reason === "identity") return [{ label: "", text: identityText(record.preStatus) }];
+    if (record.preStatus.reason === "no_script") return [{ label: "", text: noScriptText(record.preStatus) }];
+    return [];
+  }
   // no usable plan at all (the planner's rounds failed): that is the reason, whatever the invalid plan held
   if (record.planFailure || (!record.plan && (record.planFailures?.length || record.repairProblems?.length))) {
     return [{ label: "", text: planFailureText(record) }];
@@ -795,6 +800,13 @@ function planFailureText(record) {
     if (problems.length) rounds.push(problems.slice(0, 2).join("；"));
   }
   return rounds.length ? `规划模型没有给出能交给引擎的计划：${rounds.join("；")}` : REASON_PLAIN.invalid_input;
+}
+
+function noScriptText(preStatus) {
+  const names = cleanTexts(preStatus.noScript);
+  if (!names.length) return REASON_PLAIN.no_script;
+  return `${names.slice(0, 3).map((name) => `「${name}」`).join("、")}${names.length > 3 ? "等" : ""}在 ygopro 里还没有效果脚本`
+    + "（萌卡已收录卡片资料，脚本还没写），没法用引擎复现";
 }
 
 function identityText(preStatus) {

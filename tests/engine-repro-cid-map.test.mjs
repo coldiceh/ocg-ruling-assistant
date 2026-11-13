@@ -88,3 +88,38 @@ test("a mapped passcode the engine's pool does not have is an identity failure, 
   assert.equal(record.preStatus.detail, `无法确认身份：CID 500（テスト騎士）的卡号 ${PRE} 不在引擎卡库`);
   assert.match(engineReproConciseText(engineReproDigest(record)), /「テスト騎士」在 ygopro 的卡库里找不到/u);
 });
+
+const factsEngine = (fact) => async (op, body) => {
+  if (op === "cards" && body.with_text) return { cards: [] };
+  if (op === "cards") return { cards: body.codes.map((code) => ({ code, exists: true, ...fact })) };
+  if (op === "related") return { related: [] };
+  throw new Error(`unexpected engine op ${op}`);
+};
+
+test("a named card the engine has no script for (not a vanilla monster) is not run", async () => {
+  let planned = false;
+  const record = await runEngineReproduction({ question: "q", identity, cardsById, cidMap: { 500: OFFICIAL },
+    engine: factsEngine({ name: "测试骑士", types: ["怪兽", "效果"], script: null }),
+    modelCall: async () => { planned = true; return { status: "completed", outputText: "{}", usage: {} }; } });
+  assert.equal(planned, false);
+  assert.equal(record.summary.status, "未复现");
+  assert.deepEqual(record.summary.reasonCodes, ["no_script"]);
+  assert.equal(record.preStatus.detail, `没有脚本：CID 500（测试骑士）的卡号 ${OFFICIAL} 在引擎里没有效果脚本`);
+  assert.match(engineReproConciseText(engineReproDigest(record)),
+    /「测试骑士」在 ygopro 里还没有效果脚本（萌卡已收录卡片资料，脚本还没写），没法用引擎复现/u);
+});
+
+test("a vanilla monster or a token needs no script; a pendulum normal monster does", async () => {
+  const run = async (types) => {
+    let planned = false;
+    const record = await runEngineReproduction({ question: "q", identity, cardsById, cidMap: { 500: OFFICIAL },
+      engine: factsEngine({ name: "测试骑士", types, script: null }),
+      modelCall: async () => { planned = true; return { status: "completed", outputText: JSON.stringify(naPlan), usage: {} }; } });
+    return { planned, reason: record.preStatus?.reason ?? null };
+  };
+  assert.deepEqual(await run(["怪兽", "通常"]), { planned: true, reason: null });
+  assert.deepEqual(await run(["怪兽", "通常", "调整"]), { planned: true, reason: null });
+  assert.deepEqual(await run(["怪兽", "衍生物"]), { planned: true, reason: null });
+  assert.deepEqual(await run(["怪兽", "通常", "灵摆"]), { planned: false, reason: "no_script" });
+  assert.deepEqual(await run(["魔法", "速攻"]), { planned: false, reason: "no_script" });
+});

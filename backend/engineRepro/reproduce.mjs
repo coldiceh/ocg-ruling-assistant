@@ -327,6 +327,12 @@ function summarizeEngine(r) {
  *                     (conclusion.mjs CONCLUSION_MODEL / conclusionConfigFromEnv); the call goes through
  *                     the same modelCall, so it is charged and timed with the reproduction
  */
+// A card the engine may run without a script: a vanilla (non-pendulum) monster or a token.
+function needsNoScript(fact) {
+  const types = Array.isArray(fact?.types) ? fact.types : [];
+  return types.includes("衍生物") || (types.includes("怪兽") && types.includes("通常") && !types.includes("灵摆"));
+}
+
 export async function runEngineReproduction({ question, identity, cardsById, cidMap, engine, modelCall,
   planner = DEFAULT_PLANNER, includeOfficialQa = false, clock = () => 0, conclusion = null, record: base = {} }) {
   const record = { ...base, text: question, promptVersion: PROMPT_VERSION, planner, includeOfficialQa,
@@ -425,6 +431,17 @@ export async function runEngineReproduction({ question, identity, cardsById, cid
     record.preStatus = { status: STATUS.FAIL, reason: "identity",
       detail: `无法确认身份：${missing.map((m) => `CID ${m.cid}（${name(m.cid) || "?"}）的卡号 ${m.code} 不在引擎卡库`).join("、")}`,
       unresolved: [], unmapped: missing.map((m) => name(m.cid) || `CID ${m.cid}`) };
+    return finish();
+  }
+  // MyCard often lists a released card before it has a script; the engine then reports "script": null. Only a
+  // vanilla monster or a token needs no script, any other card would run as a card without effects.
+  const unscripted = identity.resolved.map((c, i) => ({ cid: c.cid, code: codes[i], fact: facts[i] }))
+    .filter(({ fact }) => fact.script === null && !needsNoScript(fact));
+  if (unscripted.length) {
+    const name = (m) => m.fact.name || cardsById.get(m.cid)?.name || `CID ${m.cid}`;
+    record.preStatus = { status: STATUS.FAIL, reason: "no_script",
+      detail: `没有脚本：${unscripted.map((m) => `CID ${m.cid}（${name(m)}）的卡号 ${m.code} 在引擎里没有效果脚本`).join("、")}`,
+      noScript: unscripted.map(name) };
     return finish();
   }
   const cards = identity.resolved.map((c, i) => {
