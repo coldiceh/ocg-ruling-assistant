@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-12T02:26:54.510Z",
+  "generatedAt": "2026-11-13T02:05:51.426Z",
   "records": [
     {
       "id": "21385",
@@ -14387,7 +14387,7 @@
         "白鸦骑士 埃特瓦罗斯"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23849",
-      "updatedAt": "2026-11-06T01:47:03.294Z",
+      "updatedAt": "2026-11-13T02:04:42.176Z",
       "chineseNameSources": [
         {
           "name": "白鸦骑士 艾特瓦拉斯",
@@ -14400,6 +14400,13 @@
           "name": "白鸦骑士 埃特瓦罗斯",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23849"
+        },
+        {
+          "name": "白鸦骑士 艾特瓦拉斯",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23849"
         }
@@ -25025,6 +25032,7 @@
       "level": 10,
       "attribute": "earth",
       "name": "アマゾネス女帝王",
+      "cnName": "亚马逊女帝王",
       "jaName": "アマゾネス女帝王",
       "enName": "Amazoness Augusta",
       "effectText": "「アマゾネス」融合モンスター＋「アマゾネス」モンスター\nこのカード名の①の効果は１ターンに１度しか使用できない。①：このカードが融合召喚に成功した場合に発動できる。デッキから「アマゾネス」モンスター１体を特殊召喚する。②：このカードがモンスターゾーンに存在する限り、このカード以外の自分フィールドの「アマゾネス」カードは相手の効果の対象にならず、相手の効果では破壊されない。③：「アマゾネス女帝」または「アマゾネス女王」を素材として融合召喚したこのカードは１度のバトルフェイズ中に２回攻撃できる。",
@@ -25035,8 +25043,7 @@
         "亚马逊女帝王"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/17614",
-      "updatedAt": "2026-09-12T21:05:59.796Z",
-      "cnName": "亚马逊女帝王",
+      "updatedAt": "2026-11-13T02:04:42.746Z",
       "chineseNameSources": [
         {
           "name": "亚马逊女帝王",
@@ -25063,6 +25070,13 @@
           "name": "亚马逊女帝王",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "17614"
+        },
+        {
+          "name": "亚马逊女帝王",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "17614"
         }
@@ -25096,6 +25110,7 @@
       "level": 2,
       "attribute": "earth",
       "name": "アマゾネスペット仔虎",
+      "cnName": "亚马逊宠物仔虎",
       "jaName": "アマゾネスペット仔虎",
       "enName": "Amazoness Baby Tiger",
       "effectText": "このカード名の②の効果は１ターンに１度しか使用できない。①：このカードのカード名は、フィールド・墓地に存在する限り「アマゾネスペット虎」として扱う。②：このカードが手札・墓地に存在し、自分フィールドに「アマゾネス」モンスターが召喚・特殊召喚された場合に発動できる。このカードを特殊召喚する。③：このカードの攻撃力は、自分の墓地の「アマゾネス」カードの数×１００アップする。",
@@ -25107,8 +25122,7 @@
         "亚马逊宠物幼虎"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/13173",
-      "updatedAt": "2026-09-12T21:05:59.802Z",
-      "cnName": "亚马逊宠物仔虎",
+      "updatedAt": "2026-11-13T02:04:42.754Z",
       "chineseNameSources": [
         {
           "name": "亚马逊宠物仔虎",
@@ -25135,6 +25149,13 @@
           "name": "亚马逊宠物幼虎",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "13173"
+        },
+        {
+          "name": "亚马逊宠物仔虎",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "13173"
         }
@@ -25168,6 +25189,7 @@
       "level": 3,
       "attribute": "earth",
       "name": "アマゾネスの吹き矢兵",
+      "cnName": "亚马逊吹箭兵",
       "jaName": "アマゾネスの吹き矢兵",
       "enName": "Amazoness Blowpiper",
       "effectText": "自分のスタンバイフェイズ毎に相手フィールド上のモンスターを１体選択する。選択したモンスターの攻撃力はターン終了時まで５００ポイントダウンする。",
@@ -25179,8 +25201,7 @@
         "亚马逊的吹箭兵"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/5646",
-      "updatedAt": "2026-09-12T21:05:59.812Z",
-      "cnName": "亚马逊吹箭兵",
+      "updatedAt": "2026-11-13T02:04:42.753Z",
       "chineseNameSources": [
         {
           "name": "亚马逊吹箭兵",
@@ -25207,6 +25228,13 @@
           "name": "亚马逊的吹箭兵",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "5646"
+        },
+        {
+          "name": "亚马逊的吹箭兵",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "5646"
         }
@@ -25229,10 +25257,11 @@
       "aliases": [
         "アマゾネスの叫声",
         "Amazoness Call",
-        "亚马逊的叫声"
+        "亚马逊的叫声",
+        "亚马逊的呼声"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/13174",
-      "updatedAt": "2026-10-31T01:01:42.574Z",
+      "updatedAt": "2026-11-13T02:04:42.755Z",
       "chineseNameSources": [
         {
           "name": "亚马逊的叫声",
@@ -25259,6 +25288,13 @@
           "name": "亚马逊的叫声",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "13174"
+        },
+        {
+          "name": "亚马逊的呼声",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "13174"
         }
@@ -25292,6 +25328,7 @@
       "level": 4,
       "attribute": "earth",
       "name": "アマゾネスの鎖使い",
+      "cnName": "亚马逊锁链使",
       "jaName": "アマゾネスの鎖使い",
       "enName": "Amazoness Chain Master",
       "effectText": "①：このカードが戦闘で破壊され墓地へ送られた時、１５００LPを払って発動できる。相手の手札を確認し、その中からモンスター１体を選んで自分の手札に加える。",
@@ -25303,8 +25340,7 @@
         "亚马逊的锁链使"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/5291",
-      "updatedAt": "2026-09-12T21:05:59.818Z",
-      "cnName": "亚马逊锁链使",
+      "updatedAt": "2026-11-13T02:04:42.761Z",
       "chineseNameSources": [
         {
           "name": "亚马逊锁链使",
@@ -25331,6 +25367,13 @@
           "name": "亚马逊的锁链使",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "5291"
+        },
+        {
+          "name": "亚马逊的锁链使",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "5291"
         }
@@ -25373,10 +25416,11 @@
         "アマゾネスの鎖使い－死に際の鎖舞い－",
         "Amazoness Chain Master - Brink of Death Chain Dance",
         "亚马逊锁链使-临终锁舞-",
-        "亚马逊锁链使-临死的锁链舞-"
+        "亚马逊锁链使-临死的锁链舞-",
+        "亚马逊的锁链使－濒死之锁舞－"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23816",
-      "updatedAt": "2026-11-09T01:16:25.967Z",
+      "updatedAt": "2026-11-13T02:04:42.761Z",
       "chineseNameSources": [
         {
           "name": "亚马逊锁链使-临终锁舞-",
@@ -25389,6 +25433,13 @@
           "name": "亚马逊锁链使-临死的锁链舞-",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23816"
+        },
+        {
+          "name": "亚马逊的锁链使－濒死之锁舞－",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23816"
         }
@@ -25410,7 +25461,7 @@
         "亚马逊救出剧"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23885",
-      "updatedAt": "2026-11-06T01:47:04.608Z",
+      "updatedAt": "2026-11-13T02:04:42.763Z",
       "chineseNameSources": [
         {
           "name": "亚马逊救出剧",
@@ -25423,6 +25474,13 @@
           "name": "亚马逊救出剧",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23885"
+        },
+        {
+          "name": "亚马逊救出剧",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23885"
         }
@@ -25460,6 +25518,7 @@
       "level": 8,
       "attribute": "earth",
       "name": "アマゾネス女帝",
+      "cnName": "亚马逊女帝",
       "jaName": "アマゾネス女帝",
       "enName": "Amazoness Empress",
       "effectText": "「アマゾネス女王」＋「アマゾネス」モンスター\n①：このカードがモンスターゾーンに存在する限り、このカード以外の自分フィールドの「アマゾネス」カードは戦闘・効果では破壊されない。②：自分の「アマゾネス」モンスターが守備表示モンスターを攻撃した場合、その守備力を攻撃力が超えた分だけ相手に戦闘ダメージを与える。③：融合召喚した表側表示のこのカードが相手の効果でフィールドから離れた場合、または戦闘で破壊された場合に発動できる。自分の手札・デッキ・墓地から「アマゾネス女王」１体を選んで特殊召喚する。",
@@ -25470,8 +25529,7 @@
         "亚马逊女帝"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/13148",
-      "updatedAt": "2026-09-12T21:05:59.823Z",
-      "cnName": "亚马逊女帝",
+      "updatedAt": "2026-11-13T02:04:42.767Z",
       "chineseNameSources": [
         {
           "name": "亚马逊女帝",
@@ -25498,6 +25556,13 @@
           "name": "亚马逊女帝",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "13148"
+        },
+        {
+          "name": "亚马逊女帝",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "13148"
         }
@@ -25531,6 +25596,7 @@
       "level": 4,
       "attribute": "earth",
       "name": "アマゾネスの格闘戦士",
+      "cnName": "亚马逊格斗战士",
       "jaName": "アマゾネスの格闘戦士",
       "enName": "Amazoness Fighter",
       "effectText": "このカードが戦闘を行う事によって受けるコントローラーの戦闘ダメージは０になる。",
@@ -25543,8 +25609,7 @@
         "亚马逊的格斗戦士"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/5295",
-      "updatedAt": "2026-09-12T21:05:59.853Z",
-      "cnName": "亚马逊格斗战士",
+      "updatedAt": "2026-11-13T02:04:42.775Z",
       "chineseNameSources": [
         {
           "name": "亚马逊格斗战士",
@@ -25571,6 +25636,13 @@
           "name": "亚马逊的格斗戦士",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "5295"
+        },
+        {
+          "name": "亚马逊的格斗战士",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "5295"
         }
@@ -25612,10 +25684,11 @@
       "aliases": [
         "アマゾネスの格闘戦士－蹴殺の舞い－",
         "Amazoness Fighter - Instant Kill Dance",
-        "亚马逊格斗战士-蹴杀之舞-"
+        "亚马逊格斗战士-蹴杀之舞-",
+        "亚马逊的格斗战士－蹴杀之舞－"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23817",
-      "updatedAt": "2026-11-09T01:16:26.013Z",
+      "updatedAt": "2026-11-13T02:04:42.784Z",
       "chineseNameSources": [
         {
           "name": "亚马逊格斗战士-蹴杀之舞-",
@@ -25630,6 +25703,13 @@
           "sourceField": "nwbbs_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23817"
+        },
+        {
+          "name": "亚马逊的格斗战士－蹴杀之舞－",
+          "source": "baige",
+          "sourceField": "sc_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23817"
         }
       ]
     },
@@ -25642,6 +25722,7 @@
         "continuous"
       ],
       "name": "アマゾネスの闘志",
+      "cnName": "亚马逊的斗志",
       "jaName": "アマゾネスの闘志",
       "enName": "Amazoness Fighting Spirit",
       "effectText": "「アマゾネス」と名のついたモンスターが、その攻撃力よりも高い攻撃力を持つモンスターを攻撃する場合、ダメージ計算時のみ攻撃モンスターの攻撃力は１０００ポイントアップする。",
@@ -25652,8 +25733,7 @@
         "亚马逊的斗志"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/8985",
-      "updatedAt": "2026-09-12T21:05:59.854Z",
-      "cnName": "亚马逊的斗志",
+      "updatedAt": "2026-11-13T02:04:42.784Z",
       "chineseNameSources": [
         {
           "name": "亚马逊的斗志",
@@ -25680,6 +25760,13 @@
           "name": "亚马逊的斗志",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "8985"
+        },
+        {
+          "name": "亚马逊的斗志",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "8985"
         }
@@ -25717,6 +25804,7 @@
       "level": 5,
       "attribute": "earth",
       "name": "アマゾネスの金鞭使い",
+      "cnName": "亚马逊金鞭使",
       "jaName": "アマゾネスの金鞭使い",
       "enName": "Amazoness Golden Whip Master",
       "effectText": "このカード名の①②のモンスター効果はそれぞれ１ターンに１度しか使用できない。①：モンスターゾーンのこのカードが戦闘・効果で破壊された場合に発動できる。このカードを自分のPゾーンに置く。②：このカードが墓地に存在する状態で、自分フィールドに「アマゾネス」モンスターが特殊召喚された場合に発動できる。このカードを自分のPゾーンに置く。",
@@ -25731,8 +25819,7 @@
         "亚马逊的金鞭使"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/17610",
-      "updatedAt": "2026-09-12T21:05:59.853Z",
-      "cnName": "亚马逊金鞭使",
+      "updatedAt": "2026-11-13T02:04:42.788Z",
       "chineseNameSources": [
         {
           "name": "亚马逊金鞭使",
@@ -25761,6 +25848,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "17610"
+        },
+        {
+          "name": "亚马逊的金鞭使",
+          "source": "baige",
+          "sourceField": "sc_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "17610"
         }
       ]
     },
@@ -25773,6 +25867,7 @@
         "continuous"
       ],
       "name": "アマゾネス拝謁の間",
+      "cnName": "亚马逊拜谒间",
       "jaName": "アマゾネス拝謁の間",
       "enName": "Amazoness Hall",
       "effectText": "このカード名の②の効果は１ターンに１度しか使用できない。①：このカードの発動時の効果処理として、自分の墓地のモンスター及び自分のEXデッキの表側表示のPモンスターの中から、「アマゾネス」モンスター１体を選んで手札に加えるか、「アマゾネス」Pモンスター１体を選んで自分のPゾーンに置く事ができる。②：自分フィールドに「アマゾネス」モンスターカードが存在し、相手フィールドにモンスターが特殊召喚された場合、その相手モンスター１体を対象として発動できる。そのモンスターの攻撃力分だけ自分のLPを回復する。",
@@ -25784,8 +25879,7 @@
         "亚马逊拜谒之间"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/17654",
-      "updatedAt": "2026-09-12T21:05:59.860Z",
-      "cnName": "亚马逊拜谒间",
+      "updatedAt": "2026-11-13T02:04:42.791Z",
       "chineseNameSources": [
         {
           "name": "亚马逊拜谒间",
@@ -25812,6 +25906,13 @@
           "name": "亚马逊拜谒之间",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "17654"
+        },
+        {
+          "name": "亚马逊拜谒之间",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "17654"
         }
@@ -25878,6 +25979,7 @@
         "continuous"
       ],
       "name": "アマゾネスの秘湯",
+      "cnName": "亚马逊的秘汤",
       "jaName": "アマゾネスの秘湯",
       "enName": "Amazoness Hot Spring",
       "effectText": "このカード名の②の効果は１ターンに１度しか使用できない。①：このカードの発動時の効果処理として、デッキから、「アマゾネス」モンスター１体を手札に加えるか、「アマゾネス」Pモンスター１体を選んで自分のPゾーンに置く事ができる。②：自分フィールドに「アマゾネス」モンスターカードが存在し、自分が戦闘ダメージを受けた時に発動できる。受けたダメージの数値分だけ自分のLPを回復する。",
@@ -25888,8 +25990,7 @@
         "亚马逊的秘汤"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/17655",
-      "updatedAt": "2026-09-12T21:05:59.870Z",
-      "cnName": "亚马逊的秘汤",
+      "updatedAt": "2026-11-13T02:04:42.793Z",
       "chineseNameSources": [
         {
           "name": "亚马逊的秘汤",
@@ -25916,6 +26017,13 @@
           "name": "亚马逊的秘汤",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "17655"
+        },
+        {
+          "name": "亚马逊的秘汤",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "17655"
         }
@@ -25953,6 +26061,7 @@
       "level": 9,
       "attribute": "earth",
       "name": "アマゾネスペット虎獅王",
+      "cnName": "亚马逊宠物虎狮王",
       "jaName": "アマゾネスペット虎獅王",
       "enName": "Amazoness Pet Liger King",
       "effectText": "レベル５以上の「アマゾネス」モンスター＋「アマゾネス」モンスター\nこのカード名の②の効果は１ターンに１度しか使用できない。①：このカードがモンスターゾーンに存在する限り、相手モンスターはこのカード以外のモンスターを攻撃できない。②：自分フィールドの「アマゾネス」カード１枚と自分の墓地の戦士族の「アマゾネス」モンスター１体を対象として発動できる。対象のフィールドのカードを破壊し、対象の墓地のモンスターを特殊召喚する。この効果を発動するターン、このカードは攻撃できない。",
@@ -25964,8 +26073,7 @@
         "亚马逊虎狮王"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/17615",
-      "updatedAt": "2026-09-12T21:05:59.876Z",
-      "cnName": "亚马逊宠物虎狮王",
+      "updatedAt": "2026-11-13T02:04:42.798Z",
       "chineseNameSources": [
         {
           "name": "亚马逊宠物虎狮王",
@@ -25994,6 +26102,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "17615"
+        },
+        {
+          "name": "亚马逊宠物虎狮王",
+          "source": "baige",
+          "sourceField": "sc_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "17615"
         }
       ]
     },
@@ -26006,6 +26121,7 @@
         "continuous"
       ],
       "name": "アマゾネスの急襲",
+      "cnName": "亚马逊的急袭",
       "jaName": "アマゾネスの急襲",
       "enName": "Amazoness Onslaught",
       "effectText": "①：１ターンに１度、自分・相手のバトルフェイズに発動できる。手札から「アマゾネス」モンスター１体を特殊召喚する。この効果で特殊召喚したモンスターの攻撃力はターン終了時まで５００アップする。②：自分の「アマゾネス」モンスターが相手モンスターと戦闘を行ったダメージ計算後に発動できる。その相手モンスターを除外する。③：フィールドのこのカードが破壊され墓地へ送られた場合、自分の墓地の「アマゾネス」モンスター１体を対象として発動できる。そのモンスターを特殊召喚する。",
@@ -26016,8 +26132,7 @@
         "亚马逊的急袭"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/13175",
-      "updatedAt": "2026-09-12T21:05:59.881Z",
-      "cnName": "亚马逊的急袭",
+      "updatedAt": "2026-11-13T02:04:42.805Z",
       "chineseNameSources": [
         {
           "name": "亚马逊的急袭",
@@ -26044,6 +26159,13 @@
           "name": "亚马逊的急袭",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "13175"
+        },
+        {
+          "name": "亚马逊的急袭",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "13175"
         }
@@ -26077,6 +26199,7 @@
       "level": 4,
       "attribute": "earth",
       "name": "アマゾネスの聖戦士",
+      "cnName": "亚马逊圣战士",
       "jaName": "アマゾネスの聖戦士",
       "enName": "Amazoness Paladin",
       "effectText": "自分フィールド上の「アマゾネス」という名のついたモンスターカード１枚につき、このカードの攻撃力は１００ポイントアップする。",
@@ -26089,8 +26212,7 @@
         "亚马逊的圣戦士"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/5645",
-      "updatedAt": "2026-09-12T21:05:59.910Z",
-      "cnName": "亚马逊圣战士",
+      "updatedAt": "2026-11-13T02:04:42.813Z",
       "chineseNameSources": [
         {
           "name": "亚马逊圣战士",
@@ -26117,6 +26239,13 @@
           "name": "亚马逊的圣戦士",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "5645"
+        },
+        {
+          "name": "亚马逊的圣战士",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "5645"
         }
@@ -26154,6 +26283,7 @@
       "level": 7,
       "attribute": "earth",
       "name": "アマゾネスペット虎獅子",
+      "cnName": "亚马逊宠物虎狮子",
       "jaName": "アマゾネスペット虎獅子",
       "enName": "Amazoness Pet Liger",
       "effectText": "「アマゾネスペット虎」＋「アマゾネス」モンスター\n①：このカードが攻撃するダメージ計算時に発動できる。このカードの攻撃力はそのダメージ計算時のみ５００アップする。②：自分の「アマゾネス」モンスターが相手モンスターに攻撃したダメージ計算後、相手フィールドの表側表示モンスター１体を対象として発動できる。そのモンスターの攻撃力は８００ダウンする。③：このカードがモンスターゾーンに存在する限り、相手モンスターはこのカード以外の「アマゾネス」モンスターを攻撃できない。",
@@ -26164,8 +26294,7 @@
         "亚马逊宠物虎狮子"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/13147",
-      "updatedAt": "2026-09-12T21:05:59.913Z",
-      "cnName": "亚马逊宠物虎狮子",
+      "updatedAt": "2026-11-13T02:04:42.815Z",
       "chineseNameSources": [
         {
           "name": "亚马逊宠物虎狮子",
@@ -26192,6 +26321,13 @@
           "name": "亚马逊宠物虎狮子",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "13147"
+        },
+        {
+          "name": "亚马逊宠物虎狮子",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "13147"
         }
@@ -26225,6 +26361,7 @@
       "level": 3,
       "attribute": "earth",
       "name": "アマゾネス王女",
+      "cnName": "亚马逊王女",
       "jaName": "アマゾネス王女",
       "enName": "Amazoness Princess",
       "effectText": "このカード名の②の効果は１ターンに１度しか使用できない。①：このカードのカード名は、フィールド・墓地に存在する限り「アマゾネス女王」として扱う。②：このカードが召喚・特殊召喚に成功した場合に発動できる。デッキから「アマゾネス」魔法・罠カード１枚を手札に加える。③：このカードの攻撃宣言時に、このカード以外の自分の手札・フィールドのカード１枚を墓地へ送って発動できる。デッキから「アマゾネス王女」以外の「アマゾネス」モンスター１体を守備表示で特殊召喚する。",
@@ -26236,8 +26373,7 @@
         "亚马逊公主"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/13172",
-      "updatedAt": "2026-09-12T21:05:59.911Z",
-      "cnName": "亚马逊王女",
+      "updatedAt": "2026-11-13T02:04:42.819Z",
       "chineseNameSources": [
         {
           "name": "亚马逊王女",
@@ -26264,6 +26400,13 @@
           "name": "亚马逊公主",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "13172"
+        },
+        {
+          "name": "亚马逊王女",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "13172"
         }
@@ -26297,6 +26440,7 @@
       "level": 6,
       "attribute": "earth",
       "name": "アマゾネス女王",
+      "cnName": "亚马逊女王",
       "jaName": "アマゾネス女王",
       "enName": "Amazoness Queen",
       "effectText": "①：このカードがモンスターゾーンに存在する限り、自分の「アマゾネス」モンスターは戦闘では破壊されない。",
@@ -26307,8 +26451,7 @@
         "亚马逊女王"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/8963",
-      "updatedAt": "2026-09-12T21:05:59.917Z",
-      "cnName": "亚马逊女王",
+      "updatedAt": "2026-11-13T02:04:42.824Z",
       "chineseNameSources": [
         {
           "name": "亚马逊女王",
@@ -26335,6 +26478,13 @@
           "name": "亚马逊女王",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "8963"
+        },
+        {
+          "name": "亚马逊女王",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "8963"
         }
@@ -26368,6 +26518,7 @@
       "level": 4,
       "attribute": "earth",
       "name": "アマゾネスの賢者",
+      "cnName": "亚马逊贤者",
       "jaName": "アマゾネスの賢者",
       "enName": "Amazoness Sage",
       "effectText": "①：このカードが攻撃したダメージステップ終了時、このカードがモンスターゾーンに存在していれば、相手フィールドの魔法・罠カード１枚を対象として発動する。その相手のカードを破壊する。",
@@ -26379,8 +26530,7 @@
         "亚马逊的贤者"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/8961",
-      "updatedAt": "2026-09-12T21:05:59.928Z",
-      "cnName": "亚马逊贤者",
+      "updatedAt": "2026-11-13T02:04:42.823Z",
       "chineseNameSources": [
         {
           "name": "亚马逊贤者",
@@ -26407,6 +26557,13 @@
           "name": "亚马逊的贤者",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "8961"
+        },
+        {
+          "name": "亚马逊的贤者",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "8961"
         }
@@ -26494,6 +26651,7 @@
         "quickplay"
       ],
       "name": "アマゾネスの秘術",
+      "cnName": "亚马逊的秘术",
       "jaName": "アマゾネスの秘術",
       "enName": "Amazoness Secret Arts",
       "effectText": "このカード名の①②の効果は１ターンに１度、いずれか１つしか使用できない。①：自分の手札・フィールドから、「アマゾネス」融合モンスターカードによって決められた融合素材モンスターを墓地へ送り、その融合モンスター１体をEXデッキから融合召喚する。②：自分メインフェイズに墓地のこのカードを除外して発動できる。このターン、自分が「アマゾネス」融合モンスターを融合召喚する場合に１度だけ、自分のEXデッキの「アマゾネス」モンスター１体を墓地へ送って融合素材とする事もできる。",
@@ -26504,8 +26662,7 @@
         "亚马逊的秘术"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/17616",
-      "updatedAt": "2026-09-12T21:05:59.936Z",
-      "cnName": "亚马逊的秘术",
+      "updatedAt": "2026-11-13T02:04:42.830Z",
       "chineseNameSources": [
         {
           "name": "亚马逊的秘术",
@@ -26532,6 +26689,13 @@
           "name": "亚马逊的秘术",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "17616"
+        },
+        {
+          "name": "亚马逊的秘术",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "17616"
         }
@@ -26565,6 +26729,7 @@
       "level": 2,
       "attribute": "earth",
       "name": "アマゾネス霊術師",
+      "cnName": "亚马逊灵术师",
       "jaName": "アマゾネス霊術師",
       "enName": "Amazoness Spiritualist",
       "effectText": "このカード名の①②の効果はそれぞれ１ターンに１度しか使用できない。①：このカードが手札・墓地に存在する場合、「アマゾネス霊術師」以外の自分フィールドの「アマゾネス」カード１枚を対象として発動できる。そのカードを持ち主の手札に戻し、このカードを特殊召喚する。この効果の発動後、ターン終了時まで自分は「アマゾネス」モンスターしかEXデッキから特殊召喚できない。②：このカードが特殊召喚に成功した場合に発動できる。デッキから「融合」１枚を手札に加える。",
@@ -26575,8 +26740,7 @@
         "亚马逊灵术师"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/17613",
-      "updatedAt": "2026-09-12T21:05:59.938Z",
-      "cnName": "亚马逊灵术师",
+      "updatedAt": "2026-11-13T02:04:42.836Z",
       "chineseNameSources": [
         {
           "name": "亚马逊灵术师",
@@ -26603,6 +26767,13 @@
           "name": "亚马逊灵术师",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "17613"
+        },
+        {
+          "name": "亚马逊灵术师",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "17613"
         }
@@ -26613,6 +26784,7 @@
       "type": "trap",
       "cardType": "trap",
       "name": "アマゾネス転生術",
+      "cnName": "亚马逊转生术",
       "jaName": "アマゾネス転生術",
       "enName": "Amazoness Shamanism",
       "effectText": "自分フィールド上に表側表示で存在する「アマゾネス」と名のついたモンスターを全て破壊する。その後、破壊した数と同じ数まで自分の墓地に存在するレベル４以下の「アマゾネス」と名のついたモンスターを表側守備表示で特殊召喚する事ができる。",
@@ -26623,8 +26795,7 @@
         "亚马逊转生术"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/9210",
-      "updatedAt": "2026-09-12T21:05:59.967Z",
-      "cnName": "亚马逊转生术",
+      "updatedAt": "2026-11-13T02:04:42.844Z",
       "chineseNameSources": [
         {
           "name": "亚马逊转生术",
@@ -26651,6 +26822,13 @@
           "name": "亚马逊转生术",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "9210"
+        },
+        {
+          "name": "亚马逊转生术",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "9210"
         }
@@ -26688,6 +26866,7 @@
       "level": 3,
       "attribute": "earth",
       "name": "アマゾネスの銀剣使い",
+      "cnName": "亚马逊银剑使",
       "jaName": "アマゾネスの銀剣使い",
       "enName": "Amazoness Silver Sword Master",
       "effectText": "このカード名の①②のモンスター効果はそれぞれ１ターンに１度しか使用できない。①：モンスターゾーンのこのカードが戦闘・効果で破壊された場合に発動できる。このカードを自分のPゾーンに置く。②：このカードが墓地に存在する状態で、自分フィールドに「アマゾネス」モンスターが特殊召喚された場合に発動できる。このカードを自分のPゾーンに置く。",
@@ -26702,8 +26881,7 @@
         "亚马逊的银剑使"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/17611",
-      "updatedAt": "2026-09-12T21:05:59.969Z",
-      "cnName": "亚马逊银剑使",
+      "updatedAt": "2026-11-13T02:04:42.844Z",
       "chineseNameSources": [
         {
           "name": "亚马逊银剑使",
@@ -26732,6 +26910,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "17611"
+        },
+        {
+          "name": "亚马逊的银剑使",
+          "source": "baige",
+          "sourceField": "sc_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "17611"
         }
       ]
     },
@@ -26740,6 +26925,7 @@
       "type": "spell",
       "cardType": "spell",
       "name": "アマゾネスの呪詛師",
+      "cnName": "亚马逊诅咒师",
       "jaName": "アマゾネスの呪詛師",
       "enName": "Amazoness Spellcaster",
       "effectText": "ターン終了時まで、自分フィールド上の「アマゾネス」という名のついた表側表示モンスター１体と、相手フィールド上表側表示モンスター１体の元々の攻撃力を入れ替える。",
@@ -26751,8 +26937,7 @@
         "亚马逊的诅咒师"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/5296",
-      "updatedAt": "2026-09-12T21:05:59.970Z",
-      "cnName": "亚马逊诅咒师",
+      "updatedAt": "2026-11-13T02:04:42.849Z",
       "chineseNameSources": [
         {
           "name": "亚马逊诅咒师",
@@ -26779,6 +26964,13 @@
           "name": "亚马逊的诅咒师",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "5296"
+        },
+        {
+          "name": "亚马逊的诅咒师",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "5296"
         }
@@ -26820,10 +27012,11 @@
       "aliases": [
         "アマゾネスの呪詛師－呪印の舞い－",
         "Amazoness Spellcaster - Forbidden Spell Dance",
-        "亚马逊诅咒师-咒印之舞-"
+        "亚马逊诅咒师-咒印之舞-",
+        "亚马逊的诅咒师－咒印之舞－"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23818",
-      "updatedAt": "2026-11-09T01:16:26.177Z",
+      "updatedAt": "2026-11-13T02:04:42.854Z",
       "chineseNameSources": [
         {
           "name": "亚马逊诅咒师-咒印之舞-",
@@ -26836,6 +27029,13 @@
           "name": "亚马逊诅咒师-咒印之舞-",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23818"
+        },
+        {
+          "name": "亚马逊的诅咒师－咒印之舞－",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23818"
         }
@@ -26869,6 +27069,7 @@
       "level": 3,
       "attribute": "earth",
       "name": "アマゾネスの斥候",
+      "cnName": "亚马逊斥候",
       "jaName": "アマゾネスの斥候",
       "enName": "Amazoness Spy",
       "effectText": "このカード名の①の効果は１ターンに１度しか使用できない。①：このカード以外の手札の「アマゾネス」モンスター１体を相手に見せて発動できる。このカードを手札から特殊召喚する。②：このカードが戦闘で破壊され墓地へ送られた時、「アマゾネスの斥候」以外の自分の墓地の「アマゾネス」モンスター１体を対象として発動できる。そのモンスターを手札に加えるかデッキに戻す。",
@@ -26881,8 +27082,7 @@
         "亚马逊侦察兵"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/13146",
-      "updatedAt": "2026-09-12T21:05:59.977Z",
-      "cnName": "亚马逊斥候",
+      "updatedAt": "2026-11-13T02:04:42.855Z",
       "chineseNameSources": [
         {
           "name": "亚马逊斥候",
@@ -26909,6 +27109,13 @@
           "name": "亚马逊侦察兵",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "13146"
+        },
+        {
+          "name": "亚马逊的斥候",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "13146"
         }
@@ -26954,10 +27161,11 @@
       "aliases": [
         "アマゾネスの剣聖",
         "Amazoness Swordmaster",
-        "亚马逊剑圣"
+        "亚马逊剑圣",
+        "亚马逊的剑圣"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23843",
-      "updatedAt": "2026-11-06T01:47:04.808Z",
+      "updatedAt": "2026-11-13T02:04:42.854Z",
       "chineseNameSources": [
         {
           "name": "亚马逊剑圣",
@@ -26970,6 +27178,13 @@
           "name": "亚马逊剑圣",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23843"
+        },
+        {
+          "name": "亚马逊的剑圣",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23843"
         }
@@ -27003,6 +27218,7 @@
       "level": 4,
       "attribute": "earth",
       "name": "アマゾネスの剣士",
+      "cnName": "亚马逊剑士",
       "jaName": "アマゾネスの剣士",
       "enName": "Amazoness Swords Woman",
       "effectText": "①：このカードの戦闘で発生する自分への戦闘ダメージは代わりに相手が受ける。",
@@ -27014,8 +27230,7 @@
         "亚马逊的剑士"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/5284",
-      "updatedAt": "2026-09-12T21:05:59.985Z",
-      "cnName": "亚马逊剑士",
+      "updatedAt": "2026-11-13T02:04:42.865Z",
       "chineseNameSources": [
         {
           "name": "亚马逊剑士",
@@ -27042,6 +27257,13 @@
           "name": "亚马逊的剑士",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "5284"
+        },
+        {
+          "name": "亚马逊的剑士",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "5284"
         }
@@ -27075,6 +27297,7 @@
       "level": 4,
       "attribute": "earth",
       "name": "アマゾネスペット虎",
+      "cnName": "亚马逊宠物虎",
       "jaName": "アマゾネスペット虎",
       "enName": "Amazoness Tiger",
       "effectText": "①：「アマゾネスペット虎」は自分フィールドに１体しか表側表示で存在できない。②：このカードの攻撃力は、自分フィールドの「アマゾネス」モンスターの数×４００アップする。③：このカードがモンスターゾーンに存在する限り、相手モンスターはこのカード以外の「アマゾネス」モンスターを攻撃できない。",
@@ -27085,8 +27308,7 @@
         "亚马逊宠物虎"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/5647",
-      "updatedAt": "2026-09-12T21:05:59.987Z",
-      "cnName": "亚马逊宠物虎",
+      "updatedAt": "2026-11-13T02:04:42.868Z",
       "chineseNameSources": [
         {
           "name": "亚马逊宠物虎",
@@ -27113,6 +27335,13 @@
           "name": "亚马逊宠物虎",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "5647"
+        },
+        {
+          "name": "亚马逊宠物虎",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "5647"
         }
@@ -27146,6 +27375,7 @@
       "level": 4,
       "attribute": "earth",
       "name": "アマゾネス訓練生",
+      "cnName": "亚马逊训练生",
       "jaName": "アマゾネス訓練生",
       "enName": "Amazoness Trainee",
       "effectText": "このカードが戦闘によって破壊したモンスターは墓地へ送らず持ち主のデッキの一番下に戻す。このカードが戦闘によって相手モンスターを破壊した場合、このカードの攻撃力は２００ポイントアップする。",
@@ -27156,8 +27386,7 @@
         "亚马逊训练生"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/8962",
-      "updatedAt": "2026-09-12T21:05:59.994Z",
-      "cnName": "亚马逊训练生",
+      "updatedAt": "2026-11-13T02:04:42.874Z",
       "chineseNameSources": [
         {
           "name": "亚马逊训练生",
@@ -27186,6 +27415,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "8962"
+        },
+        {
+          "name": "亚马逊训练生",
+          "source": "baige",
+          "sourceField": "sc_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "8962"
         }
       ]
     },
@@ -27198,6 +27434,7 @@
         "field"
       ],
       "name": "アマゾネスの里",
+      "cnName": "亚马逊之里",
       "jaName": "アマゾネスの里",
       "enName": "Amazoness Village",
       "effectText": "①：フィールドの「アマゾネス」モンスターの攻撃力は２００アップする。②：１ターンに１度、「アマゾネス」モンスターが戦闘・効果で破壊され墓地へ送られた時に発動できる。自分はその「アマゾネス」モンスターの元々のレベル以下のレベルを持つ「アマゾネス」モンスター１体をデッキから特殊召喚する。",
@@ -27210,8 +27447,7 @@
         "亚马逊之村"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/8984",
-      "updatedAt": "2026-09-12T21:05:59.998Z",
-      "cnName": "亚马逊之里",
+      "updatedAt": "2026-11-13T02:04:42.875Z",
       "chineseNameSources": [
         {
           "name": "亚马逊之里",
@@ -27238,6 +27474,13 @@
           "name": "亚马逊之村",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "8984"
+        },
+        {
+          "name": "亚马逊之乡",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "8984"
         }
@@ -27283,7 +27526,7 @@
         "亚马逊的战士长"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/17612",
-      "updatedAt": "2026-10-31T01:01:42.825Z",
+      "updatedAt": "2026-11-13T02:04:42.879Z",
       "chineseNameSources": [
         {
           "name": "亚马逊战士长",
@@ -27312,6 +27555,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "17612"
+        },
+        {
+          "name": "亚马逊的战士长",
+          "source": "baige",
+          "sourceField": "sc_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "17612"
         }
       ]
     },
@@ -27324,6 +27574,7 @@
         "continuous"
       ],
       "name": "アマゾネスの意地",
+      "cnName": "亚马逊的意志",
       "jaName": "アマゾネスの意地",
       "enName": "Amazoness Willpower",
       "effectText": "自分の墓地から「アマゾネス」と名のついたモンスター１体を選択し、攻撃表示で特殊召喚する。この効果で特殊召喚したモンスターは表示形式を変更する事ができず、攻撃可能な場合には攻撃しなければならない。このカードがフィールド上に存在しなくなった時、そのモンスターを破壊する。そのモンスターが破壊された時このカードを破壊する。",
@@ -27332,11 +27583,11 @@
         "アマゾネスの意地",
         "Amazoness Willpower",
         "亚马逊的意志",
-        "亚马逊的志气"
+        "亚马逊的志气",
+        "亚马逊的骨气"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/9003",
-      "updatedAt": "2026-09-12T21:06:00.025Z",
-      "cnName": "亚马逊的意志",
+      "updatedAt": "2026-11-13T02:04:42.885Z",
       "chineseNameSources": [
         {
           "name": "亚马逊的意志",
@@ -27363,6 +27614,13 @@
           "name": "亚马逊的志气",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "9003"
+        },
+        {
+          "name": "亚马逊的骨气",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "9003"
         }
@@ -30038,6 +30296,7 @@
       "type": "spell",
       "cardType": "spell",
       "name": "古の呪文",
+      "cnName": "古之咒文",
       "jaName": "古の呪文",
       "enName": "Ancient Chant",
       "effectText": "このカード名のカードは１ターンに１枚しか発動できない。\n①：自分のデッキ・墓地から「ラーの翼神竜」１体を手札に加え、このターン自分は通常召喚に加えて１度だけ、自分メインフェイズにA召喚できる。\n②：墓地のこのカードを除外して発動できる。発動後、このターン中に自分が「ラーの翼神竜」をA召喚した場合、その元々の攻撃力・守備力は、そのA召喚のためにリリースしたモンスターの元々の攻撃力・守備力をそれぞれ合計した数値になる。",
@@ -30049,8 +30308,7 @@
         "古老咒语"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/15333",
-      "updatedAt": "2026-09-12T21:06:00.288Z",
-      "cnName": "古之咒文",
+      "updatedAt": "2026-11-13T02:04:43.029Z",
       "chineseNameSources": [
         {
           "name": "古之咒文",
@@ -30077,6 +30335,13 @@
           "name": "古之咒文",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "15333"
+        },
+        {
+          "name": "古之咒文",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "15333"
         }
@@ -39264,7 +39529,7 @@
         "白鸦骑士 阿努"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23822",
-      "updatedAt": "2026-11-09T01:16:27.786Z",
+      "updatedAt": "2026-11-13T02:04:43.562Z",
       "chineseNameSources": [
         {
           "name": "白鸦骑士 安",
@@ -39277,6 +39542,13 @@
           "name": "白鸦骑士 阿努",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23822"
+        },
+        {
+          "name": "白鸦骑士 安",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23822"
         }
@@ -55956,10 +56228,11 @@
         "神幻学都アルス＝マグナ",
         "Ars Magna Academic Arcane Apparition Acropolis",
         "神幻学都 无垢大艺术学园",
-        "神幻学都 无垢大艺学园"
+        "神幻学都 无垢大艺学园",
+        "神幻学都 奥艺"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23872",
-      "updatedAt": "2026-11-09T01:16:29.921Z",
+      "updatedAt": "2026-11-13T02:04:44.582Z",
       "chineseNameSources": [
         {
           "name": "神幻学都 无垢大艺术学园",
@@ -55972,6 +56245,13 @@
           "name": "神幻学都 无垢大艺学园",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23872"
+        },
+        {
+          "name": "神幻学都 奥艺",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23872"
         }
@@ -56022,7 +56302,7 @@
         "无垢大牵绊 神艺学徒"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23856",
-      "updatedAt": "2026-11-09T01:16:29.921Z",
+      "updatedAt": "2026-11-13T02:04:44.584Z",
       "chineseNameSources": [
         {
           "name": "无垢牵绊 神艺学徒",
@@ -56042,6 +56322,13 @@
           "name": "无垢大牵绊 神艺学徒",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23856"
+        },
+        {
+          "name": "无垢奥艺之绊 神艺",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23856"
         }
@@ -56088,10 +56375,11 @@
         "無垢なる血盟 ドゥームズ",
         "Ars Magna DoomZ",
         "无垢血盟 终刻龙卫",
-        "无垢大血盟 终刻龙机"
+        "无垢大血盟 终刻龙机",
+        "无垢奥艺之血盟 终刻"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23857",
-      "updatedAt": "2026-11-09T01:16:29.927Z",
+      "updatedAt": "2026-11-13T02:04:44.586Z",
       "chineseNameSources": [
         {
           "name": "无垢血盟 终刻龙卫",
@@ -56104,6 +56392,13 @@
           "name": "无垢大血盟 终刻龙机",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23857"
+        },
+        {
+          "name": "无垢奥艺之血盟 终刻",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23857"
         }
@@ -56150,10 +56445,11 @@
         "無垢なる協奏 エルフェンノーツ",
         "Ars Magna Elfnote",
         "无垢协奏 耀圣诗团",
-        "无垢大协奏 耀圣之诗"
+        "无垢大协奏 耀圣之诗",
+        "无垢奥艺之协奏 耀圣"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23858",
-      "updatedAt": "2026-11-09T01:16:29.933Z",
+      "updatedAt": "2026-11-13T02:04:44.589Z",
       "chineseNameSources": [
         {
           "name": "无垢协奏 耀圣诗团",
@@ -56166,6 +56462,13 @@
           "name": "无垢大协奏 耀圣之诗",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23858"
+        },
+        {
+          "name": "无垢奥艺之协奏 耀圣",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23858"
         }
@@ -60126,10 +60429,11 @@
       "released": true,
       "aliases": [
         "鬼神 夜魅",
-        "Ashtrama Yoami"
+        "Ashtrama Yoami",
+        "艮鬼神 夜魅"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23850",
-      "updatedAt": "2026-11-09T01:16:30.444Z",
+      "updatedAt": "2026-11-13T02:04:44.816Z",
       "chineseNameSources": [
         {
           "name": "鬼神 夜魅",
@@ -60142,6 +60446,13 @@
           "name": "鬼神 夜魅",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23850"
+        },
+        {
+          "name": "艮鬼神 夜魅",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23850"
         }
@@ -60241,10 +60552,11 @@
         "鬼神童鵄 タマヨリ",
         "Ashtrata Tamayori",
         "鬼神童鸱 玉依",
-        "鬼神童鵄 玉依"
+        "鬼神童鵄 玉依",
+        "艮鬼神童鸱 玉依"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23829",
-      "updatedAt": "2026-11-09T01:16:30.477Z",
+      "updatedAt": "2026-11-13T02:04:44.821Z",
       "chineseNameSources": [
         {
           "name": "鬼神童鸱 玉依",
@@ -60257,6 +60569,13 @@
           "name": "鬼神童鵄 玉依",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23829"
+        },
+        {
+          "name": "艮鬼神童鸱 玉依",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23829"
         }
@@ -65881,7 +66200,7 @@
         "Autumn"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23882",
-      "updatedAt": "2026-11-06T01:47:09.648Z",
+      "updatedAt": "2026-11-13T02:04:45.133Z",
       "chineseNameSources": [
         {
           "name": "秋",
@@ -65894,6 +66213,13 @@
           "name": "秋",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23882"
+        },
+        {
+          "name": "秋",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23882"
         }
@@ -88582,6 +88908,7 @@
       "level": 5,
       "attribute": "earth",
       "name": "昆虫機甲鎧",
+      "cnName": "昆虫机甲铠",
       "jaName": "昆虫機甲鎧",
       "enName": "Bio-Insect Armor",
       "effectText": "このカード名の①の効果は１ターンに１度しか使用できない。①：このカードが手札・墓地に存在し、自分フィールドに「昆虫機甲鎧」が存在しない場合、自分フィールドの昆虫族モンスター１体を対象として発動できる。このカードを装備カード扱いとしてそのモンスターに装備する。このカード及びこの効果でこのカードを装備したモンスターは、フィールドから離れた場合に除外される。②：このカードを装備したモンスターはお互いのバトルフェイズ及びメインフェイズ２の間、攻撃力が１５００アップし、守備力が２０００アップする。",
@@ -88592,8 +88919,7 @@
         "昆虫机甲铠"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/18159",
-      "updatedAt": "2026-09-12T21:06:06.569Z",
-      "cnName": "昆虫机甲铠",
+      "updatedAt": "2026-11-13T02:04:46.388Z",
       "chineseNameSources": [
         {
           "name": "昆虫机甲铠",
@@ -88620,6 +88946,13 @@
           "name": "昆虫机甲铠",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "18159"
+        },
+        {
+          "name": "昆虫机甲铠",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "18159"
         }
@@ -99280,6 +99613,7 @@
         "quickplay"
       ],
       "name": "ゴッド・ブレイズ・キャノン",
+      "cnName": "神威烈焰加农炮",
       "jaName": "ゴッド・ブレイズ・キャノン",
       "enName": "Blaze Cannon",
       "effectText": "①：自分フィールドの「ラーの翼神竜」１体を選ぶ。そのモンスターはターン終了時まで以下の効果を得る。このカードの発動と効果は無効化されない。\n●このカードは相手の効果を受けない。\n●このカードが戦闘を行う攻撃宣言時に、このターン攻撃宣言をしていない自分フィールドの他のモンスターを任意の数だけリリースして発動できる。このカードの攻撃力はターン終了時まで、リリースしたモンスターの元々の攻撃力の合計分アップする。\n●このカードが攻撃したダメージ計算後に発動できる。相手フィールドのモンスターを全て墓地へ送る。",
@@ -99292,8 +99626,7 @@
         "神之烈焰加农炮"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/15334",
-      "updatedAt": "2026-09-12T21:06:07.654Z",
-      "cnName": "神威烈焰加农炮",
+      "updatedAt": "2026-11-13T02:04:46.969Z",
       "chineseNameSources": [
         {
           "name": "神威烈焰加农炮",
@@ -99320,6 +99653,13 @@
           "name": "神之烈焰加农炮",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "15334"
+        },
+        {
+          "name": "神烈焰加农炮",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "15334"
         }
@@ -105529,6 +105869,7 @@
       "type": "spell",
       "cardType": "spell",
       "name": "ボンディング－D２O",
+      "cnName": "结合术-D2O",
       "jaName": "ボンディング－D２O",
       "enName": "Bonding - D2O",
       "effectText": "このカード名の②の効果は１ターンに１度しか使用できない。①：自分の手札・フィールドの「デューテリオン」２体と「オキシゲドン」１体をリリースして発動できる。自分の手札・デッキ・墓地から「ウォーター・ドラゴン」または「ウォーター・ドラゴン－クラスター」１体を選んで「ボンディング－H２O」の効果扱いとして特殊召喚する。②：このカードが墓地に存在し、「ウォーター・ドラゴン」または「ウォーター・ドラゴン－クラスター」がフィールドから自分の墓地へ送られた場合に発動する。墓地のこのカードを手札に戻す。",
@@ -105541,8 +105882,7 @@
         "键结-D2O"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/13190",
-      "updatedAt": "2026-09-12T21:06:08.296Z",
-      "cnName": "结合术-D2O",
+      "updatedAt": "2026-11-13T02:04:47.304Z",
       "chineseNameSources": [
         {
           "name": "结合术-D2O",
@@ -105571,6 +105911,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "13190"
+        },
+        {
+          "name": "键结－D2O",
+          "source": "baige",
+          "sourceField": "sc_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "13190"
         }
       ]
     },
@@ -105579,6 +105926,7 @@
       "type": "trap",
       "cardType": "trap",
       "name": "ボンディング－DHO",
+      "cnName": "结合术-DHO",
       "jaName": "ボンディング－DHO",
       "enName": "Bonding - DHO",
       "effectText": "①：自分の手札・墓地から「デューテリオン」「ハイドロゲドン」「オキシゲドン」を１体ずつデッキに戻して発動できる。自分の手札・墓地から「ウォーター・ドラゴン－クラスター」１体を選んで特殊召喚する。②：墓地のこのカードを除外して発動できる。自分のデッキ・墓地から「ウォーター・ドラゴン」または「ウォーター・ドラゴン－クラスター」１体を選んで手札に加える。",
@@ -105591,8 +105939,7 @@
         "键结-DHO"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/13191",
-      "updatedAt": "2026-09-12T21:06:08.297Z",
-      "cnName": "结合术-DHO",
+      "updatedAt": "2026-11-13T02:04:47.314Z",
       "chineseNameSources": [
         {
           "name": "结合术-DHO",
@@ -105621,6 +105968,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "13191"
+        },
+        {
+          "name": "键结－DHO",
+          "source": "baige",
+          "sourceField": "sc_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "13191"
         }
       ]
     },
@@ -105629,6 +105983,7 @@
       "type": "spell",
       "cardType": "spell",
       "name": "ボンディング－H２O",
+      "cnName": "结合术-H2O",
       "jaName": "ボンディング－H２O",
       "enName": "Bonding - H2O",
       "effectText": "①：自分フィールドの「ハイドロゲドン」２体と「オキシゲドン」１体をリリースして発動できる。自分の手札・デッキ・墓地から「ウォーター・ドラゴン」１体を特殊召喚する。",
@@ -105638,11 +105993,11 @@
         "Bonding - H2O",
         "结合术-H2O",
         "键结－H２O",
-        "键结-H2O"
+        "键结-H2O",
+        "键结－H2O"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/6492",
-      "updatedAt": "2026-09-12T21:06:08.309Z",
-      "cnName": "结合术-H2O",
+      "updatedAt": "2026-11-13T02:04:47.315Z",
       "chineseNameSources": [
         {
           "name": "结合术-H2O",
@@ -105669,6 +106024,13 @@
           "name": "键结-H2O",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "6492"
+        },
+        {
+          "name": "键结－H2O",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "6492"
         }
@@ -120390,10 +120752,11 @@
         "バニリン・エキストラクト",
         "Bunnillin Extract",
         "香草白兔冰的精粹",
-        "香草醛兔提取物"
+        "香草醛兔提取物",
+        "香兰兔・精萃提取"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23877",
-      "updatedAt": "2026-11-06T01:47:16.399Z",
+      "updatedAt": "2026-11-13T02:04:48.158Z",
       "chineseNameSources": [
         {
           "name": "香草白兔冰的精粹",
@@ -120406,6 +120769,13 @@
           "name": "香草醛兔提取物",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23877"
+        },
+        {
+          "name": "香兰兔・精萃提取",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23877"
         }
@@ -120429,10 +120799,11 @@
         "バニリン・ソフト",
         "Bunnillin Soft",
         "软软香草白兔冰",
-        "香草醛兔软件冰淇淋"
+        "香草醛兔软件冰淇淋",
+        "香兰兔・软件淇淋"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23891",
-      "updatedAt": "2026-11-06T01:47:16.401Z",
+      "updatedAt": "2026-11-13T02:04:48.158Z",
       "chineseNameSources": [
         {
           "name": "软软香草白兔冰",
@@ -120445,6 +120816,13 @@
           "name": "香草醛兔软件冰淇淋",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23891"
+        },
+        {
+          "name": "香兰兔・软件淇淋",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23891"
         }
@@ -120487,10 +120865,11 @@
         "バニリン：モカMOD",
         "Bunnillin: Mocha MOD",
         "香草白兔冰：摩卡模组",
-        "香草醛兔：摩卡MOD"
+        "香草醛兔：摩卡MOD",
+        "香兰兔：摩卡模组"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23831",
-      "updatedAt": "2026-11-06T01:47:16.413Z",
+      "updatedAt": "2026-11-13T02:04:48.163Z",
       "chineseNameSources": [
         {
           "name": "香草白兔冰：摩卡模组",
@@ -120503,6 +120882,13 @@
           "name": "香草醛兔：摩卡MOD",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23831"
+        },
+        {
+          "name": "香兰兔：摩卡模组",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23831"
         }
@@ -123817,6 +124203,7 @@
       "level": 5,
       "attribute": "dark",
       "name": "バイサー・ショック",
+      "cnName": "电击拷问机",
       "jaName": "バイサー・ショック",
       "enName": "Byser Shock",
       "effectText": "このカードが召喚・反転召喚・特殊召喚に成功した時、フィールド上の全てのセットされたカードを持ち主の手札に戻す。",
@@ -123826,11 +124213,11 @@
         "Byser Shock",
         "电击拷问机",
         "冲击魔人",
-        "电击刑具"
+        "电击刑具",
+        "震撼刑具"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/5300",
-      "updatedAt": "2026-09-12T21:06:10.246Z",
-      "cnName": "电击拷问机",
+      "updatedAt": "2026-11-13T02:04:48.364Z",
       "chineseNameSources": [
         {
           "name": "电击拷问机",
@@ -123857,6 +124244,13 @@
           "name": "电击刑具",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "5300"
+        },
+        {
+          "name": "震撼刑具",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "5300"
         }
@@ -128434,7 +128828,7 @@
         "魔兽的昂进"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23880",
-      "updatedAt": "2026-11-06T01:47:17.423Z",
+      "updatedAt": "2026-11-13T02:04:48.609Z",
       "chineseNameSources": [
         {
           "name": "魔兽的昂进",
@@ -128447,6 +128841,13 @@
           "name": "魔兽的昂进",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23880"
+        },
+        {
+          "name": "魔兽的昂进",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23880"
         }
@@ -131563,7 +131964,7 @@
         "吸血鬼魔城"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23881",
-      "updatedAt": "2026-11-06T01:47:17.835Z",
+      "updatedAt": "2026-11-13T02:04:48.823Z",
       "chineseNameSources": [
         {
           "name": "吸血鬼城堡",
@@ -131576,6 +131977,13 @@
           "name": "吸血鬼魔城",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23881"
+        },
+        {
+          "name": "吸血鬼城堡",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23881"
         }
@@ -137957,10 +138365,11 @@
       "aliases": [
         "カオス・バリアンズ・チェンジ",
         "Chaos Barian's Change",
-        "混沌异晶人的变身"
+        "混沌异晶人的变身",
+        "混沌巴利安之转换"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23876",
-      "updatedAt": "2026-11-06T01:47:18.663Z",
+      "updatedAt": "2026-11-13T02:04:49.203Z",
       "chineseNameSources": [
         {
           "name": "混沌异晶人的变身",
@@ -137973,6 +138382,13 @@
           "name": "混沌异晶人的变身",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23876"
+        },
+        {
+          "name": "混沌巴利安之转换",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23876"
         }
@@ -154674,6 +155090,7 @@
         "quickplay"
       ],
       "name": "超進化の繭",
+      "cnName": "超进化之茧",
       "jaName": "超進化の繭",
       "enName": "Cocoon of Ultra Evolution",
       "effectText": "このカード名の②の効果は１ターンに１度しか使用できない。①：装備カードを装備した自分・相手フィールドの昆虫族モンスター１体をリリースし、デッキから昆虫族モンスター１体を召喚条件を無視して特殊召喚する。②：自分メインフェイズに墓地のこのカードを除外し、自分の墓地の昆虫族モンスター１体を対象として発動できる。そのモンスターをデッキに戻してシャッフルする。その後、自分はデッキから１枚ドローする。",
@@ -154684,8 +155101,7 @@
         "超进化之茧"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/13470",
-      "updatedAt": "2026-09-12T21:06:13.462Z",
-      "cnName": "超进化之茧",
+      "updatedAt": "2026-11-13T02:04:50.121Z",
       "chineseNameSources": [
         {
           "name": "超进化之茧",
@@ -154712,6 +155128,13 @@
           "name": "超进化之茧",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "13470"
+        },
+        {
+          "name": "超进化之茧",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "13470"
         }
@@ -154839,10 +155262,11 @@
       "aliases": [
         "コダイダロス",
         "Codaedalus",
-        "科泰达路斯"
+        "科泰达路斯",
+        "小代达罗斯"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23860",
-      "updatedAt": "2026-11-09T01:16:53.756Z",
+      "updatedAt": "2026-11-13T02:04:50.127Z",
       "chineseNameSources": [
         {
           "name": "科泰达路斯",
@@ -154855,6 +155279,13 @@
           "name": "科泰达路斯",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23860"
+        },
+        {
+          "name": "小代达罗斯",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23860"
         }
@@ -163927,6 +164358,7 @@
       "type": "trap",
       "cardType": "trap",
       "name": "蝕みの鱗粉",
+      "cnName": "侵蚀鳞粉",
       "jaName": "蝕みの鱗粉",
       "enName": "Corrosive Scales",
       "effectText": "①：自分フィールドの昆虫族モンスター１体を対象としてこのカードを発動できる。このカードを装備カード扱いとしてそのモンスターに装備する。相手はその自分の装備モンスター以外の昆虫族モンスターを攻撃できない。②：このカードが装備されている限り、相手がモンスターを召喚・特殊召喚する度、または相手が魔法・罠・モンスターの効果を発動する度に、相手フィールドの表側表示モンスター全てに鱗粉カウンターを１つずつ置く。相手フィールドのモンスターの攻撃力・守備力は、そのモンスターの鱗粉カウンターの数×１００ダウンする。",
@@ -163938,8 +164370,7 @@
         "腐蚀的鳞粉"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/13471",
-      "updatedAt": "2026-09-12T21:06:14.443Z",
-      "cnName": "侵蚀鳞粉",
+      "updatedAt": "2026-11-13T02:04:50.639Z",
       "chineseNameSources": [
         {
           "name": "侵蚀鳞粉",
@@ -163966,6 +164397,13 @@
           "name": "腐蚀的鳞粉",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "13471"
+        },
+        {
+          "name": "侵蚀鳞粉",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "13471"
         }
@@ -183131,6 +183569,7 @@
         "equip"
       ],
       "name": "サイバー・ボンテージ",
+      "cnName": "电子紧身衣",
       "jaName": "サイバー・ボンテージ",
       "enName": "Cyber Shield",
       "effectText": "「ハーピィ・レディ」または「ハーピィ・レディ三姉妹」にのみ装備可能。①：装備モンスターの攻撃力は５００アップする。",
@@ -183139,11 +183578,11 @@
         "サイバー・ボンテージ",
         "Cyber Shield",
         "电子紧身衣",
-        "电子盔甲"
+        "电子盔甲",
+        "电子紧身装束"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/4323",
-      "updatedAt": "2026-09-12T21:06:16.466Z",
-      "cnName": "电子紧身衣",
+      "updatedAt": "2026-11-13T02:04:51.706Z",
       "chineseNameSources": [
         {
           "name": "电子紧身衣",
@@ -183170,6 +183609,13 @@
           "name": "电子紧身衣",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "4323"
+        },
+        {
+          "name": "电子紧身装束",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "4323"
         }
@@ -211420,6 +211866,7 @@
       "type": "trap",
       "cardType": "trap",
       "name": "暗黒の魔再生",
+      "cnName": "暗黑之魔再生",
       "jaName": "暗黒の魔再生",
       "enName": "Dark Spell Regeneration",
       "effectText": "①：相手モンスターの攻撃宣言時に、相手の墓地の魔法カード１枚を対象として発動できる。そのカードを自分フィールドにセットする。②：墓地のこのカードを除外し、手札及び自分フィールドにセットされたカードの中から、「死者蘇生」１枚を墓地へ送って発動できる。自分の墓地から「ラーの翼神竜」１体を選んで召喚条件を無視して特殊召喚する。その後、相手フィールドのモンスター１体を選んで墓地へ送る事ができる。この効果で特殊召喚したモンスターはエンドフェイズに墓地へ送られる。",
@@ -211431,8 +211878,7 @@
         "暗黑之魔重生"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/5638",
-      "updatedAt": "2026-09-12T21:06:19.369Z",
-      "cnName": "暗黑之魔再生",
+      "updatedAt": "2026-11-13T02:04:53.241Z",
       "chineseNameSources": [
         {
           "name": "暗黑之魔再生",
@@ -211459,6 +211905,13 @@
           "name": "暗黑之魔再生",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "5638"
+        },
+        {
+          "name": "暗黑之魔再生",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "5638"
         }
@@ -220433,10 +220886,11 @@
         "白鴉の深き森",
         "Deep Forest of the Winter Raven",
         "白鸦的大森林",
-        "白鸦的幽深森林"
+        "白鸦的幽深森林",
+        "白鸦之幽森"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23870",
-      "updatedAt": "2026-11-09T01:17:01.972Z",
+      "updatedAt": "2026-11-13T02:04:53.737Z",
       "chineseNameSources": [
         {
           "name": "白鸦的大森林",
@@ -220449,6 +220903,13 @@
           "name": "白鸦的幽深森林",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23870"
+        },
+        {
+          "name": "白鸦之幽森",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23870"
         }
@@ -233273,7 +233734,7 @@
         "白鸦森林的女主人 迪亚贝尔泽"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23845",
-      "updatedAt": "2026-11-09T01:17:03.550Z",
+      "updatedAt": "2026-11-13T02:04:54.426Z",
       "chineseNameSources": [
         {
           "name": "白鸦之森的女主人 迪亚贝尔泽",
@@ -233293,6 +233754,13 @@
           "name": "白鸦森林的女主人 迪亚贝尔泽",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23845"
+        },
+        {
+          "name": "白鸦之森的女主人 迪亚贝尔赛",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23845"
         }
@@ -267712,6 +268180,7 @@
       "type": "trap",
       "cardType": "trap",
       "name": "救出劇",
+      "cnName": "救出剧",
       "jaName": "救出劇",
       "enName": "Dramatic Rescue",
       "effectText": "フィールド上の「アマゾネス」という名のついたモンスターを対象にしたカードが発動した時に発動する事ができる。対象になったモンスターカードを手札に戻し、別のモンスター１体を手札から特殊召喚する。",
@@ -267722,8 +268191,7 @@
         "救出剧"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/5299",
-      "updatedAt": "2026-09-12T21:06:25.206Z",
-      "cnName": "救出剧",
+      "updatedAt": "2026-11-13T02:04:56.338Z",
       "chineseNameSources": [
         {
           "name": "救出剧",
@@ -267750,6 +268218,13 @@
           "name": "救出剧",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "5299"
+        },
+        {
+          "name": "救出剧",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "5299"
         }
@@ -280651,10 +281126,11 @@
         "太陽神の守護者－神・スライム",
         "Egyptian God Slime, Protector of the Sun God",
         "太阳神的守护者-神·史莱姆",
-        "太阳神灵的守护者-神·史莱姆"
+        "太阳神灵的守护者-神·史莱姆",
+        "太阳神的护卫者－神・史莱姆"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23884",
-      "updatedAt": "2026-11-06T01:47:36.289Z",
+      "updatedAt": "2026-11-13T02:04:57.068Z",
       "chineseNameSources": [
         {
           "name": "太阳神的守护者-神·史莱姆",
@@ -280667,6 +281143,13 @@
           "name": "太阳神灵的守护者-神·史莱姆",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23884"
+        },
+        {
+          "name": "太阳神的护卫者－神・史莱姆",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23884"
         }
@@ -283898,7 +284381,7 @@
         "华丽的三面镜"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23864",
-      "updatedAt": "2026-11-09T01:17:09.941Z",
+      "updatedAt": "2026-11-13T02:04:57.242Z",
       "chineseNameSources": [
         {
           "name": "华丽的三面镜",
@@ -283911,6 +284394,13 @@
           "name": "华丽的三面镜",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23864"
+        },
+        {
+          "name": "华丽的三面镜",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23864"
         }
@@ -315283,10 +315773,11 @@
       "aliases": [
         "誘惑の鏡壁",
         "Eyelluring Mirror Wall",
-        "诱惑之镜壁"
+        "诱惑之镜壁",
+        "诱惑的镜壁"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23886",
-      "updatedAt": "2026-11-06T01:47:40.497Z",
+      "updatedAt": "2026-11-13T02:04:58.929Z",
       "chineseNameSources": [
         {
           "name": "诱惑之镜壁",
@@ -315299,6 +315790,13 @@
           "name": "诱惑之镜壁",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23886"
+        },
+        {
+          "name": "诱惑的镜壁",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23886"
         }
@@ -346723,6 +347221,7 @@
       "level": 7,
       "attribute": "water",
       "name": "要塞クジラ",
+      "cnName": "要塞鲸",
       "jaName": "要塞クジラ",
       "enName": "Fortress Whale",
       "effectText": "「要塞クジラの誓い」により降臨。場か手札から、星の数が合計７個以上になるようカードを生け贄に捧げなければならない。",
@@ -346734,8 +347233,7 @@
         "要塞鲸鱼"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/4724",
-      "updatedAt": "2026-09-12T21:06:33.390Z",
-      "cnName": "要塞鲸",
+      "updatedAt": "2026-11-13T02:05:00.684Z",
       "chineseNameSources": [
         {
           "name": "要塞鲸",
@@ -346764,6 +347262,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "4724"
+        },
+        {
+          "name": "要塞鲸鱼",
+          "source": "baige",
+          "sourceField": "sc_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "4724"
         }
       ]
     },
@@ -346776,6 +347281,7 @@
         "ritual"
       ],
       "name": "要塞クジラの誓い",
+      "cnName": "要塞鲸的誓言",
       "jaName": "要塞クジラの誓い",
       "enName": "Fortress Whale's Oath",
       "effectText": "「要塞クジラ」の降臨に必要。場か手札から、星の数が合計７個以上になるようカードを生け贄に捧げなければならない。",
@@ -346784,11 +347290,11 @@
         "要塞クジラの誓い",
         "Fortress Whale's Oath",
         "要塞鲸的誓言",
-        "要塞鲸鱼的誓言"
+        "要塞鲸鱼的誓言",
+        "要塞鲸鱼之誓"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/4706",
-      "updatedAt": "2026-09-12T21:06:33.392Z",
-      "cnName": "要塞鲸的誓言",
+      "updatedAt": "2026-11-13T02:05:00.688Z",
       "chineseNameSources": [
         {
           "name": "要塞鲸的誓言",
@@ -346815,6 +347321,13 @@
           "name": "要塞鲸的誓言",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "4706"
+        },
+        {
+          "name": "要塞鲸鱼之誓",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "4706"
         }
@@ -384177,6 +384690,7 @@
       "level": 3,
       "attribute": "earth",
       "name": "ジャイアント・メサイア",
+      "cnName": "巨蚁地狱救世主",
       "jaName": "ジャイアント・メサイア",
       "enName": "Infinite Antlion",
       "effectText": "このカード名の①②の効果はそれぞれ１ターンに１度しか使用できない。①：相手モンスターの攻撃宣言時に発動できる。このカードを手札から特殊召喚する。②：このカードが召喚・特殊召喚に成功した場合に発動できる。自分の手札・墓地から昆虫族モンスター１体を選び、攻撃力・守備力５００アップの装備カード扱いとしてこのカードに装備する。③：１ターンに１度、昆虫族モンスターが戦闘を行うダメージステップ開始時に、自分及び相手フィールドのカードを１枚ずつ対象として発動できる。そのカードを破壊する。",
@@ -384186,11 +384700,11 @@
         "Infinite Antlion",
         "巨蚁地狱救世主",
         "巨型蚁狮",
-        "巨蚁地狱弥赛亚"
+        "巨蚁地狱弥赛亚",
+        "巨型弥赛亚"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/18160",
-      "updatedAt": "2026-09-12T21:06:37.210Z",
-      "cnName": "巨蚁地狱救世主",
+      "updatedAt": "2026-11-13T02:05:02.747Z",
       "chineseNameSources": [
         {
           "name": "巨蚁地狱救世主",
@@ -384217,6 +384731,13 @@
           "name": "巨蚁地狱弥赛亚",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "18160"
+        },
+        {
+          "name": "巨型弥赛亚",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "18160"
         }
@@ -386958,6 +387479,7 @@
       "level": 4,
       "attribute": "dark",
       "name": "ギル・ガース",
+      "cnName": "屠杀巨灵",
       "jaName": "ギル・ガース",
       "enName": "Gil Garth",
       "effectText": "鋼鉄の鎧を身にまとった殺戮マシーン。巨大なカタナで容赦なく攻撃をする。",
@@ -386968,11 +387490,11 @@
         "屠杀巨灵",
         "钩刀魔",
         "基尔·加斯",
-        "基尔格斯"
+        "基尔格斯",
+        "吉尔伽斯"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/5491",
-      "updatedAt": "2026-09-12T21:06:37.500Z",
-      "cnName": "屠杀巨灵",
+      "updatedAt": "2026-11-13T02:05:02.900Z",
       "chineseNameSources": [
         {
           "name": "屠杀巨灵",
@@ -386999,6 +387521,13 @@
           "name": "基尔格斯",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "5491"
+        },
+        {
+          "name": "吉尔伽斯",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "5491"
         }
@@ -387041,10 +387570,11 @@
         "太陽神の殺戮機－ギル・ガース",
         "Gil Garth, Exterminator of the Sun God",
         "太阳神的杀戮机-屠杀巨灵",
-        "太阳神灵的杀戮机-屠杀巨灵"
+        "太阳神灵的杀戮机-屠杀巨灵",
+        "太阳神的杀戮机－吉尔伽斯"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23814",
-      "updatedAt": "2026-11-09T01:17:22.751Z",
+      "updatedAt": "2026-11-13T02:05:02.905Z",
       "chineseNameSources": [
         {
           "name": "太阳神的杀戮机-屠杀巨灵",
@@ -387057,6 +387587,13 @@
           "name": "太阳神灵的杀戮机-屠杀巨灵",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23814"
+        },
+        {
+          "name": "太阳神的杀戮机－吉尔伽斯",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23814"
         }
@@ -419566,6 +420103,7 @@
       "level": 10,
       "attribute": "water",
       "name": "ガーディアン・スライム",
+      "cnName": "守护者史莱姆",
       "jaName": "ガーディアン・スライム",
       "enName": "Guardian Slime",
       "effectText": "このカード名の①②③の効果はそれぞれ１ターンに１度しか使用できない。\n①：自分が戦闘・効果でダメージを受けた場合に発動できる。このカードを手札から特殊召喚する。\n②：このカードが相手モンスターと戦闘を行う自分・相手ターンのダメージ計算時に発動できる。このカードの守備力はそのダメージ計算時のみ、その相手モンスターの攻撃力分アップする。\n③：このカードが手札・フィールドから墓地へ送られた場合に発動できる。デッキから「ラーの翼神竜」のカード名が記された魔法・罠カード１枚を手札に加える。",
@@ -419577,8 +420115,7 @@
         "守护使者史莱姆"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/15331",
-      "updatedAt": "2026-09-12T21:06:40.809Z",
-      "cnName": "守护者史莱姆",
+      "updatedAt": "2026-11-13T02:05:04.661Z",
       "chineseNameSources": [
         {
           "name": "守护者史莱姆",
@@ -419605,6 +420142,13 @@
           "name": "守护使者史莱姆",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "15331"
+        },
+        {
+          "name": "守护者史莱姆",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "15331"
         }
@@ -427202,10 +427746,11 @@
         "ハーピィ＆アマゾネス －羅刹の陣－",
         "Harpie & Amazoness Rakshasa Formation",
         "鹰身&亚马逊 -罗刹之阵-",
-        "鹰身女妖与亚马逊 -罗刹之阵-"
+        "鹰身女妖与亚马逊 -罗刹之阵-",
+        "神鹰与亚马逊－罗刹之阵－"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23865",
-      "updatedAt": "2026-11-09T01:17:27.687Z",
+      "updatedAt": "2026-11-13T02:05:05.086Z",
       "chineseNameSources": [
         {
           "name": "鹰身&亚马逊 -罗刹之阵-",
@@ -427218,6 +427763,13 @@
           "name": "鹰身女妖与亚马逊 -罗刹之阵-",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23865"
+        },
+        {
+          "name": "神鹰与亚马逊－罗刹之阵－",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23865"
         }
@@ -427737,10 +428289,11 @@
         "ハーピィ・レディ－魅惑の舞い－",
         "Harpie Lady - Alluring Dance",
         "鹰身女郎-诱惑之舞-",
-        "鹰身女郎-魅惑之舞-"
+        "鹰身女郎-魅惑之舞-",
+        "神鹰女郎－魅惑之舞－"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23819",
-      "updatedAt": "2026-11-09T01:17:27.745Z",
+      "updatedAt": "2026-11-13T02:05:05.111Z",
       "chineseNameSources": [
         {
           "name": "鹰身女郎-诱惑之舞-",
@@ -427753,6 +428306,13 @@
           "name": "鹰身女郎-魅惑之舞-",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23819"
+        },
+        {
+          "name": "神鹰女郎－魅惑之舞－",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23819"
         }
@@ -427843,6 +428403,7 @@
       "level": 4,
       "attribute": "wind",
       "name": "ハーピィ・レディ１",
+      "cnName": "鹰身女郎1",
       "jaName": "ハーピィ・レディ１",
       "enName": "Harpie Lady 1",
       "effectText": "このカードのカード名は「ハーピィ・レディ」として扱う。このカードがフィールド上に表側表示で存在する限り、風属性モンスターの攻撃力は３００ポイントアップする。",
@@ -427852,11 +428413,11 @@
         "Harpie Lady 1",
         "鹰身女郎1",
         "神鹰女郎１",
-        "妖鸟女郎1"
+        "妖鸟女郎1",
+        "神鹰女郎1"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/6186",
-      "updatedAt": "2026-09-12T21:06:41.656Z",
-      "cnName": "鹰身女郎1",
+      "updatedAt": "2026-11-13T02:05:05.124Z",
       "chineseNameSources": [
         {
           "name": "鹰身女郎1",
@@ -427883,6 +428444,13 @@
           "name": "妖鸟女郎1",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "6186"
+        },
+        {
+          "name": "神鹰女郎1",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "6186"
         }
@@ -427916,6 +428484,7 @@
       "level": 4,
       "attribute": "wind",
       "name": "ハーピィ・レディ２",
+      "cnName": "鹰身女郎2",
       "jaName": "ハーピィ・レディ２",
       "enName": "Harpie Lady 2",
       "effectText": "このカードのカード名は「ハーピィ・レディ」として扱う。このモンスターが戦闘によって破壊したリバース効果モンスターの効果は無効化される。",
@@ -427925,11 +428494,11 @@
         "Harpie Lady 2",
         "鹰身女郎2",
         "神鹰女郎２",
-        "妖鸟女郎2"
+        "妖鸟女郎2",
+        "神鹰女郎2"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/6187",
-      "updatedAt": "2026-09-12T21:06:41.657Z",
-      "cnName": "鹰身女郎2",
+      "updatedAt": "2026-11-13T02:05:05.123Z",
       "chineseNameSources": [
         {
           "name": "鹰身女郎2",
@@ -427956,6 +428525,13 @@
           "name": "妖鸟女郎2",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "6187"
+        },
+        {
+          "name": "神鹰女郎2",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "6187"
         }
@@ -427989,6 +428565,7 @@
       "level": 4,
       "attribute": "wind",
       "name": "ハーピィ・レディ３",
+      "cnName": "鹰身女郎3",
       "jaName": "ハーピィ・レディ３",
       "enName": "Harpie Lady 3",
       "effectText": "このカードのカード名は「ハーピィ・レディ」として扱う。このカードと戦闘を行った相手モンスターは、相手ターンで数えて２ターンの間攻撃宣言ができなくなる。",
@@ -427998,11 +428575,11 @@
         "Harpie Lady 3",
         "鹰身女郎3",
         "神鹰女郎３",
-        "妖鸟女郎3"
+        "妖鸟女郎3",
+        "神鹰女郎3"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/6188",
-      "updatedAt": "2026-09-12T21:06:41.662Z",
-      "cnName": "鹰身女郎3",
+      "updatedAt": "2026-11-13T02:05:05.125Z",
       "chineseNameSources": [
         {
           "name": "鹰身女郎3",
@@ -428029,6 +428606,13 @@
           "name": "妖鸟女郎3",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "6188"
+        },
+        {
+          "name": "神鹰女郎3",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "6188"
         }
@@ -431277,6 +431861,7 @@
       "level": 7,
       "attribute": "earth",
       "name": "無死虫団の重騎兵",
+      "cnName": "无死虫团的重骑兵",
       "jaName": "無死虫団の重騎兵",
       "enName": "Heavy Cavalry of the Indestructible Insects",
       "effectText": "レベル５以上の昆虫族モンスター＋昆虫族モンスター\nこのカード名の②の効果は１ターンに１度しか使用できない。\n①：このカードはモンスターゾーンに存在する限り、相手の効果では破壊されない。\n②：自分・相手ターンに、自分フィールドの表側表示モンスターが昆虫族モンスターのみの場合、自分フィールドの昆虫族モンスターを含むフィールドのモンスター２体を対象として発動できる。そのモンスターを除外する。",
@@ -431287,8 +431872,7 @@
         "无死虫团的重骑兵"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/20706",
-      "updatedAt": "2026-09-12T21:06:42.023Z",
-      "cnName": "无死虫团的重骑兵",
+      "updatedAt": "2026-11-13T02:05:05.306Z",
       "chineseNameSources": [
         {
           "name": "无死虫团的重骑兵",
@@ -431315,6 +431899,13 @@
           "name": "无死虫团的重骑兵",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "20706"
+        },
+        {
+          "name": "无死虫团的重骑兵",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "20706"
         }
@@ -434050,6 +434641,7 @@
       "level": 5,
       "attribute": "dark",
       "name": "地獄詩人ヘルポエマー",
+      "cnName": "地狱诗人",
       "jaName": "地獄詩人ヘルポエマー",
       "enName": "Helpoemer",
       "effectText": "このカードは墓地からの特殊召喚はできない。①：戦闘で破壊されたこのカードが墓地に存在する場合、相手バトルフェイズ終了時に発動する。このカードが墓地に存在する場合、相手の手札をランダムに１枚選んで捨てる。",
@@ -434062,8 +434654,7 @@
         "地狱诗人 冥府吟游者"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/5489",
-      "updatedAt": "2026-09-12T21:06:42.295Z",
-      "cnName": "地狱诗人",
+      "updatedAt": "2026-11-13T02:05:05.453Z",
       "chineseNameSources": [
         {
           "name": "地狱诗人",
@@ -434090,6 +434681,13 @@
           "name": "地狱诗人 冥府吟游者",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "5489"
+        },
+        {
+          "name": "地狱诗人",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "5489"
         }
@@ -434132,10 +434730,11 @@
         "太陽神の詩詠者－ヘルポエマー",
         "Helpoemer, Chanter of the Sun God",
         "太阳神的诗咏者-地狱诗人",
-        "太阳神灵的诗咏者-地狱诗人"
+        "太阳神灵的诗咏者-地狱诗人",
+        "太阳神的咏诗者－地狱诗人"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23812",
-      "updatedAt": "2026-11-09T01:17:28.529Z",
+      "updatedAt": "2026-11-13T02:05:05.453Z",
       "chineseNameSources": [
         {
           "name": "太阳神的诗咏者-地狱诗人",
@@ -434148,6 +434747,13 @@
           "name": "太阳神灵的诗咏者-地狱诗人",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23812"
+        },
+        {
+          "name": "太阳神的咏诗者－地狱诗人",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23812"
         }
@@ -436073,7 +436679,7 @@
         "灾祸的根绝者"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23832",
-      "updatedAt": "2026-11-06T01:47:55.217Z",
+      "updatedAt": "2026-11-13T02:05:05.569Z",
       "chineseNameSources": [
         {
           "name": "灾祸的根绝者",
@@ -436086,6 +436692,13 @@
           "name": "灾祸的根绝者",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23832"
+        },
+        {
+          "name": "灾祸的根绝者",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23832"
         }
@@ -449351,6 +449964,7 @@
       "level": 4,
       "attribute": "water",
       "name": "ハイドロゲドン",
+      "cnName": "氢素龙",
       "jaName": "ハイドロゲドン",
       "enName": "Hydrogeddon",
       "effectText": "①：このカードが戦闘で相手モンスターを破壊し墓地へ送った時に発動できる。デッキから「ハイドロゲドン」１体を特殊召喚する。",
@@ -449359,11 +449973,11 @@
         "ハイドロゲドン",
         "Hydrogeddon",
         "氢素龙",
-        "氢魔兽"
+        "氢魔兽",
+        "氢恐龙"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/6479",
-      "updatedAt": "2026-09-12T21:06:43.890Z",
-      "cnName": "氢素龙",
+      "updatedAt": "2026-11-13T02:05:06.309Z",
       "chineseNameSources": [
         {
           "name": "氢素龙",
@@ -449390,6 +450004,13 @@
           "name": "氢素龙",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "6479"
+        },
+        {
+          "name": "氢恐龙",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "6479"
         }
@@ -456133,7 +456754,7 @@
         "白鸦魔女的幻姿"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23889",
-      "updatedAt": "2026-11-06T01:47:57.719Z",
+      "updatedAt": "2026-11-13T02:05:06.677Z",
       "chineseNameSources": [
         {
           "name": "白鸦魔女的幻姿",
@@ -456146,6 +456767,13 @@
           "name": "白鸦魔女的幻姿",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23889"
+        },
+        {
+          "name": "白鸦魔女的幻姿",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23889"
         }
@@ -459340,6 +459968,7 @@
       "level": 6,
       "attribute": "fire",
       "name": "炎獄魔人ヘル・バーナー",
+      "cnName": "炎狱魔人 地狱焚魔",
       "jaName": "炎獄魔人ヘル・バーナー",
       "enName": "Infernal Incinerator",
       "effectText": "このカードを除く自分の手札を全て墓地に捨て、さらに自分フィールド上の攻撃力２０００以上のモンスター１体を生け贄に捧げなければ通常召喚できない。相手フィールド上モンスター１体につきこのカードの攻撃力は２００ポイントアップする。このカード以外の自分フィールド上のモンスター１体につきこのカードの攻撃力は５００ポイントダウンする。",
@@ -459348,11 +459977,11 @@
         "炎獄魔人ヘル・バーナー",
         "Infernal Incinerator",
         "炎狱魔人 地狱焚魔",
-        "焱狱魔人 地狱焚魔"
+        "焱狱魔人 地狱焚魔",
+        "焰狱魔人 地狱燃烧者"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/6476",
-      "updatedAt": "2026-09-12T21:06:44.910Z",
-      "cnName": "炎狱魔人 地狱焚魔",
+      "updatedAt": "2026-11-13T02:05:06.856Z",
       "chineseNameSources": [
         {
           "name": "炎狱魔人 地狱焚魔",
@@ -459379,6 +460008,13 @@
           "name": "焱狱魔人 地狱焚魔",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "6476"
+        },
+        {
+          "name": "焰狱魔人 地狱燃烧者",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "6476"
         }
@@ -468513,7 +469149,7 @@
         "无敌的火箭战士"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23828",
-      "updatedAt": "2026-11-09T01:17:32.900Z",
+      "updatedAt": "2026-11-13T02:05:07.408Z",
       "chineseNameSources": [
         {
           "name": "无敌的火箭战士",
@@ -468526,6 +469162,13 @@
           "name": "无敌的火箭战士",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23828"
+        },
+        {
+          "name": "无敌的火箭战士",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23828"
         }
@@ -474268,6 +474911,7 @@
       "level": 8,
       "attribute": "earth",
       "name": "ジャベリンビートル",
+      "cnName": "标枪甲虫",
       "jaName": "ジャベリンビートル",
       "enName": "Javelin Beetle",
       "effectText": "「ジャベリンビートルの契約」により降臨。場か手札から、星の数が合計８個以上になるようカードを生け贄に捧げなければならない。",
@@ -474278,8 +474922,7 @@
         "标枪甲虫"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/4723",
-      "updatedAt": "2026-09-12T21:06:46.531Z",
-      "cnName": "标枪甲虫",
+      "updatedAt": "2026-11-13T02:05:07.746Z",
       "chineseNameSources": [
         {
           "name": "标枪甲虫",
@@ -474306,6 +474949,13 @@
           "name": "标枪甲虫",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "4723"
+        },
+        {
+          "name": "标枪甲虫",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "4723"
         }
@@ -474320,6 +474970,7 @@
         "ritual"
       ],
       "name": "ジャベリンビートルの契約",
+      "cnName": "标枪甲虫的契约",
       "jaName": "ジャベリンビートルの契約",
       "enName": "Javelin Beetle Pact",
       "effectText": "「ジャベリンビートル」の降臨に必要。場か手札から、星の数が合計８個以上になるようカードを生け贄に捧げなければならない。",
@@ -474330,8 +474981,7 @@
         "标枪甲虫的契约"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/4702",
-      "updatedAt": "2026-09-12T21:06:46.544Z",
-      "cnName": "标枪甲虫的契约",
+      "updatedAt": "2026-11-13T02:05:07.748Z",
       "chineseNameSources": [
         {
           "name": "标枪甲虫的契约",
@@ -474358,6 +475008,13 @@
           "name": "标枪甲虫的契约",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "4702"
+        },
+        {
+          "name": "标枪甲虫的契约",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "4702"
         }
@@ -474407,7 +475064,7 @@
         "盟约的标枪甲虫"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23840",
-      "updatedAt": "2026-11-09T01:17:33.687Z",
+      "updatedAt": "2026-11-13T02:05:07.750Z",
       "chineseNameSources": [
         {
           "name": "盟约之标枪甲虫",
@@ -474420,6 +475077,13 @@
           "name": "盟约的标枪甲虫",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23840"
+        },
+        {
+          "name": "盟约之标枪甲虫",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23840"
         }
@@ -489206,7 +489870,7 @@
         "高岭之天仙 迦陵"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23855",
-      "updatedAt": "2026-11-06T01:48:01.803Z",
+      "updatedAt": "2026-11-13T02:05:08.538Z",
       "chineseNameSources": [
         {
           "name": "高岭之天仙 火轮",
@@ -489219,6 +489883,13 @@
           "name": "高岭之天仙 迦陵",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23855"
+        },
+        {
+          "name": "高岭之天仙 火轮",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23855"
         }
@@ -493662,7 +494333,7 @@
         "炎之平原上奔驰而过的百兽之王"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23859",
-      "updatedAt": "2026-11-09T01:17:35.988Z",
+      "updatedAt": "2026-11-13T02:05:08.778Z",
       "chineseNameSources": [
         {
           "name": "驰驱于火炎平原的百兽之王",
@@ -493682,6 +494353,13 @@
           "name": "炎之平原上奔驰而过的百兽之王",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23859"
+        },
+        {
+          "name": "驰骋横越炎之平原的百兽之王",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23859"
         }
@@ -509145,10 +509823,11 @@
         "太陽神の鉄檻－ラヴァ・ゴーレム",
         "Lava Golem, Steelcage of the Sun God",
         "太阳神的铁槛-熔岩魔神",
-        "太阳神灵的铁槛-熔岩魔神"
+        "太阳神灵的铁槛-熔岩魔神",
+        "太阳神的铁笼－岩浆魔像"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23842",
-      "updatedAt": "2026-11-06T01:48:04.214Z",
+      "updatedAt": "2026-11-13T02:05:09.602Z",
       "chineseNameSources": [
         {
           "name": "太阳神的铁槛-熔岩魔神",
@@ -509161,6 +509840,13 @@
           "name": "太阳神灵的铁槛-熔岩魔神",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23842"
+        },
+        {
+          "name": "太阳神的铁笼－岩浆魔像",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23842"
         }
@@ -515641,10 +516327,11 @@
         "ダラダラサウルス",
         "Lethargisaurus",
         "达懒斯龙",
-        "拖拉达拉斯龙"
+        "拖拉达拉斯龙",
+        "懒懒散散达拉斯龙"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23851",
-      "updatedAt": "2026-11-09T01:17:38.691Z",
+      "updatedAt": "2026-11-13T02:05:09.961Z",
       "chineseNameSources": [
         {
           "name": "达懒斯龙",
@@ -515657,6 +516344,13 @@
           "name": "拖拉达拉斯龙",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23851"
+        },
+        {
+          "name": "懒懒散散达拉斯龙",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23851"
         }
@@ -552776,6 +553470,7 @@
       "level": 4,
       "attribute": "dark",
       "name": "処刑人－マキュラ",
+      "cnName": "处刑人-摩休罗",
       "jaName": "処刑人－マキュラ",
       "enName": "Makyura the Destructor",
       "effectText": "このカード名の効果は１ターンに１度しか使用できない。①：このカードがモンスターゾーンから墓地へ送られた場合に発動できる。このターンに１度だけ、自分は罠カードを手札から発動できる。",
@@ -552787,8 +553482,7 @@
         "处刑人－摩修罗"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/5285",
-      "updatedAt": "2026-09-12T21:06:54.605Z",
-      "cnName": "处刑人-摩休罗",
+      "updatedAt": "2026-11-13T02:05:12.024Z",
       "chineseNameSources": [
         {
           "name": "处刑人-摩休罗",
@@ -552815,6 +553509,13 @@
           "name": "处刑人-摩休罗",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "5285"
+        },
+        {
+          "name": "处刑人－摩修罗",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "5285"
         }
@@ -552857,10 +553558,11 @@
         "太陽神の処刑人－マキュラ",
         "Makyura, Destructor of the Sun God",
         "太阳神的处刑人-摩休罗",
-        "太阳神灵的处刑人-摩休罗"
+        "太阳神灵的处刑人-摩休罗",
+        "太阳神的处刑人－摩修罗"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23813",
-      "updatedAt": "2026-11-09T01:17:43.423Z",
+      "updatedAt": "2026-11-13T02:05:12.028Z",
       "chineseNameSources": [
         {
           "name": "太阳神的处刑人-摩休罗",
@@ -552873,6 +553575,13 @@
           "name": "太阳神灵的处刑人-摩休罗",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23813"
+        },
+        {
+          "name": "太阳神的处刑人－摩修罗",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23813"
         }
@@ -561414,10 +562123,11 @@
       "aliases": [
         "白鴉の騎士マルト",
         "Mart, Knight of the Winter Raven",
-        "白鸦骑士 马特"
+        "白鸦骑士 马特",
+        "白鸦骑士 马尔特"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23821",
-      "updatedAt": "2026-11-09T01:17:44.471Z",
+      "updatedAt": "2026-11-13T02:05:12.503Z",
       "chineseNameSources": [
         {
           "name": "白鸦骑士 马特",
@@ -561430,6 +562140,13 @@
           "name": "白鸦骑士 马特",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23821"
+        },
+        {
+          "name": "白鸦骑士 马尔特",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23821"
         }
@@ -583778,6 +584495,7 @@
       "level": 7,
       "attribute": "earth",
       "name": "究極変異態・インセクト女王",
+      "cnName": "究极变异态昆虫女王",
       "jaName": "究極変異態・インセクト女王",
       "enName": "Metamorphosed Insect Queen",
       "effectText": "このカードは通常召喚できず、カードの効果でのみ特殊召喚できる。①：フィールドに他の昆虫族モンスターが存在する場合、自分フィールドの昆虫族モンスターは相手の効果の対象にならず、相手の効果では破壊されない。②：このカードが攻撃したダメージステップ終了時、自分フィールドのモンスター１体をリリースして発動できる。このカードは相手モンスターに続けて攻撃できる。③：自分・相手のエンドフェイズに発動できる。自分フィールドに「インセクトモンスタートークン」（昆虫族・地・星１・攻／守１００）１体を特殊召喚する。",
@@ -583786,11 +584504,11 @@
         "究極変異態・インセクト女王",
         "Metamorphosed Insect Queen",
         "究极变异态昆虫女王",
-        "终极变态昆虫女王"
+        "终极变态昆虫女王",
+        "究极变异态・昆虫女王"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/13469",
-      "updatedAt": "2026-09-12T21:06:57.710Z",
-      "cnName": "究极变异态昆虫女王",
+      "updatedAt": "2026-11-13T02:05:13.689Z",
       "chineseNameSources": [
         {
           "name": "究极变异态昆虫女王",
@@ -583817,6 +584535,13 @@
           "name": "究极变异态昆虫女王",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "13469"
+        },
+        {
+          "name": "究极变异态・昆虫女王",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "13469"
         }
@@ -587468,6 +588193,7 @@
         "continuous"
       ],
       "name": "千年の啓示",
+      "cnName": "千年的启示",
       "jaName": "千年の啓示",
       "enName": "Millennium Revelation",
       "effectText": "このカード名の①②の効果はそれぞれ１ターンに１度しか使用できない。①：手札から幻神獣族モンスター１体を墓地へ送って発動できる。自分のデッキ・墓地から「死者蘇生」１枚を選んで手札に加える。②：魔法＆罠ゾーンの表側表示のこのカードを墓地へ送って発動できる。このターン、自分の「死者蘇生」によって、自分の墓地の「ラーの翼神竜」を召喚条件を無視して特殊召喚できる。この効果を発動したターンのエンドフェイズに、自分は「死者蘇生」の効果で特殊召喚された「ラーの翼神竜」を墓地へ送らなければならない。",
@@ -587475,11 +588201,11 @@
       "aliases": [
         "千年の啓示",
         "Millennium Revelation",
-        "千年的启示"
+        "千年的启示",
+        "仟年启示"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/15335",
-      "updatedAt": "2026-09-12T21:06:58.123Z",
-      "cnName": "千年的启示",
+      "updatedAt": "2026-11-13T02:05:13.905Z",
       "chineseNameSources": [
         {
           "name": "千年的启示",
@@ -587506,6 +588232,13 @@
           "name": "千年的启示",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "15335"
+        },
+        {
+          "name": "仟年启示",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "15335"
         }
@@ -594110,6 +594843,7 @@
         "continuous"
       ],
       "name": "銀幕の鏡壁",
+      "cnName": "银幕之镜壁",
       "jaName": "銀幕の鏡壁",
       "enName": "Mirror Wall",
       "effectText": "このカードのコントローラーは自分スタンバイフェイズ毎に２０００LPを払う。またはLPを払わずにこのカードを破壊する。①：このカードが魔法＆罠ゾーンに存在する限り、相手の攻撃モンスターの攻撃力は半分になる。",
@@ -594122,8 +594856,7 @@
         "银幕镜壁"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/4993",
-      "updatedAt": "2026-09-12T21:06:58.852Z",
-      "cnName": "银幕之镜壁",
+      "updatedAt": "2026-11-13T02:05:14.292Z",
       "chineseNameSources": [
         {
           "name": "银幕之镜壁",
@@ -594150,6 +594883,13 @@
           "name": "银幕镜壁",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "4993"
+        },
+        {
+          "name": "银幕镜壁",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "4993"
         }
@@ -617788,10 +618528,11 @@
       "aliases": [
         "竜魔導の降霊師",
         "Necromancer of Dragon Magic",
-        "龙魔导降灵师"
+        "龙魔导降灵师",
+        "龙魔导之降灵师"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23861",
-      "updatedAt": "2026-11-09T01:17:51.494Z",
+      "updatedAt": "2026-11-13T02:05:15.609Z",
       "chineseNameSources": [
         {
           "name": "龙魔导降灵师",
@@ -617804,6 +618545,13 @@
           "name": "龙魔导降灵师",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23861"
+        },
+        {
+          "name": "龙魔导之降灵师",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23861"
         }
@@ -626904,7 +627652,7 @@
         "幻惑之绮罗星"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23833",
-      "updatedAt": "2026-11-09T01:17:52.577Z",
+      "updatedAt": "2026-11-13T02:05:16.094Z",
       "chineseNameSources": [
         {
           "name": "幻惑的绮罗星",
@@ -626917,6 +627665,13 @@
           "name": "幻惑之绮罗星",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23833"
+        },
+        {
+          "name": "幻惑的绮罗星",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23833"
         }
@@ -642636,10 +643391,11 @@
         "No.96 ブラック・マリオネッター",
         "Number 96: Dark Manipulator",
         "No.96 黑偶",
-        "No.96 黑傀儡师"
+        "No.96 黑傀儡师",
+        "编号96 黑操偶师"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23854",
-      "updatedAt": "2026-11-09T01:17:54.434Z",
+      "updatedAt": "2026-11-13T02:05:16.917Z",
       "chineseNameSources": [
         {
           "name": "No.96 黑偶",
@@ -642652,6 +643408,13 @@
           "name": "No.96 黑傀儡师",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23854"
+        },
+        {
+          "name": "编号96 黑操偶师",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23854"
         }
@@ -642689,6 +643452,7 @@
       "rank": 2,
       "attribute": "dark",
       "name": "No.96 ブラック・ミスト",
+      "cnName": "No.96 黑雾",
       "jaName": "No.96 ブラック・ミスト",
       "enName": "Number 96: Dark Mist",
       "effectText": "レベル２モンスター×３\n①：このカードが相手の表側表示モンスターと戦闘を行う攻撃宣言時に１度、このカードのX素材を１つ取り除いて発動できる。その相手モンスターの攻撃力を半分にし、その数値分このカードの攻撃力をアップする。",
@@ -642697,11 +643461,11 @@
         "No.96 ブラック・ミスト",
         "Number 96: Dark Mist",
         "No.96 黑雾",
-        "编号96 黑色迷雾"
+        "编号96 黑色迷雾",
+        "编号96 黑雾"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/9917",
-      "updatedAt": "2026-09-12T21:07:03.787Z",
-      "cnName": "No.96 黑雾",
+      "updatedAt": "2026-11-13T02:05:16.919Z",
       "chineseNameSources": [
         {
           "name": "No.96 黑雾",
@@ -642728,6 +643492,13 @@
           "name": "No.96 黑雾",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "9917"
+        },
+        {
+          "name": "编号96 黑雾",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "9917"
         }
@@ -644655,6 +645426,7 @@
       "rank": 6,
       "attribute": "dark",
       "name": "CNo.5 亡朧龍 カオス・キマイラ・ドラゴン",
+      "cnName": "混沌No.5 亡胧龙 混沌嵌合龙",
       "jaName": "CNo.5 亡朧龍 カオス・キマイラ・ドラゴン",
       "enName": "Number C5: Chaos Chimera Dragon",
       "effectText": "レベル６モンスター×３体以上\n①：このカードの攻撃力は、このカードのX素材の数×１０００アップする。②：このカードが攻撃を行ったダメージステップ終了時に、このカードのX素材を１つ取り除いて発動できる。このカードは相手モンスターに続けて攻撃できる。③：バトルフェイズ終了時に、LPを半分払い、自分・相手の墓地のカードを合計２枚対象として発動できる。その内の１枚を持ち主のデッキの一番上に置き、もう１枚をこのカードの下に重ねてX素材とする。",
@@ -644664,11 +645436,11 @@
         "Number C5: Chaos Chimera Dragon",
         "混沌No.5 亡胧龙 混沌嵌合龙",
         "混沌编号5 亡胧龙 混沌客迈拉龙",
-        "CNo.5 亡胧龙 混沌嵌合龙"
+        "CNo.5 亡胧龙 混沌嵌合龙",
+        "混沌编号5 亡胧龙 混沌嵌合龙"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11187",
-      "updatedAt": "2026-09-12T21:07:03.959Z",
-      "cnName": "混沌No.5 亡胧龙 混沌嵌合龙",
+      "updatedAt": "2026-11-13T02:05:17.013Z",
       "chineseNameSources": [
         {
           "name": "混沌No.5 亡胧龙 混沌嵌合龙",
@@ -644695,6 +645467,13 @@
           "name": "CNo.5 亡胧龙 混沌嵌合龙",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "11187"
+        },
+        {
+          "name": "混沌编号5 亡胧龙 混沌嵌合龙",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "11187"
         }
@@ -645492,6 +646271,7 @@
       "rank": 3,
       "attribute": "dark",
       "name": "CNo.96 ブラック・ストーム",
+      "cnName": "混沌No.96 黑飙",
       "jaName": "CNo.96 ブラック・ストーム",
       "enName": "Number C96: Dark Storm",
       "effectText": "闇属性レベル３モンスター×４\n①：このカードは戦闘では破壊されず、このカードの戦闘で発生する自分への戦闘ダメージは相手も受ける。②：このカードが「No.96 ブラック・ミスト」をX素材としている場合、以下の効果を得る。●このカードが相手モンスターと戦闘を行う攻撃宣言時に１度、このカードのX素材を１つ取り除いて発動できる。その相手モンスターの攻撃力を０にし、このカードの攻撃力はその相手モンスターの元々の攻撃力分アップする。",
@@ -645501,11 +646281,11 @@
         "Number C96: Dark Storm",
         "混沌No.96 黑飙",
         "混沌编号96 黑色风暴",
-        "CNo.96 黑飙"
+        "CNo.96 黑飙",
+        "混沌编号96 黑岚"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/10777",
-      "updatedAt": "2026-09-12T21:07:04.029Z",
-      "cnName": "混沌No.96 黑飙",
+      "updatedAt": "2026-11-13T02:05:17.045Z",
       "chineseNameSources": [
         {
           "name": "混沌No.96 黑飙",
@@ -645532,6 +646312,13 @@
           "name": "CNo.96 黑飙",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "10777"
+        },
+        {
+          "name": "混沌编号96 黑岚",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "10777"
         }
@@ -653900,10 +654687,11 @@
         "終天獄神Ωヴィードリウム",
         "Omega Vidolium the Power Patron of Heaven's End",
         "终天狱神Ω比托利姆",
-        "终天狱神 Ω比托利姆"
+        "终天狱神 Ω比托利姆",
+        "终天狱神Ω皮托里姆"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23846",
-      "updatedAt": "2026-11-06T01:48:21.798Z",
+      "updatedAt": "2026-11-13T02:05:17.506Z",
       "chineseNameSources": [
         {
           "name": "终天狱神Ω比托利姆",
@@ -653916,6 +654704,13 @@
           "name": "终天狱神 Ω比托利姆",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23846"
+        },
+        {
+          "name": "终天狱神Ω皮托里姆",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23846"
         }
@@ -654428,6 +655223,7 @@
         "continuous"
       ],
       "name": "太陽神合一",
+      "cnName": "太阳神合一",
       "jaName": "太陽神合一",
       "enName": "Sun God Unification",
       "effectText": "このカードの①②の効果は同一チェーン上では発動できず、自分フィールドに元々のカード名が「ラーの翼神竜」となるモンスターが存在する場合、このカードはセットしたターンでも発動できる。①：自分・相手のメインフェイズに、１００LPになるようにLPを払って発動できる。自分フィールドの特殊召喚された「ラーの翼神竜」１体を選び、その攻撃力・守備力を払った数値分アップする。②：１ターンに１度、自分フィールドの「ラーの翼神竜」１体をリリースして発動できる。その攻撃力分だけ自分のLPを回復する。",
@@ -654439,8 +655235,7 @@
         "太阳神灵合一"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/15336",
-      "updatedAt": "2026-09-12T21:07:04.949Z",
-      "cnName": "太阳神合一",
+      "updatedAt": "2026-11-13T02:05:17.558Z",
       "chineseNameSources": [
         {
           "name": "太阳神合一",
@@ -654467,6 +655262,13 @@
           "name": "太阳神合一",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "15336"
+        },
+        {
+          "name": "太阳神合一",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "15336"
         }
@@ -661256,6 +662058,7 @@
       "level": 4,
       "attribute": "wind",
       "name": "オキシゲドン",
+      "cnName": "氧素龙",
       "jaName": "オキシゲドン",
       "enName": "Oxygeddon",
       "effectText": "①：このカードが炎族モンスターとの戦闘で破壊され墓地へ送られた場合に発動する。お互いに８００ダメージを受ける。",
@@ -661264,11 +662067,11 @@
         "オキシゲドン",
         "Oxygeddon",
         "氧素龙",
-        "氧魔兽"
+        "氧魔兽",
+        "氧恐龙"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/6480",
-      "updatedAt": "2026-09-12T21:07:05.705Z",
-      "cnName": "氧素龙",
+      "updatedAt": "2026-11-13T02:05:17.958Z",
       "chineseNameSources": [
         {
           "name": "氧素龙",
@@ -661295,6 +662098,13 @@
           "name": "氧素龙",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "6480"
+        },
+        {
+          "name": "氧恐龙",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "6480"
         }
@@ -666037,6 +666847,7 @@
       "level": 2,
       "attribute": "earth",
       "name": "寄生虫パラノイド",
+      "cnName": "寄生虫 帕拉诺伊德",
       "jaName": "寄生虫パラノイド",
       "enName": "Parasite Paranoid",
       "effectText": "このカード名の①の効果は１ターンに１度しか使用できない。①：フィールドの表側表示モンスター１体を対象として発動できる。このカードを手札から装備カード扱いとしてそのモンスターに装備する。装備モンスターは種族が昆虫族になり、昆虫族モンスターを攻撃できず、昆虫族モンスターを対象として発動した装備モンスターの効果は無効化される。この効果は相手ターンでも発動できる。②：装備カード扱いのこのカードが墓地へ送られた場合に発動できる。手札からレベル７以上の昆虫族モンスター１体を召喚条件を無視して特殊召喚する。",
@@ -666048,8 +666859,7 @@
         "寄生虫帕拉诺伊德"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/13468",
-      "updatedAt": "2026-09-12T21:07:06.226Z",
-      "cnName": "寄生虫 帕拉诺伊德",
+      "updatedAt": "2026-11-13T02:05:18.227Z",
       "chineseNameSources": [
         {
           "name": "寄生虫 帕拉诺伊德",
@@ -666076,6 +666886,13 @@
           "name": "寄生虫 帕拉诺伊德",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "13468"
+        },
+        {
+          "name": "寄生虫 帕拉诺伊德",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "13468"
         }
@@ -670460,6 +671277,7 @@
       "level": 9,
       "attribute": "earth",
       "name": "完全態・グレート・インセクト",
+      "cnName": "完全态大昆虫",
       "jaName": "完全態・グレート・インセクト",
       "enName": "Ultimate Great Insect",
       "effectText": "昆虫族・レベル８モンスター＋昆虫族・レベル７モンスター\n自分は「完全態・グレート・インセクト」を１ターンに１度しか特殊召喚できない。このカードは融合召喚及び以下の方法でのみEXデッキから特殊召喚できる。●装備カードを装備した自分の守備力２０００以上の昆虫族モンスター１体をリリースした場合にEXデッキから特殊召喚できる。①：このカードは戦闘では破壊されない。②：フィールドゾーンに表側表示でカードが存在する場合、自分・相手のバトルフェイズに１度、発動できる。相手フィールドのモンスターを全て破壊する。",
@@ -670468,11 +671286,11 @@
         "完全態・グレート・インセクト",
         "Ultimate Great Insect",
         "完全态大昆虫",
-        "完全体・大昆虫"
+        "完全体・大昆虫",
+        "完全态・大昆虫"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/18180",
-      "updatedAt": "2026-09-12T21:07:06.707Z",
-      "cnName": "完全态大昆虫",
+      "updatedAt": "2026-11-13T02:05:18.499Z",
       "chineseNameSources": [
         {
           "name": "完全态大昆虫",
@@ -670499,6 +671317,13 @@
           "name": "完全态大昆虫",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "18180"
+        },
+        {
+          "name": "完全态・大昆虫",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "18180"
         }
@@ -693541,10 +694366,11 @@
       "aliases": [
         "獄神封門－共滅の剣－",
         "Power Patron Portal Plugging -Sword of Mutual Destruction-",
-        "狱神封门-共灭之剑-"
+        "狱神封门-共灭之剑-",
+        "狱神封门－共灭之剑－"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23871",
-      "updatedAt": "2026-11-09T01:18:00.868Z",
+      "updatedAt": "2026-11-13T02:05:19.748Z",
       "chineseNameSources": [
         {
           "name": "狱神封门-共灭之剑-",
@@ -693557,6 +694383,13 @@
           "name": "狱神封门-共灭之剑-",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23871"
+        },
+        {
+          "name": "狱神封门－共灭之剑－",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23871"
         }
@@ -694372,7 +695205,7 @@
         "决斗者之力"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23878",
-      "updatedAt": "2026-11-06T01:48:26.916Z",
+      "updatedAt": "2026-11-13T02:05:19.803Z",
       "chineseNameSources": [
         {
           "name": "决斗者之力",
@@ -694385,6 +695218,13 @@
           "name": "决斗者之力",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23878"
+        },
+        {
+          "name": "决斗者之力",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23878"
         }
@@ -701958,7 +702798,7 @@
         "六花双精报春蔷薇"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23826",
-      "updatedAt": "2026-11-09T01:18:01.957Z",
+      "updatedAt": "2026-11-13T02:05:20.232Z",
       "chineseNameSources": [
         {
           "name": "六花双精 报春来",
@@ -701978,6 +702818,13 @@
           "name": "六花双精报春蔷薇",
           "source": "baige",
           "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23826"
+        },
+        {
+          "name": "六花双精报春蔷薇",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23826"
         }
@@ -709707,7 +710554,7 @@
         "白鸦森林的炎魔"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23820",
-      "updatedAt": "2026-11-09T01:18:02.944Z",
+      "updatedAt": "2026-11-13T02:05:20.666Z",
       "chineseNameSources": [
         {
           "name": "白鸦之森的炎魔",
@@ -709720,6 +710567,13 @@
           "name": "白鸦森林的炎魔",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23820"
+        },
+        {
+          "name": "白鸦之森的炎魔",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23820"
         }
@@ -713448,6 +714302,7 @@
       "type": "trap",
       "cardType": "trap",
       "name": "女王の選択",
+      "cnName": "女王的选择",
       "jaName": "女王の選択",
       "enName": "Queen's Pawn",
       "effectText": "自分フィールド上に存在する「アマゾネス」と名のついたモンスターが戦闘によって相手モンスターを破壊し墓地へ送った時に発動する事ができる。自分のデッキからレベル４以下の「アマゾネス」と名のついたモンスター１体を特殊召喚する。",
@@ -713459,8 +714314,7 @@
         "女王的抉择"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/9004",
-      "updatedAt": "2026-09-12T21:07:11.198Z",
-      "cnName": "女王的选择",
+      "updatedAt": "2026-11-13T02:05:20.877Z",
       "chineseNameSources": [
         {
           "name": "女王的选择",
@@ -713487,6 +714341,13 @@
           "name": "女王的选择",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "9004"
+        },
+        {
+          "name": "女王的选择",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "9004"
         }
@@ -725590,7 +726451,7 @@
         "亚特兰蒂斯的暴翼"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23830",
-      "updatedAt": "2026-11-09T01:18:04.943Z",
+      "updatedAt": "2026-11-13T02:05:21.533Z",
       "chineseNameSources": [
         {
           "name": "亚特兰蒂斯的暴翼",
@@ -725603,6 +726464,13 @@
           "name": "亚特兰蒂斯的暴翼",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23830"
+        },
+        {
+          "name": "亚特兰蒂斯的暴翼",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23830"
         }
@@ -725725,6 +726593,7 @@
       "type": "spell",
       "cardType": "spell",
       "name": "RUM－千死蛮巧",
+      "cnName": "升阶魔法-千死蛮巧",
       "jaName": "RUM－千死蛮巧",
       "enName": "Rank-Up-Magic Admiration of the Thousands",
       "effectText": "「RUM－千死蛮巧」は１ターンに１枚しか発動できず、このカードを発動するターン、自分はこのカードの効果以外ではモンスターを特殊召喚できない。①：自分及び相手の墓地の同じランクのXモンスターをそれぞれ１体以上対象として発動できる。そのモンスターよりランクが１つ高い、「CNo.」モンスターまたは「CX」モンスター１体をエクストラデッキから特殊召喚し、対象のモンスターを下に重ねてX素材とする。",
@@ -725736,8 +726605,7 @@
         "升阶魔法－千死蛮巧"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11188",
-      "updatedAt": "2026-09-12T21:07:12.416Z",
-      "cnName": "升阶魔法-千死蛮巧",
+      "updatedAt": "2026-11-13T02:05:21.545Z",
       "chineseNameSources": [
         {
           "name": "升阶魔法-千死蛮巧",
@@ -725764,6 +726632,13 @@
           "name": "升阶魔法-千死蛮巧",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "11188"
+        },
+        {
+          "name": "升阶魔法－千死蛮巧",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "11188"
         }
@@ -738739,10 +739614,11 @@
         "リインゼルム・アムルサ",
         "Reindsurm Amurusa",
         "轮回虫龙 大紫蛱蝶",
-        "无死虫龙·紫蛱蝶鳞虫"
+        "无死虫龙·紫蛱蝶鳞虫",
+        "轮回虫龙・大紫蛱蝶"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23835",
-      "updatedAt": "2026-11-06T01:48:32.404Z",
+      "updatedAt": "2026-11-13T02:05:22.273Z",
       "chineseNameSources": [
         {
           "name": "轮回虫龙 大紫蛱蝶",
@@ -738755,6 +739631,13 @@
           "name": "无死虫龙·紫蛱蝶鳞虫",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23835"
+        },
+        {
+          "name": "轮回虫龙・大紫蛱蝶",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23835"
         }
@@ -738773,10 +739656,11 @@
       "aliases": [
         "翅竜の羽撃",
         "Reindsurm Butterfly",
-        "翅龙的羽击"
+        "翅龙的羽击",
+        "轮回虫龙之羽击"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23868",
-      "updatedAt": "2026-11-09T01:18:06.633Z",
+      "updatedAt": "2026-11-13T02:05:22.275Z",
       "chineseNameSources": [
         {
           "name": "翅龙的羽击",
@@ -738789,6 +739673,13 @@
           "name": "翅龙的羽击",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23868"
+        },
+        {
+          "name": "轮回虫龙之羽击",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23868"
         }
@@ -738835,10 +739726,11 @@
         "リインゼルム・カルカサス",
         "Reindsurm Carcasas",
         "轮回虫龙 高加索南洋大兜虫",
-        "无死虫龙·高加索独角仙鳞虫"
+        "无死虫龙·高加索独角仙鳞虫",
+        "轮回虫龙・卡萨斯大兜虫"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23837",
-      "updatedAt": "2026-11-09T01:18:06.646Z",
+      "updatedAt": "2026-11-13T02:05:22.281Z",
       "chineseNameSources": [
         {
           "name": "轮回虫龙 高加索南洋大兜虫",
@@ -738851,6 +739743,13 @@
           "name": "无死虫龙·高加索独角仙鳞虫",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23837"
+        },
+        {
+          "name": "轮回虫龙・卡萨斯大兜虫",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23837"
         }
@@ -738874,10 +739773,11 @@
         "無死なる竜の鼓動",
         "Reindsurm Carnation",
         "无死之龙的鼓动",
-        "无死虫龙的鼓动"
+        "无死虫龙的鼓动",
+        "轮回虫龙之鼓动"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23867",
-      "updatedAt": "2026-11-09T01:18:06.665Z",
+      "updatedAt": "2026-11-13T02:05:22.288Z",
       "chineseNameSources": [
         {
           "name": "无死之龙的鼓动",
@@ -738890,6 +739790,13 @@
           "name": "无死虫龙的鼓动",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23867"
+        },
+        {
+          "name": "轮回虫龙之鼓动",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23867"
         }
@@ -738912,10 +739819,11 @@
       "aliases": [
         "竜の骸歌",
         "Reindsurm Conquest",
-        "龙之骸歌"
+        "龙之骸歌",
+        "轮回虫龙之骸歌"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23866",
-      "updatedAt": "2026-11-09T01:18:06.662Z",
+      "updatedAt": "2026-11-13T02:05:22.298Z",
       "chineseNameSources": [
         {
           "name": "龙之骸歌",
@@ -738928,6 +739836,13 @@
           "name": "龙之骸歌",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23866"
+        },
+        {
+          "name": "轮回虫龙之骸歌",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23866"
         }
@@ -738950,10 +739865,11 @@
       "aliases": [
         "百竜の交戦",
         "Reindsurm Encounter",
-        "百龙的交战"
+        "百龙的交战",
+        "轮回虫龙之交战"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23887",
-      "updatedAt": "2026-11-06T01:48:32.447Z",
+      "updatedAt": "2026-11-13T02:05:22.297Z",
       "chineseNameSources": [
         {
           "name": "百龙的交战",
@@ -738966,6 +739882,13 @@
           "name": "百龙的交战",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23887"
+        },
+        {
+          "name": "轮回虫龙之交战",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23887"
         }
@@ -739012,10 +739935,11 @@
         "リインゼルム・ギガロヴェンドラ",
         "Reindsurm Gigalovendra",
         "轮回虫龙 秘鲁巨人蜈蚣",
-        "无死虫龙·巨人蜈蚣鳞虫"
+        "无死虫龙·巨人蜈蚣鳞虫",
+        "轮回虫龙・极巨百足龙"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23838",
-      "updatedAt": "2026-11-06T01:48:32.447Z",
+      "updatedAt": "2026-11-13T02:05:22.298Z",
       "chineseNameSources": [
         {
           "name": "轮回虫龙 秘鲁巨人蜈蚣",
@@ -739028,6 +739952,13 @@
           "name": "无死虫龙·巨人蜈蚣鳞虫",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23838"
+        },
+        {
+          "name": "轮回虫龙・极巨百足龙",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23838"
         }
@@ -739078,7 +740009,7 @@
         "无死虫龙·喀戎独角仙鳞虫"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23839",
-      "updatedAt": "2026-11-06T01:48:32.452Z",
+      "updatedAt": "2026-11-13T02:05:22.303Z",
       "chineseNameSources": [
         {
           "name": "轮回虫龙 奇伦南洋大兜虫",
@@ -739098,6 +740029,13 @@
           "name": "无死虫龙·喀戎独角仙鳞虫",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23839"
+        },
+        {
+          "name": "轮回虫龙・铜身三戟龙",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23839"
         }
@@ -739144,10 +740082,11 @@
         "リインゼルム・ルヴィアン",
         "Reindsurm Luvian",
         "轮回虫龙 秘鲁蜈蚣",
-        "无死虫龙·秘鲁蜈蚣鳞虫"
+        "无死虫龙·秘鲁蜈蚣鳞虫",
+        "轮回虫龙・巨人蜈蚣"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23836",
-      "updatedAt": "2026-11-09T01:18:06.698Z",
+      "updatedAt": "2026-11-13T02:05:22.303Z",
       "chineseNameSources": [
         {
           "name": "轮回虫龙 秘鲁蜈蚣",
@@ -739160,6 +740099,13 @@
           "name": "无死虫龙·秘鲁蜈蚣鳞虫",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23836"
+        },
+        {
+          "name": "轮回虫龙・巨人蜈蚣",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23836"
         }
@@ -739179,10 +740125,11 @@
         "角竜の修練",
         "Reindsurm Practice",
         "角龙的修炼",
-        "角龙的修练"
+        "角龙的修练",
+        "轮回虫龙之修练"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23869",
-      "updatedAt": "2026-11-09T01:18:06.705Z",
+      "updatedAt": "2026-11-13T02:05:22.306Z",
       "chineseNameSources": [
         {
           "name": "角龙的修炼",
@@ -739195,6 +740142,13 @@
           "name": "角龙的修练",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23869"
+        },
+        {
+          "name": "轮回虫龙之修练",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23869"
         }
@@ -748328,7 +749282,7 @@
         "六花的黑姬"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23827",
-      "updatedAt": "2026-11-09T01:18:07.910Z",
+      "updatedAt": "2026-11-13T02:05:22.849Z",
       "chineseNameSources": [
         {
           "name": "六花的黑姬",
@@ -748348,6 +749302,13 @@
           "name": "六花的黑姬",
           "source": "baige",
           "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23827"
+        },
+        {
+          "name": "六花的黑姬",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23827"
         }
@@ -748483,7 +749444,7 @@
         "Rikka Moonlit Waters"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23875",
-      "updatedAt": "2026-11-06T01:48:33.636Z",
+      "updatedAt": "2026-11-13T02:05:22.856Z",
       "chineseNameSources": [
         {
           "name": "六花水月",
@@ -748503,6 +749464,13 @@
           "name": "六花水月",
           "source": "baige",
           "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23875"
+        },
+        {
+          "name": "六花水月",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23875"
         }
@@ -748792,7 +749760,7 @@
         "六花深圣花环"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23853",
-      "updatedAt": "2026-11-09T01:18:07.975Z",
+      "updatedAt": "2026-11-13T02:05:22.878Z",
       "chineseNameSources": [
         {
           "name": "六花深圣 力量女神花圈",
@@ -748812,6 +749780,13 @@
           "name": "六花深圣花环",
           "source": "baige",
           "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23853"
+        },
+        {
+          "name": "六花深圣花环",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23853"
         }
@@ -766609,7 +767584,7 @@
         "转生炎兽 宽耳蝠"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23825",
-      "updatedAt": "2026-11-09T01:18:10.274Z",
+      "updatedAt": "2026-11-13T02:05:23.865Z",
       "chineseNameSources": [
         {
           "name": "转生炎兽 宽耳蝠",
@@ -766622,6 +767597,13 @@
           "name": "转生炎兽 宽耳蝠",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23825"
+        },
+        {
+          "name": "转生炎兽 宽耳蝠",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23825"
         }
@@ -767768,10 +768750,11 @@
       "aliases": [
         "転生炎獣の神剣",
         "Salamangreat Gearblade",
-        "转生炎兽的神剑"
+        "转生炎兽的神剑",
+        "转生炎兽之神剑"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23874",
-      "updatedAt": "2026-11-09T01:18:10.417Z",
+      "updatedAt": "2026-11-13T02:05:23.922Z",
       "chineseNameSources": [
         {
           "name": "转生炎兽的神剑",
@@ -767784,6 +768767,13 @@
           "name": "转生炎兽的神剑",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23874"
+        },
+        {
+          "name": "转生炎兽之神剑",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23874"
         }
@@ -768049,7 +769039,7 @@
         "转生炎兽 捻角山羊"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23824",
-      "updatedAt": "2026-11-09T01:18:10.443Z",
+      "updatedAt": "2026-11-13T02:05:23.952Z",
       "chineseNameSources": [
         {
           "name": "转生炎兽 捻角山羊",
@@ -768062,6 +769052,13 @@
           "name": "转生炎兽 捻角山羊",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23824"
+        },
+        {
+          "name": "转生炎兽 捻角山羊",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23824"
         }
@@ -768937,10 +769934,11 @@
       "aliases": [
         "転生炎獣の神域",
         "Salamangreat Shrine",
-        "转生炎兽的神域"
+        "转生炎兽的神域",
+        "转生炎兽之神域"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23873",
-      "updatedAt": "2026-11-06T01:48:36.189Z",
+      "updatedAt": "2026-11-13T02:05:23.988Z",
       "chineseNameSources": [
         {
           "name": "转生炎兽的神域",
@@ -768953,6 +769951,13 @@
           "name": "转生炎兽的神域",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23873"
+        },
+        {
+          "name": "转生炎兽之神域",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23873"
         }
@@ -788169,6 +789174,7 @@
       "type": "trap",
       "cardType": "trap",
       "name": "誘惑のシャドウ",
+      "cnName": "诱惑之影",
       "jaName": "誘惑のシャドウ",
       "enName": "Shadow of Eyes",
       "effectText": "相手フィールド上にモンスターがセットされた時に発動する事ができる。そのセットされたモンスター１体を表側攻撃表示にする。（この時、リバース効果モンスターの効果は発動しない。）",
@@ -788177,11 +789183,11 @@
         "誘惑のシャドウ",
         "Shadow of Eyes",
         "诱惑之影",
-        "诱惑的魅影"
+        "诱惑的魅影",
+        "诱惑眼影"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/5135",
-      "updatedAt": "2026-09-12T21:07:18.945Z",
-      "cnName": "诱惑之影",
+      "updatedAt": "2026-11-13T02:05:25.058Z",
       "chineseNameSources": [
         {
           "name": "诱惑之影",
@@ -788208,6 +789214,13 @@
           "name": "诱惑之影",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "5135"
+        },
+        {
+          "name": "诱惑眼影",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "5135"
         }
@@ -800383,7 +801396,7 @@
         "白鸦森林的罪宝"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23823",
-      "updatedAt": "2026-11-09T01:18:14.512Z",
+      "updatedAt": "2026-11-13T02:05:25.732Z",
       "chineseNameSources": [
         {
           "name": "白鸦之森的罪宝",
@@ -800396,6 +801409,13 @@
           "name": "白鸦森林的罪宝",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23823"
+        },
+        {
+          "name": "白鸦之森的罪宝",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23823"
         }
@@ -827090,7 +828110,7 @@
         "白鸦魔女的光彩"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23888",
-      "updatedAt": "2026-11-06T01:48:43.592Z",
+      "updatedAt": "2026-11-13T02:05:27.291Z",
       "chineseNameSources": [
         {
           "name": "白鸦魔女的光彩",
@@ -827103,6 +828123,13 @@
           "name": "白鸦魔女的光彩",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23888"
+        },
+        {
+          "name": "白鸦魔女的光彩",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23888"
         }
@@ -845098,7 +846125,7 @@
         "太阳神灵的支配"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23883",
-      "updatedAt": "2026-11-06T01:48:45.810Z",
+      "updatedAt": "2026-11-13T02:05:28.283Z",
       "chineseNameSources": [
         {
           "name": "太阳神的支配",
@@ -845111,6 +846138,13 @@
           "name": "太阳神灵的支配",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23883"
+        },
+        {
+          "name": "太阳神的支配",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23883"
         }
@@ -855332,6 +856366,7 @@
       "level": 5,
       "attribute": "earth",
       "name": "無死虫団の補給兵",
+      "cnName": "无死虫团的补给兵",
       "jaName": "無死虫団の補給兵",
       "enName": "Supply Soldier of the Indestructible Insects",
       "effectText": "このカード名の①②の効果はそれぞれ１ターンに１度しか使用できない。\n①：昆虫族モンスターの効果が発動した時に発動できる。このカードを手札から特殊召喚する。相手の効果の発動にチェーンしてこの効果を発動した場合、さらにその効果を無効にする。この効果の発動後、次の自分ターンの終了時まで自分は昆虫族モンスターしかEXデッキから特殊召喚できない。\n②：自分メインフェイズに発動できる。自分の手札・フィールドのモンスターを融合素材とし、昆虫族の融合モンスター１体を融合召喚する。",
@@ -855342,8 +856377,7 @@
         "无死虫团的补给兵"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/20705",
-      "updatedAt": "2026-09-12T21:07:26.053Z",
-      "cnName": "无死虫团的补给兵",
+      "updatedAt": "2026-11-13T02:05:28.803Z",
       "chineseNameSources": [
         {
           "name": "无死虫团的补给兵",
@@ -855370,6 +856404,13 @@
           "name": "无死虫团的补给兵",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "20705"
+        },
+        {
+          "name": "无死虫团的补给兵",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "20705"
         }
@@ -871964,7 +873005,7 @@
         "六花深圣泪滴花束"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23852",
-      "updatedAt": "2026-11-09T01:18:23.672Z",
+      "updatedAt": "2026-11-13T02:05:29.743Z",
       "chineseNameSources": [
         {
           "name": "六花深圣 泪滴花束雪花莲",
@@ -871984,6 +873025,13 @@
           "name": "六花深圣 泪滴花束雪花莲",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23852"
+        },
+        {
+          "name": "六花深圣泪滴花束",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23852"
         }
@@ -884976,10 +886024,11 @@
         "不死なる太陽神",
         "The Immortal Sun God",
         "不死的太阳神",
-        "不死的太阳神灵"
+        "不死的太阳神灵",
+        "不死之太阳神"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23862",
-      "updatedAt": "2026-11-09T01:18:25.315Z",
+      "updatedAt": "2026-11-13T02:05:30.489Z",
       "chineseNameSources": [
         {
           "name": "不死的太阳神",
@@ -884992,6 +886041,13 @@
           "name": "不死的太阳神灵",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23862"
+        },
+        {
+          "name": "不死之太阳神",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23862"
         }
@@ -886065,7 +887121,7 @@
         "幻之昆虫女王"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23847",
-      "updatedAt": "2026-11-06T01:48:50.857Z",
+      "updatedAt": "2026-11-13T02:05:30.555Z",
       "chineseNameSources": [
         {
           "name": "幻之昆虫女王",
@@ -886078,6 +887134,13 @@
           "name": "幻之昆虫女王",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23847"
+        },
+        {
+          "name": "幻之昆虫女王",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23847"
         }
@@ -888897,10 +889960,11 @@
         "ケペルの金字塔",
         "The Pyramid of Kepher",
         "凯帕之金字塔",
-        "赫普鲁金字塔"
+        "赫普鲁金字塔",
+        "凯佩尔的金字塔"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23879",
-      "updatedAt": "2026-11-06T01:48:51.213Z",
+      "updatedAt": "2026-11-13T02:05:30.714Z",
       "chineseNameSources": [
         {
           "name": "凯帕之金字塔",
@@ -888913,6 +889977,13 @@
           "name": "赫普鲁金字塔",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23879"
+        },
+        {
+          "name": "凯佩尔的金字塔",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23879"
         }
@@ -889683,10 +890754,11 @@
         "お返し鶴秘姫",
         "The Secret Crane Princess Who Returns A Favor",
         "返身报恩的鹤秘姬",
-        "回报的鹤秘姬"
+        "回报的鹤秘姬",
+        "报恩鹤秘姬"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23834",
-      "updatedAt": "2026-11-09T01:18:25.985Z",
+      "updatedAt": "2026-11-13T02:05:30.774Z",
       "chineseNameSources": [
         {
           "name": "返身报恩的鹤秘姬",
@@ -889699,6 +890771,13 @@
           "name": "回报的鹤秘姬",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23834"
+        },
+        {
+          "name": "报恩鹤秘姬",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23834"
         }
@@ -890764,10 +891843,11 @@
         "闇へ誘う太陽神",
         "The Sun God Leading Down into Darkness",
         "诱向黑暗的太阳神",
-        "诱向黑暗的太阳神灵"
+        "诱向黑暗的太阳神灵",
+        "诱导向黑暗的太阳神"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23863",
-      "updatedAt": "2026-11-06T01:48:51.488Z",
+      "updatedAt": "2026-11-13T02:05:30.833Z",
       "chineseNameSources": [
         {
           "name": "诱向黑暗的太阳神",
@@ -890780,6 +891860,13 @@
           "name": "诱向黑暗的太阳神灵",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23863"
+        },
+        {
+          "name": "诱导向黑暗的太阳神",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23863"
         }
@@ -891782,10 +892869,11 @@
         "The True Sun God",
         "真正的太阳神",
         "真太阳神",
-        "真正的太阳神灵"
+        "真正的太阳神灵",
+        "真之太阳神"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/17743",
-      "updatedAt": "2026-10-31T01:03:34.454Z",
+      "updatedAt": "2026-11-13T02:05:30.896Z",
       "chineseNameSources": [
         {
           "name": "真正的太阳神",
@@ -891812,6 +892900,13 @@
           "name": "真正的太阳神",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "17743"
+        },
+        {
+          "name": "真之太阳神",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "17743"
         }
@@ -894172,7 +895267,7 @@
         "暗黑之太阳神灵-太阳神之翼神龙"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23841",
-      "updatedAt": "2026-11-09T01:18:26.562Z",
+      "updatedAt": "2026-11-13T02:05:31.041Z",
       "chineseNameSources": [
         {
           "name": "暗黑之太阳神-拉之翼神龙",
@@ -894192,6 +895287,13 @@
           "name": "暗黑之太阳神灵-太阳神之翼神龙",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23841"
+        },
+        {
+          "name": "暗黑太阳神－拉之翼神龙",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23841"
         }
@@ -894762,10 +895864,11 @@
         "予幻なき世界に託す約束",
         "Theorealize Ephemeral Lull",
         "向无预幻世托付的约定",
-        "托付给无预幻世界的约定"
+        "托付给无预幻世界的约定",
+        "托付给无预幻世界的刹那约定"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23890",
-      "updatedAt": "2026-11-06T01:48:52.013Z",
+      "updatedAt": "2026-11-13T02:05:31.071Z",
       "chineseNameSources": [
         {
           "name": "向无预幻世托付的约定",
@@ -894778,6 +895881,13 @@
           "name": "托付给无预幻世界的约定",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23890"
+        },
+        {
+          "name": "托付给无预幻世界的刹那约定",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23890"
         }
@@ -917847,7 +918957,7 @@
         "神鹰女郎三姐妹・三角狂欢"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23844",
-      "updatedAt": "2026-11-09T01:18:29.647Z",
+      "updatedAt": "2026-11-13T02:05:32.359Z",
       "chineseNameSources": [
         {
           "name": "鹰身女郎三姐妹 三角神迷",
@@ -917867,6 +918977,13 @@
           "name": "鹰身女郎三姐妹 三角神迷",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23844"
+        },
+        {
+          "name": "神鹰女郎三姐妹・三角狂欢",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23844"
         }
@@ -952894,6 +954011,7 @@
       "level": 4,
       "attribute": "dark",
       "name": "万力魔神バイサー・デス",
+      "cnName": "万力魔神 死亡拷问机",
       "jaName": "万力魔神バイサー・デス",
       "enName": "Viser Des",
       "effectText": "①：このカードの召喚に成功した場合、相手フィールドのモンスター１体を対象として発動する。発動後、３回目の自分スタンバイフェイズに対象のモンスターを破壊する。②：このカードの①の効果の対象のモンスターがフィールドに存在している限り、このカードは戦闘では破壊されない。",
@@ -952906,8 +954024,7 @@
         "万力魔神 死亡刑具"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/5292",
-      "updatedAt": "2026-09-12T21:07:36.365Z",
-      "cnName": "万力魔神 死亡拷问机",
+      "updatedAt": "2026-11-13T02:05:34.306Z",
       "chineseNameSources": [
         {
           "name": "万力魔神 死亡拷问机",
@@ -952934,6 +954051,13 @@
           "name": "万力魔神 死亡刑具",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "5292"
+        },
+        {
+          "name": "万力魔神 死亡刑具",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "5292"
         }
@@ -952976,10 +954100,11 @@
         "太陽神の拷問具－バイサー・デス・ショック",
         "Viser Des Shock, Tormentor of the Sun God",
         "太阳神的拷问具-电击死亡拷问机",
-        "太阳神灵的拷问具-电击死亡拷问机"
+        "太阳神灵的拷问具-电击死亡拷问机",
+        "太阳神的拷问具－死亡震撼刑具"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23815",
-      "updatedAt": "2026-11-09T01:18:34.059Z",
+      "updatedAt": "2026-11-13T02:05:34.306Z",
       "chineseNameSources": [
         {
           "name": "太阳神的拷问具-电击死亡拷问机",
@@ -952992,6 +954117,13 @@
           "name": "太阳神灵的拷问具-电击死亡拷问机",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23815"
+        },
+        {
+          "name": "太阳神的拷问具－死亡震撼刑具",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23815"
         }
@@ -962931,6 +964063,7 @@
       "level": 8,
       "attribute": "water",
       "name": "ウォーター・ドラゴン",
+      "cnName": "水龙",
       "jaName": "ウォーター・ドラゴン",
       "enName": "Water Dragon",
       "effectText": "このカードは通常召喚できず、「ボンディング－H２O」の効果でのみ特殊召喚できる。\n①：このカードがモンスターゾーンに存在する限り、フィールドの炎属性モンスター及び炎族モンスターの攻撃力は０になる。\n②：このカードが破壊され墓地へ送られた時、自分の墓地の「ハイドロゲドン」２体と「オキシゲドン」１体を対象として発動できる。そのモンスターを特殊召喚する。",
@@ -962942,8 +964075,7 @@
         "水合龙"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/6481",
-      "updatedAt": "2026-09-12T21:07:37.420Z",
-      "cnName": "水龙",
+      "updatedAt": "2026-11-13T02:05:34.858Z",
       "chineseNameSources": [
         {
           "name": "水龙",
@@ -962970,6 +964102,13 @@
           "name": "水龙",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "6481"
+        },
+        {
+          "name": "水合龙",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "6481"
         }
@@ -963003,6 +964142,7 @@
       "level": 10,
       "attribute": "water",
       "name": "ウォーター・ドラゴン－クラスター",
+      "cnName": "水龙-团簇",
       "jaName": "ウォーター・ドラゴン－クラスター",
       "enName": "Water Dragon Cluster",
       "effectText": "このカードは通常召喚できない。「ボンディング」魔法・罠カードの効果でのみ特殊召喚できる。①：このカードが特殊召喚に成功した場合に発動できる。相手フィールドの効果モンスターはターン終了時まで、攻撃力が０になり、効果を発動できない。②：このカードをリリースして発動できる。手札・デッキから「ウォーター・ドラゴン」２体を召喚条件を無視して守備表示で特殊召喚する。この効果は相手ターンでも発動できる。",
@@ -963014,8 +964154,7 @@
         "水合龙－团簇"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/13188",
-      "updatedAt": "2026-09-12T21:07:37.420Z",
-      "cnName": "水龙-团簇",
+      "updatedAt": "2026-11-13T02:05:34.873Z",
       "chineseNameSources": [
         {
           "name": "水龙-团簇",
@@ -963042,6 +964181,13 @@
           "name": "水龙-团簇",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "13188"
+        },
+        {
+          "name": "水合龙－团簇",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "13188"
         }
@@ -977970,7 +979116,7 @@
         "魔女工艺・育种希德"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23416",
-      "updatedAt": "2026-11-06T01:49:02.327Z",
+      "updatedAt": "2026-11-13T02:05:35.679Z",
       "chineseNameSources": [
         {
           "name": "魔女术工匠·种子女巫",
@@ -977997,6 +979143,13 @@
           "name": "魔女工艺・育种希德",
           "source": "baige",
           "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23416"
+        },
+        {
+          "name": "魔女工艺・育种希德",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23416"
         }
@@ -999064,10 +1000217,11 @@
         "白鴉の騎士ザルティス",
         "Zaltys, Knight of the Winter Raven",
         "白鸦骑士 扎尔蒂斯",
-        "白鸦骑士 萨尔蒂斯"
+        "白鸦骑士 萨尔蒂斯",
+        "白鸦骑士 扎尔提斯"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23848",
-      "updatedAt": "2026-11-09T01:18:39.815Z",
+      "updatedAt": "2026-11-13T02:05:36.839Z",
       "chineseNameSources": [
         {
           "name": "白鸦骑士 扎尔蒂斯",
@@ -999080,6 +1000234,13 @@
           "name": "白鸦骑士 萨尔蒂斯",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23848"
+        },
+        {
+          "name": "白鸦骑士 扎尔提斯",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23848"
         }
