@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-15T01:17:55.985Z",
+  "generatedAt": "2026-11-16T01:21:16.071Z",
   "records": [
     {
       "id": "ygoresources-qa-24345",
@@ -231,8 +231,8 @@
       "answerLocale": "ja",
       "questionLocales": {
         "en": {
-          "title": "If the second effect of <<12059>> is activated, and one of the battling monsters is equipped with <<11771>>, will the effect of <<11771>> activate?",
-          "question": "If the second effect of <<12059>> is activated, and one of the battling monsters is equipped with <<11771>>, will the effect of <<11771>> activate?"
+          "title": "If a card effect causes damage calculation to be performed, can card effects be activated during the Damage Step?",
+          "question": "If <<12260>>'s『change the attack target to this card and perform damage calculation』effect resolves, which of the following can be activated?\n\nA: <<15299>> upon reaching Start of the Damage Step\nB: <<15299>> upon reaching Before Damage Calculation\nC: <<14860>> upon reaching During Damage Calculation\nD: <<13763>>'s effect upon reaching After Damage Calculation\nE: <<22743>>'s effect upon reaching End of the Damage Step"
         },
         "ja": {
           "title": "カードの効果でダメージ計算を行う場合、ダメージステップ中にカードの効果を発動できますか?",
@@ -274,8 +274,8 @@
       "answerLocale": "ja",
       "questionLocales": {
         "en": {
-          "title": "Can the effect of <<11708>> be activated in a chain to the activation of the effect of <<11593>> that activates when a Level 4 or lower monster is Normal Summoned if the card and its effect are activated in the same chain link?",
-          "question": "Can the effect of <<11708>> be activated in a chain to the activation of the effect of <<11593>> that activates when a Level 4 or lower monster is Normal Summoned if the card and its effect are activated in the same chain link?"
+          "title": "If <<11593>>'s effect is activated alongside its Trap Card activation, can <<11708>>'s effect be activated in response?",
+          "question": "When a Level 4 or lower monster is Summoned, my opponent activates <<11593>>, and activates the『negate its effects until the end of this turn』effect as part of that Trap Card activation. Can I activate <<11708>>'s effect in response?"
         },
         "ja": {
           "title": "「<<11593>>」のカードの発動と同一のチェーンブロックにて効果の発動が行われる場合、「<<11708>>」の効果をチェーンして発動できますか?",
@@ -478,6 +478,10 @@
       "detailedQuestionLocale": "ja",
       "answerLocale": "ja",
       "questionLocales": {
+        "en": {
+          "title": "Can I add <<23389>> to my hand, or Set it, using the effects of <<22964>> or <<22966>>?",
+          "question": "If I resolve <<22964>>'s『add 1 \"<<12852>>\", or 1 Spell that mentions it, from your Deck to your hand』effect, can I add <<23389>> to my hand?\n\nIf I resolve <<22966>>'s『Set 1 \"<<12852>>\", or 1 Spell that mentions it, from your Deck』effect, can I Set <<23389>> from my Deck?"
+        },
         "ja": {
           "title": "「<<22964>>」や「<<22966>>」の2の効果によって、「召喚魔術-「杯」」を手札に加えたりセットすることはできますか?",
           "question": "「<<22964>>」の『2:このカードが召喚・特殊召喚・リバースした場合、EXデッキから「召喚獣」モンスター1体を除外して発動できる。「<<12852>>」またはそのカード名が記された魔法カード1枚をデッキから手札に加える』効果を発動した場合、「<<23389>>」を手札に加えることはできますか?\n\nまた、「<<22966>>」の『2:このカードが特殊召喚した場合に発動できる。「<<12852>>」またはそのカード名が記された魔法カード1枚をデッキから自分フィールドにセットする』効果を発動し、「<<23389>>」をセットすることはできますか?"
@@ -650,6 +654,10 @@
       "detailedQuestionLocale": "ja",
       "answerLocale": "ja",
       "questionLocales": {
+        "en": {
+          "title": "Can I Tribute just <<15363>> in my hand to Tribute Summon <<23349>>?",
+          "question": "When Tribute Summoning <<23349>> using『you can Tribute Summon this card face-up by Tributing monsters in your hand and/or your opponent's field, while you control no monsters,』can I Tribute it using only a single <<15363>> from my hand, using the『this card can be treated as 2 Tributes for the Tribute Summon of a Warrior monster』effect?"
+        },
         "ja": {
           "title": "手札の「<<15363>>」1体をリリースして、「<<23349>>」をアドバンス召喚できますか?",
           "question": "「<<23349>>」を、その『自分フィールドにモンスターが存在しない場合、このカードは自分の手札及び相手フィールドの中からモンスターをリリースして、表側表示でA召喚できる』方法でアドバンス召喚する際に、『2:戦士族モンスターをアドバンス召喚する場合、このカードは2体分のリリースにできる』効果を持つ「<<15363>>」1体のみを、手札からリリースしてアドバンス召喚できますか?"
@@ -687,6 +695,10 @@
       "detailedQuestionLocale": "ja",
       "answerLocale": "ja",
       "questionLocales": {
+        "en": {
+          "title": "Can I activate <<13587>>'s effect in response to <<23374>>'s『add 1 card [...] from your Deck to your hand』effect?",
+          "question": "Can I activate <<13587>>'s effect in response to <<23374>>'s『add 1 card that mentions \"<<23374>>\" from your Deck to your hand, except \"<<23374>>\", also during the End Phase of this turn, add 1 \"<<23374>>\" from your Graveyard to your hand』effect?"
+        },
         "ja": {
           "title": "「<<23374>>」の1つ目の『●』の効果の発動にチェーンして「<<13587>>」の効果を発動できますか?",
           "question": "「<<23374>>」の『●「<<23374>>」を除く、「<<23374>>」のカード名が記されたカード1枚をデッキから手札に加える。このターンのエンドフェイズに、自分の墓地から「<<23374>>」1枚を手札に加える』効果の発動にチェーンして「<<13587>>」の効果を発動できますか?"
@@ -721,6 +733,10 @@
       "detailedQuestionLocale": "ja",
       "answerLocale": "ja",
       "questionLocales": {
+        "en": {
+          "title": "Can I activate <<23349>>'s『negate that effect』effect in response to <<13293>> that was activated from the hand?",
+          "question": "If my opponent activates <<13293>> from their hand (using the『if you control no cards, you can activate this card from your hand』text), can I activate <<23349>>'s『when your opponent activates a card effect in the hand, Graveyard, or banishment』effect in response?"
+        },
         "ja": {
           "title": "相手が手札から「<<13293>>」を発動した時、チェーンして「<<23349>>」の1の効果を発動できますか?",
           "question": "相手が、手札から「<<13293>>」を『自分フィールドにカードが存在しない場合、このカードの発動は手札からもできる』方法で発動した時、チェーンして自分は「<<23349>>」の『1:このカードが通常召喚されている場合、相手が手札・墓地・除外状態のカードの効果を発動した時に発動できる。その効果を無効にし破壊する』効果を発動できますか?"
@@ -759,6 +775,10 @@
       "detailedQuestionLocale": "ja",
       "answerLocale": "ja",
       "questionLocales": {
+        "en": {
+          "title": "If <<23366>> has <<23329>> as material, what is its ATK?",
+          "question": "I apply <<23329>>'s『can be treated as 2 materials for the Xyz Summon of a \"Number\" Xyz Monster that requires 3 or more materials』effect to Xyz Summon <<23364>> using it and one other monster. I then Xyz Summon <<23365>> using that <<23364>> as material (for example by using <<10541>>).\n\nFinally, I then Xyz Summon <<23366>> using that <<23365>> as material. What will <<23366>>'s ATK now be, considering its『gains 1000 ATK for each material attached to it』effect?"
+        },
         "ja": {
           "title": "「<<23329>>」をエクシーズ素材に持っている「<<23366>>」の攻撃力はいくつになりますか?",
           "question": "「<<23329>>」の『3:モンスター3体以上を素材とする「No.」XモンスターをX召喚する場合、このカードは2体分のX素材にできる』効果を適用して、「<<23329>>」を含むモンスター2体で「<<23364>>」をエクシーズ召喚した後、カードの効果でその上に重ねて「<<23365>>」をエクシーズ召喚扱いで特殊召喚しました。\nその「<<23365>>」の上に重ねて「<<23366>>」をエクシーズ召喚した場合、「<<23366>>」は自身の『1:このカードの攻撃力は、このカードのX素材の数×1000アップする』効果によって攻撃力がいくつになりますか?"
@@ -792,6 +812,10 @@
       "detailedQuestionLocale": "ja",
       "answerLocale": "ja",
       "questionLocales": {
+        "en": {
+          "title": "Can I Special Summon <<23331>> using the listed method while <<23162>> is applying?",
+          "question": "Can I Special Summon <<23331>> using the『Special Summon this card (from your hand) by revealing 1 face-down card you control and returning it to the hand or Extra Deck』effect, while my opponent's『your opponent must keep their hand revealed, also you can look at their Set cards at any time』effect is applying?"
+        },
         "ja": {
           "title": "「<<23162>>」の1の効果適用中に、「<<23331>>」を1の方法で特殊召喚できますか?",
           "question": "相手の「<<23162>>」の『自分は相手フィールドの裏側表示カードをいつでも確認できる』効果適用中に、自分は「<<23331>>」を『1:このカードは自分フィールドの裏側表示カード1枚を相手に見せて手札・EXデッキに戻し、手札から特殊召喚できる』方法で特殊召喚できますか?"
@@ -1939,8 +1963,8 @@
       "answerLocale": "ja",
       "questionLocales": {
         "en": {
-          "title": "Can <<4387>> be Special Summoned from the Deck with the effect of <<12431>>?",
-          "question": "I selected the『●Special Summon 1 Toon monster from your Deck, except \"<<12431>>\", ignoring its Summoning conditions』effect and activated the『Once per turn: You can discard 1 \"Toon\" card, then activate 1 of these effects;』effect of <<12431>>.\n\nAt this time, can <<4387>> be selected as the monster to Special Summon?"
+          "title": "Can I discard <<4387>> or <<23356>> when activating <<12431>>'s effect, or can I Special Summon them when resolving the effect?",
+          "question": "These questions are regarding <<12431>>'s『discard 1 \"Toon\" card; Special Summon 1 Toon monster from your Deck』effect.\n\nA: Can I activate this effect by discarding <<4387>> or <<23356>> as a cost?\nB: Can I Special Summon <<4387>> or <<23356>> when resolving the effect?"
         },
         "ja": {
           "title": "「<<12431>>」の効果を発動する際に「<<4387>>」や「<<23356>>」を捨てたり、処理時に特殊召喚できますか?",
@@ -2090,8 +2114,8 @@
       "answerLocale": "ja",
       "questionLocales": {
         "en": {
-          "title": "If <<11995>> is Xyz Summoned using a <<11958>> that had its effects negated by <<8933>>, is the effect that increases ATK applied?",
-          "question": "If <<11995>> is Xyz Summoned using a <<11958>> that had its effects negated by <<8933>>, is the effect that increases ATK applied?"
+          "title": "If I use a <<21379>>, whose effects are negated, for an Xyz Summon, what happens to the granted effect?",
+          "question": "A <<21379>> is in the Monster Zone, with its effects negated. This <<21379>> is now used as material to Xyz Summon an Xyz Monster. What happens to <<21379>>'s『an Xyz Monster that has this card as material gains this effect』effect?"
         },
         "ja": {
           "title": "効果が無効化された「<<21379>>」を素材としてエクシーズ召喚した場合、『●』の効果は適用されますか?",
@@ -2335,6 +2359,10 @@
       "detailedQuestionLocale": "ja",
       "answerLocale": "ja",
       "questionLocales": {
+        "en": {
+          "title": "Can I add <<23162>> to my hand using <<23161>>'s effect?",
+          "question": "Can I add <<23162>> to my hand using <<23161>>'s『add 1 \"Toon\" card, or 1 card that mentions a \"Toon\" card by name, from your Deck to your hand』effect?"
+        },
         "ja": {
           "title": "「<<23161>>」の2の効果によって「<<23162>>」を手札に加えることはできますか?",
           "question": "「<<23161>>」の2の『「トゥーン」カードまたはそのカード名が記されたカード1枚をデッキから手札に加える』効果によって「<<23162>>」を手札に加えることはできますか?"
@@ -2467,6 +2495,10 @@
       "detailedQuestionLocale": "ja",
       "answerLocale": "ja",
       "questionLocales": {
+        "en": {
+          "title": "If a monster Special Summoned by <<12285>>'s effect was not destroyed during the End Phase of the current turn, will it be destroyed again during the next turn's End Phase?",
+          "question": "<<12280>> was Special Summoned by <<12285>>'s『Special Summon it, but [...] it is destroyed during the End Phase』effect. However, during the same turn, <<10284>> was applied to it. What now happens during the End Phase?"
+        },
         "ja": {
           "title": "「<<12285>>」の効果で特殊召喚したモンスターが、『エンドフェイズに破壊される』処理で破壊されなかった場合、次のターンのエンドフェイズに破壊されますか?",
           "question": "「<<12285>>」の『1:1ターンに1度、自分の墓地の「ムーンライト」モンスター1体を対象として発動できる。そのモンスターを特殊召喚する。この効果で特殊召喚したモンスターは攻撃できず、効果は無効化され、エンドフェイズに破壊される』ペンデュラム効果によって、墓地から「<<12280>>」を特殊召喚したターンです。\n\nそのターンに「<<10284>>」が発動し、その特殊召喚された「<<12280>>」に『1:フィールドの表側表示モンスター1体を対象として発動できる。ターン終了時までそのモンスターは、攻撃力が600ダウンし、効果の対象にならず、効果では破壊されない』効果が適用された場合、エンドフェイズの処理はどうなりますか?"
@@ -2731,8 +2763,8 @@
       "answerLocale": "ja",
       "questionLocales": {
         "en": {
-          "title": "While the effect of <<5008>> is applying, can I activate <<13292>>?",
-          "question": "While the effect of <<5008>> is applying, can I activate <<13292>>?"
+          "title": "While the effect of <<5008>> is applying, can I activate a Field Spell using <<13292>>?",
+          "question": "While the effect of <<5008>> is applying, can I activate <<13292>> and activate a Field Spell from my Deck?"
         },
         "ja": {
           "title": "「<<5008>>」の適用中に、「<<13292>>」の効果でフィールド魔法カードを発動できますか?",
@@ -2780,8 +2812,8 @@
       "answerLocale": "ja",
       "questionLocales": {
         "en": {
-          "title": "Can I activate <<11425>> during a turn that I activated <<7493>>?",
-          "question": "During a turn that I activated the『Send the top card of your Deck to the Graveyard; add 1 Equip Spell from your Deck or Graveyard to your hand』effect of <<7493>>, I cannot Normal Summon/Set, but can I activate the『Look at up to 5 cards from the top of your Deck, then place them on the top of the Deck in any order. You can Tribute Summon 1 monster in addition to your Normal Summon/Set this turn. (You can only gain this effect once per turn.)』effect of <<11425>> this turn?"
+          "title": "Can I activate an \"Normal Summon in addition to your Normal Summon/Set\" effect if I cannot Normal Summon this turn?",
+          "question": "During a turn that I activated the『add 1 Equip Spell』effect of <<7493>>, I cannot Normal Summon/Set, but can I activate the『Look at up to 5 cards from the top of your Deck, then place them on the top of the Deck in any order. You can Tribute Summon 1 monster in addition to your Normal Summon/Set this turn. (You can only gain this effect once per turn.)』effect of <<11425>> this turn?"
         },
         "ja": {
           "title": "通常召喚できないターンに、”通常召喚に加えて1度だけモンスター1体を召喚できる効果”を発動できますか?",
@@ -2857,8 +2889,8 @@
       "answerLocale": "ja",
       "questionLocales": {
         "en": {
-          "title": "<<9702>>, <<10632>>, <<8738>>, and <<11664>> are all face-up in my opponent's Monster Zone. In this case, if I only have 2 available Monster Zones, can I activate the effect of <<5304>>?",
-          "question": "<<9702>>, <<10632>>, <<8738>>, and <<11664>> are all face-up in my opponent's Monster Zone. In this case, if I only have 2 available Monster Zones, can I activate the effect of <<5304>>?"
+          "title": "How many of my Main Monster Zones need to be available in order to activate <<5304>>'s effect?",
+          "question": "<<9702>>, <<10632>>, <<8738>>, and <<11664>> are all face-up in my opponent's Monster Zone. How many available Main Monster Zones do I need in order to activate the『take control of all face-up Level 3 or lower monsters your opponent currently controls』effect of <<5304>>?"
         },
         "ja": {
           "title": "「<<5304>>」の効果は、自分のメインモンスターゾーンにいくつ空きがあれば発動できますか?",
@@ -3688,8 +3720,8 @@
       "answerLocale": "ja",
       "questionLocales": {
         "en": {
-          "title": "If the activation of <<6753>>'s effect during the Draw Phase is negated, can I activate it again during my next turn?",
-          "question": "When I drew a monster during my Draw Phase, I activated the effect of a <<6753>> in my Graveyard. However, that activation was negated by my opponent's card that was activated in response.\n\nOn my next turn, can I activate that effect of the same <<6753>> again?"
+          "title": "If the activation, or effect, of a『Once while face-up on the field』effect is negated, can I activate it again during my next turn?",
+          "question": "If the activation of <<22559>>'s『Once, while this card is face-up on the field, during the Main Phase』effect, or that activation's effect, is negated, can the effect be activated again, either during the same turn or a subsequent turn?"
         },
         "ja": {
           "title": "『表側表示で存在する限り1度だけ』発動できる効果の発動や効果が無効になった場合、そのターンや次のターンにその効果を再度発動できますか?",
@@ -3735,8 +3767,8 @@
       "answerLocale": "ja",
       "questionLocales": {
         "en": {
-          "title": "Can I use the effect of <<20060>> to Special Summon <<19473>>?",
-          "question": "When I activate the 2nd or 3rd effect of <<19520>> whose name is treated as <<19200>>, I chain the『You can shuffle 1 of your monsters that is banished or in your Graveyard into the Deck, or if that monster mentions that Field Spell, you can Special Summon it instead』effect of <<20060>>.\n\nCan I then Special Summon <<19473>> that mentions <<19200>> in its text instead of return into the Deck?"
+          "title": "Can I use the effect of <<20060>> to Special Summon <<19473>> or <<23158>>?",
+          "question": "When I activate the 2nd or 3rd effect of <<19520>> whose name is treated as <<19200>>, I chain the『You can shuffle 1 of your monsters that is banished or in your Graveyard into the Deck, or if that monster mentions that Field Spell, you can Special Summon it instead』effect of <<20060>>.\n\nCan I then Special Summon <<19473>> that mentions <<19200>> in its text instead of returning it to the Deck?"
         },
         "ja": {
           "title": "「<<20060>>」の効果で「<<19473>>」や「<<23158>>」を特殊召喚できますか?",
@@ -4037,7 +4069,7 @@
       "questionLocales": {
         "en": {
           "title": "Can I Fusion Summon <<14910>> using <<6310>> and <<6639>> as materials?",
-          "question": "Can I Fusion Summon <<14910>> using <<6310>> and <<6639>> as materials?"
+          "question": "Can I Fusion Summon <<14910>> (whose materials are『2 \"HERO\" monsters with different Attributes』) using <<6310>> and <<6639>> (which『is also WIND, WATER, FIRE, and EARTH』) as materials?"
         },
         "ja": {
           "title": "「<<6639>>」と「<<6310>>」を融合素材として、「<<14910>>」を融合召喚できますか?",
@@ -4123,8 +4155,8 @@
       "answerLocale": "ja",
       "questionLocales": {
         "en": {
-          "title": "I activate <<14412>>, targeting a face-up <<14407>> in my Monster Zone. If my opponent chains <<5432>> and changes <<14407>> to face-down Defense Position, how does <<14412>> resolve?",
-          "question": "I activate <<14412>>, targeting a face-up <<14407>> in my Monster Zone. If my opponent chains <<5432>> and changes <<14407>> to face-down Defense Position, how does <<14412>> resolve?"
+          "title": "If I banish <<15053>> to activate <<14830>>'s effect, does『your opponent cannot activate cards or effects in response to the activation of your Spellcaster monster effects for the rest of this turn』also apply?",
+          "question": "If I use <<14830>>'s『this effect becomes that Spell's effect when that card is activated』effect to banish <<15053>>, will <<15053>>'s『your opponent cannot activate cards or effects in response to the activation of your Spellcaster monster effects for the rest of this turn』effect also apply?\n\n(TL note: <<15053>>'s effect, in the OCG, specifies that you need to have \"Special Summoned using this effect\".)"
         },
         "ja": {
           "title": "「<<14830>>」の2の効果で「<<15053>>」を選んだ場合、『相手は魔法・罠・モンスターの効果を発動できない』も適用されますか?",
@@ -4763,8 +4795,8 @@
       "answerLocale": "ja",
       "questionLocales": {
         "en": {
-          "title": "An <<5234>> treated as a monster by its own effect in my Monster Zone is destroyed by the effect of my opponent's <<5544>>. At this time, can I activate the effect of <<13737>> that Special Summons it?",
-          "question": "An <<5234>> treated as a monster by its own effect in my Monster Zone is destroyed by the effect of my opponent's <<5544>>. At this time, can I activate the effect of <<13737>> that Special Summons it?"
+          "title": "Can I activate <<13737>>'s effect if a Trap Card that is in a Monster Zone is sent to the Graveyard, or banished?",
+          "question": "If one of the following, while in a Main Monster Zone, leaves the field due to an opponent's effect and is sent to the Graveyard, or banished, as a result, can <<13737>>'s『if a Spell/Trap you control leaves the field because of an opponent's effect, and is now in the Graveyard or banished』effect be activated?\n\nA: <<15129>> or <<17728>>, which have been Special Summoned by their own effects. (They are still treated as Traps.)\nB: <<12267>>, which has been Special Summoned by its own effect. (It is not treated as a Trap.)"
         },
         "ja": {
           "title": "モンスターゾーンに存在する罠カードが墓地へ送られたり除外された場合、「<<13737>>」の効果を発動できますか?",
@@ -4799,8 +4831,8 @@
       "answerLocale": "ja",
       "questionLocales": {
         "en": {
-          "title": "During my Battle Phase, my opponent activates <<4962>> and Special Summons 2 Spell/Trap Cards as Monster Cards from their Deck. During this Battle Phase, <<4956>> is activated, and those Spell/Trap Cards are flipped face-up. In this situation, is it possible to use the effect of <<11988>> to equip 1 of these Spell/Trap Cards to it?",
-          "question": "During my Battle Phase, my opponent activates <<4962>> and Special Summons 2 Spell/Trap Cards as Monster Cards from their Deck. During this Battle Phase, <<4956>> is activated, and those Spell/Trap Cards are flipped face-up. In this situation, is it possible to use the effect of <<11988>> to equip 1 of these Spell/Trap Cards to it?"
+          "title": "Can I activate <<11988>>'s effect to equip a Spell/Trap Card that was Special Summoned by <<4962>> or <<22995>>?",
+          "question": "My opponent has resolved <<4962>> or <<22995>>, Special Summoning Spells/Traps from their Deck as face-down Defense Position monsters.\n\nIf, during the same Battle Phase, another card effect causes one of these cards to be flipped face-up, can I choose that card to be equipped to <<11988>> when resolving its『equip 1 face-up monster your opponent controls to this card, except the battling monster』effect?"
         },
         "ja": {
           "title": "「<<11988>>」の効果を発動し、「<<22995>>」や「<<4962>>」の効果によって特殊召喚した魔法・罠カードを装備できますか?",
@@ -4947,7 +4979,17 @@
       "sourceUrl": "https://db.ygoresources.com/data/qa/23610",
       "questionLocale": "ja",
       "detailedQuestionLocale": "ja",
-      "answerLocale": "ja"
+      "answerLocale": "ja",
+      "questionLocales": {
+        "en": {
+          "title": "If the effect of <<17355>> destroys a Token in the Spell & Trap Zone, will Life Points be lost?",
+          "question": "When the effect of <<17355>> resolves, a Token, which is currently treated as an Equip or Continuous Spell, is currently in the Spell & Trap Zone of the same column as the targeted monster, and is destroyed as a result. Will my opponent lose Life Points equal to the Token's ATK in each of the following cases:\n\nA: The destroyed Token is a \"Primal Being Token\", Special Summoned by <<14741>>'s effect\nB: The destroyed Token is an \"Adventurer Token\", Special Summoned by <<16748>>'s effect"
+        },
+        "ja": {
+          "title": "「<<17355>>」の1のモンスター効果を適用したことによって、魔法&罠ゾーンに存在するモンスタートークンが破壊された場合、攻撃力分のライフポイントは失いますか?",
+          "question": "「<<17355>>」の『1:お互いのメインフェイズに、相手のメインモンスターゾーンの効果モンスター1体を対象として発動できる。その相手モンスターをそれと同じ縦列の相手の魔法&罠ゾーンに永続魔法カード扱いとして表側表示で置く(置く先にあるカードは破壊され、それがモンスターカードの場合、相手はその攻撃力分のLPを失う)』のモンスター効果を適用したことによって、装備魔法カードや永続魔法カードとして同じ縦列の魔法&罠ゾーンに存在する以下のモンスタートークンが破壊された場合、攻撃力分のライフポイントは失いますか?\n\n(A)「<<14741>>」の効果で特殊召喚されたのちに魔法&罠ゾーンに置かれた「原始生命態トークン」\n\n(B)「<<16748>>」の効果で特殊召喚されたのちに魔法&罠ゾーンに置かれた「勇者トークン」"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-19484",
@@ -5146,7 +5188,17 @@
       "sourceUrl": "https://db.ygoresources.com/data/qa/24096",
       "questionLocale": "ja",
       "detailedQuestionLocale": "ja",
-      "answerLocale": "ja"
+      "answerLocale": "ja",
+      "questionLocales": {
+        "en": {
+          "title": "When my opponent attempts to negate my monster's Special Summon, can I activate <<12070>>'s effect?",
+          "question": "While there are no monsters in my Monster Zone, I attempt to Special Summon a monster. During this attempt, my opponent activates <<21803>>'s『negate the Special Summon』effect.\n\nCan I activate <<12070>>'s『when your opponent activates a monster effect while you control no monsters』effect in response?"
+        },
+        "ja": {
+          "title": "相手がモンスターの特殊召喚を無効にする効果を発動した時、自分は「<<12070>>」の効果を発動できますか?",
+          "question": "自分のモンスターゾーンにモンスターが1体も存在しない状況で、自分がモンスターを特殊召喚する際に、相手が「<<21803>>」の『2:相手がモンスターを特殊召喚する際に発動できる。それを無効にし、そのモンスターを除外する』効果を発動しました。\n\nこの時、自分は「<<12070>>」の『1:自分フィールドにモンスターが存在せず、相手モンスターの効果が発動した時に発動できる。手札のこのカードと自分の手札・デッキ・墓地の「<<12067>>」1体を選んで特殊召喚し、その発動を無効にし破壊する』効果を発動できますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-20948",
@@ -5185,7 +5237,17 @@
       "sourceUrl": "https://db.ygoresources.com/data/qa/20948",
       "questionLocale": "ja",
       "detailedQuestionLocale": "ja",
-      "answerLocale": "ja"
+      "answerLocale": "ja",
+      "questionLocales": {
+        "en": {
+          "title": "Can I choose a monster that is unaffected by monster effects, or that cannot be destroyed by monster effects, with <<23173>>'s effect?",
+          "question": "When applying <<23173>>'s『you can destroy 1 face-up card on either field instead』effect, can I choose a <<11382>> (which is unaffected by monster effects) or a <<12433>> (which cannot be destroyed) as the monster to be destroyed?"
+        },
+        "ja": {
+          "title": "「<<23173>>」の2の効果によって、モンスター効果を受けないモンスターや効果で破壊されないカードを選べますか?",
+          "question": "「<<23173>>」の『2:フィールドのこのカードが戦闘・効果で破壊される場合、代わりに自分か相手のフィールドの表側表示カード1枚を破壊できる』効果を適用する場合、『このカード以外のモンスターの効果を受けない』永続効果が適用されている「<<11382>>」や「<<12433>>」を選んで破壊できますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-24348",
@@ -5222,6 +5284,10 @@
       "detailedQuestionLocale": "ja",
       "answerLocale": "ja",
       "questionLocales": {
+        "en": {
+          "title": "If <<4909>> destroys <<23161>>, but <<4773>> was banished by <<23161>>'s effect during the resolution, will <<4773>> be destroyed?",
+          "question": "My opponent activates <<4909>>, targeting my <<23161>>, while <<4773>> is on my field.\n\nWhen <<4909>> resolves, I apply <<23161>>'s『banish 1 Toon monster you control until immediately after that effect resolves』effect, banishing that <<4773>>. Then, <<23161>> is destroyed by <<4909>>.\n\nWill <<4773>>, upon returning to the field, now be destroyed by its『if \"<<4798>>\" on the field is destroyed, destroy this card』effect?"
+        },
         "ja": {
           "title": "「<<4773>>」が存在する時に「<<23161>>」を対象に「<<4909>>」を発動し、その処理時に3の効果で「<<4773>>」を除外した場合、戻った後に4の効果で破壊されますか?",
           "question": "「<<4773>>」が存在する時に「<<23161>>」を対象に「<<4909>>」を発動しました。\n\nその効果処理時に「<<23161>>」の『3:他のカードが発動した効果が適用される際に、自分フィールドのトゥーンモンスター1体をその効果処理後まで除外できる(このターン、このカード名のこの効果で元々のカード名が同じモンスターを除外できない)』の効果で「<<4773>>」を除外した場合、「<<4909>>」の効果で「<<23161>>」が破壊された後に「<<4773>>」が戻りますが、その「<<4773>>」は自身の『4:フィールドの「<<4798>>」が破壊される時にこのカードは破壊される』の効果で破壊されますか?"
@@ -5570,7 +5636,17 @@
       "sourceUrl": "https://db.ygoresources.com/data/qa/23993",
       "questionLocale": "ja",
       "detailedQuestionLocale": "ja",
-      "answerLocale": "ja"
+      "answerLocale": "ja",
+      "questionLocales": {
+        "en": {
+          "title": "If my monster can attack directly due to a card effect, can it attack directly while the Continuous Effect of <<18733>>, or of <<14297>>, is applying?",
+          "question": "I control <<13763>>, which has the『This card can attack directly』effect. Can <<13763>> attack directly if:\n\nA: My opponent controls <<14297>> (with the『their monsters cannot target monsters for attacks, except this one』effect)\nB: My opponent controls <<18733>> (with the『your opponent's monsters can only target monsters you control with the highest ATK for attacks』effect)"
+        },
+        "ja": {
+          "title": "「<<18733>>」や「<<14297>>」の永続効果が適用されている状況で、直接攻撃可能なモンスターで直接攻撃できますか?",
+          "question": "「<<18733>>」や「<<14297>>」の永続効果が適用されている状況で、直接攻撃可能なモンスターで直接攻撃できますか?\nQuestion\n以下の(A)(B)いずれかの状況で、自分は『このカードは直接攻撃できる』効果を持つ「<<13763>>」で直接攻撃できますか?\n\n(A)『相手は他のモンスターを攻撃対象に選択できない』効果が適用されている「<<14297>>」が存在する\n(B)『自分フィールドの攻撃力が一番高いモンスターしか相手は攻撃対象に選択できない』効果が適用されている「<<18733>>」が存在する"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-23306",
@@ -22683,7 +22759,7 @@
       "question": "『発動した効果は無効化されない』効果が適用されている場合、該当する効果の発動自体を無効にできますか?",
       "rawQuestion": "『発動した効果は無効化されない』効果が適用されている場合、該当する効果の発動自体を無効にできますか?",
       "rawDetailedQuestion": "自分の「<<13024>>」の『●このターン、「サブテラー」カードの発動する効果は無効化されない』効果が適用されているターンに、自分が「サブテラー」モンスター効果を発動した時、相手はチェーンして「<<12187>>」の『●モンスターの効果が発動した時に発動できる。その発動を無効にし破壊する』効果を発動し、その発動を無効にできますか?",
-      "answer": "できます。(効果の発動は無効になります。)\n\n「<<13024>>」の効果が適用されているターンは、「サブテラー」カードの効果の発動に成功した場合にはその効果は無効化されなくなりますが、「サブテラー」カードの効果の発動自体が無効にならない、というものではありません。\n\n以下の効果が適用されている状況でも、該当する効果の発動を「<<12187>>」のような、”モンスター効果の発動を無効にする効果”によって無効にできます。\n\n「<<23872>>」\n『1:自分が発動した「メディウス」モンスターの効果は無効化されない』\n\n「<<19876>>」\n『2:融合召喚したこのカードがモンスターゾーンに存在する限り、自分の「幻奏」融合モンスターが発動した効果は無効化されない』\n\n「<<18512>>」\n『2:このカードのリンク先のPモンスターが発動した効果は無効化されない』\n\n「<<21787>>」のモンスター効果\n『2:自分のPゾーンにPスケールが奇数と偶数の「ドレミコード」カードがそれぞれ存在する限り、自分が発動した「ドレミコード」カードの効果は無効化されない』\n\n「<<21908>>」\n『2:「<<21908>>」以外の自分フィールドの以下のモンスターが発動した効果は無効化されない。●「<<7696>>」のカード名が記されたモンスター●元々のカード名に「ウォリアー」を含むSモンスター』",
+      "answer": "できます。(効果の発動は無効になります。)\n\n「<<13024>>」の効果が適用されているターンは、「サブテラー」カードの効果の発動に成功した場合にはその効果は無効化されなくなりますが、「サブテラー」カードの効果の発動自体が無効にならない、というものではありません。\n\n以下の効果が適用されている状況でも、該当する効果の発動を「<<12187>>」のような、”効果の発動を無効にする”効果によって無効にできます。\n\n「<<23872>>」\n『1:自分が発動した「メディウス」モンスターの効果は無効化されない』\n\n「<<23867>>」\n『1:自分フィールドに元々のレベルが8以上の「リインゼルム」モンスターが存在する限り、または相手のフィールドか墓地にドラゴン族モンスターが存在する限り、自分が発動した「リインゼルム」モンスターの効果は無効化されない』\n\n「<<19876>>」\n『2:融合召喚したこのカードがモンスターゾーンに存在する限り、自分の「幻奏」融合モンスターが発動した効果は無効化されない』\n\n「<<18512>>」\n『2:このカードのリンク先のPモンスターが発動した効果は無効化されない』\n\n「<<21787>>」のモンスター効果\n『2:自分のPゾーンにPスケールが奇数と偶数の「ドレミコード」カードがそれぞれ存在する限り、自分が発動した「ドレミコード」カードの効果は無効化されない』\n\n「<<21576>>」\n1の『そのモンスターがフィールドで発動した効果は無効化されない』\n\n「<<21908>>」\n『2:「<<21908>>」以外の自分フィールドの以下のモンスターが発動した効果は無効化されない。●「<<7696>>」のカード名が記されたモンスター●元々のカード名に「ウォリアー」を含むSモンスター』",
       "cards": [
         "無効",
         "融合",
@@ -22695,8 +22771,10 @@
         "13024",
         "18512",
         "19876",
+        "21576",
         "21787",
         "21908",
+        "23867",
         "23872",
         "5362",
         "4837",
@@ -22704,7 +22782,7 @@
       ],
       "questionCardIds": [],
       "keywords": [],
-      "text": "『発動した効果は無効化されない』効果が適用されている場合、該当する効果の発動自体を無効にできますか?\n自分の「<<13024>>」の『●このターン、「サブテラー」カードの発動する効果は無効化されない』効果が適用されているターンに、自分が「サブテラー」モンスター効果を発動した時、相手はチェーンして「<<12187>>」の『●モンスターの効果が発動した時に発動できる。その発動を無効にし破壊する』効果を発動し、その発動を無効にできますか?\n『発動した効果は無効化されない』効果が適用されている場合、該当する効果の発動自体を無効にできますか?\nできます。(効果の発動は無効になります。)\n\n「<<13024>>」の効果が適用されているターンは、「サブテラー」カードの効果の発動に成功した場合にはその効果は無効化されなくなりますが、「サブテラー」カードの効果の発動自体が無効にならない、というものではありません。\n\n以下の効果が適用されている状況でも、該当する効果の発動を「<<12187>>」のような、”モンスター効果の発動を無効にする効果”によって無効にできます。\n\n「<<23872>>」\n『1:自分が発動した「メディウス」モンスターの効果は無効化されない』\n\n「<<19876>>」\n『2:融合召喚したこのカードがモンスターゾーンに存在する限り、自分の「幻奏」融合モンスターが発動した効果は無効化されない』\n\n「<<18512>>」\n『2:このカードのリンク先のPモンスターが発動した効果は無効化されない』\n\n「<<21787>>」のモンスター効果\n『2:自分のPゾーンにPスケールが奇数と偶数の「ドレミコード」カードがそれぞれ存在する限り、自分が発動した「ドレミコード」カードの効果は無効化されない』\n\n「<<21908>>」\n『2:「<<21908>>」以外の自分フィールドの以下のモンスターが発動した効果は無効化されない。●「<<7696>>」のカード名が記されたモンスター●元々のカード名に「ウォリアー」を含むSモンスター』",
+      "text": "『発動した効果は無効化されない』効果が適用されている場合、該当する効果の発動自体を無効にできますか?\n自分の「<<13024>>」の『●このターン、「サブテラー」カードの発動する効果は無効化されない』効果が適用されているターンに、自分が「サブテラー」モンスター効果を発動した時、相手はチェーンして「<<12187>>」の『●モンスターの効果が発動した時に発動できる。その発動を無効にし破壊する』効果を発動し、その発動を無効にできますか?\n『発動した効果は無効化されない』効果が適用されている場合、該当する効果の発動自体を無効にできますか?\nできます。(効果の発動は無効になります。)\n\n「<<13024>>」の効果が適用されているターンは、「サブテラー」カードの効果の発動に成功した場合にはその効果は無効化されなくなりますが、「サブテラー」カードの効果の発動自体が無効にならない、というものではありません。\n\n以下の効果が適用されている状況でも、該当する効果の発動を「<<12187>>」のような、”効果の発動を無効にする”効果によって無効にできます。\n\n「<<23872>>」\n『1:自分が発動した「メディウス」モンスターの効果は無効化されない』\n\n「<<23867>>」\n『1:自分フィールドに元々のレベルが8以上の「リインゼルム」モンスターが存在する限り、または相手のフィールドか墓地にドラゴン族モンスターが存在する限り、自分が発動した「リインゼルム」モンスターの効果は無効化されない』\n\n「<<19876>>」\n『2:融合召喚したこのカードがモンスターゾーンに存在する限り、自分の「幻奏」融合モンスターが発動した効果は無効化されない』\n\n「<<18512>>」\n『2:このカードのリンク先のPモンスターが発動した効果は無効化されない』\n\n「<<21787>>」のモンスター効果\n『2:自分のPゾーンにPスケールが奇数と偶数の「ドレミコード」カードがそれぞれ存在する限り、自分が発動した「ドレミコード」カードの効果は無効化されない』\n\n「<<21576>>」\n1の『そのモンスターがフィールドで発動した効果は無効化されない』\n\n「<<21908>>」\n『2:「<<21908>>」以外の自分フィールドの以下のモンスターが発動した効果は無効化されない。●「<<7696>>」のカード名が記されたモンスター●元々のカード名に「ウォリアー」を含むSモンスター』",
       "sourceId": "21378",
       "sourceName": "YGOResources DB",
       "sourceUrl": "https://db.ygoresources.com/data/qa/21378",
@@ -42637,7 +42715,11 @@
     {
       "id": "ygoresources-qa-8554",
       "recordType": "qa",
-      "title": "相手のエクストラモンスターゾーンに「<<12160>>」が表側表示で存在し、『1:相手フィールドのモンスターは、このカードが表側表示で存在する限りドラゴン族になる』モンスター効果…",
+      "title": "相手の「<<12160>>」のモンスター効果が適用されている場合、自分は「<<13111>>」を発動できますか?",
+      "question": "相手の「<<12160>>」のモンスター効果が適用されている場合、自分は「<<13111>>」を発動できますか?",
+      "rawQuestion": "相手の「<<12160>>」のモンスター効果が適用されている場合、自分は「<<13111>>」を発動できますか?",
+      "rawDetailedQuestion": "相手のエクストラモンスターゾーンに「<<12160>>」が表側表示で存在し、『1:相手フィールドのモンスターは、このカードが表側表示で存在する限りドラゴン族になる』モンスター効果が適用されています。\n\n自分のモンスターゾーンに「<<13063>>」と「<<13065>>」が表側表示で存在する場合、自分は「<<13111>>」の『1:自分フィールドに同じ種族でカード名が異なる「ライトロード」モンスターが2体以上存在する場合、自分の墓地の「ライトロード」モンスター2体を除外し、フィールドのカード2枚を対象として発動できる。そのカードを除外する』効果を発動する事はできますか?",
+      "answer": "質問の状況の場合、自分のモンスターゾーンに表側表示で存在する「<<13063>>」と「<<13065>>」は、相手の「<<12160>>」のモンスター効果によって、どちらもドラゴン族モンスターとして扱われていますので、『自分フィールドに同じ種族でカード名が異なる「ライトロード」モンスターが2体以上存在する場合』にあたります。\n\nしたがって、この場合、自分は「<<13111>>」を発動する事ができます。",
       "cards": [],
       "cardIds": [
         "12160",
@@ -42645,8 +42727,25 @@
         "13065",
         "13111"
       ],
+      "questionCardIds": [],
       "keywords": [],
-      "text": "相手のエクストラモンスターゾーンに「<<12160>>」が表側表示で存在し、『1:相手フィールドのモンスターは、このカードが表側表示で存在する限りドラゴン族になる』モンスター効果が適用されています。\n\n自分のモンスターゾーンに「<<13063>>」と「<<13065>>」が表側表示で存在する場合、自分は「<<13111>>」の『1:自分フィールドに同じ種族でカード名が異なる「ライトロード」モンスターが2体以上存在する場合、自分の墓地の「ライトロード」モンスター2体を除外し、フィールドのカード2枚を対象として発動できる。そのカードを除外する』効果を発動する事はできますか? 相手のエクストラモンスターゾーンに「<<12160>>」が表側表示で存在し、『1:相手フィールドのモンスターは、このカードが表側表示で存在する限りドラゴン族になる』モンスター効果… 質問の状況の場合、自分のモンスターゾーンに表側表示で存在する「<<13063>>」と「<<13065>>」は、相手の「<<12160>>」のモンスター効果によって、どちらもドラゴン族モンスターとして扱われていますので、『自分フィールドに同じ種族でカード名が異なる「ライトロード」モンスターが2体以上存在する場合』にあたります。\n\nしたがって、この場合、自分は「<<13111>>」を発動する事ができます。"
+      "text": "相手の「<<12160>>」のモンスター効果が適用されている場合、自分は「<<13111>>」を発動できますか?\n相手のエクストラモンスターゾーンに「<<12160>>」が表側表示で存在し、『1:相手フィールドのモンスターは、このカードが表側表示で存在する限りドラゴン族になる』モンスター効果が適用されています。\n\n自分のモンスターゾーンに「<<13063>>」と「<<13065>>」が表側表示で存在する場合、自分は「<<13111>>」の『1:自分フィールドに同じ種族でカード名が異なる「ライトロード」モンスターが2体以上存在する場合、自分の墓地の「ライトロード」モンスター2体を除外し、フィールドのカード2枚を対象として発動できる。そのカードを除外する』効果を発動する事はできますか?\n相手の「<<12160>>」のモンスター効果が適用されている場合、自分は「<<13111>>」を発動できますか?\n質問の状況の場合、自分のモンスターゾーンに表側表示で存在する「<<13063>>」と「<<13065>>」は、相手の「<<12160>>」のモンスター効果によって、どちらもドラゴン族モンスターとして扱われていますので、『自分フィールドに同じ種族でカード名が異なる「ライトロード」モンスターが2体以上存在する場合』にあたります。\n\nしたがって、この場合、自分は「<<13111>>」を発動する事ができます。",
+      "sourceId": "8554",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/8554",
+      "questionLocale": "ja",
+      "detailedQuestionLocale": "ja",
+      "answerLocale": "ja",
+      "questionLocales": {
+        "en": {
+          "title": "<<12160>> is face-up on my opponent's field, and its effect makes all monsters on my field become Dragon-Type. If <<13065>> and <<13063>> are face-up on my field, can I activate <<13111>>?",
+          "question": "<<12160>> is face-up on my opponent's field, and its effect makes all monsters on my field become Dragon-Type. If <<13065>> and <<13063>> are face-up on my field, can I activate <<13111>>?"
+        },
+        "ja": {
+          "title": "相手の「<<12160>>」のモンスター効果が適用されている場合、自分は「<<13111>>」を発動できますか?",
+          "question": "相手のエクストラモンスターゾーンに「<<12160>>」が表側表示で存在し、『1:相手フィールドのモンスターは、このカードが表側表示で存在する限りドラゴン族になる』モンスター効果が適用されています。\n\n自分のモンスターゾーンに「<<13063>>」と「<<13065>>」が表側表示で存在する場合、自分は「<<13111>>」の『1:自分フィールドに同じ種族でカード名が異なる「ライトロード」モンスターが2体以上存在する場合、自分の墓地の「ライトロード」モンスター2体を除外し、フィールドのカード2枚を対象として発動できる。そのカードを除外する』効果を発動する事はできますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-13547",
@@ -43883,7 +43982,11 @@
     {
       "id": "ygoresources-qa-17318",
       "recordType": "qa",
-      "title": "「<<7934>>」が相手の魔法&罠ゾーンに表側表示で存在し、自分のペンデュラムゾーンに「<<11809>>」と「<<12131>>」が存在しています。 この状況で、自分は「<<…",
+      "title": "自分のペンデュラムゾーンに空きがない場合、「<<7934>>」の適用中に「<<12169>>」を発動できますか?",
+      "question": "自分のペンデュラムゾーンに空きがない場合、「<<7934>>」の適用中に「<<12169>>」を発動できますか?",
+      "rawQuestion": "自分のペンデュラムゾーンに空きがない場合、「<<7934>>」の適用中に「<<12169>>」を発動できますか?",
+      "rawDetailedQuestion": "「<<7934>>」が相手の魔法&罠ゾーンに表側表示で存在し、自分のペンデュラムゾーンに「<<11809>>」と「<<12131>>」が存在しています。\n\nこの状況で、自分は「<<12169>>」を発動する事はできますか?",
+      "answer": "質問の状況のように自分のペンデュラムゾーンに空きがなく、「<<7934>>」の効果が適用されている場合でも、自分のモンスターゾーンに表側表示のモンスターが1体も存在しない状態であれば、「<<12169>>」を通常通り発動し、処理を行う事ができます。\n(自分のペンデュラムゾーンに空きがありませんので、相手がランダムに選んだ1体はモンスターゾーンに特殊召喚される事になります。)\n\nなお、質問の状況のように自分のペンデュラムゾーンに空きがなく、「<<7934>>」が適用されている場合、自分のモンスターゾーンに表側表示のモンスター(=例えば光属性のモンスター)が1体以上存在する状態であるならば、「<<12169>>」を発動する事自体ができません。",
       "cards": [
         "7"
       ],
@@ -43894,10 +43997,27 @@
         "12169",
         "6053"
       ],
+      "questionCardIds": [],
       "keywords": [
         "魔法"
       ],
-      "text": "「<<7934>>」が相手の魔法&罠ゾーンに表側表示で存在し、自分のペンデュラムゾーンに「<<11809>>」と「<<12131>>」が存在しています。\n\nこの状況で、自分は「<<12169>>」を発動する事はできますか? 「<<7934>>」が相手の魔法&罠ゾーンに表側表示で存在し、自分のペンデュラムゾーンに「<<11809>>」と「<<12131>>」が存在しています。 この状況で、自分は「<<… 質問の状況のように自分のペンデュラムゾーンに空きがなく、「<<7934>>」の効果が適用されている場合でも、自分のモンスターゾーンに表側表示のモンスターが1体も存在しない状態であれば、「<<12169>>」を通常通り発動し、処理を行う事ができます。\n(自分のペンデュラムゾーンに空きがありませんので、相手がランダムに選んだ1体はモンスターゾーンに特殊召喚される事になります。)\n\nなお、質問の状況のように自分のペンデュラムゾーンに空きがなく、「<<7934>>」が適用されている場合、自分のモンスターゾーンに表側表示のモンスター(=例えば光属性のモンスター)が1体以上存在する状態であるならば、「<<12169>>」を発動する事自体ができません。"
+      "text": "自分のペンデュラムゾーンに空きがない場合、「<<7934>>」の適用中に「<<12169>>」を発動できますか?\n「<<7934>>」が相手の魔法&罠ゾーンに表側表示で存在し、自分のペンデュラムゾーンに「<<11809>>」と「<<12131>>」が存在しています。\n\nこの状況で、自分は「<<12169>>」を発動する事はできますか?\n自分のペンデュラムゾーンに空きがない場合、「<<7934>>」の適用中に「<<12169>>」を発動できますか?\n質問の状況のように自分のペンデュラムゾーンに空きがなく、「<<7934>>」の効果が適用されている場合でも、自分のモンスターゾーンに表側表示のモンスターが1体も存在しない状態であれば、「<<12169>>」を通常通り発動し、処理を行う事ができます。\n(自分のペンデュラムゾーンに空きがありませんので、相手がランダムに選んだ1体はモンスターゾーンに特殊召喚される事になります。)\n\nなお、質問の状況のように自分のペンデュラムゾーンに空きがなく、「<<7934>>」が適用されている場合、自分のモンスターゾーンに表側表示のモンスター(=例えば光属性のモンスター)が1体以上存在する状態であるならば、「<<12169>>」を発動する事自体ができません。",
+      "sourceId": "17318",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/17318",
+      "questionLocale": "ja",
+      "detailedQuestionLocale": "ja",
+      "answerLocale": "ja",
+      "questionLocales": {
+        "en": {
+          "title": "<<7934>> is face-up in my opponent's Spell & Trap Zone, whereas <<11809>> and <<12131>> are in each of my Pendulum Zones. In this situation, can I activate <<12169>>?",
+          "question": "<<7934>> is face-up in my opponent's Spell & Trap Zone, whereas <<11809>> and <<12131>> are in each of my Pendulum Zones. In this situation, can I activate <<12169>>?"
+        },
+        "ja": {
+          "title": "自分のペンデュラムゾーンに空きがない場合、「<<7934>>」の適用中に「<<12169>>」を発動できますか?",
+          "question": "「<<7934>>」が相手の魔法&罠ゾーンに表側表示で存在し、自分のペンデュラムゾーンに「<<11809>>」と「<<12131>>」が存在しています。\n\nこの状況で、自分は「<<12169>>」を発動する事はできますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-17519",
@@ -47444,7 +47564,11 @@
     {
       "id": "ygoresources-qa-17315",
       "recordType": "qa",
-      "title": "「<<5285>>」の『このカードが墓地へ送られたターン、このカードの持ち主は手札から罠カードを発動する事ができる』効果によって手札からカウンター罠カードを発動する場合、「<<1…",
+      "title": "「<<5285>>」の効果によって手札から罠カードを発動できる場合、「<<12144>>」のペンデュラム効果は適用されますか?",
+      "question": "「<<5285>>」の効果によって手札から罠カードを発動できる場合、「<<12144>>」のペンデュラム効果は適用されますか?",
+      "rawQuestion": "「<<5285>>」の効果によって手札から罠カードを発動できる場合、「<<12144>>」のペンデュラム効果は適用されますか?",
+      "rawDetailedQuestion": "「<<5285>>」の『このカードが墓地へ送られたターン、このカードの持ち主は手札から罠カードを発動する事ができる』効果によって手札からカウンター罠カードを発動する場合、「<<12144>>」の『1:このカードがPゾーンに存在する限り、以下の効果を適用する』ペンデュラム効果は適用されますか?",
+      "answer": "「<<5285>>」の効果によって手札からカウンター罠カードを発動する場合でも、「<<12144>>」のペンデュラム効果は適用される事になりますので、「<<9008>>」であれば、『●自分はカウンター罠カードを発動するために払うLPが必要なくなる』ペンデュラム効果によって2000のライフポイントを払う必要はありません。\n同様に、「<<7645>>」であれば、『●自分はカウンター罠カードを発動するために捨てる手札が必要なくなる』ペンデュラム効果によって、手札を1枚捨てる必要はありません。",
       "cards": [
         "7"
       ],
@@ -47455,8 +47579,25 @@
         "12144",
         "6053"
       ],
+      "questionCardIds": [],
       "keywords": [],
-      "text": "「<<5285>>」の『このカードが墓地へ送られたターン、このカードの持ち主は手札から罠カードを発動する事ができる』効果によって手札からカウンター罠カードを発動する場合、「<<12144>>」の『1:このカードがPゾーンに存在する限り、以下の効果を適用する』ペンデュラム効果は適用されますか? 「<<5285>>」の『このカードが墓地へ送られたターン、このカードの持ち主は手札から罠カードを発動する事ができる』効果によって手札からカウンター罠カードを発動する場合、「<<1… 「<<5285>>」の効果によって手札からカウンター罠カードを発動する場合でも、「<<12144>>」のペンデュラム効果は適用される事になりますので、「<<9008>>」であれば、『●自分はカウンター罠カードを発動するために払うLPが必要なくなる』ペンデュラム効果によって2000のライフポイントを払う必要はありません。\n同様に、「<<7645>>」であれば、『●自分はカウンター罠カードを発動するために捨てる手札が必要なくなる』ペンデュラム効果によって、手札を1枚捨てる必要はありません。"
+      "text": "「<<5285>>」の効果によって手札から罠カードを発動できる場合、「<<12144>>」のペンデュラム効果は適用されますか?\n「<<5285>>」の『このカードが墓地へ送られたターン、このカードの持ち主は手札から罠カードを発動する事ができる』効果によって手札からカウンター罠カードを発動する場合、「<<12144>>」の『1:このカードがPゾーンに存在する限り、以下の効果を適用する』ペンデュラム効果は適用されますか?\n「<<5285>>」の効果によって手札から罠カードを発動できる場合、「<<12144>>」のペンデュラム効果は適用されますか?\n「<<5285>>」の効果によって手札からカウンター罠カードを発動する場合でも、「<<12144>>」のペンデュラム効果は適用される事になりますので、「<<9008>>」であれば、『●自分はカウンター罠カードを発動するために払うLPが必要なくなる』ペンデュラム効果によって2000のライフポイントを払う必要はありません。\n同様に、「<<7645>>」であれば、『●自分はカウンター罠カードを発動するために捨てる手札が必要なくなる』ペンデュラム効果によって、手札を1枚捨てる必要はありません。",
+      "sourceId": "17315",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/17315",
+      "questionLocale": "ja",
+      "detailedQuestionLocale": "ja",
+      "answerLocale": "ja",
+      "questionLocales": {
+        "en": {
+          "title": "If a Counter Trap Card is activated from the hand by the effect of <<5285>>, can the Pendulum Effects of <<12144>> be applied?",
+          "question": "If a Counter Trap Card is activated from the hand by the effect of <<5285>>, can the Pendulum Effects of <<12144>> be applied?"
+        },
+        "ja": {
+          "title": "「<<5285>>」の効果によって手札から罠カードを発動できる場合、「<<12144>>」のペンデュラム効果は適用されますか?",
+          "question": "「<<5285>>」の『このカードが墓地へ送られたターン、このカードの持ち主は手札から罠カードを発動する事ができる』効果によって手札からカウンター罠カードを発動する場合、「<<12144>>」の『1:このカードがPゾーンに存在する限り、以下の効果を適用する』ペンデュラム効果は適用されますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-24010",
@@ -54423,8 +54564,13 @@
     {
       "id": "ygoresources-qa-17616",
       "recordType": "qa",
-      "title": "自分のモンスターゾーンに「<<12198>>」のカード名と効果を得ている「<<7351>>」が存在しています。 その「<<7351>>」が相手の「<<5005>>」の効果によって…",
+      "title": "「幻影騎士団」と名のついたモンスターのカード名を得ている「ファントム・オブ・カオス」が墓地へ送られた場合、手札の「<<12202>>」の効果を発動できますか?",
+      "question": "「幻影騎士団」と名のついたモンスターのカード名を得ている「ファントム・オブ・カオス」が墓地へ送られた場合、手札の「<<12202>>」の効果を発動できますか?",
+      "rawQuestion": "「幻影騎士団」と名のついたモンスターのカード名を得ている「ファントム・オブ・カオス」が墓地へ送られた場合、手札の「<<12202>>」の効果を発動できますか?",
+      "rawDetailedQuestion": "自分のモンスターゾーンに「<<12198>>」のカード名と効果を得ている「<<7351>>」が存在しています。\n\nその「<<7351>>」が相手の「<<5005>>」の効果によって破壊され墓地へ送られた場合、「<<12202>>」の『1:自分フィールドの表側表示の「幻影騎士団」モンスターが戦闘・効果で破壊された場合に発動できる。このカードを手札から特殊召喚する』効果を発動する事はできますか?",
+      "answer": "質問の状況の場合、自分のモンスターゾーンに表側表示で存在する「<<7351>>」は「<<12198>>」として扱われていますので、自分のモンスターゾーンに表側表示で存在する「幻影騎士団」と名のついたモンスターがカードの効果によって破壊されている事になります。\n\nしたがって、この場合、手札の「<<12202>>」の効果を発動する事ができます。",
       "cards": [
+        "混沌魅影",
         "7"
       ],
       "cardIds": [
@@ -54434,8 +54580,25 @@
         "12202",
         "6053"
       ],
+      "questionCardIds": [],
       "keywords": [],
-      "text": "自分のモンスターゾーンに「<<12198>>」のカード名と効果を得ている「<<7351>>」が存在しています。\n\nその「<<7351>>」が相手の「<<5005>>」の効果によって破壊され墓地へ送られた場合、「<<12202>>」の『1:自分フィールドの表側表示の「幻影騎士団」モンスターが戦闘・効果で破壊された場合に発動できる。このカードを手札から特殊召喚する』効果を発動する事はできますか? 自分のモンスターゾーンに「<<12198>>」のカード名と効果を得ている「<<7351>>」が存在しています。 その「<<7351>>」が相手の「<<5005>>」の効果によって… 質問の状況の場合、自分のモンスターゾーンに表側表示で存在する「<<7351>>」は「<<12198>>」として扱われていますので、自分のモンスターゾーンに表側表示で存在する「幻影騎士団」と名のついたモンスターがカードの効果によって破壊されている事になります。\n\nしたがって、この場合、手札の「<<12202>>」の効果を発動する事ができます。"
+      "text": "「幻影騎士団」と名のついたモンスターのカード名を得ている「ファントム・オブ・カオス」が墓地へ送られた場合、手札の「<<12202>>」の効果を発動できますか?\n自分のモンスターゾーンに「<<12198>>」のカード名と効果を得ている「<<7351>>」が存在しています。\n\nその「<<7351>>」が相手の「<<5005>>」の効果によって破壊され墓地へ送られた場合、「<<12202>>」の『1:自分フィールドの表側表示の「幻影騎士団」モンスターが戦闘・効果で破壊された場合に発動できる。このカードを手札から特殊召喚する』効果を発動する事はできますか?\n「幻影騎士団」と名のついたモンスターのカード名を得ている「ファントム・オブ・カオス」が墓地へ送られた場合、手札の「<<12202>>」の効果を発動できますか?\n質問の状況の場合、自分のモンスターゾーンに表側表示で存在する「<<7351>>」は「<<12198>>」として扱われていますので、自分のモンスターゾーンに表側表示で存在する「幻影騎士団」と名のついたモンスターがカードの効果によって破壊されている事になります。\n\nしたがって、この場合、手札の「<<12202>>」の効果を発動する事ができます。",
+      "sourceId": "17616",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/17616",
+      "questionLocale": "ja",
+      "detailedQuestionLocale": "ja",
+      "answerLocale": "ja",
+      "questionLocales": {
+        "en": {
+          "title": "You control a <<7351>> that has gained the name and effects of <<12198>>.  If that <<7351>> is destroyed and sent to the Graveyard by the effect of the opponent's <<5005>>, can the effect of <<12202>> be activated?",
+          "question": "You control a <<7351>> that has gained the name and effects of <<12198>>.\n\nIf that <<7351>> is destroyed and sent to the Graveyard by the effect of the opponent's <<5005>>, can the effect of <<12202>> be activated?"
+        },
+        "ja": {
+          "title": "「幻影騎士団」と名のついたモンスターのカード名を得ている「ファントム・オブ・カオス」が墓地へ送られた場合、手札の「<<12202>>」の効果を発動できますか?",
+          "question": "自分のモンスターゾーンに「<<12198>>」のカード名と効果を得ている「<<7351>>」が存在しています。\n\nその「<<7351>>」が相手の「<<5005>>」の効果によって破壊され墓地へ送られた場合、「<<12202>>」の『1:自分フィールドの表側表示の「幻影騎士団」モンスターが戦闘・効果で破壊された場合に発動できる。このカードを手札から特殊召喚する』効果を発動する事はできますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-17617",
@@ -67125,7 +67288,11 @@
     {
       "id": "ygoresources-qa-17397",
       "recordType": "qa",
-      "title": "自分のモンスターゾーンの「<<11972>>」を対象として、自分が「<<12172>>」を発動しました。 その発動にチェーンして相手が「<<7752>>」を発動し、対象の「<<1…",
+      "title": "「<<12172>>」の効果処理時に、対象のモンスターが裏側守備表示になっている場合、どうなりますか?",
+      "question": "「<<12172>>」の効果処理時に、対象のモンスターが裏側守備表示になっている場合、どうなりますか?",
+      "rawQuestion": "「<<12172>>」の効果処理時に、対象のモンスターが裏側守備表示になっている場合、どうなりますか?",
+      "rawDetailedQuestion": "自分のモンスターゾーンの「<<11972>>」を対象として、自分が「<<12172>>」を発動しました。\n\nその発動にチェーンして相手が「<<7752>>」を発動し、対象の「<<11972>>」が裏側守備表示になった場合、処理はどうなりますか?",
+      "answer": "「<<12172>>」の効果処理時に、対象のモンスターが裏側守備表示になっている場合には、『そのモンスターはターン終了時まで、攻撃力・守備力が倍になり』の処理も、『相手に与える戦闘ダメージは半分になる』処理も適用されません。",
       "cards": [
         "7"
       ],
@@ -67135,8 +67302,25 @@
         "12172",
         "6053"
       ],
+      "questionCardIds": [],
       "keywords": [],
-      "text": "自分のモンスターゾーンの「<<11972>>」を対象として、自分が「<<12172>>」を発動しました。\n\nその発動にチェーンして相手が「<<7752>>」を発動し、対象の「<<11972>>」が裏側守備表示になった場合、処理はどうなりますか? 自分のモンスターゾーンの「<<11972>>」を対象として、自分が「<<12172>>」を発動しました。 その発動にチェーンして相手が「<<7752>>」を発動し、対象の「<<1… 「<<12172>>」の効果処理時に、対象のモンスターが裏側守備表示になっている場合には、『そのモンスターはターン終了時まで、攻撃力・守備力が倍になり』の処理も、『相手に与える戦闘ダメージは半分になる』処理も適用されません。"
+      "text": "「<<12172>>」の効果処理時に、対象のモンスターが裏側守備表示になっている場合、どうなりますか?\n自分のモンスターゾーンの「<<11972>>」を対象として、自分が「<<12172>>」を発動しました。\n\nその発動にチェーンして相手が「<<7752>>」を発動し、対象の「<<11972>>」が裏側守備表示になった場合、処理はどうなりますか?\n「<<12172>>」の効果処理時に、対象のモンスターが裏側守備表示になっている場合、どうなりますか?\n「<<12172>>」の効果処理時に、対象のモンスターが裏側守備表示になっている場合には、『そのモンスターはターン終了時まで、攻撃力・守備力が倍になり』の処理も、『相手に与える戦闘ダメージは半分になる』処理も適用されません。",
+      "sourceId": "17397",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/17397",
+      "questionLocale": "ja",
+      "detailedQuestionLocale": "ja",
+      "answerLocale": "ja",
+      "questionLocales": {
+        "en": {
+          "title": "What happens if the targeted monster is face-down when <<12172>> resolves?",
+          "question": "I have activated <<12172>> by targeting my <<11972>>.\n\nIn response, my opponent's <<7752>> resolves, flipping <<11972>> face-down. What happens to <<12172>>' resolution?"
+        },
+        "ja": {
+          "title": "「<<12172>>」の効果処理時に、対象のモンスターが裏側守備表示になっている場合、どうなりますか?",
+          "question": "自分のモンスターゾーンの「<<11972>>」を対象として、自分が「<<12172>>」を発動しました。\n\nその発動にチェーンして相手が「<<7752>>」を発動し、対象の「<<11972>>」が裏側守備表示になった場合、処理はどうなりますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-20884",
@@ -69655,14 +69839,35 @@
     {
       "id": "ygoresources-qa-9067",
       "recordType": "qa",
-      "title": "前のターンに自分の「<<12139>>」1体が除外されており、このターンに「<<12139>>」のモンスター効果はまだ発動していない状況です。 この状況で、「<<6941>>」を…",
+      "title": "前のターンに除外されている「<<12139>>」を「<<6941>>」の効果によって、墓地に戻した場合、効果を発動できますか?",
+      "question": "前のターンに除外されている「<<12139>>」を「<<6941>>」の効果によって、墓地に戻した場合、効果を発動できますか?",
+      "rawQuestion": "前のターンに除外されている「<<12139>>」を「<<6941>>」の効果によって、墓地に戻した場合、効果を発動できますか?",
+      "rawDetailedQuestion": "前のターンに自分の「<<12139>>」1体が除外されており、このターンに「<<12139>>」のモンスター効果はまだ発動していない状況です。\n\nこの状況で、「<<6941>>」を発動し、その除外されている「<<12139>>」を自分の墓地へ戻した場合、『1:このカードが墓地に存在する場合、チューナー以外の自分の墓地のアンデット族モンスター1体を対象として発動できる。そのモンスターとこのカードを墓地から除外し、その2体のレベルの合計と同じレベルを持つアンデット族Sモンスター1体をエクストラデッキから特殊召喚する』効果を発動する事はできますか?",
+      "answer": "「<<6941>>」の効果によって、除外されている状態から墓地に戻った「<<12139>>」は、そのターンに墓地へ送られた扱いにはなりません。\n\nしたがって、そのターンに「<<12139>>」のモンスター効果を発動していないのであれば、「<<6941>>」の効果によって墓地に戻った「<<12139>>」の効果をそのターンに発動する事ができます。",
       "cards": [],
       "cardIds": [
         "6941",
         "12139"
       ],
+      "questionCardIds": [],
       "keywords": [],
-      "text": "前のターンに自分の「<<12139>>」1体が除外されており、このターンに「<<12139>>」のモンスター効果はまだ発動していない状況です。\n\nこの状況で、「<<6941>>」を発動し、その除外されている「<<12139>>」を自分の墓地へ戻した場合、『1:このカードが墓地に存在する場合、チューナー以外の自分の墓地のアンデット族モンスター1体を対象として発動できる。そのモンスターとこのカードを墓地から除外し、その2体のレベルの合計と同じレベルを持つアンデット族Sモンスター1体をエクストラデッキから特殊召喚する』効果を発動する事はできますか? 前のターンに自分の「<<12139>>」1体が除外されており、このターンに「<<12139>>」のモンスター効果はまだ発動していない状況です。 この状況で、「<<6941>>」を… 「<<6941>>」の効果によって、除外されている状態から墓地に戻った「<<12139>>」は、そのターンに墓地へ送られた扱いにはなりません。\n\nしたがって、そのターンに「<<12139>>」のモンスター効果を発動していないのであれば、「<<6941>>」の効果によって墓地に戻った「<<12139>>」の効果をそのターンに発動する事ができます。"
+      "text": "前のターンに除外されている「<<12139>>」を「<<6941>>」の効果によって、墓地に戻した場合、効果を発動できますか?\n前のターンに自分の「<<12139>>」1体が除外されており、このターンに「<<12139>>」のモンスター効果はまだ発動していない状況です。\n\nこの状況で、「<<6941>>」を発動し、その除外されている「<<12139>>」を自分の墓地へ戻した場合、『1:このカードが墓地に存在する場合、チューナー以外の自分の墓地のアンデット族モンスター1体を対象として発動できる。そのモンスターとこのカードを墓地から除外し、その2体のレベルの合計と同じレベルを持つアンデット族Sモンスター1体をエクストラデッキから特殊召喚する』効果を発動する事はできますか?\n前のターンに除外されている「<<12139>>」を「<<6941>>」の効果によって、墓地に戻した場合、効果を発動できますか?\n「<<6941>>」の効果によって、除外されている状態から墓地に戻った「<<12139>>」は、そのターンに墓地へ送られた扱いにはなりません。\n\nしたがって、そのターンに「<<12139>>」のモンスター効果を発動していないのであれば、「<<6941>>」の効果によって墓地に戻った「<<12139>>」の効果をそのターンに発動する事ができます。",
+      "sourceId": "9067",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/9067",
+      "questionLocale": "ja",
+      "detailedQuestionLocale": "ja",
+      "answerLocale": "ja",
+      "questionLocales": {
+        "en": {
+          "title": "This turn, my <<12139>> was banished, and the monster effect of <<12139>> has not been activated. If <<6941>> is activated, and the banished <<12139>> is returned to my Graveyard, can I then activate the effect of <<12139>> this turn?",
+          "question": "This turn, my <<12139>> was banished, and the monster effect of <<12139>> has not been activated. If <<6941>> is activated, and the banished <<12139>> is returned to my Graveyard, can I then activate the effect of <<12139>> this turn?"
+        },
+        "ja": {
+          "title": "前のターンに除外されている「<<12139>>」を「<<6941>>」の効果によって、墓地に戻した場合、効果を発動できますか?",
+          "question": "前のターンに自分の「<<12139>>」1体が除外されており、このターンに「<<12139>>」のモンスター効果はまだ発動していない状況です。\n\nこの状況で、「<<6941>>」を発動し、その除外されている「<<12139>>」を自分の墓地へ戻した場合、『1:このカードが墓地に存在する場合、チューナー以外の自分の墓地のアンデット族モンスター1体を対象として発動できる。そのモンスターとこのカードを墓地から除外し、その2体のレベルの合計と同じレベルを持つアンデット族Sモンスター1体をエクストラデッキから特殊召喚する』効果を発動する事はできますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-9452",
@@ -69810,15 +70015,32 @@
     {
       "id": "ygoresources-qa-17277",
       "recordType": "qa",
-      "title": "除外されている「<<12141>>」を対象として、「<<12161>>」の『1:1ターンに1度、除外されている自分のアンデット族モンスター1体を対象として発動できる。そのモンスタ…",
+      "title": "「<<12161>>」の効果の対象となったモンスターが、チェーンして発動した「異次元の埋葬」の効果によって、墓地に戻っている場合、処理はどうなりますか?",
+      "question": "「<<12161>>」の効果の対象となったモンスターが、チェーンして発動した「異次元の埋葬」の効果によって、墓地に戻っている場合、処理はどうなりますか?",
+      "rawQuestion": "「<<12161>>」の効果の対象となったモンスターが、チェーンして発動した「異次元の埋葬」の効果によって、墓地に戻っている場合、処理はどうなりますか?",
+      "rawDetailedQuestion": "除外されている「<<12141>>」を対象として、「<<12161>>」の『1:1ターンに1度、除外されている自分のアンデット族モンスター1体を対象として発動できる。そのモンスターをデッキに戻し、その攻撃力以下の攻撃力を持つ相手フィールドのモンスターを全て守備表示にする。この効果は相手ターンでも発動できる』効果を発動しました。\n\nその発動にチェーンして「<<6941>>」が発動し、対象の「<<12141>>」が墓地に戻っている場合、効果処理はどうなりますか?",
+      "answer": "「<<12161>>」の効果の対象に選択したモンスターが、チェーンして発動した「<<6941>>」の効果によって、効果処理時に墓地に戻っている場合には、「<<12161>>」の効果処理は適用されません。\n(『そのモンスターをデッキに戻し』の処理、『その攻撃力以下の攻撃力を持つ相手フィールドのモンスターを全て守備表示にする』処理のどちらも適用されません。)",
       "cards": [],
       "cardIds": [
         "6941",
         "12141",
         "12161"
       ],
+      "questionCardIds": [],
       "keywords": [],
-      "text": "除外されている「<<12141>>」を対象として、「<<12161>>」の『1:1ターンに1度、除外されている自分のアンデット族モンスター1体を対象として発動できる。そのモンスターをデッキに戻し、その攻撃力以下の攻撃力を持つ相手フィールドのモンスターを全て守備表示にする。この効果は相手ターンでも発動できる』効果を発動しました。\n\nその発動にチェーンして「<<6941>>」が発動し、対象の「<<12141>>」が墓地に戻っている場合、効果処理はどうなりますか? 除外されている「<<12141>>」を対象として、「<<12161>>」の『1:1ターンに1度、除外されている自分のアンデット族モンスター1体を対象として発動できる。そのモンスタ… 「<<12161>>」の効果の対象に選択したモンスターが、チェーンして発動した「<<6941>>」の効果によって、効果処理時に墓地に戻っている場合には、「<<12161>>」の効果処理は適用されません。\n(『そのモンスターをデッキに戻し』の処理、『その攻撃力以下の攻撃力を持つ相手フィールドのモンスターを全て守備表示にする』処理のどちらも適用されません。)"
+      "text": "「<<12161>>」の効果の対象となったモンスターが、チェーンして発動した「異次元の埋葬」の効果によって、墓地に戻っている場合、処理はどうなりますか?\n除外されている「<<12141>>」を対象として、「<<12161>>」の『1:1ターンに1度、除外されている自分のアンデット族モンスター1体を対象として発動できる。そのモンスターをデッキに戻し、その攻撃力以下の攻撃力を持つ相手フィールドのモンスターを全て守備表示にする。この効果は相手ターンでも発動できる』効果を発動しました。\n\nその発動にチェーンして「<<6941>>」が発動し、対象の「<<12141>>」が墓地に戻っている場合、効果処理はどうなりますか?\n「<<12161>>」の効果の対象となったモンスターが、チェーンして発動した「異次元の埋葬」の効果によって、墓地に戻っている場合、処理はどうなりますか?\n「<<12161>>」の効果の対象に選択したモンスターが、チェーンして発動した「<<6941>>」の効果によって、効果処理時に墓地に戻っている場合には、「<<12161>>」の効果処理は適用されません。\n(『そのモンスターをデッキに戻し』の処理、『その攻撃力以下の攻撃力を持つ相手フィールドのモンスターを全て守備表示にする』処理のどちらも適用されません。)",
+      "sourceId": "17277",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/17277",
+      "questionLocale": "ja",
+      "detailedQuestionLocale": "ja",
+      "answerLocale": "ja",
+      "questionLocales": {
+        "ja": {
+          "title": "「<<12161>>」の効果の対象となったモンスターが、チェーンして発動した「異次元の埋葬」の効果によって、墓地に戻っている場合、処理はどうなりますか?",
+          "question": "除外されている「<<12141>>」を対象として、「<<12161>>」の『1:1ターンに1度、除外されている自分のアンデット族モンスター1体を対象として発動できる。そのモンスターをデッキに戻し、その攻撃力以下の攻撃力を持つ相手フィールドのモンスターを全て守備表示にする。この効果は相手ターンでも発動できる』効果を発動しました。\n\nその発動にチェーンして「<<6941>>」が発動し、対象の「<<12141>>」が墓地に戻っている場合、効果処理はどうなりますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-17407",
@@ -70242,7 +70464,11 @@
     {
       "id": "ygoresources-qa-7604",
       "recordType": "qa",
-      "title": "「<<12474>>」の『2:墓地のこのカードを除外して発動できる。「<<12153>>」によって決められた融合素材モンスターを自分の墓地から除外し、その融合モンスター1体をエク…",
+      "title": "「<<12474>>」の墓地にて発動する効果にチェーンして、「<<7858>>」が発動した場合、処理はどうなりますか?",
+      "question": "「<<12474>>」の墓地にて発動する効果にチェーンして、「<<7858>>」が発動した場合、処理はどうなりますか?",
+      "rawQuestion": "「<<12474>>」の墓地にて発動する効果にチェーンして、「<<7858>>」が発動した場合、処理はどうなりますか?",
+      "rawDetailedQuestion": "「<<12474>>」の『2:墓地のこのカードを除外して発動できる。「<<12153>>」によって決められた融合素材モンスターを自分の墓地から除外し、その融合モンスター1体をエクストラデッキから融合召喚する』効果を発動した際に、チェーンして「<<7858>>」を発動しました。\n\nその場合、効果処理はどうなりますか?",
+      "answer": "質問の状況の場合、「<<7858>>」の『1:このカードが魔法&罠ゾーンに存在する限り、お互いにカードを除外できない』効果が適用されていますので、『「<<12153>>」によって決められた融合素材モンスターを自分の墓地から除外し』の処理を適用する事ができませんので、『その融合モンスター1体をエクストラデッキから融合召喚する』処理も適用されません。\n(融合素材モンスターはそのまま墓地に残る事になります。)",
       "cards": [
         "融合",
         "7"
@@ -70254,10 +70480,27 @@
         "4837",
         "6053"
       ],
+      "questionCardIds": [],
       "keywords": [
         "魔法"
       ],
-      "text": "「<<12474>>」の『2:墓地のこのカードを除外して発動できる。「<<12153>>」によって決められた融合素材モンスターを自分の墓地から除外し、その融合モンスター1体をエクストラデッキから融合召喚する』効果を発動した際に、チェーンして「<<7858>>」を発動しました。\n\nその場合、効果処理はどうなりますか? 「<<12474>>」の『2:墓地のこのカードを除外して発動できる。「<<12153>>」によって決められた融合素材モンスターを自分の墓地から除外し、その融合モンスター1体をエク… 質問の状況の場合、「<<7858>>」の『1:このカードが魔法&罠ゾーンに存在する限り、お互いにカードを除外できない』効果が適用されていますので、『「<<12153>>」によって決められた融合素材モンスターを自分の墓地から除外し』の処理を適用する事ができませんので、『その融合モンスター1体をエクストラデッキから融合召喚する』処理も適用されません。\n(融合素材モンスターはそのまま墓地に残る事になります。)"
+      "text": "「<<12474>>」の墓地にて発動する効果にチェーンして、「<<7858>>」が発動した場合、処理はどうなりますか?\n「<<12474>>」の『2:墓地のこのカードを除外して発動できる。「<<12153>>」によって決められた融合素材モンスターを自分の墓地から除外し、その融合モンスター1体をエクストラデッキから融合召喚する』効果を発動した際に、チェーンして「<<7858>>」を発動しました。\n\nその場合、効果処理はどうなりますか?\n「<<12474>>」の墓地にて発動する効果にチェーンして、「<<7858>>」が発動した場合、処理はどうなりますか?\n質問の状況の場合、「<<7858>>」の『1:このカードが魔法&罠ゾーンに存在する限り、お互いにカードを除外できない』効果が適用されていますので、『「<<12153>>」によって決められた融合素材モンスターを自分の墓地から除外し』の処理を適用する事ができませんので、『その融合モンスター1体をエクストラデッキから融合召喚する』処理も適用されません。\n(融合素材モンスターはそのまま墓地に残る事になります。)",
+      "sourceId": "7604",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/7604",
+      "questionLocale": "ja",
+      "detailedQuestionLocale": "ja",
+      "answerLocale": "ja",
+      "questionLocales": {
+        "en": {
+          "title": "I activate the second effect of <<12474>> that performs a Fusion Summon by banishing the materials from my Graveyard, but then <<7858>> is chained. In this case, how does the effect resolve?",
+          "question": "I activate the second effect of <<12474>> that performs a Fusion Summon by banishing the materials from my Graveyard, but then <<7858>> is chained. In this case, how does the effect resolve?"
+        },
+        "ja": {
+          "title": "「<<12474>>」の墓地にて発動する効果にチェーンして、「<<7858>>」が発動した場合、処理はどうなりますか?",
+          "question": "「<<12474>>」の『2:墓地のこのカードを除外して発動できる。「<<12153>>」によって決められた融合素材モンスターを自分の墓地から除外し、その融合モンスター1体をエクストラデッキから融合召喚する』効果を発動した際に、チェーンして「<<7858>>」を発動しました。\n\nその場合、効果処理はどうなりますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-13458",
@@ -79397,7 +79640,11 @@
     {
       "id": "ygoresources-qa-10769",
       "recordType": "qa",
-      "title": "自分のモンスターゾーンに「<<12782>>」と「<<12142>>」が表側表示で存在しています。 この状況で相手が「<<4342>>」を発動し、自分の「<<12782>>」と「…",
+      "title": "2体以上のアンデット族モンスターがカードの効果によって破壊される場合、「<<12782>>」のモンスター効果を適用できますか?",
+      "question": "2体以上のアンデット族モンスターがカードの効果によって破壊される場合、「<<12782>>」のモンスター効果を適用できますか?",
+      "rawQuestion": "2体以上のアンデット族モンスターがカードの効果によって破壊される場合、「<<12782>>」のモンスター効果を適用できますか?",
+      "rawDetailedQuestion": "自分のモンスターゾーンに「<<12782>>」と「<<12142>>」が表側表示で存在しています。\n\nこの状況で相手が「<<4342>>」を発動し、自分の「<<12782>>」と「<<12142>>」が2体とも破壊される場合、「<<12782>>」の『2:自分フィールドのアンデット族モンスターが戦闘・効果で破壊される場合、代わりに自分の墓地の「不知火」モンスター1体を除外できる』モンスター効果を適用する事はできますか?",
+      "answer": "自分のモンスターゾーンに表側表示で存在する2体以上のアンデット族モンスターが同時にカードの効果によって破壊される場合でも、「<<12782>>」のモンスター効果を適用する事はできます。\n\n質問の状況の場合、自分の墓地の「不知火」と名のついたモンスター1体を除外する事で、「<<12782>>」と「<<12142>>」はどちらも、相手の「<<4342>>」では破壊されない事になります。",
       "cards": [
         "7"
       ],
@@ -79407,8 +79654,25 @@
         "12782",
         "6053"
       ],
+      "questionCardIds": [],
       "keywords": [],
-      "text": "自分のモンスターゾーンに「<<12782>>」と「<<12142>>」が表側表示で存在しています。\n\nこの状況で相手が「<<4342>>」を発動し、自分の「<<12782>>」と「<<12142>>」が2体とも破壊される場合、「<<12782>>」の『2:自分フィールドのアンデット族モンスターが戦闘・効果で破壊される場合、代わりに自分の墓地の「不知火」モンスター1体を除外できる』モンスター効果を適用する事はできますか? 自分のモンスターゾーンに「<<12782>>」と「<<12142>>」が表側表示で存在しています。 この状況で相手が「<<4342>>」を発動し、自分の「<<12782>>」と「… 自分のモンスターゾーンに表側表示で存在する2体以上のアンデット族モンスターが同時にカードの効果によって破壊される場合でも、「<<12782>>」のモンスター効果を適用する事はできます。\n\n質問の状況の場合、自分の墓地の「不知火」と名のついたモンスター1体を除外する事で、「<<12782>>」と「<<12142>>」はどちらも、相手の「<<4342>>」では破壊されない事になります。"
+      "text": "2体以上のアンデット族モンスターがカードの効果によって破壊される場合、「<<12782>>」のモンスター効果を適用できますか?\n自分のモンスターゾーンに「<<12782>>」と「<<12142>>」が表側表示で存在しています。\n\nこの状況で相手が「<<4342>>」を発動し、自分の「<<12782>>」と「<<12142>>」が2体とも破壊される場合、「<<12782>>」の『2:自分フィールドのアンデット族モンスターが戦闘・効果で破壊される場合、代わりに自分の墓地の「不知火」モンスター1体を除外できる』モンスター効果を適用する事はできますか?\n2体以上のアンデット族モンスターがカードの効果によって破壊される場合、「<<12782>>」のモンスター効果を適用できますか?\n自分のモンスターゾーンに表側表示で存在する2体以上のアンデット族モンスターが同時にカードの効果によって破壊される場合でも、「<<12782>>」のモンスター効果を適用する事はできます。\n\n質問の状況の場合、自分の墓地の「不知火」と名のついたモンスター1体を除外する事で、「<<12782>>」と「<<12142>>」はどちらも、相手の「<<4342>>」では破壊されない事になります。",
+      "sourceId": "10769",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/10769",
+      "questionLocale": "ja",
+      "detailedQuestionLocale": "ja",
+      "answerLocale": "ja",
+      "questionLocales": {
+        "en": {
+          "title": "<<12142>> and <<12782>> are both face-up on my field. If my opponent activates <<4342>>, and both monsters would be destroyed, can I apply the effect of <<12782>> and banish a \"Shiranui\" monster from my Graveyard instead?",
+          "question": "<<12142>> and <<12782>> are both face-up on my field. If my opponent activates <<4342>>, and both monsters would be destroyed, can I apply the effect of <<12782>> and banish a \"Shiranui\" monster from my Graveyard instead?"
+        },
+        "ja": {
+          "title": "2体以上のアンデット族モンスターがカードの効果によって破壊される場合、「<<12782>>」のモンスター効果を適用できますか?",
+          "question": "自分のモンスターゾーンに「<<12782>>」と「<<12142>>」が表側表示で存在しています。\n\nこの状況で相手が「<<4342>>」を発動し、自分の「<<12782>>」と「<<12142>>」が2体とも破壊される場合、「<<12782>>」の『2:自分フィールドのアンデット族モンスターが戦闘・効果で破壊される場合、代わりに自分の墓地の「不知火」モンスター1体を除外できる』モンスター効果を適用する事はできますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-11254",
@@ -82358,6 +82622,10 @@
       "detailedQuestionLocale": "ja",
       "answerLocale": "ja",
       "questionLocales": {
+        "en": {
+          "title": "If <<23161>>'s effect banishes a Toon monster while <<23498>> is resolving, causing there to be fewer than 5 cards, will <<23498>> be negated by <<23162>>?",
+          "question": "There are exactly 5 face-up cards on my opponent's field, including <<23162>>, <<23161>>, and a Toon monster. Also, <<23162>>'s『until the end of this turn while this card is face-up, negate the activated effects of cards with that original name』declaring \"<<23498>>\" is already applying.\n\nI now activate <<23498>>. When it resolves, my opponent applies <<23161>>'s『at the start of its resolution, you can banish 1 Toon monster you control until immediately after that effect resolves』effect, banishing their Toon monster. As a result, there are no longer 5 or more face-up cards on my opponent's field.\n\nWill the activated effect of <<23498>> now be negated by <<23162>>?"
+        },
         "ja": {
           "title": "「<<23498>>」の効果処理時に「<<23161>>」の3の効果を適用して相手フィールドに表側表示カードが5枚以上存在しなくなった場合、その効果は「<<23162>>」により無効化されますか?",
           "question": "既に「<<23498>>」を宣言して発動した「<<23162>>」の『このカードが表側表示で存在する間、ターン終了時まで宣言したカードと元々のカード名が同じカードが発動した効果は無効化される』効果が適用されており、相手フィールドには「<<23162>>」、「<<23161>>」、トゥーンモンスターを含めた、表側表示のカード5枚が存在します。\n\nこの状況で自分が「<<23498>>」を発動し、その処理時に相手が「<<23161>>」の3の効果を適用してトゥーンモンスターを除外したことで、相手フィールドに表側表示カードが5枚以上存在しなくなった場合、発動した「<<23498>>」の効果は無効になりますか?"
@@ -88895,7 +89163,13 @@
       "sourceUrl": "https://db.ygoresources.com/data/qa/6215",
       "questionLocale": "ja",
       "detailedQuestionLocale": "ja",
-      "answerLocale": "ja"
+      "answerLocale": "ja",
+      "questionLocales": {
+        "ja": {
+          "title": "フィールドの魔法・罠カードを破壊する「<<12632>>」のモンスター効果の処理時に、自分の墓地に魔法・罠カードが存在する場合、処理はどうなりますか?",
+          "question": "自分の魔法&罠ゾーンにセットされたカードが2枚存在し、自分の墓地に魔法・罠カードが1枚もない状況で、自分は「<<12632>>」の『2:1ターンに1度、自分の墓地に魔法・罠カードが存在しない場合、フィールドの魔法・罠カード1枚を対象として発動できる。そのカードを破壊し、相手に500ダメージを与える。この効果は相手ターンでも発動できる』モンスター効果を発動しました。\n\nその発動にチェーンして相手が「<<12175>>」を発動し、自分の魔法&罠ゾーンのカード2枚が破壊され墓地へ送られた場合、「<<12632>>」のモンスター効果の処理はどうなりますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-6219",
@@ -89756,7 +90030,17 @@
       "sourceUrl": "https://db.ygoresources.com/data/qa/6269",
       "questionLocale": "ja",
       "detailedQuestionLocale": "ja",
-      "answerLocale": "ja"
+      "answerLocale": "ja",
+      "questionLocales": {
+        "en": {
+          "title": "<<12304>> was Special Summoned by the effect of <<12181>> this turn. If <<12206>> is activated by targeting that <<12304>>, what happens?",
+          "question": "<<12304>> was Special Summoned by the effect of <<12181>> this turn. If <<12206>> is activated by targeting that <<12304>>, what happens?"
+        },
+        "ja": {
+          "title": "「<<12181>>」の効果で特殊召喚されたモンスターを対象として「<<12206>>」を発動した場合、それぞれの効果はどうなりますか?",
+          "question": "「<<12181>>」の『1:デッキから「ダイナミスト」モンスター1体を特殊召喚する。この効果で特殊召喚したモンスターは他のカードの効果を受けず、エンドフェイズに破壊される』効果によって、「<<12304>>」が特殊召喚されているターンです。\n\nその「<<12304>>」を対象として、「<<12206>>」が発動した場合、それぞれの効果の処理はどうなりますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-6271",
@@ -95171,7 +95455,17 @@
       "sourceUrl": "https://db.ygoresources.com/data/qa/6991",
       "questionLocale": "ja",
       "detailedQuestionLocale": "ja",
-      "answerLocale": "ja"
+      "answerLocale": "ja",
+      "questionLocales": {
+        "en": {
+          "title": "There are 2 copies of <<12171>> present face-up in my Spell & Trap Zone. If a single <<12136>> in my Monster Zone is destroyed by battle, and then placed face-up in the Extra Deck, what happens?",
+          "question": "There are 2 copies of <<12171>> present face-up in my Spell & Trap Zone. If a single <<12136>> in my Monster Zone is destroyed by battle, and then placed face-up in the Extra Deck, what happens?"
+        },
+        "ja": {
+          "title": "自分の魔法&罠ゾーンに「ダイナミスト・チャージ」が2枚表側表示で存在し、「ダイナミスト」と名のついたモンスター1体がエクストラデッキに表側表示で加わった場合、処理はどうなりますか?",
+          "question": "自分の魔法&罠ゾーンに「<<12171>>」が2枚表側表示で存在しています。\n\n自分のモンスターゾーンの「<<12136>>」1体が戦闘で破壊され、自分のエクストラデッキに表側表示で加わった場合、「<<12171>>」の『2:1ターンに1度、「ダイナミスト」カードがフィールドから自分のエクストラデッキに表側表示で加わった場合に発動する。そのカード1枚を手札に加える』処理はどうなりますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-6995",
@@ -103633,7 +103927,17 @@
       "sourceUrl": "https://db.ygoresources.com/data/qa/8003",
       "questionLocale": "ja",
       "detailedQuestionLocale": "ja",
-      "answerLocale": "ja"
+      "answerLocale": "ja",
+      "questionLocales": {
+        "en": {
+          "title": "<<12196>> is face-up on my field. If I want to activate a <<12192>> from my hand, what is the correct procedure?",
+          "question": "<<12196>> is face-up on my field. If I want to activate a <<12192>> from my hand, what is the correct procedure?"
+        },
+        "ja": {
+          "title": "「<<12196>>」のモンスター効果で、手札の「<<12192>>」を発動する場合、どのように発動し、処理を行いますか?",
+          "question": "自分のモンスターゾーンに「<<12196>>」が表側表示で存在し、『2:このカードがモンスターゾーンに存在する限り、自分は「バージェストマ」罠カードを手札から発動できる』モンスター効果が適用されています。\n\nこの状況で、手札の「<<12192>>」を発動する場合、どのように発動し、処理を行いますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-8006",
@@ -110944,7 +111248,13 @@
       "sourceUrl": "https://db.ygoresources.com/data/qa/8634",
       "questionLocale": "ja",
       "detailedQuestionLocale": "ja",
-      "answerLocale": "ja"
+      "answerLocale": "ja",
+      "questionLocales": {
+        "ja": {
+          "title": "2枚の「<<12908>>」のペンデュラム効果を、同一のモンスターを対象として発動できますか?",
+          "question": "自分のペンデュラムゾーンに2枚の「<<12908>>」が存在し、自分のモンスターゾーンに「<<12155>>」が表側表示で存在しています。\n\nこの状況で、その「<<12155>>」を対象に、2枚の「<<12908>>」の『1:1ターンに1度、自分フィールドの魔法使い族・闇属性モンスター1体を対象として発動できる。このターンそのモンスターが相手モンスターとの戦闘で相手に与える戦闘ダメージは倍になる。その後、このカードを破壊する』ペンデュラム効果をそれぞれ発動する事はできますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-8635",
@@ -115677,7 +115987,17 @@
       "sourceUrl": "https://db.ygoresources.com/data/qa/9073",
       "questionLocale": "ja",
       "detailedQuestionLocale": "ja",
-      "answerLocale": "ja"
+      "answerLocale": "ja",
+      "questionLocales": {
+        "en": {
+          "title": "If the first effect of <<12163>> that banishes a monster from the opponent's Extra Deck is activated, but <<7858>> is chained, how does the effect resolve?",
+          "question": "If the first effect of <<12163>> that banishes a monster from the opponent's Extra Deck is activated, but <<7858>> is chained, how does the effect resolve?"
+        },
+        "ja": {
+          "title": "「<<12163>>」の除外したモンスターの攻撃力と同じになる効果処理時に、「<<7858>>」が適用されている場合、処理はどうなりますか?",
+          "question": "「<<12163>>」の『1:相手のエクストラデッキから裏側表示のモンスターをランダムに1体除外する。このカードの攻撃力は除外したモンスターの攻撃力と同じになる』効果の発動にチェーンして「<<7858>>」が発動した場合、「<<12163>>」の効果処理はどうなりますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-9074",
@@ -117797,7 +118117,17 @@
       "sourceUrl": "https://db.ygoresources.com/data/qa/9281",
       "questionLocale": "ja",
       "detailedQuestionLocale": "ja",
-      "answerLocale": "ja"
+      "answerLocale": "ja",
+      "questionLocales": {
+        "en": {
+          "title": "If I activate <<12169>>, but my opponent chains <<7934>>, how does the effect of <<12169>> resolve?",
+          "question": "If I activate <<12169>>, but my opponent chains <<7934>>, how does the effect of <<12169>> resolve?"
+        },
+        "ja": {
+          "title": "「<<12169>>」の発動にチェーンして「<<7934>>」が発動した場合、処理はどうなりますか?",
+          "question": "自分の「<<12169>>」の発動にチェーンして相手が「<<7934>>」を発動しました。\n\nこの場合、『1:デッキから「竜剣士」Pモンスター1体と「竜魔王」Pモンスター1体を選んで相手に見せ、相手はその中からランダムに1体選ぶ。相手が選んだPモンスターを自分のPゾーンに置くか特殊召喚する。残りのPモンスターは自分のエクストラデッキに表側表示で加える』処理はどのように行いますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-9283",
@@ -152925,7 +153255,17 @@
       "sourceUrl": "https://db.ygoresources.com/data/qa/12873",
       "questionLocale": "ja",
       "detailedQuestionLocale": "ja",
-      "answerLocale": "ja"
+      "answerLocale": "ja",
+      "questionLocales": {
+        "en": {
+          "title": "<<12151>> was sent directly from the Deck to the Graveyard by the effect of <<5236>>. In this situation, can the effect of <<12174>> Ritual Summon that <<12151>> from the Graveyard?",
+          "question": "<<12151>> was sent directly from the Deck to the Graveyard by the effect of <<5236>>. In this situation, can the effect of <<12174>> Ritual Summon that <<12151>> from the Graveyard?"
+        },
+        "ja": {
+          "title": "「<<5236>>」の効果でデッキから墓地に送られた「<<12151>>」を「<<12174>>」の効果で儀式召喚できますか?",
+          "question": "「<<5236>>」の効果によって、「<<12151>>」がデッキから墓地へ送られています。\n\nこの状況で、「<<12174>>」の『1:レベルの合計が儀式召喚するモンスターのレベル以上になるように、自分の手札・フィールドのPモンスターをリリースし、自分の手札・墓地からドラゴン族の儀式モンスター1体を儀式召喚する』効果を発動し、その墓地へ送られている「<<12151>>」を儀式召喚する事はできますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-12874",
@@ -221070,7 +221410,13 @@
       "sourceUrl": "https://db.ygoresources.com/data/qa/17237",
       "questionLocale": "ja",
       "detailedQuestionLocale": "ja",
-      "answerLocale": "ja"
+      "answerLocale": "ja",
+      "questionLocales": {
+        "ja": {
+          "title": "「<<12189>>」の効果処理時に、「<<9352>>」が適用されたモンスターが存在する場合、処理はどうなりますか?",
+          "question": "「<<12189>>」の効果処理時に、「<<9352>>」の効果が適用されたモンスターが存在する場合、「<<12189>>」の『1:フィールドの表側表示モンスターの攻撃力はターン終了時まで、フィールドのモンスターの数×100アップする』効果の処理はどうなりますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-17241",
@@ -221175,7 +221521,13 @@
       "sourceUrl": "https://db.ygoresources.com/data/qa/17252",
       "questionLocale": "ja",
       "detailedQuestionLocale": "ja",
-      "answerLocale": "ja"
+      "answerLocale": "ja",
+      "questionLocales": {
+        "ja": {
+          "title": "「<<12159>>」が相手モンスターに攻撃した後、戦闘の巻き戻しによって直接攻撃になる場合、攻撃力はどうなりますか?",
+          "question": "自分のモンスターゾーンに「<<12159>>」と「<<12158>>」のみが表側表示で存在し、相手のモンスターゾーンには裏側守備表示のモンスター1体のみが存在しています。\n\nこの状況で、「<<12159>>」が相手モンスターに攻撃した際に『1:このカードが相手モンスターに攻撃する攻撃宣言時に発動する。このカードの攻撃力はダメージステップ終了時まで、自分フィールドの戦士族・地属性のSモンスターの数×400アップする』効果を発動し、さらにチェーンして発動した「<<5544>>」の効果によって相手モンスターを破壊した場合、処理はどうなりますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-17254",
@@ -221197,7 +221549,17 @@
       "sourceUrl": "https://db.ygoresources.com/data/qa/17254",
       "questionLocale": "ja",
       "detailedQuestionLocale": "ja",
-      "answerLocale": "ja"
+      "answerLocale": "ja",
+      "questionLocales": {
+        "en": {
+          "title": "If a <<12134>> destroys an opponent's Token Monster in battle, can its Monster effect be activated?",
+          "question": "If a <<12134>> destroys an opponent's Token Monster in battle, can its Monster effect be activated?"
+        },
+        "ja": {
+          "title": "「<<12134>>」が戦闘でモンスタートークンを破壊した場合、そのモンスター効果を発動できますか?",
+          "question": "自分の「<<12134>>」が相手のモンスターゾーンに存在するモンスタートークンを戦闘で破壊した場合、『1:このカードが戦闘で相手モンスターを破壊した時に発動できる。デッキから「ダイナミスト」カード1枚を手札に加える』モンスター効果を発動する事はできますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-17255",
@@ -221221,7 +221583,17 @@
       "sourceUrl": "https://db.ygoresources.com/data/qa/17255",
       "questionLocale": "ja",
       "detailedQuestionLocale": "ja",
-      "answerLocale": "ja"
+      "answerLocale": "ja",
+      "questionLocales": {
+        "en": {
+          "title": "If a <<12133>> affected by the effect of <<12010>> destroys an opponent's monster by the effect of <<12010>>, can the effect of <<12132>> be activated?",
+          "question": "If a <<12133>> affected by the effect of <<12010>> destroys an opponent's monster by the effect of <<12010>>, can the effect of <<12132>> be activated?"
+        },
+        "ja": {
+          "title": "「<<12010>>」の効果によって自分のペンデュラムモンスターが相手モンスターを破壊した場合、「<<12132>>」のモンスター効果を発動できますか?",
+          "question": "「<<12010>>」の『1:属性を1つ宣言し、自分フィールドの表側表示モンスター1体を対象として発動できる。このターン、その自分の表側表示モンスターが、宣言した属性を持つ相手モンスターと戦闘を行う場合、そのダメージステップ開始時にその相手モンスターは破壊される』効果が適用されている「<<12133>>」が、その「<<12010>>」の効果によって相手モンスターを破壊した場合、「<<12132>>」の『1:このカード以外の自分のPモンスターが相手モンスターと戦闘を行ったダメージ計算後に発動できる。その戦闘を行ったお互いのモンスターを破壊する』モンスター効果を発動する事はできますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-17256",
@@ -221422,7 +221794,13 @@
       "sourceUrl": "https://db.ygoresources.com/data/qa/17275",
       "questionLocale": "ja",
       "detailedQuestionLocale": "ja",
-      "answerLocale": "ja"
+      "answerLocale": "ja",
+      "questionLocales": {
+        "ja": {
+          "title": "「<<9774>>」の効果によって、エクストラデッキの「<<12161>>」が除外された場合、効果を発動できますか?",
+          "question": "レベル6を宣言して発動した相手の「<<9774>>」の効果によって、自分のエクストラデッキから「<<12161>>」が除外された場合、『2:このカードが除外された場合、相手フィールドのモンスター1体を対象として発動できる。そのモンスターの攻撃力は500ダウンする』効果を発動する事はできますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-17278",
@@ -221641,7 +222019,13 @@
       "sourceUrl": "https://db.ygoresources.com/data/qa/17286",
       "questionLocale": "ja",
       "detailedQuestionLocale": "ja",
-      "answerLocale": "ja"
+      "answerLocale": "ja",
+      "questionLocales": {
+        "ja": {
+          "title": "「<<12170>>」の効果が適用されている場合、相手は魔法・罠カードの発動は行えますか?",
+          "question": "「<<12170>>」の『2:自分の「ダイナミスト」モンスターが戦闘を行う場合、相手はダメージステップ終了時まで魔法・罠・モンスターの効果を発動できない』効果が適用されている場合、相手は魔法・罠カードのカードの発動を行う事はできますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-17287",
@@ -221668,7 +222052,13 @@
       "sourceUrl": "https://db.ygoresources.com/data/qa/17287",
       "questionLocale": "ja",
       "detailedQuestionLocale": "ja",
-      "answerLocale": "ja"
+      "answerLocale": "ja",
+      "questionLocales": {
+        "ja": {
+          "title": "相手モンスターの直接攻撃宣言時に、2枚の「<<12179>>」をチェーンして発動できますか?",
+          "question": "相手モンスターの直接攻撃宣言時に、自分は「<<12179>>」を発動しました。\n\nさらにその発動にチェーンして、自分は2枚目の「<<12179>>」を発動する事はできますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-17288",
@@ -221746,7 +222136,13 @@
       "sourceUrl": "https://db.ygoresources.com/data/qa/17293",
       "questionLocale": "ja",
       "detailedQuestionLocale": "ja",
-      "answerLocale": "ja"
+      "answerLocale": "ja",
+      "questionLocales": {
+        "ja": {
+          "title": "「<<12184>>」の『この効果で裏側守備表示になったモンスターは表示形式を変更できない』効果はいつまで適用されますか?",
+          "question": "「<<12184>>」の『1:相手モンスターの攻撃宣言時に発動できる。相手フィールドの攻撃表示モンスターを全て裏側守備表示にする。この効果で裏側守備表示になったモンスターは表示形式を変更できない』効果によって、裏側守備表示になったモンスターは、いつまで表示形式の変更が行えない状態になりますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-17294",
@@ -222017,7 +222413,17 @@
       "sourceUrl": "https://db.ygoresources.com/data/qa/17322",
       "questionLocale": "ja",
       "detailedQuestionLocale": "ja",
-      "answerLocale": "ja"
+      "answerLocale": "ja",
+      "questionLocales": {
+        "en": {
+          "title": "If you activate the effect of <<12108>> in a chain to the activation of the Monster Effect of your <<12143>>, so that you no longer have an EARTH, WATER, FIRE or WIND Monster, how does the Monster Effect of <<12143>> resolve?",
+          "question": "If you activate the effect of <<12108>> in a chain to the activation of the Monster Effect of your <<12143>>, so that you no longer have an EARTH, WATER, FIRE or WIND Monster, how does the Monster Effect of <<12143>> resolve?"
+        },
+        "ja": {
+          "title": "「<<12143>>」のモンスター効果の処理時に、デッキに地・水・炎・風属性のいずれかのモンスターが存在しなくなった場合、処理はどうなりますか?",
+          "question": "自分の「<<12143>>」の『1:このカードが召喚・特殊召喚に成功した場合に発動できる。デッキから地・水・炎・風属性モンスターを1体ずつ選び、好きな順番でデッキの上に戻す』モンスター効果の発動にチェーンして、自分が「<<12108>>」の『1:1ターンに1度、このカードのX素材を1つ取り除いて発動できる。デッキからカード1枚を選んで墓地へ送る。この効果は相手ターンでも発動できる』効果を発動し、デッキに地・水・炎・風属性のいずれかのモンスターが存在しなくなった場合、「<<12143>>」のモンスター効果の処理はどうなりますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-17323",
@@ -222065,7 +222471,13 @@
       "sourceUrl": "https://db.ygoresources.com/data/qa/17326",
       "questionLocale": "ja",
       "detailedQuestionLocale": "ja",
-      "answerLocale": "ja"
+      "answerLocale": "ja",
+      "questionLocales": {
+        "ja": {
+          "title": "「<<12166>>」の効果によって適用されたレベルと攻撃力はいつまで適用されますか?",
+          "question": "「<<12166>>」の『1:自分の墓地の「スピードロイド」モンスター1体を除外し、自分フィールドのSモンスター1体を対象として発動できる。そのモンスターはターン終了時まで、除外したモンスターと同じレベルになり、攻撃力は除外したモンスターのレベル×500アップする』効果によって適用されたレベルと攻撃力はいつまで適用されますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-17332",
@@ -222094,7 +222506,13 @@
       "sourceUrl": "https://db.ygoresources.com/data/qa/17332",
       "questionLocale": "ja",
       "detailedQuestionLocale": "ja",
-      "answerLocale": "ja"
+      "answerLocale": "ja",
+      "questionLocales": {
+        "ja": {
+          "title": "「<<12167>>」の効果処理の際に、「<<7466>>」を適用できますか?",
+          "question": "「<<12167>>」の『1:自分の手札及び自分・相手フィールドから、融合モンスターカードによって決められた融合素材モンスターを墓地へ送り、「<<4983>>」を融合素材とするその融合モンスター1体をエクストラデッキから融合召喚する』効果処理を行う際に、「<<7466>>」の『このカードの発動ターンに自分が融合召喚をする場合、融合モンスターカードによって決められた融合素材モンスターを自分の手札・デッキ・フィールド上・墓地から選んでゲームから除外し、これらを融合素材にできる。このカードを発動するターン、自分は攻撃する事ができず、この効果で融合召喚したモンスターはエンドフェイズ時に破壊される』効果を適用する事はできますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-17333",
@@ -222194,7 +222612,13 @@
       "sourceUrl": "https://db.ygoresources.com/data/qa/17339",
       "questionLocale": "ja",
       "detailedQuestionLocale": "ja",
-      "answerLocale": "ja"
+      "answerLocale": "ja",
+      "questionLocales": {
+        "ja": {
+          "title": "「<<5430>>」の効果によって墓地から特殊召喚された場合でも、「<<12162>>」の効果を発動できますか?",
+          "question": "「<<5430>>」の効果によって墓地から「<<12162>>」が特殊召喚に成功した場合でも、「<<12162>>」の『1:このカードが特殊召喚に成功した場合、自分の墓地のアンデット族モンスター1体を除外して発動できる。このカードの攻撃力はターン終了時まで、除外したモンスターの元々の攻撃力分アップする』効果を発動する事はできますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-17340",
@@ -222652,7 +223076,17 @@
       "sourceUrl": "https://db.ygoresources.com/data/qa/17369",
       "questionLocale": "ja",
       "detailedQuestionLocale": "ja",
-      "answerLocale": "ja"
+      "answerLocale": "ja",
+      "questionLocales": {
+        "en": {
+          "title": "The effect of <<12140>> that prevents monsters from being destroyed in battle has been applied this turn.  If <<7857>> is activated this turn, so that monsters you control are treated as Zombie-Type monsters, are monsters whose Original Type is not Zombie-Type also prevented from bein destroyed in battle?",
+          "question": "The effect of <<12140>> that prevents monsters from being destroyed in battle has been applied this turn.\n\nIf <<7857>> is activated this turn, so that monsters you control are treated as Zombie-Type monsters, are monsters whose Original Type is not Zombie-Type also prevented from bein destroyed in battle?"
+        },
+        "ja": {
+          "title": "除外された「<<12140>>」の効果が適用されているターン、「<<7857>>」の効果でアンデット族として扱われているモンスターも戦闘で破壊されなくなりますか?",
+          "question": "「<<12140>>」の『2:このカードが除外された場合に発動できる。このターン、自分のアンデット族モンスターは戦闘では破壊されない』効果が適用されているターンです。\n\nこのターンに「<<7857>>」を発動し、自分フィールドのモンスターがアンデット族として扱われる場合、元々の種族がアンデット族ではない自分のモンスターゾーンのモンスターも戦闘で破壊されなくなりますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-17370",
@@ -222756,7 +223190,13 @@
       "sourceUrl": "https://db.ygoresources.com/data/qa/17376",
       "questionLocale": "ja",
       "detailedQuestionLocale": "ja",
-      "answerLocale": "ja"
+      "answerLocale": "ja",
+      "questionLocales": {
+        "ja": {
+          "title": "「<<12168>>」の効果が無効になったターン、2枚目の「<<12168>>」を発動できますか?",
+          "question": "自分の「<<12168>>」の『1:相手の墓地の同じ種族のモンスターを3体まで対象として発動できる。そのモンスターを除外し、自分フィールドの「<<4983>>」モンスターまたは「破壊剣」モンスター1体を選び、ターン終了時までその攻撃力・守備力を除外したモンスターの数×500アップする』効果が、相手の「<<10545>>」の効果によって無効になっているターンです。\n\n自分はこのターンに2枚目となる「<<12168>>」を発動する事はできますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-17377",
@@ -222807,7 +223247,13 @@
       "sourceUrl": "https://db.ygoresources.com/data/qa/17380",
       "questionLocale": "ja",
       "detailedQuestionLocale": "ja",
-      "answerLocale": "ja"
+      "answerLocale": "ja",
+      "questionLocales": {
+        "ja": {
+          "title": "「<<12182>>」の効果処理時に、「<<12182>>」自身が破壊されている場合、対象の5枚のカードはどうなりますか?",
+          "question": "「<<12182>>」の『2:1ターンに1度、自分の墓地の「マジェスペクター」カード5枚を対象として発動できる。そのカード5枚をデッキに加えてシャッフルする。その後、自分はデッキから1枚ドローする』効果の発動にチェーンして、相手が「<<4909>>」を発動し、「<<12182>>」自身が破壊された場合、効果処理はどうなりますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-17381",
@@ -222856,7 +223302,13 @@
       "sourceUrl": "https://db.ygoresources.com/data/qa/17386",
       "questionLocale": "ja",
       "detailedQuestionLocale": "ja",
-      "answerLocale": "ja"
+      "answerLocale": "ja",
+      "questionLocales": {
+        "ja": {
+          "title": "「<<6682>>」の適用中に、「<<12186>>」を発動した場合、処理はどうなりますか?",
+          "question": "「<<6682>>」の適用中に、「<<12186>>」を発動した場合、処理はどうなりますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-17388",
@@ -222879,7 +223331,13 @@
       "sourceUrl": "https://db.ygoresources.com/data/qa/17388",
       "questionLocale": "ja",
       "detailedQuestionLocale": "ja",
-      "answerLocale": "ja"
+      "answerLocale": "ja",
+      "questionLocales": {
+        "ja": {
+          "title": "「<<12188>>」のカードの発動の際に、「<<8089>>」を対象にできますか?",
+          "question": "相手のモンスターゾーンに、『2:このカードの攻撃力・守備力は自分の手札の数×600アップする』効果によって攻撃力・守備力が1800となっている「<<8089>>」が表側表示で存在しています。\n\n「<<12188>>」の『1:相手フィールドの表側表示モンスター1体を対象として発動できる。自分はその表側表示モンスターの攻撃力の半分のダメージを受ける。その後、自分が受けたダメージと同じ数値分のダメージを相手に与える』効果を発動する際に、対象として、元々の攻撃力が?の「<<8089>>」を選択する事はできますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-17389",
@@ -222980,7 +223438,17 @@
       "sourceUrl": "https://db.ygoresources.com/data/qa/17396",
       "questionLocale": "ja",
       "detailedQuestionLocale": "ja",
-      "answerLocale": "ja"
+      "answerLocale": "ja",
+      "questionLocales": {
+        "en": {
+          "title": "If there is no Zombie monster with 0 DEF in my Graveyard, can I activate <<12173>> by sending a Zombie monster with 0 DEF to my Graveyard?",
+          "question": "I have a banished Zombie monster with 0 DEF, but none of the monsters in my Graveyard are Zombie monsters with 0 DEF. In this situation, can I send a Zombie monster with 0 DEF to my Graveyard as the cost to activate <<12173>>, then target that monster for the『●Target 1 Zombie-Type monster with 0 DEF in your Graveyard; Special Summon it.』effect?"
+        },
+        "ja": {
+          "title": "守備力0のアンデット族モンスターが自分の墓地に1体も存在しない時、手札の守備力0のアンデット族モンスターを墓地へ送り、「<<12173>>」の効果を発動できますか?",
+          "question": "自分の守備力0のアンデット族モンスターが1体除外されており、自分の墓地には守備力0のアンデット族モンスターが1体も存在していません。\n\nこの状況で、「<<12173>>」の効果を発動する際のコストとして手札の守備力0のアンデット族モンスターを墓地へ送り、そのモンスターを対象として、1つ目の『●』の効果を発動できますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-17398",
@@ -223032,7 +223500,13 @@
       "sourceUrl": "https://db.ygoresources.com/data/qa/17400",
       "questionLocale": "ja",
       "detailedQuestionLocale": "ja",
-      "answerLocale": "ja"
+      "answerLocale": "ja",
+      "questionLocales": {
+        "ja": {
+          "title": "「<<12165>>」の効果によって、ペンデュラムゾーンのカードが1枚も破壊されなかった場合、処理はどうなりますか?",
+          "question": "自分のペンデュラムゾーンに「<<11968>>」のみが存在する状況で、相手が「<<12165>>」を発動しました。\n\nその発動にチェーンして、自分が「<<4909>>」を発動し、その「<<11968>>」を破壊した場合、「<<12165>>」の処理はどうなりますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-17402",
@@ -223055,7 +223529,13 @@
       "sourceUrl": "https://db.ygoresources.com/data/qa/17402",
       "questionLocale": "ja",
       "detailedQuestionLocale": "ja",
-      "answerLocale": "ja"
+      "answerLocale": "ja",
+      "questionLocales": {
+        "ja": {
+          "title": "「<<12164>>」の効果処理時に、対象のうち1枚が存在しなくなった場合、処理はどうなりますか?",
+          "question": "相手フィールドのカード2枚を対象として、「<<12164>>」の『1:自分フィールドの「EM」モンスターの数まで相手フィールドのカードを対象として発動できる。そのカードを持ち主の手札に戻す』効果を発動しました。\n\nその発動にチェーンして、「<<5544>>」が発動し、「<<12164>>」の対象の内、1枚が破壊され墓地へ送られた場合、処理はどうなりますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-17403",
@@ -223242,7 +223722,13 @@
       "sourceUrl": "https://db.ygoresources.com/data/qa/17413",
       "questionLocale": "ja",
       "detailedQuestionLocale": "ja",
-      "answerLocale": "ja"
+      "answerLocale": "ja",
+      "questionLocales": {
+        "ja": {
+          "title": "「<<7858>>」の適用中に、「<<12183>>」を発動できますか?",
+          "question": "「<<7858>>」の適用中に、「<<12183>>」を発動する事はできますか?\n\nまた、「<<12183>>」の発動にチェーンして「<<7858>>」が発動した場合、どうなりますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-17414",
@@ -223499,7 +223985,17 @@
       "sourceUrl": "https://db.ygoresources.com/data/qa/17427",
       "questionLocale": "ja",
       "detailedQuestionLocale": "ja",
-      "answerLocale": "ja"
+      "answerLocale": "ja",
+      "questionLocales": {
+        "en": {
+          "title": "If the opponent controls a face-up <<7770>>, can the Monster Effect of <<12138>> be activated? Also, if the opponent activates <<4989>> in a chain to the activation of the Monster Effect of <<12138>>, Special Summoning <<7770>>, how does this resolve?",
+          "question": "If the opponent controls a face-up <<7770>>, can the Monster Effect of <<12138>> be activated?\n\nAlso, if the opponent activates <<4989>> in a chain to the activation of the Monster Effect of <<12138>> - Gama, Special Summoning <<7770>>, how does this resolve?"
+        },
+        "ja": {
+          "title": "「ダーク・シムルグ」の効果適用中に、「<<12138>>」のモンスター効果を発動できますか?",
+          "question": "相手のモンスターゾーンに「<<7770>>」が表側表示で存在する場合、「<<12138>>」の『1:このカードが召喚・特殊召喚に成功した時に発動できる。デッキから「マジェスペクター」魔法・罠カード1枚を選んで自分フィールドにセットする。この効果でセットしたカードはこのターン発動できない』モンスター効果を発動する事はできますか?\n\nまた、「<<12138>>」の『1:このカードが召喚・特殊召喚に成功した時に発動できる。デッキから「マジェスペクター」魔法・罠カード1枚を選んで自分フィールドにセットする。この効果でセットしたカードはこのターン発動できない』モンスター効果の発動にチェーンして、相手が「<<4989>>」を発動し、「<<7770>>」を特殊召喚した場合、効果処理はどうなりますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-17428",
@@ -223524,7 +224020,17 @@
       "sourceUrl": "https://db.ygoresources.com/data/qa/17428",
       "questionLocale": "ja",
       "detailedQuestionLocale": "ja",
-      "answerLocale": "ja"
+      "answerLocale": "ja",
+      "questionLocales": {
+        "en": {
+          "title": "Your <<12137>> battled with an opponent's monster and was destroyed in battle as a result.  In this case, can its Monster Effect be activated?",
+          "question": "Your <<12137>> battled with an opponent's monster and was destroyed in battle as a result.\n\nIn this case, can its Monster Effect be activated?"
+        },
+        "ja": {
+          "title": "「<<12137>>」自身が戦闘で破壊されている場合、自身のモンスター効果を発動できますか?",
+          "question": "自分の「<<12137>>」が相手モンスターに攻撃を行い、その結果、戦闘によって破壊されました。\n\nその場合、その戦闘で破壊された「<<12137>>」の『1:このカードが攻撃を行ったダメージステップ終了時、このカード以外の自分フィールドの「ダイナミスト」モンスター1体をリリースし、以下の効果から1つを選択して発動できる』モンスター効果を発動する事はできますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-17429",
@@ -224971,7 +225477,13 @@
       "sourceUrl": "https://db.ygoresources.com/data/qa/17529",
       "questionLocale": "ja",
       "detailedQuestionLocale": "ja",
-      "answerLocale": "ja"
+      "answerLocale": "ja",
+      "questionLocales": {
+        "ja": {
+          "title": "「<<12178>>」の対象のモンスターが裏側守備表示モンスターを攻撃した場合、効果を発動できますか?",
+          "question": "「<<12178>>」の『2:対象のモンスターがレベル5以上の相手モンスターと戦闘を行うダメージステップ開始時に発動できる。その相手モンスターを破壊する。対象のモンスターの攻撃力はターン終了時まで、この効果で破壊したモンスターの元々の攻撃力分アップする』効果は、対象のモンスターが裏側守備表示の相手モンスターを攻撃した際に発動する事はできますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-17534",
@@ -226031,7 +226543,17 @@
       "sourceUrl": "https://db.ygoresources.com/data/qa/17618",
       "questionLocale": "ja",
       "detailedQuestionLocale": "ja",
-      "answerLocale": "ja"
+      "answerLocale": "ja",
+      "questionLocales": {
+        "en": {
+          "title": "Can the effect of <<12201>> be activated if a face-down \"Phantom Knights\" card is sent to the Graveyard?",
+          "question": "A face-down Defense Position <<12199>> was destroyed by the effect of <<5544>> and was sent to the Graveyard.\n\nIn this case, does the effect of <<12201>> activate?"
+        },
+        "ja": {
+          "title": "裏側守備表示の「幻影騎士団」と名のついたモンスターが墓地へ送られた場合、「<<12201>>」の効果は発動しますか?",
+          "question": "自分のモンスターゾーンに裏側守備表示で存在する「<<12199>>」が「<<5544>>」の効果によって破壊され墓地へ送られました。\n\nこの場合、「<<12201>>」の『1:「幻影騎士団」カードまたは「ファントム」魔法・罠カードが自分の墓地へ送られた場合に発動する。このカードの攻撃力は500アップする』効果は発動しますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-17622",
@@ -227499,7 +228021,17 @@
       "sourceUrl": "https://db.ygoresources.com/data/qa/17749",
       "questionLocale": "ja",
       "detailedQuestionLocale": "ja",
-      "answerLocale": "ja"
+      "answerLocale": "ja",
+      "questionLocales": {
+        "en": {
+          "title": "<<4027>> is the only card in my hand, and there are no \"Forbidden One\" or \"Exodia\" cards in my Deck. In this situation, if I activate the first effect of <<12197>>, but my opponent chains <<6147>> so that <<4027>> is no longer in my hand, how does the effect of <<12197>> resolve?",
+          "question": "<<4027>> is the only card in my hand, and there are no \"Forbidden One\" or \"Exodia\" cards in my Deck. In this situation, if I activate the first effect of <<12197>>, but my opponent chains <<6147>> so that <<4027>> is no longer in my hand, how does the effect of <<12197>> resolve?"
+        },
+        "ja": {
+          "title": "フィールドのモンスターを手札に戻す「<<12197>>」の効果処理時に、手札やデッキに「封印されし」と名のついたモンスターや「エクゾディア」と名のついたカードが存在しなくなっている場合、処理はどうなりますか?",
+          "question": "自分の手札が「<<4027>>」1枚のみ、自分のデッキに「封印されし」と名のついたモンスターや、「エクゾディア」と名のついたカードが1枚も存在しない状態です。\n\nこの状況で、「<<12197>>」の『1:フィールドのモンスター1体を対象としてこの効果を発動できる。手札・デッキから「封印されし」モンスター1体または「エクゾディア」カード1枚を墓地へ送り、対象のカードを持ち主の手札に戻す』効果の発動にチェーンして相手が「<<6147>>」を発動し、手札に「<<4027>>」が存在しなくなった場合、効果処理はどうなりますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-17750",
@@ -231666,31 +232198,60 @@
     {
       "id": "ygoresources-qa-18119",
       "recordType": "qa",
-      "title": "「<<12332>>」の効果によって特殊召喚されている「ブルーアイズ」と名のついたモンスターに、「<<9352>>」の効果が適用された場合、それぞれの効果はどうなりますか?",
-      "question": "「<<12332>>」の効果によって特殊召喚されている「ブルーアイズ」と名のついたモンスターに、「<<9352>>」の効果が適用された場合、それぞれの効果はどうなりますか?",
-      "rawQuestion": "「<<12332>>」の効果によって特殊召喚されている「ブルーアイズ」と名のついたモンスターに、「<<9352>>」の効果が適用された場合、それぞれの効果はどうなりますか?",
-      "rawDetailedQuestion": "「<<12332>>」の『1:自分フィールドに他の「<<12332>>」が存在せず、自分の墓地に「ブルーアイズ」モンスターが3体以上存在する場合、その内の1体を対象としてこのカードを発動できる。そのモンスターを効果を無効にして特殊召喚し、このカードを装備する。このカードがフィールドから離れた時にそのモンスターは除外される』効果によって墓地から「<<12290>>」が特殊召喚され、装備されている状態です。\n\nこの状況で、「<<9352>>」が発動し、『1:フィールドの表側表示モンスター1体を対象として発動できる。そのモンスターはターン終了時まで、攻撃力が800ダウンし、このカード以外の魔法・罠カードの効果を受けない。』効果が、その「<<12290>>」に適用された場合、「<<12332>>」のそれぞれの効果はどうなりますか?",
-      "answer": "質問の状況のように、「<<12332>>」の効果によって特殊召喚されたモンスターが「<<9352>>」の効果によって、魔法カードの効果を受けなくなっている間は、『このカードがフィールドから離れた時にそのモンスターは除外される』効果や、『2:装備モンスター以外の自分のモンスターは攻撃できず、自分の墓地に「ブルーアイズ」モンスターが存在する場合、装備モンスターはその数まで1度のバトルフェイズ中に攻撃できる』効果を受けなくなります。\n\nなお、その場合でも「<<12332>>」の効果によって特殊召喚されたモンスターは効果を無効にして特殊召喚されていますので、「<<9352>>」の効果が適用された場合でも、効果が無効化されていない状態に戻る事はありません。",
+      "title": "装備魔法カードの効果によって特殊召喚されたモンスターが魔法カードの効果を受けない場合、それぞれの効果はどうなりますか?",
+      "question": "装備魔法カードの効果によって特殊召喚されたモンスターが魔法カードの効果を受けない場合、それぞれの効果はどうなりますか?",
+      "rawQuestion": "装備魔法カードの効果によって特殊召喚されたモンスターが魔法カードの効果を受けない場合、それぞれの効果はどうなりますか?",
+      "rawDetailedQuestion": "以下の効果で特殊召喚したモンスターに「<<9352>>」の効果が適用され、魔法カードの効果を受けなくなった場合、どうなりますか?\n\n(A)「<<12332>>」\n\n(B)「<<13813>>」\n\n(C)「<<13513>>」",
+      "answer": "(A)2の『自分の墓地に「ブルーアイズ」モンスターが存在する場合、装備モンスターはその数まで1度のバトルフェイズ中に攻撃できる』効果は適用されなくなりますが、効果が無効化されていない状態には戻りません。\n\n(B)『2:装備モンスターの攻撃力・守備力は1000ダウンし、効果は無効化される』効果を受けない状態になります。(効果が無効化されていない状態に戻ります。)\n\n(C)『2:1ターンに1度、装備モンスターが戦闘・効果で相手にダメージを与えた場合に発動できる。手札から「トリックスター」モンスター1体を特殊召喚する』効果を発動した場合、テキスト通りに処理を行います。\n\nなお、「<<12332>>」や「<<13813>>」の『このカードがフィールドから離れた時にそのモンスターは除外される』効果や、「<<13513>>」の『このカードがフィールドから離れた時にそのモンスターは破壊される』効果は適用されなくなりますので、該当の装備魔法カードが破壊されたり、フィールドから離れても、魔法カードの効果を受けない装備モンスターはモンスターゾーンに残ります。\n\n例として、以下の効果で特殊召喚したモンスターが魔法の効果を受けなくなった場合も同様に、該当の装備魔法カードが破壊されたり、フィールドから離れても装備モンスターはモンスターゾーンに残ります。\n「<<4966>>」\n「<<6273>>」\n「<<6272>>」\n「<<18431>>」\n「<<6615>>」\n「<<14610>>」\n「<<12838>>」\n「<<13615>>」\n「<<10181>>」\n「<<17640>>」\n「<<7223>>」\n「<<5606>>」\n「<<8206>>」\n「<<13769>>」\n「<<16387>>」\n「<<14501>>」",
       "cards": [
-        "無効"
+        "無効",
+        "7"
       ],
       "cardIds": [
+        "4966",
+        "5606",
+        "6272",
+        "6273",
+        "6615",
+        "7223",
+        "8206",
         "9352",
-        "12290",
+        "10181",
         "12332",
-        "5362"
+        "12838",
+        "13513",
+        "13615",
+        "13769",
+        "13813",
+        "14501",
+        "14610",
+        "16387",
+        "17640",
+        "18431",
+        "5362",
+        "6053"
       ],
       "questionCardIds": [],
       "keywords": [
         "魔法"
       ],
-      "text": "「<<12332>>」の効果によって特殊召喚されている「ブルーアイズ」と名のついたモンスターに、「<<9352>>」の効果が適用された場合、それぞれの効果はどうなりますか?\n「<<12332>>」の『1:自分フィールドに他の「<<12332>>」が存在せず、自分の墓地に「ブルーアイズ」モンスターが3体以上存在する場合、その内の1体を対象としてこのカードを発動できる。そのモンスターを効果を無効にして特殊召喚し、このカードを装備する。このカードがフィールドから離れた時にそのモンスターは除外される』効果によって墓地から「<<12290>>」が特殊召喚され、装備されている状態です。\n\nこの状況で、「<<9352>>」が発動し、『1:フィールドの表側表示モンスター1体を対象として発動できる。そのモンスターはターン終了時まで、攻撃力が800ダウンし、このカード以外の魔法・罠カードの効果を受けない。』効果が、その「<<12290>>」に適用された場合、「<<12332>>」のそれぞれの効果はどうなりますか?\n「<<12332>>」の効果によって特殊召喚されている「ブルーアイズ」と名のついたモンスターに、「<<9352>>」の効果が適用された場合、それぞれの効果はどうなりますか?\n質問の状況のように、「<<12332>>」の効果によって特殊召喚されたモンスターが「<<9352>>」の効果によって、魔法カードの効果を受けなくなっている間は、『このカードがフィールドから離れた時にそのモンスターは除外される』効果や、『2:装備モンスター以外の自分のモンスターは攻撃できず、自分の墓地に「ブルーアイズ」モンスターが存在する場合、装備モンスターはその数まで1度のバトルフェイズ中に攻撃できる』効果を受けなくなります。\n\nなお、その場合でも「<<12332>>」の効果によって特殊召喚されたモンスターは効果を無効にして特殊召喚されていますので、「<<9352>>」の効果が適用された場合でも、効果が無効化されていない状態に戻る事はありません。",
+      "text": "装備魔法カードの効果によって特殊召喚されたモンスターが魔法カードの効果を受けない場合、それぞれの効果はどうなりますか?\n以下の効果で特殊召喚したモンスターに「<<9352>>」の効果が適用され、魔法カードの効果を受けなくなった場合、どうなりますか?\n\n(A)「<<12332>>」\n\n(B)「<<13813>>」\n\n(C)「<<13513>>」\n装備魔法カードの効果によって特殊召喚されたモンスターが魔法カードの効果を受けない場合、それぞれの効果はどうなりますか?\n(A)2の『自分の墓地に「ブルーアイズ」モンスターが存在する場合、装備モンスターはその数まで1度のバトルフェイズ中に攻撃できる』効果は適用されなくなりますが、効果が無効化されていない状態には戻りません。\n\n(B)『2:装備モンスターの攻撃力・守備力は1000ダウンし、効果は無効化される』効果を受けない状態になります。(効果が無効化されていない状態に戻ります。)\n\n(C)『2:1ターンに1度、装備モンスターが戦闘・効果で相手にダメージを与えた場合に発動できる。手札から「トリックスター」モンスター1体を特殊召喚する』効果を発動した場合、テキスト通りに処理を行います。\n\nなお、「<<12332>>」や「<<13813>>」の『このカードがフィールドから離れた時にそのモンスターは除外される』効果や、「<<13513>>」の『このカードがフィールドから離れた時にそのモンスターは破壊される』効果は適用されなくなりますので、該当の装備魔法カードが破壊されたり、フィールドから離れても、魔法カードの効果を受けない装備モンスターはモンスターゾーンに残ります。\n\n例として、以下の効果で特殊召喚したモンスターが魔法の効果を受けなくなった場合も同様に、該当の装備魔法カードが破壊されたり、フィールドから離れても装備モンスターはモンスターゾーンに残ります。\n「<<4966>>」\n「<<6273>>」\n「<<6272>>」\n「<<18431>>」\n「<<6615>>」\n「<<14610>>」\n「<<12838>>」\n「<<13615>>」\n「<<10181>>」\n「<<17640>>」\n「<<7223>>」\n「<<5606>>」\n「<<8206>>」\n「<<13769>>」\n「<<16387>>」\n「<<14501>>」",
       "sourceId": "18119",
       "sourceName": "YGOResources DB",
       "sourceUrl": "https://db.ygoresources.com/data/qa/18119",
       "questionLocale": "ja",
       "detailedQuestionLocale": "ja",
-      "answerLocale": "ja"
+      "answerLocale": "ja",
+      "questionLocales": {
+        "en": {
+          "title": "If a \"Blue-Eyes\" monster Special Summoned by <<12332>> has <<9352>> applied to it, what happens to its effects?",
+          "question": "A <<12290>> is Special Summoned from the Graveyard by <<12332>>, and equipped with it. Afterwards, <<9352>> resolves targeting that same <<12290>>. What happens to the effects of <<12332>>?"
+        },
+        "ja": {
+          "title": "装備魔法カードの効果によって特殊召喚されたモンスターが魔法カードの効果を受けない場合、それぞれの効果はどうなりますか?",
+          "question": "以下の効果で特殊召喚したモンスターに「<<9352>>」の効果が適用され、魔法カードの効果を受けなくなった場合、どうなりますか?\n\n(A)「<<12332>>」\n\n(B)「<<13813>>」\n\n(C)「<<13513>>」"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-18128",
@@ -233193,7 +233754,13 @@
       "sourceUrl": "https://db.ygoresources.com/data/qa/18230",
       "questionLocale": "ja",
       "detailedQuestionLocale": "ja",
-      "answerLocale": "ja"
+      "answerLocale": "ja",
+      "questionLocales": {
+        "ja": {
+          "title": "フィールドにて攻撃力がアップしている「ブンボーグ」と名のついたモンスターが存在する場合、「<<12314>>」のモンスター効果でアップする攻撃力はどうなりますか?",
+          "question": "自身の『1:このカードの攻撃力は、自分の墓地の「ブンボーグ」カードの数×500アップする』モンスター効果によって、攻撃力が3500にアップしている「<<12147>>」が存在する場合、「<<12314>>」の『1:1ターンに1度、自分メインフェイズ1に発動できる。このカードの攻撃力は相手ターン終了時まで、「<<12314>>」以外の自分フィールドの「ブンボーグ」モンスターの攻撃力の合計分アップする。この効果を発動するターン、このカードしか攻撃できない』モンスター効果を発動した場合に、アップする攻撃力はいくつですか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-18232",
@@ -294736,36 +295303,30 @@
     {
       "id": "ygoresources-qa-21670",
       "recordType": "qa",
-      "title": "「<<13513>>」の装備モンスターに「<<9352>>」の効果が適用されている場合、相手にダメージを与えた際に、「<<13513>>」の効果を発動できますか?",
-      "question": "「<<13513>>」の装備モンスターに「<<9352>>」の効果が適用されている場合、相手にダメージを与えた際に、「<<13513>>」の効果を発動できますか?",
-      "rawQuestion": "「<<13513>>」の装備モンスターに「<<9352>>」の効果が適用されている場合、相手にダメージを与えた際に、「<<13513>>」の効果を発動できますか?",
-      "rawDetailedQuestion": "「<<13513>>」の効果によって墓地から特殊召喚された「<<13260>>」が自分のメインモンスターゾーンに存在しています。\n\nその「<<13260>>」が、「<<9352>>」の『1:フィールドの表側表示モンスター1体を対象として発動できる。そのモンスターはターン終了時まで、攻撃力が800ダウンし、このカード以外の魔法・罠カードの効果を受けない』効果が適用された状態で、戦闘または自身の『1:このカードがモンスターゾーンに存在する限り、このカードのリンク先のモンスターが戦闘・効果で破壊され墓地へ送られる度に、相手に200ダメージを与える』モンスター効果によって相手にダメージを与えた場合、「<<13513>>」の『2:1ターンに1度、装備モンスターが戦闘・効果で相手にダメージを与えた場合に発動できる。手札から「トリックスター」モンスター1体を特殊召喚する』効果を発動する事はできますか?",
-      "answer": "「<<13513>>」の『手札から「トリックスター」モンスター1体を特殊召喚する』効果は、装備モンスターが受ける効果ではありません。\n\n質問の状況のように、「<<9352>>」の効果によって魔法カードの効果を受けない状態であっても、「<<13513>>」の装備モンスターが戦闘やカードの効果で相手にダメージを与えたのであれば、その『手札から「トリックスター」モンスター1体を特殊召喚する』効果を発動する事ができます。",
-      "cards": [],
+      "title": "A <<13260>> that was Special Summoned from the Graveyard by the effect of <<13513>> is fa…",
+      "question": "A <<13260>> that was Special Summoned from the Graveyard by the effect of <<13513>> is face-up on my field. If I inflict damage to my opponent with the effect of <<13260>>, can I still activate the effect of <<13513>> that Special Summons a \"Trickstar\" monster from my hand?",
+      "rawQuestion": "A <<13260>> that was Special Summoned from the Graveyard by the effect of <<13513>> is face-up on my field. If I inflict damage to my opponent with the effect of <<13260>>, can I still activate the effect of <<13513>> that Special Summons a \"Trickstar\" monster from my hand?",
+      "rawDetailedQuestion": "A <<13260>> that was Special Summoned from the Graveyard by the effect of <<13513>> is face-up on my field. If I inflict damage to my opponent with the effect of <<13260>>, can I still activate the effect of <<13513>> that Special Summons a \"Trickstar\" monster from my hand?",
+      "answer": "The effect of <<13513>> that Special Summons a \"Trickstar\" monster from your hand is not an effect applied to the equipped monster. Even if the equipped monster is unaffected by Spell effects due to the effect of <<9352>>, you can activate the effect of <<13513>> when the equipped monster inflicts damage to your opponent.",
+      "cards": [
+        "I：P百变莱娜"
+      ],
       "cardIds": [
-        "9352",
-        "13260",
-        "13513"
+        "14676"
       ],
       "questionCardIds": [],
-      "keywords": [
-        "魔法"
-      ],
-      "text": "「<<13513>>」の装備モンスターに「<<9352>>」の効果が適用されている場合、相手にダメージを与えた際に、「<<13513>>」の効果を発動できますか?\n「<<13513>>」の効果によって墓地から特殊召喚された「<<13260>>」が自分のメインモンスターゾーンに存在しています。\n\nその「<<13260>>」が、「<<9352>>」の『1:フィールドの表側表示モンスター1体を対象として発動できる。そのモンスターはターン終了時まで、攻撃力が800ダウンし、このカード以外の魔法・罠カードの効果を受けない』効果が適用された状態で、戦闘または自身の『1:このカードがモンスターゾーンに存在する限り、このカードのリンク先のモンスターが戦闘・効果で破壊され墓地へ送られる度に、相手に200ダメージを与える』モンスター効果によって相手にダメージを与えた場合、「<<13513>>」の『2:1ターンに1度、装備モンスターが戦闘・効果で相手にダメージを与えた場合に発動できる。手札から「トリックスター」モンスター1体を特殊召喚する』効果を発動する事はできますか?\n「<<13513>>」の装備モンスターに「<<9352>>」の効果が適用されている場合、相手にダメージを与えた際に、「<<13513>>」の効果を発動できますか?\n「<<13513>>」の『手札から「トリックスター」モンスター1体を特殊召喚する』効果は、装備モンスターが受ける効果ではありません。\n\n質問の状況のように、「<<9352>>」の効果によって魔法カードの効果を受けない状態であっても、「<<13513>>」の装備モンスターが戦闘やカードの効果で相手にダメージを与えたのであれば、その『手札から「トリックスター」モンスター1体を特殊召喚する』効果を発動する事ができます。",
+      "keywords": [],
+      "text": "A <<13260>> that was Special Summoned from the Graveyard by the effect of <<13513>> is face-up on my field. If I inflict damage to my opponent with the effect of <<13260>>, can I still activate the effect of <<13513>> that Special Summons a \"Trickstar\" monster from my hand?\nA <<13260>> that was Special Summoned from the Graveyard by the effect of <<13513>> is fa…\nThe effect of <<13513>> that Special Summons a \"Trickstar\" monster from your hand is not an effect applied to the equipped monster. Even if the equipped monster is unaffected by Spell effects due to the effect of <<9352>>, you can activate the effect of <<13513>> when the equipped monster inflicts damage to your opponent.",
       "sourceId": "21670",
       "sourceName": "YGOResources DB",
       "sourceUrl": "https://db.ygoresources.com/data/qa/21670",
-      "questionLocale": "ja",
-      "detailedQuestionLocale": "ja",
-      "answerLocale": "ja",
+      "questionLocale": "en",
+      "detailedQuestionLocale": "en",
+      "answerLocale": "en",
       "questionLocales": {
         "en": {
           "title": "A <<13260>> that was Special Summoned from the Graveyard by the effect of <<13513>> is face-up on my field. If I inflict damage to my opponent with the effect of <<13260>>, can I still activate the effect of <<13513>> that Special Summons a \"Trickstar\" monster from my hand?",
           "question": "A <<13260>> that was Special Summoned from the Graveyard by the effect of <<13513>> is face-up on my field. If I inflict damage to my opponent with the effect of <<13260>>, can I still activate the effect of <<13513>> that Special Summons a \"Trickstar\" monster from my hand?"
-        },
-        "ja": {
-          "title": "「<<13513>>」の装備モンスターに「<<9352>>」の効果が適用されている場合、相手にダメージを与えた際に、「<<13513>>」の効果を発動できますか?",
-          "question": "「<<13513>>」の効果によって墓地から特殊召喚された「<<13260>>」が自分のメインモンスターゾーンに存在しています。\n\nその「<<13260>>」が、「<<9352>>」の『1:フィールドの表側表示モンスター1体を対象として発動できる。そのモンスターはターン終了時まで、攻撃力が800ダウンし、このカード以外の魔法・罠カードの効果を受けない』効果が適用された状態で、戦闘または自身の『1:このカードがモンスターゾーンに存在する限り、このカードのリンク先のモンスターが戦闘・効果で破壊され墓地へ送られる度に、相手に200ダメージを与える』モンスター効果によって相手にダメージを与えた場合、「<<13513>>」の『2:1ターンに1度、装備モンスターが戦闘・効果で相手にダメージを与えた場合に発動できる。手札から「トリックスター」モンスター1体を特殊召喚する』効果を発動する事はできますか?"
         }
       }
     },
@@ -473063,7 +473624,7 @@
       ],
       "questionCardIds": [],
       "keywords": [],
-      "text": "黑衣龙之艾克利西亚 FAQ 1\n【1の効果について】\nモンスターゾーンで発動できる誘発即時効果です。\n処理時に『このカードをエンドフェイズまで除外し』の処理を行い、除外に成功した場合、『自分のデッキ・墓地から「<<15245>>」またはそのカード名が記されたレベル4以下のモンスター1体を特殊召喚する』処理を行います。\n除外する処理と特殊召喚する処理は同時に行われる扱いです。\n自分のメインモンスターゾーンに、このカードを含む5体のモンスターが存在している場合でも発動できます。\n処理時に、このカードが裏側守備表示になっている場合、このカードは裏側で除外され、該当のモンスターを特殊召喚し、エンドフェイズに裏側守備表示でモンスターゾーンに戻ります。\nエンドフェイズにこのカードをフィールドに戻す際に自分の使用可能なメインモンスターゾーンがない場合、このカードは除外状態から墓地に置かれます。\n『そのカード名が記されたモンスター』とは、テキストにカード名として「<<15245>>」と記されているモンスターを指します。"
+      "text": "黑衣龙之艾克利西亚 FAQ 1\n【1の効果について】\nモンスターゾーンで発動できる誘発即時効果です。\n処理時に『このカードをエンドフェイズまで除外し』の処理を行い、除外に成功した場合、『自分のデッキ・墓地から「<<15245>>」またはそのカード名が記されたレベル4以下のモンスター1体を特殊召喚する』処理を行います。\n墓地に存在する、カード名を「<<15245>>」として扱うモンスター(レベル5以上も含む)を特殊召喚することもできます。\n除外する処理と特殊召喚する処理は同時に行われる扱いです。\n自分のメインモンスターゾーンに、このカードを含む5体のモンスターが存在している場合でも発動できます。\n処理時に、このカードが裏側守備表示になっている場合、このカードは裏側で除外され、該当のモンスターを特殊召喚し、エンドフェイズに裏側守備表示でモンスターゾーンに戻ります。\nエンドフェイズにこのカードをフィールドに戻す際に自分の使用可能なメインモンスターゾーンがない場合、このカードは除外状態から墓地に置かれます。\n『そのカード名が記されたモンスター』とは、テキストにカード名として「<<15245>>」と記されているモンスターを指します。"
     },
     {
       "id": "card-faq-22144-2",
@@ -793838,6 +794399,46 @@
       "questionCardIds": [],
       "keywords": [],
       "text": "7 FAQ 0\n3枚ドローする効果は、「<<6053>>」が3枚揃った時に適用され、ドローを行う事ができます。\nドローできる枚数は3枚のみで、それぞれの効果によって合計9枚ドローする事はありません。"
+    },
+    {
+      "id": "ygoresources-qa-22",
+      "recordType": "qa",
+      "title": "「<<7432>>」がモンスターゾーンに表側表示で存在しなくなった場合や、その効果で特殊召喚したモンスターが表側表示ではなくなった場合、どうなりますか?",
+      "question": "「<<7432>>」がモンスターゾーンに表側表示で存在しなくなった場合や、その効果で特殊召喚したモンスターが表側表示ではなくなった場合、どうなりますか?",
+      "rawQuestion": "「<<7432>>」がモンスターゾーンに表側表示で存在しなくなった場合や、その効果で特殊召喚したモンスターが表側表示ではなくなった場合、どうなりますか?",
+      "rawDetailedQuestion": "墓地に存在する「<<7285>>」を対象として「<<7432>>」の『1:このカードが「剣闘獣」モンスターの効果で特殊召喚に成功した時、自分の墓地の「剣闘獣」モンスター1体を対象として発動できる。そのモンスターを効果を無効にして特殊召喚する。このカードがフィールドから離れた時にそのモンスターは持ち主のデッキに戻る』効果を発動し、以下の状況になった場合、どうなりますか?\n\n\n(A)同一チェーン上で発動した他の効果によって「<<7432>>」が墓地へ送られた・除外された・エクストラデッキに戻った・魔法&罠ゾーンに置かれた・エクシーズモンスターのエクシーズ素材になった・裏側守備表示になった場合\n\n\n(B)「<<7285>>」が特殊召喚した後に、他の効果によって「<<7432>>」が墓地へ送られた・除外された・エクストラデッキに戻った場合\n\n\n(C)「<<7285>>」が特殊召喚した後に、他の効果によって「<<7432>>」が魔法&罠ゾーンに置かれた・エクシーズモンスターのエクシーズ素材になった・裏側守備表示になった場合\n\n\n(D)特殊召喚した「<<7285>>」が『1:このカードが「剣闘獣」モンスターの効果で特殊召喚に成功した場合、フィールドの魔法・罠カード1枚を対象として発動する。そのカードを破壊する』効果を発動し、その同一チェーン上で発動した他の効果によって「<<7285>>」が墓地へ送られた・除外された・手札、デッキに戻った・魔法&罠ゾーンに置かれた・エクシーズモンスターのエクシーズ素材になった・裏側守備表示になった場合",
+      "answer": "(A)「<<7285>>」は効果が無効化された状態で特殊召喚され、デッキに戻らずにモンスターゾーンに残ります。(『このカードがフィールドから離れた時にそのモンスターは持ち主のデッキに戻る』状態ではなくなります。)\nまた、魔法&罠ゾーンに置かれた「<<7432>>」や、裏側守備表示になった「<<7432>>」がそのあとにフィールドから離れても「<<7285>>」がデッキに戻ることはありません。\n\n\n(B)『このカードがフィールドから離れる時にそのモンスターは除外される』効果が適用されますので、「<<7285>>」はデッキに戻り、発動した効果も無効化されます。\n\n\n(C)「<<7432>>」はフィールドから離れた扱いにはなりませんので、「<<7285>>」がデッキに戻ることはありませんが、効果が無効化された状態になります 。\nまた、魔法&罠ゾーンに置かれた「<<7432>>」や、裏側守備表示になった「<<7432>>」がそのあとにフィールドから離れても「<<7285>>」がデッキに戻ることはありません。\n\n\n(D)「<<7285>>」の1の効果の発動にチェーンして発動した他の効果によって「<<7285>>」が墓地へ送られた・除外された・手札、デッキに戻った・魔法&罠ゾーンに置かれた・エクシーズモンスターのエクシーズ素材になった場合、効果は無効化されます。\nまた、処理時に「<<7285>>」が裏側守備表示になった場合には、『フィールドの魔法・罠カード1枚を対象として発動する。そのカードを破壊する』効果は無効化されません。\n(なお、いずれの場合でも『このカードがフィールドから離れた時にそのモンスターは持ち主のデッキに戻る』状態ではなくなります。)",
+      "cards": [
+        "無効",
+        "7"
+      ],
+      "cardIds": [
+        "7285",
+        "7432",
+        "5362",
+        "6053"
+      ],
+      "questionCardIds": [],
+      "keywords": [
+        "魔法"
+      ],
+      "text": "「<<7432>>」がモンスターゾーンに表側表示で存在しなくなった場合や、その効果で特殊召喚したモンスターが表側表示ではなくなった場合、どうなりますか?\n墓地に存在する「<<7285>>」を対象として「<<7432>>」の『1:このカードが「剣闘獣」モンスターの効果で特殊召喚に成功した時、自分の墓地の「剣闘獣」モンスター1体を対象として発動できる。そのモンスターを効果を無効にして特殊召喚する。このカードがフィールドから離れた時にそのモンスターは持ち主のデッキに戻る』効果を発動し、以下の状況になった場合、どうなりますか?\n\n\n(A)同一チェーン上で発動した他の効果によって「<<7432>>」が墓地へ送られた・除外された・エクストラデッキに戻った・魔法&罠ゾーンに置かれた・エクシーズモンスターのエクシーズ素材になった・裏側守備表示になった場合\n\n\n(B)「<<7285>>」が特殊召喚した後に、他の効果によって「<<7432>>」が墓地へ送られた・除外された・エクストラデッキに戻った場合\n\n\n(C)「<<7285>>」が特殊召喚した後に、他の効果によって「<<7432>>」が魔法&罠ゾーンに置かれた・エクシーズモンスターのエクシーズ素材になった・裏側守備表示になった場合\n\n\n(D)特殊召喚した「<<7285>>」が『1:このカードが「剣闘獣」モンスターの効果で特殊召喚に成功した場合、フィールドの魔法・罠カード1枚を対象として発動する。そのカードを破壊する』効果を発動し、その同一チェーン上で発動した他の効果によって「<<7285>>」が墓地へ送られた・除外された・手札、デッキに戻った・魔法&罠ゾーンに置かれた・エクシーズモンスターのエクシーズ素材になった・裏側守備表示になった場合\n「<<7432>>」がモンスターゾーンに表側表示で存在しなくなった場合や、その効果で特殊召喚したモンスターが表側表示ではなくなった場合、どうなりますか?\n(A)「<<7285>>」は効果が無効化された状態で特殊召喚され、デッキに戻らずにモンスターゾーンに残ります。(『このカードがフィールドから離れた時にそのモンスターは持ち主のデッキに戻る』状態ではなくなります。)\nまた、魔法&罠ゾーンに置かれた「<<7432>>」や、裏側守備表示になった「<<7432>>」がそのあとにフィールドから離れても「<<7285>>」がデッキに戻ることはありません。\n\n\n(B)『このカードがフィールドから離れる時にそのモンスターは除外される』効果が適用されますので、「<<7285>>」はデッキに戻り、発動した効果も無効化されます。\n\n\n(C)「<<7432>>」はフィールドから離れた扱いにはなりませんので、「<<7285>>」がデッキに戻ることはありませんが、効果が無効化された状態になります 。\nまた、魔法&罠ゾーンに置かれた「<<7432>>」や、裏側守備表示になった「<<7432>>」がそのあとにフィールドから離れても「<<7285>>」がデッキに戻ることはありません。\n\n\n(D)「<<7285>>」の1の効果の発動にチェーンして発動した他の効果によって「<<7285>>」が墓地へ送られた・除外された・手札、デッキに戻った・魔法&罠ゾーンに置かれた・エクシーズモンスターのエクシーズ素材になった場合、効果は無効化されます。\nまた、処理時に「<<7285>>」が裏側守備表示になった場合には、『フィールドの魔法・罠カード1枚を対象として発動する。そのカードを破壊する』効果は無効化されません。\n(なお、いずれの場合でも『このカードがフィールドから離れた時にそのモンスターは持ち主のデッキに戻る』状態ではなくなります。)",
+      "sourceId": "22",
+      "sourceName": "YGOResources DB",
+      "sourceUrl": "https://db.ygoresources.com/data/qa/22",
+      "questionLocale": "ja",
+      "detailedQuestionLocale": "ja",
+      "answerLocale": "ja",
+      "questionLocales": {
+        "en": {
+          "title": "What happens if <<7432>> stops being face-up in the Monster Zone, or if the monster Special Summoned by its effect is no longer face-up?",
+          "question": "What happens to <<7432>>'s『Special Summon that target, but its effect(s) is negated by this card, and it is shuffled into the Deck when this card leaves the field』effect in each of the following scenarios, when it was activated by targeting a <<7285>> in the Graveyard?\n\nA: <<7432>> is sent to the Graveyard, banished, returned to the Extra Deck, placed in a Spell & Trap Zone, attached as Xyz material, or is changed to face-down Defense Position, due to another effect activated in response?\n\nB: After <<7285>> has been Special Summoned, <<7432>> is sent to the Graveyard, banished, or returned to the Extra Deck?\n\nB: After <<7285>> has been Special Summoned, <<7432>> is placed in the Spell & Trap Zone, attached as Xyz material, or changed to face-down Defense Position?\n\nD: The Special Summoned <<7285>> activates its『target 1 Spell/Trap on the field; destroy that target』effect, and, due to another effect activated in response, <<7285>> is sent to the Graveyard, banished, returned to the hand or Deck, placed in the Spell & Trap Zone, attached as Xyz material, or changed to face-down Defense Position?"
+        },
+        "ja": {
+          "title": "「<<7432>>」がモンスターゾーンに表側表示で存在しなくなった場合や、その効果で特殊召喚したモンスターが表側表示ではなくなった場合、どうなりますか?",
+          "question": "墓地に存在する「<<7285>>」を対象として「<<7432>>」の『1:このカードが「剣闘獣」モンスターの効果で特殊召喚に成功した時、自分の墓地の「剣闘獣」モンスター1体を対象として発動できる。そのモンスターを効果を無効にして特殊召喚する。このカードがフィールドから離れた時にそのモンスターは持ち主のデッキに戻る』効果を発動し、以下の状況になった場合、どうなりますか?\n\n\n(A)同一チェーン上で発動した他の効果によって「<<7432>>」が墓地へ送られた・除外された・エクストラデッキに戻った・魔法&罠ゾーンに置かれた・エクシーズモンスターのエクシーズ素材になった・裏側守備表示になった場合\n\n\n(B)「<<7285>>」が特殊召喚した後に、他の効果によって「<<7432>>」が墓地へ送られた・除外された・エクストラデッキに戻った場合\n\n\n(C)「<<7285>>」が特殊召喚した後に、他の効果によって「<<7432>>」が魔法&罠ゾーンに置かれた・エクシーズモンスターのエクシーズ素材になった・裏側守備表示になった場合\n\n\n(D)特殊召喚した「<<7285>>」が『1:このカードが「剣闘獣」モンスターの効果で特殊召喚に成功した場合、フィールドの魔法・罠カード1枚を対象として発動する。そのカードを破壊する』効果を発動し、その同一チェーン上で発動した他の効果によって「<<7285>>」が墓地へ送られた・除外された・手札、デッキに戻った・魔法&罠ゾーンに置かれた・エクシーズモンスターのエクシーズ素材になった・裏側守備表示になった場合"
+        }
+      }
     }
   ]
 }

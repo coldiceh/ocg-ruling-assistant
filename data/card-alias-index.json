@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-15T01:17:55.985Z",
+  "generatedAt": "2026-11-16T01:21:16.071Z",
   "records": [
     {
       "alias": "“K9刑侦案件”",
@@ -23642,6 +23642,13 @@
       "language": "zh"
     },
     {
+      "alias": "神幻学都 无垢大艺术",
+      "normalizedAlias": "神幻学都 无垢大艺术",
+      "cardId": "23872",
+      "cardName": "神幻学都アルス＝マグナ",
+      "language": "zh"
+    },
+    {
       "alias": "無垢なる絆 アルトメギア",
       "normalizedAlias": "無垢なる絆 アルトメギア",
       "cardId": "23856",
@@ -25058,6 +25065,13 @@
     {
       "alias": "神艺磨砺-改变-",
       "normalizedAlias": "神艺磨砺-改变-",
+      "cardId": "21469",
+      "cardName": "神艺护漆－改变－",
+      "language": "zh"
+    },
+    {
+      "alias": "神艺学的护漆-改变-",
+      "normalizedAlias": "神艺学的护漆-改变-",
       "cardId": "21469",
       "cardName": "神艺护漆－改变－",
       "language": "zh"
@@ -50739,6 +50753,13 @@
       "language": "ja"
     },
     {
+      "alias": "香兰兔·精萃提取",
+      "normalizedAlias": "香兰兔·精萃提取",
+      "cardId": "23877",
+      "cardName": "バニリン・エキストラクト",
+      "language": "zh"
+    },
+    {
       "alias": "バニリン・ソフト",
       "normalizedAlias": "バニリン・ソフト",
       "cardId": "23891",
@@ -50772,6 +50793,13 @@
       "cardId": "23891",
       "cardName": "バニリン・ソフト",
       "language": "ja"
+    },
+    {
+      "alias": "香兰兔·软件淇淋",
+      "normalizedAlias": "香兰兔·软件淇淋",
+      "cardId": "23891",
+      "cardName": "バニリン・ソフト",
+      "language": "zh"
     },
     {
       "alias": "バニリン：モカMOD",
@@ -138785,6 +138813,13 @@
       "language": "zh"
     },
     {
+      "alias": "迪亚贝尔的友爱",
+      "normalizedAlias": "迪亚贝尔的友爱",
+      "cardId": "21194",
+      "cardName": "狂怒・迪亚贝尔",
+      "language": "zh"
+    },
+    {
       "alias": "妖龙之禁姬",
       "normalizedAlias": "妖龙之禁姬",
       "cardId": "21174",
@@ -219257,6 +219292,13 @@
       "language": "zh"
     },
     {
+      "alias": "奋如迪亚贝尔",
+      "normalizedAlias": "奋如迪亚贝尔",
+      "cardId": "20794",
+      "cardName": "猛如迪亚贝尔",
+      "language": "zh"
+    },
+    {
       "alias": "璃拉说唱",
       "normalizedAlias": "璃拉说唱",
       "cardId": "18321",
@@ -241377,6 +241419,13 @@
       "language": "zh"
     },
     {
+      "alias": "童话动物教母·妈咪",
+      "normalizedAlias": "童话动物教母·妈咪",
+      "cardId": "22987",
+      "cardName": "メルフィーゴッド・マミィ",
+      "language": "zh"
+    },
+    {
       "alias": "梅尔菲躲猫猫",
       "normalizedAlias": "梅尔菲躲猫猫",
       "cardId": "15291",
@@ -241449,6 +241498,13 @@
     {
       "alias": "奇妙毛毛兽妈咪",
       "normalizedAlias": "奇妙毛毛兽妈咪",
+      "cardId": "15279",
+      "cardName": "梅尔菲・玛咪",
+      "language": "zh"
+    },
+    {
+      "alias": "童话动物·妈咪",
+      "normalizedAlias": "童话动物·妈咪",
       "cardId": "15279",
       "cardName": "梅尔菲・玛咪",
       "language": "zh"
@@ -248701,6 +248757,13 @@
     {
       "alias": "奇迹的供品-供品的仪式-",
       "normalizedAlias": "奇迹的供品-供品的仪式-",
+      "cardId": "21627",
+      "cardName": "ミラクル・レイヴン－供物の儀式－",
+      "language": "zh"
+    },
+    {
+      "alias": "奇迹渡鸦-供物的仪式-",
+      "normalizedAlias": "奇迹渡鸦-供物的仪式-",
       "cardId": "21627",
       "cardName": "ミラクル・レイヴン－供物の儀式－",
       "language": "zh"
@@ -260342,6 +260405,13 @@
     {
       "alias": "炼机圣之影灵衣",
       "normalizedAlias": "炼机圣之影灵衣",
+      "cardId": "20937",
+      "cardName": "梅塔特隆的影灵衣",
+      "language": "zh"
+    },
+    {
+      "alias": "梅塔特隆之影灵衣",
+      "normalizedAlias": "梅塔特隆之影灵衣",
       "cardId": "20937",
       "cardName": "梅塔特隆的影灵衣",
       "language": "zh"
@@ -285736,6 +285806,13 @@
       "language": "zh"
     },
     {
+      "alias": "幻魔帝 特里洛吉克",
+      "normalizedAlias": "幻魔帝 特里洛吉克",
+      "cardId": "14345",
+      "cardName": "幻魔帝特里洛吉克",
+      "language": "zh"
+    },
+    {
       "alias": "幻煌龍の螺旋突",
       "normalizedAlias": "幻煌龍の螺旋突",
       "cardId": "12971",
@@ -289168,6 +289245,13 @@
     {
       "alias": "操控迪亚贝尔",
       "normalizedAlias": "操控迪亚贝尔",
+      "cardId": "20793",
+      "cardName": "兴妖迪亚贝尔",
+      "language": "zh"
+    },
+    {
+      "alias": "身演迪亚贝尔",
+      "normalizedAlias": "身演迪亚贝尔",
       "cardId": "20793",
       "cardName": "兴妖迪亚贝尔",
       "language": "zh"
@@ -309725,6 +309809,13 @@
       "language": "ja"
     },
     {
+      "alias": "轮回虫龙·大紫蛱蝶",
+      "normalizedAlias": "轮回虫龙·大紫蛱蝶",
+      "cardId": "23835",
+      "cardName": "リインゼルム・アムルサ",
+      "language": "zh"
+    },
+    {
       "alias": "翅竜の羽撃",
       "normalizedAlias": "翅竜の羽撃",
       "cardId": "23868",
@@ -309786,6 +309877,13 @@
       "cardId": "23837",
       "cardName": "リインゼルム・カルカサス",
       "language": "ja"
+    },
+    {
+      "alias": "轮回虫龙·卡萨斯大兜虫",
+      "normalizedAlias": "轮回虫龙·卡萨斯大兜虫",
+      "cardId": "23837",
+      "cardName": "リインゼルム・カルカサス",
+      "language": "zh"
     },
     {
       "alias": "無死なる竜の鼓動",
@@ -309914,6 +310012,13 @@
       "language": "ja"
     },
     {
+      "alias": "轮回虫龙·极巨百足龙",
+      "normalizedAlias": "轮回虫龙·极巨百足龙",
+      "cardId": "23838",
+      "cardName": "リインゼルム・ギガロヴェンドラ",
+      "language": "zh"
+    },
+    {
       "alias": "リインゼルム・ギリアカルマ",
       "normalizedAlias": "リインゼルム・ギリアカルマ",
       "cardId": "23839",
@@ -309944,6 +310049,13 @@
     {
       "alias": "无死虫龙·喀戎独角仙鳞虫",
       "normalizedAlias": "无死虫龙·喀戎独角仙鳞虫",
+      "cardId": "23839",
+      "cardName": "リインゼルム・ギリアカルマ",
+      "language": "zh"
+    },
+    {
+      "alias": "轮回虫龙·铜身三戟龙",
+      "normalizedAlias": "轮回虫龙·铜身三戟龙",
       "cardId": "23839",
       "cardName": "リインゼルム・ギリアカルマ",
       "language": "zh"
@@ -309982,6 +310094,13 @@
       "cardId": "23836",
       "cardName": "リインゼルム・ルヴィアン",
       "language": "ja"
+    },
+    {
+      "alias": "轮回虫龙·巨人蜈蚣",
+      "normalizedAlias": "轮回虫龙·巨人蜈蚣",
+      "cardId": "23836",
+      "cardName": "リインゼルム・ルヴィアン",
+      "language": "zh"
     },
     {
       "alias": "角竜の修練",
@@ -314177,6 +314296,13 @@
       "language": "zh"
     },
     {
+      "alias": "六花圣 力量女神花环",
+      "normalizedAlias": "六花圣 力量女神花环",
+      "cardId": "15280",
+      "cardName": "六花圣花环",
+      "language": "zh"
+    },
+    {
       "alias": "六花深聖ストレナエ",
       "normalizedAlias": "六花深聖ストレナエ",
       "cardId": "23853",
@@ -314200,6 +314326,13 @@
     {
       "alias": "六花深圣花环",
       "normalizedAlias": "六花深圣花环",
+      "cardId": "23853",
+      "cardName": "六花深聖ストレナエ",
+      "language": "zh"
+    },
+    {
+      "alias": "六花深圣 力量女神花环",
+      "normalizedAlias": "六花深圣 力量女神花环",
       "cardId": "23853",
       "cardName": "六花深聖ストレナエ",
       "language": "zh"
@@ -364719,6 +364852,13 @@
     {
       "alias": "六花深圣泪滴花束",
       "normalizedAlias": "六花深圣泪滴花束",
+      "cardId": "23852",
+      "cardName": "六花深聖ティアドロップ",
+      "language": "zh"
+    },
+    {
+      "alias": "六花深圣 泪滴花束",
+      "normalizedAlias": "六花深圣 泪滴花束",
       "cardId": "23852",
       "cardName": "六花深聖ティアドロップ",
       "language": "zh"
@@ -418885,6 +419025,13 @@
     {
       "alias": "质点炼机圣",
       "normalizedAlias": "质点炼机圣",
+      "cardId": "13504",
+      "cardName": "セフィラ・メタトロン",
+      "language": "zh"
+    },
+    {
+      "alias": "神数·梅塔特隆",
+      "normalizedAlias": "神数·梅塔特隆",
       "cardId": "13504",
       "cardName": "セフィラ・メタトロン",
       "language": "zh"
