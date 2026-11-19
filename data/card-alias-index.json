@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-18T03:06:00.630Z",
+  "generatedAt": "2026-11-19T02:47:18.169Z",
   "records": [
     {
       "alias": "“K9刑侦案件”",
@@ -19059,6 +19059,13 @@
     {
       "alias": "秘仪之力XII-吊人",
       "normalizedAlias": "秘仪之力xii-吊人",
+      "cardId": "23143",
+      "cardName": "アルカナフォースⅩⅡ－THE HANGED MAN",
+      "language": "zh"
+    },
+    {
+      "alias": "秘仪之力ⅩⅡ－倒吊人",
+      "normalizedAlias": "秘仪之力xii-倒吊人",
       "cardId": "23143",
       "cardName": "アルカナフォースⅩⅡ－THE HANGED MAN",
       "language": "zh"
@@ -89519,6 +89526,13 @@
       "language": "zh"
     },
     {
+      "alias": "黑暗恐兽",
+      "normalizedAlias": "黑暗恐兽",
+      "cardId": "23142",
+      "cardName": "ダークティラノ",
+      "language": "zh"
+    },
+    {
       "alias": "ダーク・ヴァルキリア",
       "normalizedAlias": "ダ-ク・ヴァルキリア",
       "cardId": "7600",
@@ -104905,6 +104919,13 @@
       "language": "en"
     },
     {
+      "alias": "玩偶槌",
+      "normalizedAlias": "玩偶槌",
+      "cardId": "23148",
+      "cardName": "ドールハンマー",
+      "language": "zh"
+    },
+    {
       "alias": "人形の幸福",
       "normalizedAlias": "人形の幸福",
       "cardId": "15891",
@@ -116077,6 +116098,13 @@
       "language": "en"
     },
     {
+      "alias": "先手比掌",
+      "normalizedAlias": "先手比掌",
+      "cardId": "22503",
+      "cardName": "先手必掌",
+      "language": "zh"
+    },
+    {
       "alias": "機甲忍者アース",
       "normalizedAlias": "機甲忍者ア-ス",
       "cardId": "9890",
@@ -117125,6 +117153,13 @@
       "cardId": "22504",
       "cardName": "海老須神鮮まつり",
       "language": "en"
+    },
+    {
+      "alias": "龙虾神鲜祭",
+      "normalizedAlias": "龙虾神鲜祭",
+      "cardId": "22504",
+      "cardName": "海老須神鮮まつり",
+      "language": "zh"
     },
     {
       "alias": "ブラック・アロー",
@@ -120307,6 +120342,13 @@
     {
       "alias": "E·HERO 黏土防御人",
       "normalizedAlias": "e·hero 黏土防御人",
+      "cardId": "23147",
+      "cardName": "E・HERO クレイガードマン",
+      "language": "zh"
+    },
+    {
+      "alias": "元素－英雄 黏土防卫人",
+      "normalizedAlias": "元素-英雄 黏土防卫人",
       "cardId": "23147",
       "cardName": "E・HERO クレイガードマン",
       "language": "zh"
@@ -128705,7 +128747,7 @@
       "language": "ja"
     },
     {
-      "alias": "邪恶的魔王-佐克",
+      "alias": "邪恶的魔王－佐克",
       "normalizedAlias": "邪恶的魔王-佐克",
       "cardId": "23486",
       "cardName": "邪悪なる魔王－ゾーク",
@@ -136001,6 +136043,13 @@
     {
       "alias": "坠入爱河的猎豹",
       "normalizedAlias": "坠入爱河的猎豹",
+      "cardId": "22500",
+      "cardName": "フォーリンチーター",
+      "language": "zh"
+    },
+    {
+      "alias": "情场骗子",
+      "normalizedAlias": "情场骗子",
       "cardId": "22500",
       "cardName": "フォーリンチーター",
       "language": "zh"
@@ -148429,6 +148478,13 @@
       "cardId": "7496",
       "cardName": "コールド・タイガー",
       "language": "en"
+    },
+    {
+      "alias": "金虎",
+      "normalizedAlias": "金虎",
+      "cardId": "7496",
+      "cardName": "コールド・タイガー",
+      "language": "zh"
     },
     {
       "alias": "氷炎の双竜",
@@ -193000,6 +193056,13 @@
       "language": "zh"
     },
     {
+      "alias": "冒名者替换",
+      "normalizedAlias": "冒名者替换",
+      "cardId": "23303",
+      "cardName": "Imposter Shift",
+      "language": "zh"
+    },
+    {
       "alias": "プリズンクインデーモン",
       "normalizedAlias": "プリズンクインデ-モン",
       "cardId": "7370",
@@ -197377,6 +197440,13 @@
     {
       "alias": "不死之死亡领主",
       "normalizedAlias": "不死之死亡领主",
+      "cardId": "23146",
+      "cardName": "不死のデスロード",
+      "language": "zh"
+    },
+    {
+      "alias": "不死的死亡领主",
+      "normalizedAlias": "不死的死亡领主",
       "cardId": "23146",
       "cardName": "不死のデスロード",
       "language": "zh"
@@ -253734,6 +253804,13 @@
     {
       "alias": "死亡之光 赫路拂尔",
       "normalizedAlias": "死亡之光 赫路拂尔",
+      "cardId": "23304",
+      "cardName": "Mortilux Heruvur",
+      "language": "zh"
+    },
+    {
+      "alias": "冥光之圣杖 哈尔威尔",
+      "normalizedAlias": "冥光之圣杖 哈尔威尔",
       "cardId": "23304",
       "cardName": "Mortilux Heruvur",
       "language": "zh"
@@ -381909,6 +381986,13 @@
       "language": "zh"
     },
     {
+      "alias": "毒蝎陷阱",
+      "normalizedAlias": "毒蝎陷阱",
+      "cardId": "21579",
+      "cardName": "毒サソリの罠",
+      "language": "zh"
+    },
+    {
       "alias": "虫惑之诱",
       "normalizedAlias": "虫惑之诱",
       "cardId": "18311",
@@ -405611,6 +405695,13 @@
       "language": "zh"
     },
     {
+      "alias": "白夜骑士团领主",
+      "normalizedAlias": "白夜骑士团领主",
+      "cardId": "6829",
+      "cardName": "白騎士団のロード",
+      "language": "zh"
+    },
+    {
       "alias": "白い泥棒",
       "normalizedAlias": "白い泥棒",
       "cardId": "4120",
@@ -421463,6 +421554,20 @@
       "normalizedAlias": "至交死党幼恐龙",
       "cardId": "19079",
       "cardName": "ズットモザウルス",
+      "language": "zh"
+    },
+    {
+      "alias": "B・L・A・C・Kパルフェ",
+      "normalizedAlias": "b・l・a・c・kパルフェ",
+      "cardId": "24071",
+      "cardName": "B・L・A・C・Kパルフェ",
+      "language": "ja"
+    },
+    {
+      "alias": "莓柠苹巧奇之黑芭菲",
+      "normalizedAlias": "莓柠苹巧奇之黑芭菲",
+      "cardId": "24071",
+      "cardName": "B・L・A・C・Kパルフェ",
       "language": "zh"
     },
     {

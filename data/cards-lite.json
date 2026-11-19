@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-18T03:06:00.630Z",
+  "generatedAt": "2026-11-19T02:47:18.169Z",
   "records": [
     {
       "id": "21385",
@@ -518,6 +518,13 @@
           "name": "未眠之城的『盈彩月夜』",
           "source": "baige",
           "sourceField": "sc_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23552"
+        },
+        {
+          "name": "未眠之城的『盈彩月夜』",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23552"
         }
@@ -1517,6 +1524,13 @@
           "name": "归光之旅－『塞尼特』",
           "source": "baige",
           "sourceField": "sc_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23539"
+        },
+        {
+          "name": "归光之旅－『塞尼特』",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23539"
         }
@@ -9178,6 +9192,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23346"
+        },
+        {
+          "name": "魔救调律者",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23346"
         }
       ],
       "released": true,
@@ -9483,6 +9504,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23347"
+        },
+        {
+          "name": "魔救奇石－提亚马特石",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23347"
         }
       ],
       "released": true,
@@ -9663,6 +9691,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23371"
+        },
+        {
+          "name": "魔救辉迹",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23371"
         }
       ],
       "released": true,
@@ -9735,6 +9770,13 @@
           "name": "魔救的合缘",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23385"
+        },
+        {
+          "name": "魔救合缘",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23385"
         }
@@ -10214,6 +10256,13 @@
           "name": "魔救之奇迹-母神巨兽石",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23363"
+        },
+        {
+          "name": "魔救奇迹－提亚马特石",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23363"
         }
@@ -11751,6 +11800,13 @@
           "name": "显现的传说之都",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23382"
+        },
+        {
+          "name": "显现的亚特兰蒂斯",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23382"
         }
@@ -17421,6 +17477,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23324"
+        },
+        {
+          "name": "飞龙的龙骑士",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23324"
         }
       ],
       "released": true,
@@ -22315,6 +22378,13 @@
           "name": "塞尼特・光器还魂之仪",
           "source": "baige",
           "sourceField": "sc_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23540"
+        },
+        {
+          "name": "塞尼特・光器还魂之仪",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23540"
         }
@@ -35109,6 +35179,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23306"
+        },
+        {
+          "name": "Angelechy Bastion",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23306"
         }
       ],
       "released": true,
@@ -35237,6 +35314,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23307"
+        },
+        {
+          "name": "Angelechy Destrier",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23307"
         }
       ],
       "released": true,
@@ -35294,6 +35378,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23310"
+        },
+        {
+          "name": "Angelechy Disturbance",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23310"
         }
       ],
       "released": true,
@@ -35347,6 +35438,13 @@
           "name": "隐天来希士兵",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23308"
+        },
+        {
+          "name": "Angelechy Enlisted",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23308"
         }
@@ -35410,6 +35508,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23311"
+        },
+        {
+          "name": "Angelechy Opening to e4",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23311"
         }
       ],
       "released": true,
@@ -35460,6 +35565,13 @@
           "name": "隐天来希排局",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23309"
+        },
+        {
+          "name": "Angelechy Problem",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23309"
         }
@@ -35542,6 +35654,13 @@
           "name": "隐天来希国王",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23305"
+        },
+        {
+          "name": "Angelechy Shatranga",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23305"
         }
@@ -36267,6 +36386,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23157"
+        },
+        {
+          "name": "漫画猫",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23157"
         }
       ],
       "released": true,
@@ -36701,6 +36827,13 @@
           "name": "异宇宙战煌",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "21618"
+        },
+        {
+          "name": "异宇宙战煌",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "21618"
         }
@@ -42920,7 +43053,8 @@
         "アルカナフォースⅩⅡ－THE HANGED MAN",
         "Arcana Force XII - The Hangman",
         "秘仪之力12-倒吊人",
-        "秘仪之力XII-吊人"
+        "秘仪之力XII-吊人",
+        "秘仪之力ⅩⅡ－倒吊人"
       ],
       "chineseNameSources": [
         {
@@ -42941,6 +43075,13 @@
           "name": "秘仪之力XII-吊人",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23143"
+        },
+        {
+          "name": "秘仪之力ⅩⅡ－倒吊人",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23143"
         }
@@ -53537,6 +53678,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23383"
+        },
+        {
+          "name": "无垢奥艺－“黄昏之变幻”",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23383"
         }
       ],
       "released": true,
@@ -53585,6 +53733,13 @@
           "name": "无垢艺术-「创幻的贤者」",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23399"
+        },
+        {
+          "name": "无垢奥艺－“幻创之贤者”",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23399"
         }
@@ -53914,6 +54069,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23340"
+        },
+        {
+          "name": "无限与有限之奥艺",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23340"
         }
       ],
       "released": true,
@@ -53984,6 +54146,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23341"
+        },
+        {
+          "name": "净化与腐败之奥艺",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23341"
         }
       ],
       "released": true,
@@ -54052,6 +54221,13 @@
           "name": "结合与乖离的无垢艺术",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23342"
+        },
+        {
+          "name": "统合与乖离之奥艺",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23342"
         }
@@ -57446,6 +57622,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23396"
+        },
+        {
+          "name": "依艮鬼之咒咆",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23396"
         }
       ],
       "released": true,
@@ -57491,6 +57674,13 @@
           "name": "剑艮鬼的神域",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23397"
+        },
+        {
+          "name": "剑艮鬼之神域",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23397"
         }
@@ -57540,6 +57730,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23395"
+        },
+        {
+          "name": "色艮鬼之蛊毒",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23395"
         }
       ],
       "released": true,
@@ -57583,6 +57780,13 @@
           "name": "艮鬼神 朱沙之王",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23361"
+        },
+        {
+          "name": "艮鬼神 朱沙之王",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23361"
         }
@@ -57723,6 +57927,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23379"
+        },
+        {
+          "name": "艮鬼神门 三千世界",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23379"
         }
       ],
       "released": true,
@@ -57771,6 +57982,13 @@
           "name": "鬼神童鵄 玉依",
           "source": "baige",
           "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23829"
+        },
+        {
+          "name": "艮鬼神童鸱 玉依",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23829"
         }
@@ -57843,6 +58061,13 @@
           "name": "艮鬼神 水子守命",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23362"
+        },
+        {
+          "name": "艮鬼神 水子守命",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23362"
         }
@@ -58480,6 +58705,13 @@
           "name": "A BF-丛云之草薙",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "22713"
+        },
+        {
+          "name": "强袭黑羽－丛云之草薙",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "22713"
         }
@@ -60761,6 +60993,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "22704"
+        },
+        {
+          "name": "星霜的魔术师－宙读阵魔术士",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "22704"
         }
       ],
       "released": true,
@@ -61505,6 +61744,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23381"
+        },
+        {
+          "name": "响应的亚特兰蒂斯",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23381"
         }
       ],
       "released": true,
@@ -61548,6 +61794,13 @@
           "name": "龙都 亚特兰蒂斯",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23380"
+        },
+        {
+          "name": "龙都 亚特兰蒂斯",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23380"
         }
@@ -62359,6 +62612,13 @@
           "name": "冰原之始祖 欧德姆布拉",
           "source": "baige",
           "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23513"
+        },
+        {
+          "name": "Audhumla, Progenitor of the Frozen Expanse",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23513"
         }
@@ -70336,6 +70596,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23378"
+        },
+        {
+          "name": "巴利安之希望",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23378"
         }
       ],
       "released": true,
@@ -70381,6 +70648,13 @@
           "name": "巴里安之封印",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23394"
+        },
+        {
+          "name": "巴利安之印",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23394"
         }
@@ -70431,6 +70705,13 @@
           "name": "七皇·巴里安之冀望乡",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23377"
+        },
+        {
+          "name": "巴利安之七皇冀望乡",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23377"
         }
@@ -84748,6 +85029,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23402"
+        },
+        {
+          "name": "宾果卡",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23402"
         }
       ],
       "released": true,
@@ -86829,6 +87117,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "22501"
+        },
+        {
+          "name": "影装骑士 黑杰克",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "22501"
         }
       ],
       "released": true,
@@ -88151,6 +88446,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "22921"
+        },
+        {
+          "name": "黑蔷薇龙／爆裂",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "22921"
         }
       ],
       "released": true,
@@ -88565,6 +88867,13 @@
           "name": "团结之恶魔龙 暗黑恶魔龙",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23348"
+        },
+        {
+          "name": "团结之凶魔龙 黑恶魔龙",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23348"
         }
@@ -100163,6 +100472,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "22716"
+        },
+        {
+          "name": "白之幻兽－青眼白龙",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "22716"
         }
       ],
       "released": true,
@@ -103739,6 +104055,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "22731"
+        },
+        {
+          "name": "枪管上膛戒放龙",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "22731"
         }
       ],
       "released": true,
@@ -105349,6 +105672,13 @@
           "name": "洗脑者",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "21170"
+        },
+        {
+          "name": "大脑控制者",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "21170"
         }
@@ -116390,6 +116720,13 @@
           "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23559"
+        },
+        {
+          "name": "葬岭异解△危尔海姆",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23559"
         }
       ],
       "released": true,
@@ -119367,6 +119704,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23366"
+        },
+        {
+          "name": "混沌超量 冀望皇龙混沌巴利安龙",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23366"
         }
       ],
       "released": true,
@@ -121671,6 +122015,13 @@
           "name": "光幻兽 坎德拉特",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23144"
+        },
+        {
+          "name": "光幻兽 坎德拉特",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23144"
         }
@@ -125294,6 +125645,13 @@
           "name": "剪影卡通",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23356"
+        },
+        {
+          "name": "剪影卡通",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23356"
         }
@@ -129666,6 +130024,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23302"
+        },
+        {
+          "name": "Cerynemesia, Mystical Beast of the Forest",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23302"
         }
       ],
       "released": true,
@@ -132833,6 +133198,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "22741"
+        },
+        {
+          "name": "混沌终末统御者 －开辟与终焉的支配者－",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "22741"
         }
       ],
       "released": true,
@@ -135675,6 +136047,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "22928"
+        },
+        {
+          "name": "质检机",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "22928"
         }
       ],
       "released": true,
@@ -136530,6 +136909,13 @@
           "name": "黑智天至 伊利斯菲尔",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "22557"
+        },
+        {
+          "name": "黑智天至 伊莉丝菲尔",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "22557"
         }
@@ -141882,6 +142268,13 @@
           "name": "盈彩月夜之帐 西艾萝",
           "source": "baige",
           "sourceField": "sc_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23543"
+        },
+        {
+          "name": "盈彩月夜之帐 西艾萝",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23543"
         }
@@ -156072,6 +156465,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23351"
+        },
+        {
+          "name": "耀烂龙 珊栖泳龙",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23351"
         }
       ],
       "released": true,
@@ -156670,6 +157070,13 @@
           "name": "卖躯乌鸦",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23401"
+        },
+        {
+          "name": "贩卖亡骸的乌鸦",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23401"
         }
@@ -163048,6 +163455,13 @@
           "name": "灿冠乘骑 希克拉维",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23367"
+        },
+        {
+          "name": "灿冠乘骑 迅快拉维",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23367"
         }
@@ -171070,6 +171484,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23400"
+        },
+        {
+          "name": "祟纸之报应",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23400"
         }
       ],
       "released": true,
@@ -177728,6 +178149,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "22706"
+        },
+        {
+          "name": "电子界代码魔术师",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "22706"
         }
       ],
       "released": true,
@@ -177800,6 +178228,13 @@
           "name": "电子空间契约魔女",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "22707"
+        },
+        {
+          "name": "电子界契约女巫",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "22707"
         }
@@ -180647,6 +181082,13 @@
           "name": "D-爆发",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23150"
+        },
+        {
+          "name": "D－爆破",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23150"
         }
@@ -189138,6 +189580,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23398"
+        },
+        {
+          "name": "代达罗斯的大涡",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23398"
         }
       ],
       "released": true,
@@ -194293,6 +194742,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23384"
+        },
+        {
+          "name": "幽狱时钟都市－黑暗城市",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23384"
         }
       ],
       "released": true,
@@ -195088,6 +195544,13 @@
           "name": "暗之神-黑暗神",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "22735"
+        },
+        {
+          "name": "暗之神",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "22735"
         }
@@ -202889,6 +203352,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23374"
+        },
+        {
+          "name": "时间黑魔术师",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23374"
         }
       ],
       "released": true,
@@ -203128,6 +203598,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "22737"
+        },
+        {
+          "name": "黑暗协调 灾祸恶棍",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "22737"
         }
       ],
       "released": true,
@@ -203202,6 +203679,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "22738"
+        },
+        {
+          "name": "黑暗协调 梦魇之手",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "22738"
         }
       ],
       "released": true,
@@ -203245,7 +203729,8 @@
         "ダークティラノ",
         "Dark Tyranno",
         "暗恐兽",
-        "幽暗恐兽"
+        "幽暗恐兽",
+        "黑暗恐兽"
       ],
       "chineseNameSources": [
         {
@@ -203266,6 +203751,13 @@
           "name": "幽暗恐兽",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23142"
+        },
+        {
+          "name": "黑暗恐兽",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23142"
         }
@@ -204172,6 +204664,13 @@
           "name": "有暗眼的幻想师·无脸",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23159"
+        },
+        {
+          "name": "暗眼幻象师 无面",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23159"
         }
@@ -210335,6 +210834,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "22705"
+        },
+        {
+          "name": "解码语者・整合",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "22705"
         }
       ],
       "released": true,
@@ -211483,6 +211989,13 @@
           "name": "苍之深渊 深眼白龙",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "22717"
+        },
+        {
+          "name": "苍之深渊 渊眼白龙",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "22717"
         }
@@ -213837,6 +214350,13 @@
           "name": "造物主EMA",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "22734"
+        },
+        {
+          "name": "巨匠造物主 EMA",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "22734"
         }
@@ -218436,6 +218956,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23343"
+        },
+        {
+          "name": "命运－英雄 死亡教义魔侠",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23343"
         }
       ],
       "released": true,
@@ -218896,6 +219423,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23344"
+        },
+        {
+          "name": "命运－英雄 恶劫主宰魔侠",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23344"
         }
       ],
       "released": true,
@@ -219346,6 +219880,13 @@
           "name": "D-HERO 无畏仆从",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23345"
+        },
+        {
+          "name": "命运－英雄 无惧仆从",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23345"
         }
@@ -220188,6 +220729,13 @@
           "name": "解层龙 地层古兽",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23373"
+        },
+        {
+          "name": "解层龙 斯特拉提亚",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23373"
         }
@@ -232390,6 +232938,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23297"
+        },
+        {
+          "name": "Distrust Paranoia",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23297"
         }
       ],
       "released": true,
@@ -237923,7 +238478,8 @@
       "aliases": [
         "ドールハンマー",
         "Doll Hammer",
-        "人偶之锤"
+        "人偶之锤",
+        "玩偶槌"
       ],
       "chineseNameSources": [
         {
@@ -237944,6 +238500,13 @@
           "name": "人偶之锤",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23148"
+        },
+        {
+          "name": "玩偶槌",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23148"
         }
@@ -247767,6 +248330,13 @@
           "name": "超究极魔导龙王",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "21218"
+        },
+        {
+          "name": "超究极魔导龙王",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "21218"
         }
@@ -263355,7 +263925,8 @@
       "enName": "First Striker Advantage",
       "aliases": [
         "先手必掌",
-        "First Striker Advantage"
+        "First Striker Advantage",
+        "先手比掌"
       ],
       "chineseNameSources": [
         {
@@ -263376,6 +263947,13 @@
           "name": "先手必掌",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "22503"
+        },
+        {
+          "name": "先手比掌",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "22503"
         }
@@ -265798,7 +266376,8 @@
       "aliases": [
         "海老須神鮮まつり",
         "Ebisu Shinsen Matsuri",
-        "海老须神鲜祭"
+        "海老须神鲜祭",
+        "龙虾神鲜祭"
       ],
       "chineseNameSources": [
         {
@@ -265819,6 +266398,13 @@
           "name": "海老须神鲜祭",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "22504"
+        },
+        {
+          "name": "龙虾神鲜祭",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "22504"
         }
@@ -272774,7 +273360,8 @@
         "E・HERO クレイガードマン",
         "Elemental HERO Clay Guardian",
         "元素英雄 黏土守卫侠",
-        "E·HERO 黏土防御人"
+        "E·HERO 黏土防御人",
+        "元素－英雄 黏土防卫人"
       ],
       "chineseNameSources": [
         {
@@ -272795,6 +273382,13 @@
           "name": "E·HERO 黏土防御人",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23147"
+        },
+        {
+          "name": "元素－英雄 黏土防卫人",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23147"
         }
@@ -277913,6 +278507,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23350"
+        },
+        {
+          "name": "精灵世妃 多里雅德",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23350"
         }
       ],
       "released": true,
@@ -282850,6 +283451,13 @@
           "name": "永远的牵绊",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "22315"
+        },
+        {
+          "name": "永远之绊",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "22315"
         }
@@ -289443,6 +290051,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23158"
+        },
+        {
+          "name": "邪恶之箱",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23158"
         }
       ],
       "released": true,
@@ -291692,7 +292307,8 @@
       "aliases": [
         "邪悪なる魔王－ゾーク",
         "Evil Lord - Zorc",
-        "邪恶的魔王-佐克"
+        "邪恶的魔王-佐克",
+        "邪恶的魔王－佐克"
       ],
       "chineseNameSources": [
         {
@@ -291713,6 +292329,13 @@
           "name": "邪恶的魔王-佐克",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23486"
+        },
+        {
+          "name": "邪恶的魔王－佐克",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23486"
         }
@@ -307501,7 +308124,8 @@
         "フォーリンチーター",
         "Fallin' Cheatah",
         "坠入情网的猎豹",
-        "坠入爱河的猎豹"
+        "坠入爱河的猎豹",
+        "情场骗子"
       ],
       "chineseNameSources": [
         {
@@ -307522,6 +308146,13 @@
           "name": "坠入爱河的猎豹",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "22500"
+        },
+        {
+          "name": "情场骗子",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "22500"
         }
@@ -309022,6 +309653,13 @@
           "name": "父灰熊",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23354"
+        },
+        {
+          "name": "公灰熊",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23354"
         }
@@ -312482,6 +313120,13 @@
           "name": "亚特兰蒂斯的妖涡",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23338"
+        },
+        {
+          "name": "亚特兰蒂斯的妖涡",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23338"
         }
@@ -320068,6 +320713,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23326"
+        },
+        {
+          "name": "大海的传说－渔夫",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23326"
         }
       ],
       "released": true,
@@ -324052,6 +324704,13 @@
           "name": "魔术师的空华",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "22071"
+        },
+        {
+          "name": "魔术师的空华",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "22071"
         }
@@ -329427,6 +330086,13 @@
           "name": "愚蠢的盗墓者",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23392"
+        },
+        {
+          "name": "愚蠢的盗墓者",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23392"
         }
@@ -336123,7 +336789,8 @@
       "aliases": [
         "コールド・タイガー",
         "Frost Tiger",
-        "冰寒虎"
+        "冰寒虎",
+        "金虎"
       ],
       "chineseNameSources": [
         {
@@ -336144,6 +336811,13 @@
           "name": "冰寒虎",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "7496"
+        },
+        {
+          "name": "金虎",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "7496"
         }
@@ -337443,6 +338117,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23036"
+        },
+        {
+          "name": "月轮镜",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23036"
         }
       ],
       "released": true,
@@ -337848,6 +338529,13 @@
           "name": "趣怪黑暗兔子",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23156"
+        },
+        {
+          "name": "滑稽暗黑兔",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23156"
         }
@@ -342535,6 +343223,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "22314"
+        },
+        {
+          "name": "我我我逃脱剧",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "22314"
         }
       ],
       "released": true,
@@ -342813,6 +343508,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "22701"
+        },
+        {
+          "name": "我我我女孩－零零拨号",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "22701"
         }
       ],
       "released": true,
@@ -343015,6 +343717,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "22313"
+        },
+        {
+          "name": "我我我幻象",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "22313"
         }
       ],
       "released": true,
@@ -343136,6 +343845,13 @@
           "name": "我我我魔导士-我我我魔导",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "22700"
+        },
+        {
+          "name": "我我我魔术师－我我我魔术",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "22700"
         }
@@ -346318,6 +347034,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "22727"
+        },
+        {
+          "name": "银河防卫机器人・奥比塔尔 7",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "22727"
         }
       ],
       "released": true,
@@ -348325,6 +349048,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "22726"
+        },
+        {
+          "name": "银河眼辉光子龙",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "22726"
         }
       ],
       "released": true,
@@ -349189,6 +349919,13 @@
           "name": "游戏自游机GG",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "22923"
+        },
+        {
+          "name": "游戏自游机GG",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "22923"
         }
@@ -350112,6 +350849,13 @@
           "name": "垃圾巨像",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23355"
+        },
+        {
+          "name": "垃圾魔像",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23355"
         }
@@ -352721,6 +353465,13 @@
           "name": "机炮食人魔",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "22739"
+        },
+        {
+          "name": "加特林食人魔",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "22739"
         }
@@ -359188,6 +359939,13 @@
           "name": "亚特兰蒂斯的战将",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23336"
+        },
+        {
+          "name": "亚特兰蒂斯的战将",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23336"
         }
@@ -386555,6 +387313,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23329"
+        },
+        {
+          "name": "蛇魔・黑影",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23329"
         }
       ],
       "released": true,
@@ -389699,6 +390464,13 @@
           "name": "天使与恶魔的骰子",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23375"
+        },
+        {
+          "name": "天使与魔鬼的骰子",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23375"
         }
@@ -402803,6 +403575,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "7793"
+        },
+        {
+          "name": "吞婴蛇",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "7793"
         }
       ],
       "released": true,
@@ -414671,6 +415450,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23372"
+        },
+        {
+          "name": "海中战型助手机器人",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23372"
         }
       ],
       "released": true,
@@ -419487,6 +420273,13 @@
           "name": "宇宙型飓风",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23390"
+        },
+        {
+          "name": "宇宙性飓风",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23390"
         }
@@ -425840,6 +426633,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "22703"
+        },
+        {
+          "name": "星读的魔术师－天宫图魔术士",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "22703"
         }
       ],
       "released": true,
@@ -427612,6 +428412,13 @@
           "name": "死相的冥鉴 休布罗",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23352"
+        },
+        {
+          "name": "死相之冥鉴 修布罗",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23352"
         }
@@ -430359,6 +431166,13 @@
           "name": "超升阶魔法-究极之力",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "22742"
+        },
+        {
+          "name": "超升阶魔法－究极之力",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "22742"
         }
@@ -437567,7 +438381,8 @@
       "aliases": [
         "Imposter Shift",
         "欺诈转移",
-        "冒名顶替"
+        "冒名顶替",
+        "冒名者替换"
       ],
       "chineseNameSources": [
         {
@@ -437581,6 +438396,13 @@
           "name": "冒名顶替",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23303"
+        },
+        {
+          "name": "冒名者替换",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23303"
         }
@@ -440067,6 +440889,13 @@
           "name": "永火死亡枪手",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "22740"
+        },
+        {
+          "name": "无限狱死亡枪手",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "22740"
         }
@@ -447539,7 +448368,8 @@
         "Invincible Demise Lord",
         "不死之死神领主",
         "不死之死亡神",
-        "不死之死亡领主"
+        "不死之死亡领主",
+        "不死的死亡领主"
       ],
       "chineseNameSources": [
         {
@@ -447560,6 +448390,13 @@
           "name": "不死之死亡领主",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23146"
+        },
+        {
+          "name": "不死的死亡领主",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23146"
         }
@@ -454457,6 +455294,13 @@
           "name": "人造人-念力能量震慑者",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23325"
+        },
+        {
+          "name": "人造人－念力能量震慑者",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23325"
         }
@@ -469397,6 +470241,13 @@
           "sourceField": "cn_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23517"
+        },
+        {
+          "name": "Kerolia the Frolicsome",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23517"
         }
       ],
       "released": true,
@@ -481345,6 +482196,13 @@
           "name": "蛊神之色艮鬼 葛叶",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23332"
+        },
+        {
+          "name": "蛊神之色艮鬼 葛叶",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23332"
         }
@@ -493551,6 +494409,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23335"
+        },
+        {
+          "name": "亚特兰蒂斯的龙神－代达罗斯",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23335"
         }
       ],
       "released": true,
@@ -493619,6 +494484,13 @@
           "name": "真海龙骑-代达罗斯",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23369"
+        },
+        {
+          "name": "真海龙骑－代达罗斯",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23369"
         }
@@ -503638,6 +504510,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "8767"
+        },
+        {
+          "name": "尾长黑马",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "8767"
         }
       ],
       "released": true,
@@ -507592,6 +508471,13 @@
           "name": "月光绯虎",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23421"
+        },
+        {
+          "name": "Lunalight Scarlet Tiger",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23421"
         }
@@ -513039,6 +513925,13 @@
           "name": "狂岚异解△普戮托尼翁",
           "source": "baige",
           "sourceField": "sc_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23560"
+        },
+        {
+          "name": "狂岚异解△普戮托尼翁",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23560"
         }
@@ -528681,6 +529574,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "22711"
+        },
+        {
+          "name": "Sin 力量",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "22711"
         }
       ],
       "released": true,
@@ -528802,6 +529702,13 @@
           "name": "Sin 典范转移",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "22712"
+        },
+        {
+          "name": "Sin 范式转变",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "22712"
         }
@@ -539851,6 +540758,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "22714"
+        },
+        {
+          "name": "大精灵机巧军－灵摆统御者",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "22714"
         }
       ],
       "released": true,
@@ -545503,6 +546417,13 @@
           "name": "幻狱神 墨迪克里乌斯",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23370"
+        },
+        {
+          "name": "幻狱神 墨迪克利乌斯",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23370"
         }
@@ -560964,6 +561885,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23334"
+        },
+        {
+          "name": "封神之剑艮鬼 水子守",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23334"
         }
       ],
       "released": true,
@@ -564117,6 +565045,13 @@
           "name": "透视心灵之眼",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23162"
+        },
+        {
+          "name": "心灵透视眼",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23162"
         }
@@ -572486,6 +573421,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23337"
+        },
+        {
+          "name": "亚特兰蒂斯的怪腕",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23337"
         }
       ],
       "released": true,
@@ -577174,7 +578116,8 @@
       "aliases": [
         "Mortilux Heruvur",
         "悼光之希路伯",
-        "死亡之光 赫路拂尔"
+        "死亡之光 赫路拂尔",
+        "冥光之圣杖 哈尔威尔"
       ],
       "chineseNameSources": [
         {
@@ -577188,6 +578131,13 @@
           "name": "死亡之光 赫路拂尔",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23304"
+        },
+        {
+          "name": "冥光之圣杖 哈尔威尔",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23304"
         }
@@ -580572,6 +581522,13 @@
           "name": "一日万倍龙",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23357"
+        },
+        {
+          "name": "一日万倍龙",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23357"
         }
@@ -594529,6 +595486,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "22725"
+        },
+        {
+          "name": "超银河眼光子龙－光子咆哮",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "22725"
         }
       ],
       "released": true,
@@ -605437,6 +606401,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23364"
+        },
+        {
+          "name": "编号104 假面魔蹈士 闪光V",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23364"
         }
       ],
       "released": true,
@@ -608731,6 +609702,13 @@
           "name": "No.39 光之使者 希望皇 霍普",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "22699"
+        },
+        {
+          "name": "编号39 光之使者 希望皇霍普",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "22699"
         }
@@ -614962,6 +615940,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23365"
+        },
+        {
+          "name": "混沌编号104 假面魔蹈士 黑影・胜利",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23365"
         }
       ],
       "released": true,
@@ -620797,6 +621782,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23419"
+        },
+        {
+          "name": "Odd-Eyes Override Dragon",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23419"
         }
       ],
       "released": true,
@@ -620946,6 +621938,13 @@
           "name": "四天之龙 异色眼灵摆龙",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "22702"
+        },
+        {
+          "name": "四天之龙 异色眼灵摆龙",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "22702"
         }
@@ -628766,6 +629765,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "22709"
+        },
+        {
+          "name": "奥利哈刚的魔封剑",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "22709"
         }
       ],
       "released": true,
@@ -633855,6 +634861,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "22502"
+        },
+        {
+          "name": "恐依的情侣熊！！",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "22502"
         }
       ],
       "released": true,
@@ -634478,6 +635491,13 @@
           "name": "团结与牵绊之超魔导剑士",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "20818"
+        },
+        {
+          "name": "团结与羁绊的超魔导剑士",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "20818"
         }
@@ -640471,6 +641491,13 @@
           "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23537"
+        },
+        {
+          "name": "塞尼特・归光葬魂之仪",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23537"
         }
       ],
       "released": true,
@@ -640904,6 +641931,13 @@
           "name": "完美创生高驱动龙",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "22743"
+        },
+        {
+          "name": "完美智能・海德拉驱动龙",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "22743"
         }
@@ -658470,6 +659504,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23145"
+        },
+        {
+          "name": "等离子战士 原能",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23145"
         }
       ],
       "released": true,
@@ -659802,6 +660843,13 @@
           "name": "猛毒蝮",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "7513"
+        },
+        {
+          "name": "剧毒蝮蛇",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "7513"
         }
@@ -681770,6 +682818,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23149"
+        },
+        {
+          "name": "速攻召唤",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23149"
         }
       ],
       "released": true,
@@ -691079,6 +692134,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "22710"
+        },
+        {
+          "name": "虹之桥",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "22710"
         }
       ],
       "released": true,
@@ -691967,6 +693029,13 @@
           "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23546"
+        },
+        {
+          "name": "盈彩月夜之刃 希耶娜",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23546"
         }
       ],
       "released": true,
@@ -692035,6 +693104,13 @@
           "name": "盈彩月夜之雅 卡萝尔",
           "source": "baige",
           "sourceField": "sc_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23544"
+        },
+        {
+          "name": "盈彩月夜之雅 卡萝尔",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23544"
         }
@@ -692189,6 +693265,13 @@
           "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23547"
+        },
+        {
+          "name": "盈彩月夜之灯 库露雪",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23547"
         }
       ],
       "released": true,
@@ -692259,6 +693342,13 @@
           "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23548"
+        },
+        {
+          "name": "盈彩月夜之朔 斯奎兹",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23548"
         }
       ],
       "released": true,
@@ -692327,6 +693417,13 @@
           "name": "盈彩月夜之翼 菈碧",
           "source": "baige",
           "sourceField": "sc_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23545"
+        },
+        {
+          "name": "盈彩月夜之翼 菈碧",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23545"
         }
@@ -705580,6 +706677,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23175"
+        },
+        {
+          "name": "破械转生",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23175"
         }
       ],
       "released": true,
@@ -712716,6 +713820,13 @@
           "name": "大逆转BOX",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23393"
+        },
+        {
+          "name": "大逆转箱",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23393"
         }
@@ -720750,6 +721861,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "22732"
+        },
+        {
+          "name": "枪弹网幕",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "22732"
         }
       ],
       "released": true,
@@ -725005,6 +726123,13 @@
           "name": "锈迹猛犸",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "22929"
+        },
+        {
+          "name": "锈铁猛犸",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "22929"
         }
@@ -729657,6 +730782,13 @@
           "name": "三幻魔的天坏",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23387"
+        },
+        {
+          "name": "三幻魔之天坏",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23387"
         }
@@ -756816,6 +757948,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23327"
+        },
+        {
+          "name": "闪光・黑影",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23327"
         }
       ],
       "released": true,
@@ -770289,6 +771428,13 @@
           "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23558"
+        },
+        {
+          "name": "天霆异解△幽谜",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23558"
         }
       ],
       "released": true,
@@ -771075,6 +772221,13 @@
           "name": "沉睡的羊 替罪羊",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23376"
+        },
+        {
+          "name": "眠羊 替罪山羊",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23376"
         }
@@ -781413,6 +782566,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23420"
+        },
+        {
+          "name": "Speedroid Darumaknocker",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23420"
         }
       ],
       "released": true,
@@ -783634,6 +784794,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23391"
+        },
+        {
+          "name": "魔力到达",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23391"
         }
       ],
       "released": true,
@@ -784115,6 +785282,13 @@
           "name": "魔法效果之剑",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23386"
+        },
+        {
+          "name": "魔法效果之剑",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23386"
         }
@@ -792608,6 +793782,13 @@
           "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23316"
+        },
+        {
+          "name": "命运的盘面",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23316"
         }
       ],
       "released": true,
@@ -794634,6 +795815,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "22696"
+        },
+        {
+          "name": "星尘龙－牺牲者圣域",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "22696"
         }
       ],
       "released": true,
@@ -796039,6 +797227,13 @@
           "name": "星之废品同调士",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "22697"
+        },
+        {
+          "name": "星废品同步士",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "22697"
         }
@@ -820408,6 +821603,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23323"
+        },
+        {
+          "name": "疾风的豹战士",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23323"
         }
       ],
       "released": true,
@@ -825213,6 +826415,13 @@
           "name": "同调紧急事态",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "22698"
+        },
+        {
+          "name": "同步紧急",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "22698"
         }
@@ -831759,6 +832968,13 @@
           "name": "塔乌塞尼特・阿贾特",
           "source": "baige",
           "sourceField": "sc_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23535"
+        },
+        {
+          "name": "塔乌塞尼特・阿贾特",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23535"
         }
@@ -843331,6 +844547,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "22718"
+        },
+        {
+          "name": "龙之引导唤笛",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "22718"
         }
       ],
       "released": true,
@@ -843914,6 +845137,13 @@
           "name": "盈彩月夜之辉煌",
           "source": "baige",
           "sourceField": "sc_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23553"
+        },
+        {
+          "name": "盈彩月夜之辉煌",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23553"
         }
@@ -850516,6 +851746,13 @@
           "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23551"
+        },
+        {
+          "name": "盈彩月夜之群星",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23551"
         }
       ],
       "released": true,
@@ -854632,6 +855869,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23339"
+        },
+        {
+          "name": "预幻使 墨迪乌斯",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23339"
         }
       ],
       "released": true,
@@ -856439,6 +857683,13 @@
           "name": "千尊阴影",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23330"
+        },
+        {
+          "name": "上千・黑影",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23330"
         }
@@ -859958,6 +861209,13 @@
           "name": "静寂猛虎",
           "source": "baige",
           "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23514"
+        },
+        {
+          "name": "Tigress in Silent Repose",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23514"
         }
@@ -872367,7 +873625,8 @@
         "毒サソリの罠",
         "Trap of the Poisonous Scorpion",
         "毒蝎的陷阱",
-        "毒蝎子陷阱"
+        "毒蝎子陷阱",
+        "毒蝎陷阱"
       ],
       "chineseNameSources": [
         {
@@ -872388,6 +873647,13 @@
           "name": "毒蝎子陷阱",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "21579"
+        },
+        {
+          "name": "毒蝎陷阱",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "21579"
         }
@@ -880047,6 +881313,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "22733"
+        },
+        {
+          "name": "三重枪管轮转",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "22733"
         }
       ],
       "released": true,
@@ -880431,6 +881704,13 @@
           "name": "异解△福音",
           "source": "baige",
           "sourceField": "sc_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23562"
+        },
+        {
+          "name": "异解△福音",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23562"
         }
@@ -889320,6 +890600,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "20557"
+        },
+        {
+          "name": "骄傲与灵魂之究极龙",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "20557"
         }
       ],
       "released": true,
@@ -891559,6 +892846,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23176"
+        },
+        {
+          "name": "破械习合",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23176"
         }
       ],
       "released": true,
@@ -891603,6 +892897,13 @@
           "name": "破械冥官 迦牟罗",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23172"
+        },
+        {
+          "name": "破械冥官 迦牟罗",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23172"
         }
@@ -891674,6 +892975,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23170"
+        },
+        {
+          "name": "破械式鬼 奢罗",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23170"
         }
       ],
       "released": true,
@@ -891741,6 +893049,13 @@
           "name": "破械式鬼 修摩",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23171"
+        },
+        {
+          "name": "破械式鬼 修摩",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23171"
         }
@@ -891891,6 +893206,13 @@
           "name": "破械神双 罗仪亚",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23174"
+        },
+        {
+          "name": "破械神双 拉基安",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23174"
         }
@@ -892784,6 +894106,13 @@
           "name": "黄泉天轮",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "22708"
+        },
+        {
+          "name": "黄泉天轮",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "22708"
         }
@@ -897354,6 +898683,13 @@
           "name": "V阴影",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23328"
+        },
+        {
+          "name": "V黑影",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23328"
         }
@@ -908380,6 +909716,13 @@
           "name": "胜利龙",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "5868"
+        },
+        {
+          "name": "胜利龙",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "5868"
         }
@@ -925033,7 +926376,8 @@
         "White Knight Lord",
         "白骑士团的领主",
         "白骑士团的支配者",
-        "白骑士团之领主"
+        "白骑士团之领主",
+        "白夜骑士团领主"
       ],
       "chineseNameSources": [
         {
@@ -925054,6 +926398,13 @@
           "name": "白骑士团之领主",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "6829"
+        },
+        {
+          "name": "白夜骑士团领主",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "6829"
         }
@@ -934152,6 +935503,13 @@
           "name": "远古见证者",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23296"
+        },
+        {
+          "name": "Witness of the Ancient",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23296"
         }
@@ -943518,6 +944876,13 @@
           "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23564"
+        },
+        {
+          "name": "异解△审判",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23564"
         }
       ],
       "released": true,
@@ -943569,6 +944934,13 @@
           "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23563"
+        },
+        {
+          "name": "异解△领域－瓦尔涡罗斯",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23563"
         }
       ],
       "released": true,
@@ -943617,6 +944989,13 @@
           "name": "碧之异解△屠奥内拉",
           "source": "baige",
           "sourceField": "sc_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23556"
+        },
+        {
+          "name": "碧之异解△屠奥内拉",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23556"
         }
@@ -943689,6 +945068,13 @@
           "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23554"
+        },
+        {
+          "name": "虚之异解△盖赫纳",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23554"
         }
       ],
       "released": true,
@@ -943759,6 +945145,13 @@
           "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23557"
+        },
+        {
+          "name": "绯之异解△奈落迦",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23557"
         }
       ],
       "released": true,
@@ -943827,6 +945220,13 @@
           "name": "天之异解△邪奥尔",
           "source": "baige",
           "sourceField": "sc_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23555"
+        },
+        {
+          "name": "天之异解△邪奥尔",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23555"
         }
@@ -949046,6 +950446,13 @@
           "sourceField": "cn_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23333"
+        },
+        {
+          "name": "疫神之依艮鬼 夜亚",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23333"
         }
       ],
       "released": true,
@@ -949333,6 +950740,13 @@
           "name": "炎之幻影 幽魔马格纳",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23298"
+        },
+        {
+          "name": "Yomagna the Fire Phantom",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23298"
         }
@@ -955243,6 +956657,13 @@
           "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23541"
+        },
+        {
+          "name": "塞尼特・光器之瀑布",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23541"
         }
       ],
       "released": true,
@@ -955291,6 +956712,13 @@
           "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23538"
+        },
+        {
+          "name": "塞尼特・归光之契",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23538"
         }
       ],
       "released": true,
@@ -955335,6 +956763,13 @@
           "name": "塞尼特的启示者－阿蒙霍特普",
           "source": "baige",
           "sourceField": "sc_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23533"
+        },
+        {
+          "name": "塞尼特的启示者－阿蒙霍特普",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23533"
         }
@@ -955485,6 +956920,13 @@
           "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23542"
+        },
+        {
+          "name": "塞尼特・光器之降雷",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23542"
         }
       ],
       "released": true,
@@ -955534,6 +956976,13 @@
           "name": "塞尼特摩斯・尼库贝特",
           "source": "baige",
           "sourceField": "sc_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23536"
+        },
+        {
+          "name": "塞尼特摩斯・尼库贝特",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23536"
         }
@@ -959773,6 +961222,38 @@
       "monsterProperties": [
         "Dinosaur",
         "Effect"
+      ]
+    },
+    {
+      "id": "24071",
+      "name": "B・L・A・C・Kパルフェ",
+      "cnName": "莓柠苹巧奇之黑芭菲",
+      "jaName": "B・L・A・C・Kパルフェ",
+      "aliases": [
+        "B・L・A・C・Kパルフェ",
+        "莓柠苹巧奇之黑芭菲"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "莓柠苹巧奇之黑芭菲",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24071"
+        },
+        {
+          "name": "莓柠苹巧奇之黑芭菲",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24071"
+        }
+      ],
+      "released": true,
+      "type": "spell",
+      "cardType": "spell",
+      "properties": [
+        "continuous"
       ]
     },
     {
