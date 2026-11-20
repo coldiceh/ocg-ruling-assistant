@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-19T02:47:18.169Z",
+  "generatedAt": "2026-11-20T02:34:24.734Z",
   "records": [
     {
       "id": "21385",
@@ -961338,6 +961338,585 @@
       ]
     },
     {
+      "id": "24011",
+      "name": "創世方界超神ディヴァイン・アニマ・インフィニティ",
+      "cnName": "创世方界超神 无穷圣魂",
+      "jaName": "創世方界超神ディヴァイン・アニマ・インフィニティ",
+      "aliases": [
+        "創世方界超神ディヴァイン・アニマ・インフィニティ",
+        "创世方界超神 无穷圣魂"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "创世方界超神 无穷圣魂",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24011"
+        }
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Fiend",
+      "attribute": "light",
+      "attack": 0,
+      "defense": 3000,
+      "atk": 0,
+      "def": 3000,
+      "level": 10,
+      "propertyIds": [
+        "14",
+        "11",
+        "4"
+      ],
+      "properties": [
+        "Fiend",
+        "Fusion",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "14",
+        "11",
+        "4"
+      ],
+      "monsterProperties": [
+        "Fiend",
+        "Fusion",
+        "Effect"
+      ]
+    },
+    {
+      "id": "24014",
+      "name": "方界防陣",
+      "cnName": "方界防阵",
+      "jaName": "方界防陣",
+      "aliases": [
+        "方界防陣",
+        "方界防阵"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "方界防阵",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24014"
+        }
+      ],
+      "released": true,
+      "type": "trap",
+      "cardType": "trap",
+      "properties": [
+        "counter"
+      ]
+    },
+    {
+      "id": "24012",
+      "name": "方界領域",
+      "cnName": "方界领域",
+      "jaName": "方界領域",
+      "aliases": [
+        "方界領域",
+        "方界领域"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "方界领域",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24012"
+        }
+      ],
+      "released": true,
+      "type": "spell",
+      "cardType": "spell",
+      "properties": [
+        "field"
+      ]
+    },
+    {
+      "id": "24013",
+      "name": "方界覚",
+      "cnName": "方界觉",
+      "jaName": "方界覚",
+      "aliases": [
+        "方界覚",
+        "方界觉"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "方界觉",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24013"
+        }
+      ],
+      "released": true,
+      "type": "spell",
+      "cardType": "spell",
+      "properties": [
+        "continuous"
+      ]
+    },
+    {
+      "id": "24008",
+      "name": "無窮方界器プリティマ",
+      "cnName": "无穷方界器 地天",
+      "jaName": "無窮方界器プリティマ",
+      "aliases": [
+        "無窮方界器プリティマ",
+        "无穷方界器 地天"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "无穷方界器 地天",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24008"
+        }
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Machine",
+      "attribute": "earth",
+      "attack": 800,
+      "defense": 800,
+      "atk": 800,
+      "def": 800,
+      "level": 4,
+      "propertyIds": [
+        "9",
+        "4"
+      ],
+      "properties": [
+        "Machine",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "9",
+        "4"
+      ],
+      "monsterProperties": [
+        "Machine",
+        "Effect"
+      ]
+    },
+    {
+      "id": "24010",
+      "name": "溟淵方界神アビス・ヴァグラーダ",
+      "cnName": "溟渊方界神 深渊伐萝陀",
+      "jaName": "溟淵方界神アビス・ヴァグラーダ",
+      "aliases": [
+        "溟淵方界神アビス・ヴァグラーダ",
+        "溟渊方界神 深渊伐萝陀"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "溟渊方界神 深渊伐萝陀",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24010"
+        }
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Fiend",
+      "attribute": "water",
+      "attack": 0,
+      "defense": 0,
+      "atk": 0,
+      "def": 0,
+      "level": 8,
+      "propertyIds": [
+        "14",
+        "11",
+        "4"
+      ],
+      "properties": [
+        "Fiend",
+        "Fusion",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "14",
+        "11",
+        "4"
+      ],
+      "monsterProperties": [
+        "Fiend",
+        "Fusion",
+        "Effect"
+      ]
+    },
+    {
+      "id": "24009",
+      "name": "燎炎方界神アルディティア・ヘル・ブレイズ",
+      "cnName": "燎炎方界神 狱焰之阿底提",
+      "jaName": "燎炎方界神アルディティア・ヘル・ブレイズ",
+      "aliases": [
+        "燎炎方界神アルディティア・ヘル・ブレイズ",
+        "燎炎方界神 狱焰之阿底提"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "燎炎方界神 狱焰之阿底提",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24009"
+        }
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Fiend",
+      "attribute": "fire",
+      "attack": 0,
+      "defense": 0,
+      "atk": 0,
+      "def": 0,
+      "level": 6,
+      "propertyIds": [
+        "14",
+        "11",
+        "4"
+      ],
+      "properties": [
+        "Fiend",
+        "Fusion",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "14",
+        "11",
+        "4"
+      ],
+      "monsterProperties": [
+        "Fiend",
+        "Fusion",
+        "Effect"
+      ]
+    },
+    {
+      "id": "24017",
+      "name": "アクア・リヴァイアサン＠マリンセス",
+      "cnName": "水海龙@海晶少女",
+      "jaName": "アクア・リヴァイアサン＠マリンセス",
+      "aliases": [
+        "アクア・リヴァイアサン＠マリンセス",
+        "水海龙@海晶少女"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "水海龙@海晶少女",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24017"
+        }
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Cyberse",
+      "attribute": "water",
+      "attack": 2300,
+      "defense": 2000,
+      "atk": 2300,
+      "def": 2000,
+      "level": 7,
+      "propertyIds": [
+        "30",
+        "27",
+        "4"
+      ],
+      "properties": [
+        "Cyberse",
+        "Ritual",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "30",
+        "27",
+        "4"
+      ],
+      "monsterProperties": [
+        "Cyberse",
+        "Ritual",
+        "Effect"
+      ]
+    },
+    {
+      "id": "24024",
+      "name": "ゴーストリックの妖狐",
+      "cnName": "鬼计妖狐",
+      "jaName": "ゴーストリックの妖狐",
+      "aliases": [
+        "ゴーストリックの妖狐",
+        "鬼计妖狐"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "鬼计妖狐",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24024"
+        }
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Spellcaster",
+      "attribute": "dark",
+      "attack": 900,
+      "defense": 900,
+      "atk": 900,
+      "def": 900,
+      "rank": 2,
+      "propertyIds": [
+        "8",
+        "18",
+        "4"
+      ],
+      "properties": [
+        "Spellcaster",
+        "Xyz",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "8",
+        "18",
+        "4"
+      ],
+      "monsterProperties": [
+        "Spellcaster",
+        "Xyz",
+        "Effect"
+      ]
+    },
+    {
+      "id": "24027",
+      "name": "ゴーストリック・アート",
+      "cnName": "鬼计艺术",
+      "jaName": "ゴーストリック・アート",
+      "aliases": [
+        "ゴーストリック・アート",
+        "鬼计艺术"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "鬼计艺术",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24027"
+        }
+      ],
+      "released": true,
+      "type": "spell",
+      "cardType": "spell",
+      "properties": [
+        "quickplay"
+      ]
+    },
+    {
+      "id": "24026",
+      "name": "ゴーストリック・ガーデン",
+      "cnName": "鬼计花园",
+      "jaName": "ゴーストリック・ガーデン",
+      "aliases": [
+        "ゴーストリック・ガーデン",
+        "鬼计花园"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "鬼计花园",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24026"
+        }
+      ],
+      "released": true,
+      "type": "spell",
+      "cardType": "spell",
+      "properties": [
+        "field"
+      ]
+    },
+    {
+      "id": "24022",
+      "name": "ゴーストリック・スパンキー",
+      "cnName": "鬼计鬼火",
+      "jaName": "ゴーストリック・スパンキー",
+      "aliases": [
+        "ゴーストリック・スパンキー",
+        "鬼计鬼火"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "鬼计鬼火",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24022"
+        }
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Fiend",
+      "attribute": "dark",
+      "attack": 300,
+      "defense": 200,
+      "atk": 300,
+      "def": 200,
+      "level": 1,
+      "propertyIds": [
+        "14",
+        "4"
+      ],
+      "properties": [
+        "Fiend",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "14",
+        "4"
+      ],
+      "monsterProperties": [
+        "Fiend",
+        "Effect"
+      ]
+    },
+    {
+      "id": "24028",
+      "name": "ゴーストリック・フリーズ",
+      "cnName": "鬼计冻结",
+      "jaName": "ゴーストリック・フリーズ",
+      "aliases": [
+        "ゴーストリック・フリーズ",
+        "鬼计冻结"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "鬼计冻结",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24028"
+        }
+      ],
+      "released": true,
+      "type": "trap",
+      "cardType": "trap",
+      "properties": [
+        "continuous"
+      ]
+    },
+    {
+      "id": "24025",
+      "name": "ゴーストリック・マスター アルカード",
+      "cnName": "鬼计之主 阿鲁卡德",
+      "jaName": "ゴーストリック・マスター アルカード",
+      "aliases": [
+        "ゴーストリック・マスター アルカード",
+        "鬼计之主 阿鲁卡德"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "鬼计之主 阿鲁卡德",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24025"
+        }
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Zombie",
+      "attribute": "dark",
+      "attack": 2800,
+      "defense": 2600,
+      "atk": 2800,
+      "def": 2600,
+      "rank": 6,
+      "propertyIds": [
+        "32",
+        "18",
+        "4"
+      ],
+      "properties": [
+        "Zombie",
+        "Xyz",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "32",
+        "18",
+        "4"
+      ],
+      "monsterProperties": [
+        "Zombie",
+        "Xyz",
+        "Effect"
+      ]
+    },
+    {
+      "id": "24023",
+      "name": "ゴーストリック・リッチー",
+      "cnName": "鬼计巫妖",
+      "jaName": "ゴーストリック・リッチー",
+      "aliases": [
+        "ゴーストリック・リッチー",
+        "鬼计巫妖"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "鬼计巫妖",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24023"
+        }
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Zombie",
+      "attribute": "dark",
+      "attack": 1500,
+      "defense": 600,
+      "atk": 1500,
+      "def": 600,
+      "level": 3,
+      "propertyIds": [
+        "32",
+        "4"
+      ],
+      "properties": [
+        "Zombie",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "32",
+        "4"
+      ],
+      "monsterProperties": [
+        "Zombie",
+        "Effect"
+      ]
+    },
+    {
       "id": "6053",
       "name": "7",
       "cnName": "7",
@@ -961375,6 +961954,241 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "6053"
+        }
+      ],
+      "released": true,
+      "type": "spell",
+      "cardType": "spell",
+      "properties": [
+        "continuous"
+      ]
+    },
+    {
+      "id": "24015",
+      "name": "海晶乙女アズリー",
+      "cnName": "海晶少女 蓝鲷",
+      "jaName": "海晶乙女アズリー",
+      "aliases": [
+        "海晶乙女アズリー",
+        "海晶少女 蓝鲷"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "海晶少女 蓝鲷",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24015"
+        }
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Cyberse",
+      "attribute": "water",
+      "attack": 1600,
+      "defense": 1000,
+      "atk": 1600,
+      "def": 1000,
+      "level": 3,
+      "propertyIds": [
+        "30",
+        "4"
+      ],
+      "properties": [
+        "Cyberse",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "30",
+        "4"
+      ],
+      "monsterProperties": [
+        "Cyberse",
+        "Effect"
+      ]
+    },
+    {
+      "id": "24016",
+      "name": "海晶乙女ウルピス",
+      "cnName": "海晶少女 狐狸倒吊",
+      "jaName": "海晶乙女ウルピス",
+      "aliases": [
+        "海晶乙女ウルピス",
+        "海晶少女 狐狸倒吊"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "海晶少女 狐狸倒吊",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24016"
+        }
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Cyberse",
+      "attribute": "water",
+      "attack": 600,
+      "defense": 2400,
+      "atk": 600,
+      "def": 2400,
+      "level": 5,
+      "propertyIds": [
+        "30",
+        "4"
+      ],
+      "properties": [
+        "Cyberse",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "30",
+        "4"
+      ],
+      "monsterProperties": [
+        "Cyberse",
+        "Effect"
+      ]
+    },
+    {
+      "id": "24019",
+      "name": "海晶乙女トゥルースハート",
+      "cnName": "海晶少女 真理心",
+      "jaName": "海晶乙女トゥルースハート",
+      "aliases": [
+        "海晶乙女トゥルースハート",
+        "海晶少女 真理心"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "海晶少女 真理心",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24019"
+        }
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Cyberse",
+      "attribute": "water",
+      "attack": 2800,
+      "atk": 2800,
+      "link": 4,
+      "linkRating": 4,
+      "linkArrows": "8613",
+      "propertyIds": [
+        "30",
+        "23",
+        "4"
+      ],
+      "properties": [
+        "Cyberse",
+        "Link",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "30",
+        "23",
+        "4"
+      ],
+      "monsterProperties": [
+        "Cyberse",
+        "Link",
+        "Effect"
+      ]
+    },
+    {
+      "id": "24018",
+      "name": "海晶乙女ブルークリスタルハート",
+      "cnName": "海晶少女 蓝水晶心",
+      "jaName": "海晶乙女ブルークリスタルハート",
+      "aliases": [
+        "海晶乙女ブルークリスタルハート",
+        "海晶少女 蓝水晶心"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "海晶少女 蓝水晶心",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24018"
+        }
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Cyberse",
+      "attribute": "water",
+      "attack": 0,
+      "atk": 0,
+      "link": 2,
+      "linkRating": 2,
+      "linkArrows": "13",
+      "propertyIds": [
+        "30",
+        "23",
+        "4"
+      ],
+      "properties": [
+        "Cyberse",
+        "Link",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "30",
+        "23",
+        "4"
+      ],
+      "monsterProperties": [
+        "Cyberse",
+        "Link",
+        "Effect"
+      ]
+    },
+    {
+      "id": "24021",
+      "name": "海晶乙女神流",
+      "cnName": "海晶少女神流",
+      "jaName": "海晶乙女神流",
+      "aliases": [
+        "海晶乙女神流",
+        "海晶少女神流"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "海晶少女神流",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24021"
+        }
+      ],
+      "released": true,
+      "type": "trap",
+      "cardType": "trap"
+    },
+    {
+      "id": "24020",
+      "name": "海晶乙女の礁湖",
+      "cnName": "海晶少女的礁湖",
+      "jaName": "海晶乙女の礁湖",
+      "aliases": [
+        "海晶乙女の礁湖",
+        "海晶少女的礁湖"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "海晶少女的礁湖",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24020"
         }
       ],
       "released": true,
