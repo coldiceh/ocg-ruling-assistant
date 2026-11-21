@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-20T02:34:24.734Z",
+  "generatedAt": "2026-11-21T02:51:48.768Z",
   "records": [
     {
       "id": "21385",
@@ -961344,13 +961344,21 @@
       "jaName": "創世方界超神ディヴァイン・アニマ・インフィニティ",
       "aliases": [
         "創世方界超神ディヴァイン・アニマ・インフィニティ",
-        "创世方界超神 无穷圣魂"
+        "创世方界超神 无穷圣魂",
+        "创世方界超神 天神之魂天·无穷"
       ],
       "chineseNameSources": [
         {
           "name": "创世方界超神 无穷圣魂",
           "source": "baige",
           "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24011"
+        },
+        {
+          "name": "创世方界超神 天神之魂天·无穷",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "24011"
         }
@@ -961402,6 +961410,13 @@
           "sourceField": "cn_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "24014"
+        },
+        {
+          "name": "方界防阵",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24014"
         }
       ],
       "released": true,
@@ -961425,6 +961440,13 @@
           "name": "方界领域",
           "source": "baige",
           "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24012"
+        },
+        {
+          "name": "方界领域",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "24012"
         }
@@ -961452,6 +961474,13 @@
           "sourceField": "cn_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "24013"
+        },
+        {
+          "name": "方界觉",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24013"
         }
       ],
       "released": true,
@@ -961468,13 +961497,21 @@
       "jaName": "無窮方界器プリティマ",
       "aliases": [
         "無窮方界器プリティマ",
-        "无穷方界器 地天"
+        "无穷方界器 地天",
+        "无穷方界器 生祖"
       ],
       "chineseNameSources": [
         {
           "name": "无穷方界器 地天",
           "source": "baige",
           "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24008"
+        },
+        {
+          "name": "无穷方界器 生祖",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "24008"
         }
@@ -961513,13 +961550,21 @@
       "jaName": "溟淵方界神アビス・ヴァグラーダ",
       "aliases": [
         "溟淵方界神アビス・ヴァグラーダ",
-        "溟渊方界神 深渊伐萝陀"
+        "溟渊方界神 深渊伐萝陀",
+        "溟渊方界神 深渊之伐格楼达"
       ],
       "chineseNameSources": [
         {
           "name": "溟渊方界神 深渊伐萝陀",
           "source": "baige",
           "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24010"
+        },
+        {
+          "name": "溟渊方界神 深渊之伐格楼达",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "24010"
         }
@@ -961562,13 +961607,21 @@
       "jaName": "燎炎方界神アルディティア・ヘル・ブレイズ",
       "aliases": [
         "燎炎方界神アルディティア・ヘル・ブレイズ",
-        "燎炎方界神 狱焰之阿底提"
+        "燎炎方界神 狱焰之阿底提",
+        "燎炎方界神 狱焰之阿尔底提亚"
       ],
       "chineseNameSources": [
         {
           "name": "燎炎方界神 狱焰之阿底提",
           "source": "baige",
           "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24009"
+        },
+        {
+          "name": "燎炎方界神 狱焰之阿尔底提亚",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "24009"
         }
@@ -961611,13 +961664,21 @@
       "jaName": "アクア・リヴァイアサン＠マリンセス",
       "aliases": [
         "アクア・リヴァイアサン＠マリンセス",
-        "水海龙@海晶少女"
+        "水海龙@海晶少女",
+        "水波海龙@海晶少女"
       ],
       "chineseNameSources": [
         {
           "name": "水海龙@海晶少女",
           "source": "baige",
           "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24017"
+        },
+        {
+          "name": "水波海龙@海晶少女",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "24017"
         }
@@ -961669,6 +961730,13 @@
           "sourceField": "cn_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "24024"
+        },
+        {
+          "name": "鬼计妖狐",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24024"
         }
       ],
       "released": true,
@@ -961709,13 +961777,21 @@
       "jaName": "ゴーストリック・アート",
       "aliases": [
         "ゴーストリック・アート",
-        "鬼计艺术"
+        "鬼计艺术",
+        "鬼计错视画"
       ],
       "chineseNameSources": [
         {
           "name": "鬼计艺术",
           "source": "baige",
           "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24027"
+        },
+        {
+          "name": "鬼计错视画",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "24027"
         }
@@ -961743,6 +961819,13 @@
           "sourceField": "cn_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "24026"
+        },
+        {
+          "name": "鬼计花园",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24026"
         }
       ],
       "released": true,
@@ -961759,13 +961842,21 @@
       "jaName": "ゴーストリック・スパンキー",
       "aliases": [
         "ゴーストリック・スパンキー",
-        "鬼计鬼火"
+        "鬼计鬼火",
+        "鬼计小鬼火"
       ],
       "chineseNameSources": [
         {
           "name": "鬼计鬼火",
           "source": "baige",
           "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24022"
+        },
+        {
+          "name": "鬼计小鬼火",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "24022"
         }
@@ -961804,13 +961895,21 @@
       "jaName": "ゴーストリック・フリーズ",
       "aliases": [
         "ゴーストリック・フリーズ",
-        "鬼计冻结"
+        "鬼计冻结",
+        "鬼计结冰"
       ],
       "chineseNameSources": [
         {
           "name": "鬼计冻结",
           "source": "baige",
           "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24028"
+        },
+        {
+          "name": "鬼计结冰",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "24028"
         }
@@ -961829,13 +961928,21 @@
       "jaName": "ゴーストリック・マスター アルカード",
       "aliases": [
         "ゴーストリック・マスター アルカード",
-        "鬼计之主 阿鲁卡德"
+        "鬼计之主 阿鲁卡德",
+        "鬼计妖魔之主 阿鲁卡德"
       ],
       "chineseNameSources": [
         {
           "name": "鬼计之主 阿鲁卡德",
           "source": "baige",
           "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24025"
+        },
+        {
+          "name": "鬼计妖魔之主 阿鲁卡德",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "24025"
         }
@@ -961885,6 +961992,13 @@
           "name": "鬼计巫妖",
           "source": "baige",
           "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24023"
+        },
+        {
+          "name": "鬼计巫妖",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "24023"
         }
@@ -961979,6 +962093,13 @@
           "sourceField": "cn_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "24015"
+        },
+        {
+          "name": "海晶少女 蓝鲷",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24015"
         }
       ],
       "released": true,
@@ -962015,13 +962136,21 @@
       "jaName": "海晶乙女ウルピス",
       "aliases": [
         "海晶乙女ウルピス",
-        "海晶少女 狐狸倒吊"
+        "海晶少女 狐狸倒吊",
+        "海晶少女 狐蓝子鱼"
       ],
       "chineseNameSources": [
         {
           "name": "海晶少女 狐狸倒吊",
           "source": "baige",
           "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24016"
+        },
+        {
+          "name": "海晶少女 狐蓝子鱼",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "24016"
         }
@@ -962060,13 +962189,21 @@
       "jaName": "海晶乙女トゥルースハート",
       "aliases": [
         "海晶乙女トゥルースハート",
-        "海晶少女 真理心"
+        "海晶少女 真理心",
+        "海晶少女 真晶心"
       ],
       "chineseNameSources": [
         {
           "name": "海晶少女 真理心",
           "source": "baige",
           "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24019"
+        },
+        {
+          "name": "海晶少女 真晶心",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "24019"
         }
@@ -962118,6 +962255,13 @@
           "sourceField": "cn_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "24018"
+        },
+        {
+          "name": "海晶少女 蓝水晶心",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24018"
         }
       ],
       "released": true,
@@ -962167,6 +962311,13 @@
           "sourceField": "cn_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "24021"
+        },
+        {
+          "name": "海晶少女神流",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24021"
         }
       ],
       "released": true,
@@ -962187,6 +962338,13 @@
           "name": "海晶少女的礁湖",
           "source": "baige",
           "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24020"
+        },
+        {
+          "name": "海晶少女的礁湖",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "24020"
         }
