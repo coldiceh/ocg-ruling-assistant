@@ -210,11 +210,11 @@ test("presentation state never leaks between external_api and web calls", () => 
 });
 
 test("contact messages share the configured author identity", () => {
-  assert.equal(DEFAULT_AUTHOR_CONTACT_TEXT, "B站 おmaginai，或 QQ 1195362230");
+  assert.equal(DEFAULT_AUTHOR_CONTACT_TEXT, "B站 おmaginai（https://space.bilibili.com/398617002）");
   assert.equal(resolveAuthorContactText({}), DEFAULT_AUTHOR_CONTACT_TEXT);
   assert.equal(
     formatAuthorContactSentence("如有需要，请联系作者", {}),
-    "如有需要，请联系作者：B站 おmaginai，或 QQ 1195362230。",
+    "如有需要，请联系作者：B站 おmaginai（https://space.bilibili.com/398617002）。",
   );
   assert.equal(resolveAuthorContactText({ AUTHOR_CONTACT_TEXT: "自定义公开联系方式" }), "自定义公开联系方式");
 
@@ -228,8 +228,8 @@ test("contact messages share the configured author identity", () => {
     env: {},
   });
   for (const answer of [triggered, blocked]) {
-    assert.match(answer.shortAnswer, /QQ 1195362230/u);
-    assert.match(answer.shortAnswer, /B站 おmaginai/u);
+    assert.doesNotMatch(answer.shortAnswer, /QQ/u);
+    assert.match(answer.shortAnswer, /B站 おmaginai（https:\/\/space\.bilibili\.com\/398617002）/u);
     assert.match(answer.shortAnswer, /如需提前解除/u);
   }
   assert.match(triggered.shortAnswer, /系统自动关闭 12 分钟/u);

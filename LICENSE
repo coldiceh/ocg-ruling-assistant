@@ -1,6 +1,6 @@
-MIT License
+OCG Ruling Assistant License (MIT License with an attribution condition)
 
-Copyright (c) 2026 Yu-Gi-Oh! OCG AI Rulings contributors
+Copyright (c) 2026 おmaginai (GitHub: coldiceh)
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -9,8 +9,32 @@ to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 copies of the Software, and to permit persons to whom the Software is
 furnished to do so, subject to the following conditions:
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+1. The above copyright notice and this permission notice shall be included in
+   all copies or substantial portions of the Software.
+
+2. Attribution. Any website, bot, application, API or other service that runs
+   the Software, a modified version of it, or a substantial portion of it must
+   show the following notice to its users, clearly visible in its user
+   interface and at the end of every answer it returns:
+
+       Based on the OCG Ruling Assistant by おmaginai
+       https://github.com/coldiceh/ocg-ruling-assistant
+
+   An equivalent notice in another language is acceptable if it names
+   おmaginai and links to that repository, for example:
+
+       基于 おmaginai 的游戏王裁定助手 https://github.com/coldiceh/ocg-ruling-assistant
+
+   The notice must not be removed, hidden, or changed so that anyone else is
+   credited as the author. Doing so ends the permissions granted above.
+
+3. Versions of the Software published before this attribution condition was
+   added remain available under the MIT License they were published with.
+
+This license covers the code and documentation written for this project.
+Card text, official Q&A, rule documents and other third-party data in this
+repository belong to their respective rights holders and are not licensed
+here.
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
