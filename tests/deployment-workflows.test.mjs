@@ -86,14 +86,11 @@ test("data sync rebuilds and commits the versioned RAG runtime before synchroniz
   assert.ok(verifyRuntime < parity && parity < snapshotTests);
   assert.match(publication, /git add -u -- data/u);
   assert.match(publication, /git add data\/\*\.json data\/\*\.json\.gz data\/rag-runtime-v1\/\*\* data\/cloud-evidence-v1\/\*\*/u);
-  assert.match(workflow, /cp data\/cards-lite\.json data\/snapshot-meta\.json public\/data\//u);
   const snapshotDiff = workflow.indexOf("pnpm diff:rulings");
-  const publicCopy = workflow.indexOf("cp data/cards-lite.json data/snapshot-meta.json public/data/");
-  assert.ok(snapshotDiff >= 0 && snapshotDiff < publicCopy && publicCopy < snapshotTests,
-    "public metadata must be copied after the current snapshot diff is written");
-  const metadata = await readFile(new URL("../data/snapshot-meta.json", import.meta.url), "utf8");
-  const publicMetadata = await readFile(new URL("../public/data/snapshot-meta.json", import.meta.url), "utf8");
-  assert.equal(publicMetadata.replaceAll("\r\n", "\n"), metadata.replaceAll("\r\n", "\n"));
+  assert.ok(snapshotDiff >= 0 && snapshotDiff < snapshotTests, "the snapshot diff must run before snapshot tests");
+  // public/ is build output (scripts/build-web-assets.mjs); synced data is published only under data/.
+  assert.doesNotMatch(workflow, /public\/data/u);
+  assert.doesNotMatch(publication, /public\/data/u);
 });
 
 test("data sync runs the bounded synchronization checks and keeps the complete suite separate", async () => {
@@ -164,7 +161,7 @@ test("concurrent publication rechecks the combined snapshot and retains the orig
   assert.ok(publication.indexOf('echo "snapshot_commit=') < publication.indexOf("git fetch"));
   assert.match(workflow, /failure\(\) && steps\.commit\.outputs\.snapshot_commit != ''/u);
   assert.match(workflow, /SNAPSHOT_COMMIT: \$\{\{ steps\.commit\.outputs\.snapshot_commit \}\}/u);
-  assert.match(workflow, /git archive[^\n]*unpublished-synced-rag-data\.tar[\s\S]*"\$SNAPSHOT_COMMIT" -- data public\/data\/cards-lite\.json public\/data\/snapshot-meta\.json/u);
+  assert.match(workflow, /git archive[^\n]*unpublished-synced-rag-data\.tar[\s\S]*"\$SNAPSHOT_COMMIT" -- data\n/u);
   assert.ok(workflow.indexOf("name: Preserve the unpublished generated snapshot") > workflow.indexOf("id: commit"));
 });
 

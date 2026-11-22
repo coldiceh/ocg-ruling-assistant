@@ -48,21 +48,15 @@ test("public exact mode remains rejected by the endpoint", async () => {
 });
 
 test("player page has no visible or operable exact-question entry", async () => {
-  const [html, app, publishedHtml, publishedApp] = await Promise.all([
+  // public/ is generated from these sources by scripts/build-web-assets.mjs at deploy time.
+  const [html, app] = await Promise.all([
     readFile(new URL("../index.html", import.meta.url), "utf8"),
     readFile(new URL("../src/app.js", import.meta.url), "utf8"),
-    readFile(new URL("../public/index.html", import.meta.url), "utf8"),
-    readFile(new URL("../public/src/app.js", import.meta.url), "utf8"),
   ]);
 
-  for (const [label, source] of [["index.html", html], ["public/index.html", publishedHtml]]) {
-    assert.doesNotMatch(source, /找原题/u, label);
-  }
-  for (const [label, source] of [["src/app.js", app], ["public/src/app.js", publishedApp]]) {
-    assert.doesNotMatch(source, /\/api\/answer\/exact|mode\s*:\s*["']exact["']/u, label);
-  }
+  assert.doesNotMatch(html, /找原题/u, "index.html");
+  assert.doesNotMatch(app, /\/api\/answer\/exact|mode\s*:\s*["']exact["']/u, "src/app.js");
   assert.match(app, /const backendMode = ["']rag["']/u);
-  assert.match(publishedApp, /const backendMode = ["']rag["']/u);
 });
 
 function createJsonResponse() {

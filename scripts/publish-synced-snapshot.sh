@@ -5,7 +5,7 @@ checked_out_main="$(git rev-parse HEAD)"
 git config user.name "github-actions[bot]"
 git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 git add -u -- data
-git add data/*.json data/*.json.gz data/rag-runtime-v1/** data/cloud-evidence-v1/** public/data/cards-lite.json public/data/snapshot-meta.json
+git add data/*.json data/*.json.gz data/rag-runtime-v1/** data/cloud-evidence-v1/**
 for asset_dir in data/gemini-rule-qa-v1 data/rule-embedding-v1 data/qa-embedding-v1; do
   if [ -d "$asset_dir" ]; then git add -A -- "$asset_dir"; fi
 done

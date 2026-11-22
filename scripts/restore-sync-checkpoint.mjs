@@ -88,7 +88,7 @@ export async function restoreCheckpoint({runId,sequence,repo,currentRunId,worksp
   const proof=validateCheckpointRun(run,jobs,{repo,runId,currentRunId});
   const git=args=>command('git',args,{cwd:workspace});
   await git(['merge-base','--is-ancestor',proof.headSha,'HEAD']);
-  if(await git(['diff','--name-only',proof.headSha,'HEAD','--','data','public/data/cards-lite.json','public/data/snapshot-meta.json'])) fail('sync_checkpoint_published_base_changed');
+  if(await git(['diff','--name-only',proof.headSha,'HEAD','--','data'])) fail('sync_checkpoint_published_base_changed');
   const artifacts=await api(`${endpoint}/artifacts?per_page=100`);
   const matches=(artifacts.artifacts||[]).filter(a=>a.name===proof.artifactName&&!a.expired);
   if(matches.length!==1 || String(matches[0].workflow_run?.id)!==runId) fail('sync_checkpoint_artifact_missing_or_ambiguous');
@@ -101,8 +101,6 @@ export async function restoreCheckpoint({runId,sequence,repo,currentRunId,worksp
     if(directories.has(entry.name)||(entry.isFile()&&/\.json(?:\.gz)?$/.test(entry.name))) await fs.rm(path.join(target,entry.name),{recursive:true,force:true});
   }
   await fs.cp(destination,target,{recursive:true,force:true});
-  await fs.mkdir(path.join(workspace,'public/data'),{recursive:true});
-  for(const file of ['cards-lite.json','snapshot-meta.json']) await fs.copyFile(path.join(target,file),path.join(workspace,'public/data',file));
   await output({resumed:'true',resume_sequence:sequence});
   console.log(`SYNC RESTORED: run ${runId}; frozen revision ${verified.dataRevision}; source fetching and paid stages will be skipped.`);
 }

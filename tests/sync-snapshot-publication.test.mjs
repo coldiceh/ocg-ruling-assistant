@@ -32,8 +32,7 @@ async function write(directory, file, content) {
 async function snapshot(directory, revision) {
   const text = `${JSON.stringify({ revision })}\n`;
   for (const file of ["data/cards.json", "data/cards-lite.json", "data/snapshot-meta.json",
-    "data/rag-runtime-v1/manifest.json", "data/cloud-evidence-v1/corpus-manifest.json",
-    "public/data/cards-lite.json", "public/data/snapshot-meta.json"]) {
+    "data/rag-runtime-v1/manifest.json", "data/cloud-evidence-v1/corpus-manifest.json"]) {
     await write(directory, file, text);
   }
   await write(directory, "data/cards.json.gz", gzipSync(text));
@@ -119,7 +118,7 @@ async function run(f, extraEnv = {}) {
 function assertSnapshotRetained(f, result) {
   assert.match(result.outputs.snapshot_commit || "", /^[0-9a-f]{40}$/u, result.stdout + result.stderr);
   assert.equal(git(f.working, "show", `${result.outputs.snapshot_commit}:data/cards.json`), '{"revision":"generated"}');
-  assert.equal(git(f.working, "show", `${result.outputs.snapshot_commit}:public/data/cards-lite.json`), '{"revision":"generated"}');
+  assert.equal(git(f.working, "show", `${result.outputs.snapshot_commit}:data/cards-lite.json`), '{"revision":"generated"}');
 }
 
 test("publishes changed data on unchanged main without repeating validation", async context => {
