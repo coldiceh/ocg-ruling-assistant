@@ -44,7 +44,9 @@ test('final answer exposes every pending identity in ordinary API text without c
   assert.deepEqual(result.resolvedCards.map(card => card.id), ['confirmed']);
   const { debug, ...ordinaryAnswer } = result;
   const publicAnswer = presentPublicAnswer(ordinaryAnswer, { channel: PUBLIC_REQUEST_CHANNELS.EXTERNAL_API, env: {} });
-  assert.equal(publicAnswer.shortAnswer, `${result.shortAnswer}\n\n网页端体验完整内容：https://coldiceh.github.io/ocg-ruling-assistant/`);
+  assert.equal(publicAnswer.shortAnswer, `${result.shortAnswer}\n\n网页端体验完整内容：https://coldiceh.github.io/ocg-ruling-assistant/\n`
+    + "觉得有用求关注作者 B站 おmaginai：https://space.bilibili.com/398617002\n"
+    + "也求给项目点个 Star：https://github.com/coldiceh/ocg-ruling-assistant");
 });
 
 test('final answer with no pending identities preserves the original answer text', async () => {

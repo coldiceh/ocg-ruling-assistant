@@ -20,7 +20,12 @@ const webBody = {
   rulingVersion: "latest",
 };
 const testNotice = "外部表示テスト通知";
-const webNotice = "网页端体验完整内容：https://coldiceh.github.io/ocg-ruling-assistant/";
+// The external notice ends with the web link and the author's follow / Star request.
+const webNotice = [
+  "网页端体验完整内容：https://coldiceh.github.io/ocg-ruling-assistant/",
+  "觉得有用求关注作者 B站 おmaginai：https://space.bilibili.com/398617002",
+  "也求给项目点个 Star：https://github.com/coldiceh/ocg-ruling-assistant",
+].join("\n");
 
 test("the current browser request contract is classified as web", () => {
   assert.equal(classifyPublicRequestChannel(webBody), PUBLIC_REQUEST_CHANNELS.WEB);

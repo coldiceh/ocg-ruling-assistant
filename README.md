@@ -4,6 +4,8 @@
 
 [试玩 TCG（默认英文）](https://tcg-ruling-assistant.vercel.app/) · [使用 OCG](https://coldiceh.github.io/ocg-ruling-assistant/) · [问题反馈](https://github.com/coldiceh/ocg-ruling-assistant/issues)
 
+作者：B站 [おmaginai](https://space.bilibili.com/398617002)。觉得有用求关注 B 站，也求给项目点个 Star ⭐
+
 结合卡片文本和可查阅的来源分析游戏王裁定问题。OCG 版与 TCG 公开试用版提供独立入口；回答会展示依据和仍需核对的地方。
 
 它不是 KONAMI 官方项目，也不替代正式比赛的现场裁判。

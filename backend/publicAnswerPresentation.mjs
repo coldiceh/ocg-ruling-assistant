@@ -6,6 +6,15 @@ export const PUBLIC_REQUEST_CHANNELS = Object.freeze({
 
 export const DEFAULT_AUTHOR_CONTACT_TEXT = "B站 おmaginai，或 QQ 1195362230";
 
+export const AUTHOR_BILIBILI_URL = "https://space.bilibili.com/398617002";
+export const PROJECT_GITHUB_URL = "https://github.com/coldiceh/ocg-ruling-assistant";
+// Appended to every external_api (bot) answer, one URL per line so chat
+// clients do not swallow trailing punctuation into the link.
+export const AUTHOR_FOLLOW_LINES = Object.freeze([
+  `觉得有用求关注作者 B站 おmaginai：${AUTHOR_BILIBILI_URL}`,
+  `也求给项目点个 Star：${PROJECT_GITHUB_URL}`,
+]);
+
 const WEB_REQUEST_KEYS = Object.freeze([
   "mode",
   "question",
@@ -133,6 +142,7 @@ export function presentPublicAnswer(answer, {
     evidenceSupplementNote(answer),
     String(env.EXTERNAL_API_TEST_NOTICE || "").trim(),
     "网页端体验完整内容：https://coldiceh.github.io/ocg-ruling-assistant/",
+    ...AUTHOR_FOLLOW_LINES,
   ].filter((text) => text && !shortAnswer.includes(text)).join("\n");
   if (!notice || !shortAnswer.trim()) {
     return { ...answer };

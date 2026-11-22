@@ -4,6 +4,8 @@
 
 [Try TCG — English by default](https://tcg-ruling-assistant.vercel.app/) · [Use OCG](https://coldiceh.github.io/ocg-ruling-assistant/) · [Report an issue](https://github.com/coldiceh/ocg-ruling-assistant/issues)
 
+Author: [おmaginai on Bilibili](https://space.bilibili.com/398617002). If it helps, please follow on Bilibili and star the project ⭐
+
 Analyze Yu-Gi-Oh! ruling questions with card text and sources you can inspect. The OCG assistant and TCG public preview have separate demos, with cited evidence and conditions that still need review.
 
 It is not an official KONAMI project and does not replace an event judge.

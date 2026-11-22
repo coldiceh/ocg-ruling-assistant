@@ -4,6 +4,8 @@
 
 [TCG を試す（既定は英語）](https://tcg-ruling-assistant.vercel.app/) · [OCG を使う](https://coldiceh.github.io/ocg-ruling-assistant/) · [問題を報告する](https://github.com/coldiceh/ocg-ruling-assistant/issues)
 
+作者：Bilibili の [おmaginai](https://space.bilibili.com/398617002)。役に立ったら Bilibili のフォローとプロジェクトへの Star をお願いします ⭐
+
 カードテキストと参照可能な資料をもとに、遊戯王の裁定問題を分析します。OCG 版と TCG 公開試用版にはそれぞれ専用の入口があり、回答の根拠と確認が必要な条件を表示します。
 
 KONAMI の公式プロジェクトではなく、公式大会におけるジャッジの判断に代わるものでもありません。
