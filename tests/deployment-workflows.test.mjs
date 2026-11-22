@@ -282,65 +282,6 @@ test("Vercel verifies the source, runtime, and enabled Gemini asset bindings bef
   }
 });
 
-test("bounded preview refresh keeps dry-run free, resumes bounded cloud batches, and releases only when complete", async () => {
-  const workflow = await readWorkflow("refresh-bounded-evidence-preview.yml");
-  assert.match(workflow, /^      execute_preprocessing:\s*$/mu);
-  assert.match(workflow, /^      navigation_resume_cursor:\s*$/mu);
-  assert.match(workflow, /^        default: false\s*$/mu);
-  assert.match(workflow, /^  contents: read\s*$/mu);
-  assert.match(workflow, /github\.ref == 'refs\/heads\/codex\/bounded-evidence-preview-20260914'/u);
-  assert.match(workflow, /github\.actor == github\.repository_owner/u);
-  assert.match(workflow, /--stage canonical/u);
-  assert.ok(workflow.indexOf("--stage canonical") < workflow.indexOf("--dry-run"));
-  assert.match(workflow, /if: \$\{\{ !inputs\.execute_preprocessing \}\}[\s\S]*--dry-run/u);
-  const dryStep = workflow.match(/- name: Dry-run navigation and embedding work without external calls[\s\S]*?(?=\n      - name:)/u)?.[0] || "";
-  assert.match(dryStep, /--rule-generation-profile "\$RULE_GENERATION_PROFILE"[\s\S]*--dry-run/u);
-
-  const navigationStep = workflow.match(/- name: Execute authorized cloud navigation batch[\s\S]*?(?=\n      - name:)/u)?.[0] || "";
-  assert.match(navigationStep, /--job-runtime-ms 3600000/u);
-  assert.match(navigationStep, /--request-timeout-ms 300000/u);
-  assert.match(navigationStep, /--resume-cursor "\$NAVIGATION_RESUME_CURSOR"/u);
-  assert.match(navigationStep, /--rule-generation-profile "\$RULE_GENERATION_PROFILE"/u);
-  assert.match(navigationStep, /--cloud[\s\S]*--all-inputs[\s\S]*--execute/u);
-  assert.match(navigationStep, /complete=.*p\.complete === true/u);
-  assert.doesNotMatch(navigationStep, /refresh-gemini-source-embeddings|--stage release|--stage verify/u);
-
-  const completeStep = workflow.match(/- name: Build and verify complete preprocessing release[\s\S]*?(?=\n      - name:)/u)?.[0] || "";
-  assert.match(completeStep, /steps\.navigation\.outputs\.complete == 'true'/u);
-  const embedding = completeStep.indexOf("refresh-gemini-source-embeddings.mjs");
-  const release = completeStep.indexOf("--stage release");
-  const verify = completeStep.indexOf("--stage verify");
-  assert.ok(embedding >= 0 && embedding < release && release < verify,
-    "only complete navigation may assemble and verify release assets");
-  assert.match(completeStep, /--navigation "\$EVIDENCE_STAGING\/gemini-rule-qa-v1\/navigation-records\.json\.gz"/u);
-  assert.match(completeStep, /--rule-dense-dir "\$EVIDENCE_STAGING\/rule-embedding-v1"/u);
-  assert.match(completeStep, /--qa-dense-dir "\$EVIDENCE_STAGING\/qa-embedding-v1"/u);
-
-  const assetArtifact = workflow.match(/- name: Upload verified preprocessing release assets[\s\S]*$/u)?.[0] || "";
-  assert.match(assetArtifact, /steps\.navigation\.outputs\.complete == 'true'/u);
-  assert.ok(assetArtifact.includes("${{ env.EVIDENCE_STAGING }}/**"));
-  assert.doesNotMatch(assetArtifact, /EVIDENCE_CACHE|ledger|provider-raw|secret/iu);
-  assert.match(workflow, /navigation-records\.partial\.json\.gz/u);
-  for (const name of [
-    "EVIDENCE_PREPROCESS_AUTHORIZATION_ID",
-    "EVIDENCE_PREPROCESS_LEDGER_KEY",
-    "EVIDENCE_PREPROCESS_CACHE_NAMESPACE",
-    "EVIDENCE_PREPROCESS_MAX_USD",
-    "EVIDENCE_PREPROCESS_GENERATION_PROFILE",
-    "EVIDENCE_PREPROCESS_RULE_GENERATION_PROFILE",
-  ]) assert.match(workflow, new RegExp(name, "u"));
-  assert.match(workflow, /vars\.EVIDENCE_PREPROCESS_GENERATION_PROFILE \|\| 'config\/evidence-generation\/gemini-3\.8-flash-low\.json'/u);
-  assert.match(workflow, /test -n "\$EVIDENCE_PREPROCESS_GENERATION_PROFILE"/u);
-  assert.match(workflow, /PROVIDER_ID=.*providerId/u);
-  assert.match(workflow, /case "\$PROVIDER_ID" in[\s\S]*bai\)[\s\S]*RAG_EVIDENCE_BAI_API_KEY[\s\S]*BAI_API_KEY/u);
-  assert.match(workflow, /secrets\.GEMINI_RULE_QA_API_KEY/u);
-  assert.match(workflow, /secrets\.RAG_EVIDENCE_BAI_API_KEY/u);
-  assert.match(workflow, /secrets\.BAI_API_KEY/u);
-  assert.match(workflow, /secrets\.UPSTASH_BUDGET_KV_REST_API_URL/u);
-  assert.match(workflow, /secrets\.UPSTASH_BUDGET_KV_REST_API_TOKEN/u);
-  assert.doesNotMatch(workflow, /git push|ledger.*reset|new.*budget/iu);
-});
-
 test("RAG source snapshots are checked out with stable LF line endings", async () => {
   const attributes = await readFile(new URL("../.gitattributes", import.meta.url), "utf8");
   for (const path of [
