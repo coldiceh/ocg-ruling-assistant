@@ -59,13 +59,6 @@ r = requests.post(
 print(r.json()["shortAnswer"])
 ```
 
-- Send only the `question` field; a body with other fields is handled as a web request. Questions can be up to 12,000 characters.
-- The reply is JSON. Post `shortAnswer` as it is: it already contains the conclusion, the engine replay when there is one, the web link, and the author's links. Other fields may change, so do not rely on them.
-- An answer usually takes 1–2 minutes and at most about 5 minutes; set your timeout to 300 seconds.
-- Requests are limited per source IP, by default 6 new questions per minute and 30 per hour. Over the limit you get HTTP 429 with a `Retry-After` header in seconds. The whole site shares one daily allowance.
-- Questions unrelated to Yu-Gi-Oh! rules or rulings are declined.
-- When you forward an answer, keep the web link and the follow / Star lines at the end.
-
 ## OCG evaluation: a fixed set of 50 questions
 
 These results apply only to this OCG question set. They are not TCG accuracy figures or a guarantee of correctness on other questions.
