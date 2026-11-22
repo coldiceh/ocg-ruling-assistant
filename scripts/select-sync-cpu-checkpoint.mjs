@@ -138,8 +138,7 @@ export async function selectCheckpoint({repo,currentRunId,workspace,temp,runId='
     if(job.steps.find(s=>s.name===name)?.conclusion !== 'success') fail('sync_checkpoint_preservation_unverified');
   }
   await command('git',['merge-base','--is-ancestor',proof.headSha,'HEAD'],{cwd:workspace});
-  const changed = await command('git',['diff','--name-only',proof.headSha,'HEAD','--','data',
-    'public/data/cards-lite.json','public/data/snapshot-meta.json'],{cwd:workspace});
+  const changed = await command('git',['diff','--name-only',proof.headSha,'HEAD','--','data'],{cwd:workspace});
   if(changed) {
     if(explicit) fail('sync_checkpoint_published_base_changed');
     return fresh();

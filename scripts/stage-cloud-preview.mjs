@@ -35,7 +35,7 @@ export function isPreviewSourcePath(path) {
   if (/^(?:api|backend)\/[A-Za-z0-9_-]+\.(?:mjs|js)$/u.test(path)) return true;
   if (/^src\/[A-Za-z0-9_-]+\.(?:mjs|js|css)$/u.test(path)) return true;
   if (/^assets\/[A-Za-z0-9_./-]+\.(?:png|jpg|jpeg|webp|svg|ico|woff2?)$/u.test(path)) return true;
-  if (/^public\/timing-test\.(?:html|js|css)$/u.test(path) || path === "public/.gitkeep") return true;
+  if (path === "public/.gitkeep") return true;
   if (path.startsWith("data/") && DATA_FILES.has(path.slice(5))) return true;
   if (/^data\/rag-runtime-v1\/(?:manifest\.json|(?:cards|records|qa-records|card-alias-index)\.json\.br)$/u.test(path)) return true;
   return /^data\/legacy-lua-semantic-cache-v2\/(?:manifest\.json|shards\/[a-f0-9]{2}\.json)$/u.test(path);

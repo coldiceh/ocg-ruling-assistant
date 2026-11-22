@@ -422,7 +422,7 @@ test("missing answer API fails closed instead of answering from local ruling not
 });
 
 test("unconfirmed model card names are shown only when they exactly join an unresolved or ambiguous mention", async () => {
-  const app = await readFile(new URL("../public/src/app.js", import.meta.url), "utf8");
+  const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
   const source = sourceBetween(app, "function pendingModelCardNames", "function renderCards");
   const pendingModelCardNames = new Function(`${source}; return pendingModelCardNames;`)();
   const names = pendingModelCardNames({

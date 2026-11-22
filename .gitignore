@@ -28,3 +28,7 @@ tests/fixtures/real-ruling-cases/
 
 # Retrieval comparison runs (scripts/bench) contain full answers, prompts and costs.
 /runs/
+
+# Build output: scripts/build-web-assets.mjs regenerates public/ on every deploy.
+/public/*
+!/public/.gitkeep

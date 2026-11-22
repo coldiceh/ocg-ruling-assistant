@@ -131,7 +131,6 @@ jobs:
         if: steps.restore.outputs.resumed != 'true'
         run: |
           pnpm diff:rulings
-          cp data/cards-lite.json data/snapshot-meta.json public/data/
 
       - name: Build current evidence index
         if: steps.restore.outputs.resumed != 'true'
@@ -376,7 +375,7 @@ jobs:
           SNAPSHOT_COMMIT: ${{ steps.commit.outputs.snapshot_commit }}
         run: |
           git archive --format=tar --output "$RUNNER_TEMP/unpublished-synced-rag-data.tar" \
-            "$SNAPSHOT_COMMIT" -- data public/data/cards-lite.json public/data/snapshot-meta.json
+            "$SNAPSHOT_COMMIT" -- data
 
       - name: Preserve the unpublished generated snapshot
         if: ${{ failure() && steps.commit.outputs.snapshot_commit != '' }}
