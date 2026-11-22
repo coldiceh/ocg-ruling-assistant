@@ -55,7 +55,11 @@ test('external API notice remains before the exact generated footer',async()=>{
   {},{readBudget:async()=>null});
   const shown=presentPublicAnswer(generated,{channel:PUBLIC_REQUEST_CHANNELS.EXTERNAL_API,
     env:{EXTERNAL_API_TEST_NOTICE:'External test notice'}});
-  assert.equal(shown.shortAnswer,'API answer\n\nExternal test notice\n\n实际最终模型：reported-model；请求推理强度：high');
+  assert.equal(shown.shortAnswer,'API answer\n\nExternal test notice\n'
+    +'网页端体验完整内容：https://coldiceh.github.io/ocg-ruling-assistant/\n'
+    +'觉得有用求关注作者 B站 おmaginai：https://space.bilibili.com/398617002\n'
+    +'也求给项目点个 Star：https://github.com/coldiceh/ocg-ruling-assistant'
+    +'\n\n实际最终模型：reported-model；请求推理强度：high');
 });
 
 test('prepare exports exactly the saved prompt and does not generate an answer',async()=>{

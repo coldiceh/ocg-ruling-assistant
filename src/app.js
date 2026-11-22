@@ -12,8 +12,11 @@ const visibleSourceTranslations = new Map();
 const pendingSourceTranslations = new Map();
 const uiTranslations = {
   en: {
-    "觉得好用？欢迎分享给朋友，也欢迎在 GitHub 点个 Star。": "Finding it useful? Share it with friends or give the project a star on GitHub.",
+    "觉得好用？求关注作者 B 站、求给项目点个 Star，也欢迎分享给朋友。": "Finding it useful? Please follow the author on Bilibili, star the project on GitHub, and share it with friends.",
+    "B 站关注 おmaginai": "Follow おmaginai on Bilibili",
     "给项目 Star": "Star on GitHub",
+    "觉得有用求关注作者 B 站": "Found it useful? Please follow the author on Bilibili",
+    "，也求给项目点个 Star：": "and star the project:",
     "输入问题": "Ask a question", "输入卡片、场面、连锁和需要判断的处理节点。": "Describe the cards, game state, Chain, and decision point.",
     "裁定模型": "Ruling model", "裁定流程": "Ruling process", "准备就绪": "Ready", "仅准备证据包": "Prepare evidence only", "仅引擎复现": "Engine replay only",
     "准备证据": "Evidence preparation", "Luna（默认）": "Luna (default)",
@@ -36,8 +39,11 @@ const uiTranslations = {
     "模型能力接口不可用；默认 GPT-6 Astra low 尚未确认可用。": "Model availability could not be checked; the default GPT-6 Astra low has not been verified.",
   },
   ja: {
-    "觉得好用？欢迎分享给朋友，也欢迎在 GitHub 点个 Star。": "役に立ったら、友達へのシェアや GitHub での Star をお願いします。",
+    "觉得好用？求关注作者 B 站、求给项目点个 Star，也欢迎分享给朋友。": "役に立ったら、作者の Bilibili のフォローと GitHub での Star をお願いします。友達へのシェアも歓迎です。",
+    "B 站关注 おmaginai": "Bilibili で おmaginai をフォロー",
     "给项目 Star": "GitHub で Star",
+    "觉得有用求关注作者 B 站": "役に立ったら作者の Bilibili をフォロー",
+    "，也求给项目点个 Star：": "、プロジェクトに Star をお願いします：",
     "输入问题": "質問を入力", "输入卡片、场面、连锁和需要判断的处理节点。": "カード、盤面、チェーン、判断したい処理を入力してください。",
     "裁定模型": "裁定モデル", "裁定流程": "裁定の進行", "准备就绪": "準備完了", "仅准备证据包": "根拠資料のみ準備", "仅引擎复现": "エンジン再現のみ",
     "准备证据": "根拠資料の準備", "Luna（默认）": "Luna（既定）",
@@ -136,8 +142,11 @@ function applyUiLocale(locale) {
   document.documentElement.lang = selectedUiLocale;
   if (ui.localeSelect) ui.localeSelect.value = selectedUiLocale;
   const staticLabels = {
-    "#projectSupportText": "觉得好用？欢迎分享给朋友，也欢迎在 GitHub 点个 Star。",
+    "#projectSupportText": "觉得好用？求关注作者 B 站、求给项目点个 Star，也欢迎分享给朋友。",
+    "#projectFollowText": "B 站关注 おmaginai",
     "#projectStarText": "给项目 Star",
+    "#answerSupportFollow": "觉得有用求关注作者 B 站",
+    "#answerSupportStar": "，也求给项目点个 Star：",
     ".brand-block h1": "游戏王 OCG AI裁定",
     "#askTitle": "输入问题", ".panel-head p": "输入卡片、场面、连锁和需要判断的处理节点。",
     ".model-tier-label span": "裁定模型", ".model-strip span": "裁定流程",
@@ -197,6 +206,7 @@ const FALLBACK_RULING_MODEL_PROFILE = Object.freeze({
 });
 const ui = {
   deploymentLabel: document.querySelector("#deploymentLabel"),
+  answerSupport: document.querySelector("#answerSupport"),
   questionInput: document.querySelector("#questionInput"),
   analyzeButton: document.querySelector("#analyzeButton"),
   analyzeButtonText: document.querySelector("#analyzeButtonText"),
@@ -1814,6 +1824,8 @@ function renderBackendAnswer(answer) {
 }
 
 function renderAnswerVersion(answer) {
+  // The follow / Star line sits under each rendered answer so shared screenshots carry it.
+  if (ui.answerSupport) ui.answerSupport.hidden = !answer;
   if (!ui.answerVersionText) return;
   const effectiveVersion = normalizeRulingVersion(
     answer?.effectiveRulingVersion || answer?.rulingVersion,

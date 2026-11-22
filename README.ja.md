@@ -4,6 +4,8 @@
 
 [TCG を試す（既定は英語）](https://tcg-ruling-assistant.vercel.app/) · [OCG を使う](https://coldiceh.github.io/ocg-ruling-assistant/) · [問題を報告する](https://github.com/coldiceh/ocg-ruling-assistant/issues)
 
+作者：Bilibili の [おmaginai](https://space.bilibili.com/398617002)。役に立ったら Bilibili のフォローとプロジェクトへの Star をお願いします ⭐
+
 カードテキストと参照可能な資料をもとに、遊戯王の裁定問題を分析します。OCG 版と TCG 公開試用版にはそれぞれ専用の入口があり、回答の根拠と確認が必要な条件を表示します。
 
 KONAMI の公式プロジェクトではなく、公式大会におけるジャッジの判断に代わるものでもありません。
@@ -36,6 +38,34 @@ KONAMI の公式プロジェクトではなく、公式大会におけるジャ�
 
 AI はルールを誤読したり、条件を見落としたり、誤った結論を出したりすることがあり、回答の正しさは保証されません。表示された根拠を確認し、大会では公式資料と現地ジャッジの判断に従ってください。
 
+## 公開 API（bot から直接呼び出せます）
+
+bot などのプログラムから OCG 版を直接呼び出せます。申請は不要です：
+
+```bash
+curl -sS --max-time 300 -X POST https://ocg-ruling-assistant.vercel.app/api/answer \
+  -H 'Content-Type: application/json' \
+  -d '{"question":"「ブルーアイズ・タイラント・ドラゴン」が戦闘で破壊され墓地へ送られた場合、③の効果は墓地で発動しますか？"}'
+```
+
+```python
+import requests
+
+r = requests.post(
+    "https://ocg-ruling-assistant.vercel.app/api/answer",
+    json={"question": "「ブルーアイズ・タイラント・ドラゴン」が戦闘で破壊され墓地へ送られた場合、③の効果は墓地で発動しますか？"},
+    timeout=300,
+)
+print(r.json()["shortAnswer"])
+```
+
+- リクエスト本文には `question` だけを入れてください。ほかの項目があると Web からのリクエストとして扱われます。質問は 12000 文字までです。
+- 返答は JSON です。`shortAnswer` をそのまま投稿してください。結論、エンジン再現（ある場合）、Web 版へのリンク、作者のリンクが含まれています。ほかの項目は変わる可能性があるため、依存しないでください。
+- 1回の回答には通常 1〜2 分、最長で約 5 分かかります。タイムアウトは 300 秒にしてください。
+- 送信元 IP ごとに回数制限があり、既定では新しい質問は毎分 6 件、毎時 30 件までです。超えると HTTP 429 が返り、`Retry-After` ヘッダーに待つ秒数が入ります。サイト全体で1日の利用枠を共有しています。
+- 遊戯王のルールや裁定と関係のない質問には回答しません。
+- 回答を転送するときは、末尾の Web 版リンクとフォロー・Star のお願いの行を残してください。
+
 ## OCG の固定50問による評価
 
 以下の結果はこの OCG 問題セットのみを対象とします。TCG の正答率ではなく、他の問題での正しさを保証するものでもありません。
@@ -55,6 +85,10 @@ AI はルールを誤読したり、条件を見落としたり、誤った結�
 
 - [遊戯王 OCG 公式カードデータベースとカード Q&A](https://www.db.yugioh-card.com/yugiohdb/)
 - 一般公開されているカードテキスト、FAQ、ルールブック、ルール学習資料
+
+## ライセンス
+
+コードは無料で使用・改変でき、自分の API キーで独自にデプロイすることもできます。条件として、本プロジェクトのコード（改変版を含む）を使ったサイト、bot、サービスは、画面上とすべての回答の末尾に作者のクレジットと本リポジトリへのリンクを表示し続ける必要があります。例：「Based on the OCG Ruling Assistant by おmaginai https://github.com/coldiceh/ocg-ruling-assistant」。削除したり、隠したり、他人の名前に変えたりしてはいけません。詳しくは [LICENSE](LICENSE) を参照してください。カードテキスト、公式 Q&A、ルール資料の権利はそれぞれの権利者に帰属し、このライセンスの対象外です。
 
 ## 免責事項
 

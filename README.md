@@ -4,6 +4,8 @@
 
 [试玩 TCG（默认英文）](https://tcg-ruling-assistant.vercel.app/) · [使用 OCG](https://coldiceh.github.io/ocg-ruling-assistant/) · [问题反馈](https://github.com/coldiceh/ocg-ruling-assistant/issues)
 
+作者：B站 [おmaginai](https://space.bilibili.com/398617002)。觉得有用求关注 B 站，也求给项目点个 Star ⭐
+
 结合卡片文本和可查阅的来源分析游戏王裁定问题。OCG 版与 TCG 公开试用版提供独立入口；回答会展示依据和仍需核对的地方。
 
 它不是 KONAMI 官方项目，也不替代正式比赛的现场裁判。
@@ -42,6 +44,33 @@ AI 可能误读规则、遗漏条件或给出错误结论，无法保证回答�
 
 涉及多张卡时不会按固定张数舍弃卡片；若完整卡文超出一次请求容量，会明确提示。辅助模型负责找卡和帮助查资料，最终模型负责作答；你也可以只下载整理好的资料。检索到依据不保证 AI 一定理解正确，因此请核对相关卡片、题设条件和引用原文。
 
+## 公开接口（bot 可直接调用）
+
+QQ 机器人等程序可以直接调用 OCG 版的接口，不需要申请：
+
+```bash
+curl -sS --max-time 300 -X POST https://ocg-ruling-assistant.vercel.app/api/answer \
+  -H 'Content-Type: application/json' \
+  -d '{"question":"青眼暴君龙被战斗破坏并送去墓地后，它的③效果是在墓地发动还是在场上发动？"}'
+```
+
+```python
+import requests
+
+r = requests.post(
+    "https://ocg-ruling-assistant.vercel.app/api/answer",
+    json={"question": "青眼暴君龙被战斗破坏并送去墓地后，它的③效果是在墓地发动还是在场上发动？"},
+    timeout=300,
+)
+print(r.json()["shortAnswer"])
+```
+
+- 请求体只放 `question` 一个字段，多放别的字段会被当成网页请求处理；问题最多 12000 字。
+- 返回 JSON，把 `shortAnswer` 原样发出去即可，里面已经包含结论、引擎复现（如有）、网页链接和作者信息。其他字段可能调整，不要依赖。
+- 一次回答通常要 1～2 分钟，最长约 5 分钟，超时请设到 300 秒。
+- 按来源 IP 限频，默认每分钟 6 个、每小时 30 个新问题；超出会返回 HTTP 429，`Retry-After` 头给出要等的秒数。全站共用每日额度。
+- 和游戏王规则、裁定无关的问题会被拒答。
+- 转发回答时请保留末尾的网页链接和“求关注、求 Star”几行。
 
 ## OCG 固定 50 题测试
 
@@ -62,6 +91,10 @@ AI 可能误读规则、遗漏条件或给出错误结论，无法保证回答�
 
 - [游戏王 OCG 官方卡片数据库与 Q&A](https://www.db.yugioh-card.com/yugiohdb/)
 - 公开可访问的卡片文本、FAQ、规则书与规则学习资料
+
+## 许可证
+
+代码可以免费使用、修改，也可以用自己的 API key 自己部署。条件是：用本项目代码（含修改版）做的网站、bot 或服务，必须在界面上和每条回答末尾保留作者署名和本仓库链接，例如“基于 おmaginai 的游戏王裁定助手 https://github.com/coldiceh/ocg-ruling-assistant”，不能删掉、藏起来或改成别人。完整条款见 [LICENSE](LICENSE)。卡片文本、官方 Q&A 和规则资料的权利属于各自的权利人，不在本许可证范围内。
 
 ## 免责声明
 

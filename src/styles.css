@@ -532,6 +532,31 @@ h3 {
   outline-offset: 3px;
 }
 
+/* Follow / Star line under each answer; kept in the card so screenshots carry it. */
+.answer-support {
+  margin: 14px 0 0;
+  padding-top: 10px;
+  border-top: 1px dashed var(--line-strong);
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.answer-support[hidden] {
+  display: none;
+}
+
+.answer-support a {
+  color: var(--amber);
+  font-weight: 700;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.answer-support a:hover {
+  text-decoration: underline;
+}
+
 /* ---- Main input terminal ---- */
 .workspace {
   width: min(1040px, calc(100% - 48px));
