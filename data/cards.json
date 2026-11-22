@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-21T02:51:48.768Z",
+  "generatedAt": "2026-11-22T01:35:21.806Z",
   "records": [
     {
       "id": "21385",
@@ -7092,6 +7092,68 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "11752"
+        }
+      ]
+    },
+    {
+      "id": "24010",
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Fiend",
+      "monsterPropertyIds": [
+        "14",
+        "11",
+        "4"
+      ],
+      "monsterProperties": [
+        "Fiend",
+        "Fusion",
+        "Effect"
+      ],
+      "propertyIds": [
+        "14",
+        "11",
+        "4"
+      ],
+      "properties": [
+        "Fiend",
+        "Fusion",
+        "Effect"
+      ],
+      "attack": 0,
+      "atk": 0,
+      "defense": 0,
+      "def": 0,
+      "level": 8,
+      "attribute": "water",
+      "name": "溟淵方界神アビス・ヴァグラーダ",
+      "cnName": "溟渊方界神 深渊伐萝陀",
+      "jaName": "溟淵方界神アビス・ヴァグラーダ",
+      "enName": "Abyss Vagrada the Abyssal Cubic Lord",
+      "effectText": "「方界」モンスター×３\nこのカード名の②の効果は１ターンに１度しか使用できず、この効果を発動するターン、自分は融合モンスターしかEXデッキから特殊召喚できない。\n①：このカードは、攻撃力が自分の墓地の「方界胤ヴィジャム」の数×１０００アップし、このカードより攻撃力が低いモンスターの発動した効果を受けない。\n②：自分・相手ターンに発動できる。このカードをEXデッキに戻し、自分の墓地から「方界」モンスター３体を特殊召喚し、デッキから「方界」カード１枚を手札に加える。",
+      "released": true,
+      "aliases": [
+        "溟淵方界神アビス・ヴァグラーダ",
+        "Abyss Vagrada the Abyssal Cubic Lord",
+        "溟渊方界神 深渊伐萝陀",
+        "溟渊方界神 深渊之伐格楼达"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/24010",
+      "updatedAt": "2026-11-22T01:33:16.256Z",
+      "chineseNameSources": [
+        {
+          "name": "溟渊方界神 深渊伐萝陀",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24010"
+        },
+        {
+          "name": "溟渊方界神 深渊之伐格楼达",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24010"
         }
       ]
     },
@@ -15964,6 +16026,68 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "7467"
+        }
+      ]
+    },
+    {
+      "id": "24009",
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Fiend",
+      "monsterPropertyIds": [
+        "14",
+        "11",
+        "4"
+      ],
+      "monsterProperties": [
+        "Fiend",
+        "Fusion",
+        "Effect"
+      ],
+      "propertyIds": [
+        "14",
+        "11",
+        "4"
+      ],
+      "properties": [
+        "Fiend",
+        "Fusion",
+        "Effect"
+      ],
+      "attack": 0,
+      "atk": 0,
+      "defense": 0,
+      "def": 0,
+      "level": 6,
+      "attribute": "fire",
+      "name": "燎炎方界神アルディティア・ヘル・ブレイズ",
+      "cnName": "燎炎方界神 狱焰之阿底提",
+      "jaName": "燎炎方界神アルディティア・ヘル・ブレイズ",
+      "enName": "Alditia Hell Blaze the Burning Cubic Lord",
+      "effectText": "「方界」モンスター＋「方界胤ヴィジャム」\n自分の手札・フィールドの上記のカードを墓地へ送った場合のみ特殊召喚できる。\nこのカード名の②の効果は１ターンに１度しか使用できず、この効果を発動するターン、自分は融合モンスターしかEXデッキから特殊召喚できない。\n①：このカードの攻撃力は、自分の墓地の「方界胤ヴィジャム」の数×８００アップする。\n②：自分・相手ターンに発動できる。このカードをEXデッキに戻し、自分の墓地から「方界」モンスター２体を特殊召喚し、デッキから「方界」カード１枚を手札に加える。",
+      "released": true,
+      "aliases": [
+        "燎炎方界神アルディティア・ヘル・ブレイズ",
+        "Alditia Hell Blaze the Burning Cubic Lord",
+        "燎炎方界神 狱焰之阿底提",
+        "燎炎方界神 狱焰之阿尔底提亚"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/24009",
+      "updatedAt": "2026-11-22T01:33:17.167Z",
+      "chineseNameSources": [
+        {
+          "name": "燎炎方界神 狱焰之阿底提",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24009"
+        },
+        {
+          "name": "燎炎方界神 狱焰之阿尔底提亚",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24009"
         }
       ]
     },
@@ -42816,6 +42940,68 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "20524"
+        }
+      ]
+    },
+    {
+      "id": "24017",
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Cyberse",
+      "monsterPropertyIds": [
+        "30",
+        "27",
+        "4"
+      ],
+      "monsterProperties": [
+        "Cyberse",
+        "Ritual",
+        "Effect"
+      ],
+      "propertyIds": [
+        "30",
+        "27",
+        "4"
+      ],
+      "properties": [
+        "Cyberse",
+        "Ritual",
+        "Effect"
+      ],
+      "attack": 2300,
+      "atk": 2300,
+      "defense": 2000,
+      "def": 2000,
+      "level": 7,
+      "attribute": "water",
+      "name": "アクア・リヴァイアサン＠マリンセス",
+      "cnName": "水海龙@海晶少女",
+      "jaName": "アクア・リヴァイアサン＠マリンセス",
+      "enName": "Aqua Leviathan @Marincess",
+      "effectText": "「マリンセス」カードにより降臨\nこのカード名の①②の効果はそれぞれ１ターンに１度しか使用できない。\n①：手札のこのカードを相手に見せて発動できる。デッキから儀式モンスター以外の「マリンセス」カード１枚を手札に加える。その後、自分の手札を１枚選んで捨てる。\n②：このカードが儀式召喚した場合に発動できる。自分フィールドの「マリンセス」モンスターカードの数まで、相手フィールドのカードを手札に戻す。\n③：このカードがモンスターゾーンに存在する限り、相手フィールドのモンスターの攻撃力は１０００ダウンする。",
+      "released": true,
+      "aliases": [
+        "アクア・リヴァイアサン＠マリンセス",
+        "Aqua Leviathan @Marincess",
+        "水海龙@海晶少女",
+        "水波海龙@海晶少女"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/24017",
+      "updatedAt": "2026-11-22T01:33:19.946Z",
+      "chineseNameSources": [
+        {
+          "name": "水海龙@海晶少女",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24017"
+        },
+        {
+          "name": "水波海龙@海晶少女",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24017"
         }
       ]
     },
@@ -69937,6 +70123,44 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "6498"
+        }
+      ]
+    },
+    {
+      "id": "24071",
+      "type": "spell",
+      "cardType": "spell",
+      "property": "continuous",
+      "properties": [
+        "continuous"
+      ],
+      "name": "B・L・A・C・Kパルフェ",
+      "cnName": "莓柠苹巧奇之黑芭菲",
+      "jaName": "B・L・A・C・Kパルフェ",
+      "enName": "B.L.A.C.K. Parfait",
+      "effectText": "このカード名の①の効果は１ターンに１度しか使用できない。\n①：自分メインフェイズに発動できる。デッキから「マジシャン・ガール」モンスター１体を手札に加える。\n②：相手がモンスターを召喚・特殊召喚した場合に発動できる。同じ属性のモンスターが自分フィールドに存在しない「マジシャン・ガール」モンスター１体を手札から特殊召喚する。その後、自分フィールドに「ブラック・マジシャン・ガール」が存在する場合、フィールドの他の表側表示カード１枚の効果をターン終了時まで無効にできる。",
+      "released": true,
+      "aliases": [
+        "B・L・A・C・Kパルフェ",
+        "B.L.A.C.K. Parfait",
+        "莓柠苹巧奇之黑芭菲"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/24071",
+      "updatedAt": "2026-11-22T01:33:22.704Z",
+      "chineseNameSources": [
+        {
+          "name": "莓柠苹巧奇之黑芭菲",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24071"
+        },
+        {
+          "name": "莓柠苹巧奇之黑芭菲",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24071"
         }
       ]
     },
@@ -177008,6 +177232,44 @@
       ]
     },
     {
+      "id": "24013",
+      "type": "spell",
+      "cardType": "spell",
+      "property": "continuous",
+      "properties": [
+        "continuous"
+      ],
+      "name": "方界覚",
+      "cnName": "方界觉",
+      "jaName": "方界覚",
+      "enName": "Cubic Bodhi",
+      "effectText": "このカード名のカードは１ターンに１枚しか発動できない。\n①：このカードの発動時の効果処理として、デッキから「方界」カード１枚を墓地へ送る事ができる。\n②：１ターンに１度、手札を１枚捨てて発動できる。相手フィールドの表側表示モンスター１体に方界カウンターを１つ置く。方界カウンターが置かれているモンスターは攻撃できず、効果は無効化される。\n③：自分フィールドに「方界」モンスターが特殊召喚された場合に発動できる。自分の手札・フィールドのモンスターを融合素材とし、「方界」融合モンスター１体を融合召喚する。",
+      "released": true,
+      "aliases": [
+        "方界覚",
+        "Cubic Bodhi",
+        "方界觉"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/24013",
+      "updatedAt": "2026-11-22T01:33:33.811Z",
+      "chineseNameSources": [
+        {
+          "name": "方界觉",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24013"
+        },
+        {
+          "name": "方界觉",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24013"
+        }
+      ]
+    },
+    {
       "id": "14382",
       "type": "trap",
       "cardType": "trap",
@@ -177103,6 +177365,44 @@
       ]
     },
     {
+      "id": "24014",
+      "type": "trap",
+      "cardType": "trap",
+      "property": "counter",
+      "properties": [
+        "counter"
+      ],
+      "name": "方界防陣",
+      "cnName": "方界防阵",
+      "jaName": "方界防陣",
+      "enName": "Cubic Defense",
+      "effectText": "①：相手モンスターの攻撃宣言時に発動できる。その攻撃を無効にする。その後、手札・デッキから「方界」モンスターを２体まで召喚条件を無視して特殊召喚できる。\n②：墓地のこのカードを除外し、自分フィールドの「方界」カード１枚を対象として発動できる。このターン、そのカードを対象として相手が発動した効果は無効化される。",
+      "released": true,
+      "aliases": [
+        "方界防陣",
+        "Cubic Defense",
+        "方界防阵"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/24014",
+      "updatedAt": "2026-11-22T01:33:33.818Z",
+      "chineseNameSources": [
+        {
+          "name": "方界防阵",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24014"
+        },
+        {
+          "name": "方界防阵",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24014"
+        }
+      ]
+    },
+    {
       "id": "14381",
       "type": "spell",
       "cardType": "spell",
@@ -177150,6 +177450,44 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "14381"
+        }
+      ]
+    },
+    {
+      "id": "24012",
+      "type": "spell",
+      "cardType": "spell",
+      "property": "field",
+      "properties": [
+        "field"
+      ],
+      "name": "方界領域",
+      "cnName": "方界领域",
+      "jaName": "方界領域",
+      "enName": "Cubic Dimension",
+      "effectText": "このカード名のカードは１ターンに１枚しか発動できない。\n①：このカードの発動時の効果処理として、デッキからレベル４以下の「方界」モンスター１体を手札に加える事ができる。\n②：モンスター同士の戦闘で発生するお互いへの戦闘ダメージは０になる。\n③：１ターンに１度、自分メインフェイズに発動できる。手札から「方界」モンスター１体を召喚条件を無視して特殊召喚する。\n④：モンスターが戦闘で破壊された場合に発動する。破壊されたモンスターのコントローラーはその元々の攻撃力分のダメージを受ける。",
+      "released": true,
+      "aliases": [
+        "方界領域",
+        "Cubic Dimension",
+        "方界领域"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/24012",
+      "updatedAt": "2026-11-22T01:33:33.867Z",
+      "chineseNameSources": [
+        {
+          "name": "方界领域",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24012"
+        },
+        {
+          "name": "方界领域",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24012"
         }
       ]
     },
@@ -244396,6 +244734,68 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "5546"
+        }
+      ]
+    },
+    {
+      "id": "24011",
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Fiend",
+      "monsterPropertyIds": [
+        "14",
+        "11",
+        "4"
+      ],
+      "monsterProperties": [
+        "Fiend",
+        "Fusion",
+        "Effect"
+      ],
+      "propertyIds": [
+        "14",
+        "11",
+        "4"
+      ],
+      "properties": [
+        "Fiend",
+        "Fusion",
+        "Effect"
+      ],
+      "attack": 0,
+      "atk": 0,
+      "defense": 3000,
+      "def": 3000,
+      "level": 10,
+      "attribute": "light",
+      "name": "創世方界超神ディヴァイン・アニマ・インフィニティ",
+      "cnName": "创世方界超神 无穷圣魂",
+      "jaName": "創世方界超神ディヴァイン・アニマ・インフィニティ",
+      "enName": "Divine Anima Infinity the Creation Cubic Overlord",
+      "effectText": "「方界」モンスター×４\nこのカードは融合召喚でしか特殊召喚できない。\n①：このカードは、攻撃力が自分の墓地の「方界胤ヴィジャム」の数×１５００アップし、このカードより攻撃力が低いモンスターの発動した効果を受けない。\n②：自分・相手ターンに１度、発動できる。自分の除外状態の「方界」カードを全てデッキに戻し、相手フィールドのカード１枚を破壊する。\n③：表側表示のこのカードが相手によってフィールドから離れた場合に発動できる。自分の墓地から「方界胤ヴィジャム」を３体まで特殊召喚する。",
+      "released": true,
+      "aliases": [
+        "創世方界超神ディヴァイン・アニマ・インフィニティ",
+        "Divine Anima Infinity the Creation Cubic Overlord",
+        "创世方界超神 无穷圣魂",
+        "创世方界超神 天神之魂天·无穷"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/24011",
+      "updatedAt": "2026-11-22T01:33:40.668Z",
+      "chineseNameSources": [
+        {
+          "name": "创世方界超神 无穷圣魂",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24011"
+        },
+        {
+          "name": "创世方界超神 天神之魂天·无穷",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24011"
         }
       ]
     },
@@ -383009,6 +383409,45 @@
       ]
     },
     {
+      "id": "24027",
+      "type": "spell",
+      "cardType": "spell",
+      "property": "quickplay",
+      "properties": [
+        "quickplay"
+      ],
+      "name": "ゴーストリック・アート",
+      "cnName": "鬼计艺术",
+      "jaName": "ゴーストリック・アート",
+      "enName": "Ghostrick Art",
+      "effectText": "このカード名の①②の効果はそれぞれ１ターンに１度しか使用できない。\n①：自分の手札・フィールドの「ゴーストリック」モンスターを２体までリリースし、その数だけデッキから「ゴーストリック」モンスターをそれぞれ表側守備表示か裏側守備表示で特殊召喚する（同名カードは１枚まで）。このカードの発動後、ターン終了時まで自分は闇属性モンスターしか特殊召喚できない。\n②：自分メインフェイズに墓地のこのカードを除外して発動できる。自分フィールドの裏側守備表示の「ゴーストリック」モンスター１体を表側守備表示にする。",
+      "released": true,
+      "aliases": [
+        "ゴーストリック・アート",
+        "Ghostrick Art",
+        "鬼计艺术",
+        "鬼计错视画"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/24027",
+      "updatedAt": "2026-11-22T01:33:54.715Z",
+      "chineseNameSources": [
+        {
+          "name": "鬼计艺术",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24027"
+        },
+        {
+          "name": "鬼计错视画",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24027"
+        }
+      ]
+    },
+    {
       "id": "11209",
       "type": "trap",
       "cardType": "trap",
@@ -383387,6 +383826,83 @@
       ]
     },
     {
+      "id": "24028",
+      "type": "trap",
+      "cardType": "trap",
+      "property": "continuous",
+      "properties": [
+        "continuous"
+      ],
+      "name": "ゴーストリック・フリーズ",
+      "cnName": "鬼计冻结",
+      "jaName": "ゴーストリック・フリーズ",
+      "enName": "Ghostrick Freeze",
+      "effectText": "①：自分フィールドに「ゴーストリック」カード以外の表側表示カードが存在しない状態で、相手フィールドに魔法・罠カードがセットされた時に適用する。そのカードは次のターンの終了時まで発動できない。\n②：自分・相手ターンに１度、発動できる。自分の墓地・除外状態の「ゴーストリック」カードを５枚までデッキに戻す。\n③：このカードが相手によって墓地へ送られた場合に発動できる。相手フィールドのモンスターを全て裏側守備表示にする。この効果で裏側守備表示になったモンスターは表示形式を変更できない。",
+      "released": true,
+      "aliases": [
+        "ゴーストリック・フリーズ",
+        "Ghostrick Freeze",
+        "鬼计冻结",
+        "鬼计结冰"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/24028",
+      "updatedAt": "2026-11-22T01:33:54.764Z",
+      "chineseNameSources": [
+        {
+          "name": "鬼计冻结",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24028"
+        },
+        {
+          "name": "鬼计结冰",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24028"
+        }
+      ]
+    },
+    {
+      "id": "24026",
+      "type": "spell",
+      "cardType": "spell",
+      "property": "field",
+      "properties": [
+        "field"
+      ],
+      "name": "ゴーストリック・ガーデン",
+      "cnName": "鬼计花园",
+      "jaName": "ゴーストリック・ガーデン",
+      "enName": "Ghostrick Garden",
+      "effectText": "このカード名のカードは１ターンに１枚しか発動できない。\n①：このカードが表側表示で存在する限り１度だけ、自分メインフェイズに発動できる。デッキから「ゴーストリック」モンスター１体を手札に加える。\n②：モンスターが相手の効果で墓地へ送られた場合、以下の効果から１つを選択して発動できる。\n●自分フィールドの表側表示か裏側守備表示の「ゴーストリック」モンスター１体を表側守備表示か裏側守備表示にする。\n●自分のデッキの一番上のカードを自分フィールドの「ゴーストリック」Xモンスター１体のX素材にする。",
+      "released": true,
+      "aliases": [
+        "ゴーストリック・ガーデン",
+        "Ghostrick Garden",
+        "鬼计花园"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/24026",
+      "updatedAt": "2026-11-22T01:33:54.766Z",
+      "chineseNameSources": [
+        {
+          "name": "鬼计花园",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24026"
+        },
+        {
+          "name": "鬼计花园",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24026"
+        }
+      ]
+    },
+    {
       "id": "10871",
       "type": "monster",
       "cardType": "monster",
@@ -383699,6 +384215,63 @@
       ]
     },
     {
+      "id": "24023",
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Zombie",
+      "monsterPropertyIds": [
+        "32",
+        "4"
+      ],
+      "monsterProperties": [
+        "Zombie",
+        "Effect"
+      ],
+      "propertyIds": [
+        "32",
+        "4"
+      ],
+      "properties": [
+        "Zombie",
+        "Effect"
+      ],
+      "attack": 1500,
+      "atk": 1500,
+      "defense": 600,
+      "def": 600,
+      "level": 3,
+      "attribute": "dark",
+      "name": "ゴーストリック・リッチー",
+      "cnName": "鬼计巫妖",
+      "jaName": "ゴーストリック・リッチー",
+      "enName": "Ghostrick Lich",
+      "effectText": "自分フィールドに「ゴーストリック」モンスターが存在する場合のみ、このカードは召喚できる。\nこのカード名の①の効果は１ターンに１度しか使用できない。\n①：このカードが召喚・リバースした場合に発動する。デッキから「ゴーストリック」速攻魔法・通常罠カード１枚を自分フィールドにセットする。この効果でセットしたカードはセットしたターンでも発動できる。このターン、自分は闇属性モンスターしか特殊召喚できない。\n②：自分メインフェイズに発動できる。このカードを裏側守備表示にする（１ターンに１度のみ）。",
+      "released": true,
+      "aliases": [
+        "ゴーストリック・リッチー",
+        "Ghostrick Lich",
+        "鬼计巫妖"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/24023",
+      "updatedAt": "2026-11-22T01:33:54.818Z",
+      "chineseNameSources": [
+        {
+          "name": "鬼计巫妖",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24023"
+        },
+        {
+          "name": "鬼计巫妖",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24023"
+        }
+      ]
+    },
+    {
       "id": "10793",
       "type": "spell",
       "cardType": "spell",
@@ -383836,6 +384409,68 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "10908"
+        }
+      ]
+    },
+    {
+      "id": "24025",
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Zombie",
+      "monsterPropertyIds": [
+        "32",
+        "18",
+        "4"
+      ],
+      "monsterProperties": [
+        "Zombie",
+        "Xyz",
+        "Effect"
+      ],
+      "propertyIds": [
+        "32",
+        "18",
+        "4"
+      ],
+      "properties": [
+        "Zombie",
+        "Xyz",
+        "Effect"
+      ],
+      "attack": 2800,
+      "atk": 2800,
+      "defense": 2600,
+      "def": 2600,
+      "rank": 6,
+      "attribute": "dark",
+      "name": "ゴーストリック・マスター アルカード",
+      "cnName": "鬼计之主 阿鲁卡德",
+      "jaName": "ゴーストリック・マスター アルカード",
+      "enName": "Ghostrick Master Alucard",
+      "effectText": "レベル６モンスター×３\nこのカードは手札の「ゴーストリック」カード１枚を捨て、自分フィールドの「ゴーストリック・アルカード」の上に重ねてX召喚する事もできる。\nこのカードはX召喚の素材にできない。\n①：表側表示のこのカードは裏側守備表示にならない。\n②：自分・相手ターンに１度、このカードのX素材を１つ取り除いて発動できる。相手フィールドの裏側表示カードを全て破壊する。\n③：魔法・罠カードが発動した時、このカードのX素材を２つ取り除いて発動できる。その発動を無効にし、そのカードをそのままセットする。",
+      "released": true,
+      "aliases": [
+        "ゴーストリック・マスター アルカード",
+        "Ghostrick Master Alucard",
+        "鬼计之主 阿鲁卡德",
+        "鬼计妖魔之主 阿鲁卡德"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/24025",
+      "updatedAt": "2026-11-22T01:33:54.822Z",
+      "chineseNameSources": [
+        {
+          "name": "鬼计之主 阿鲁卡德",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24025"
+        },
+        {
+          "name": "鬼计妖魔之主 阿鲁卡德",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24025"
         }
       ]
     },
@@ -384667,6 +385302,64 @@
       ]
     },
     {
+      "id": "24022",
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Fiend",
+      "monsterPropertyIds": [
+        "14",
+        "4"
+      ],
+      "monsterProperties": [
+        "Fiend",
+        "Effect"
+      ],
+      "propertyIds": [
+        "14",
+        "4"
+      ],
+      "properties": [
+        "Fiend",
+        "Effect"
+      ],
+      "attack": 300,
+      "atk": 300,
+      "defense": 200,
+      "def": 200,
+      "level": 1,
+      "attribute": "dark",
+      "name": "ゴーストリック・スパンキー",
+      "cnName": "鬼计鬼火",
+      "jaName": "ゴーストリック・スパンキー",
+      "enName": "Ghostrick Spunkie",
+      "effectText": "自分フィールドに「ゴーストリック」モンスターが存在する場合のみ、このカードは召喚できる。\n①：相手がフィールドのモンスターの効果を発動した時に発動できる。このカードを手札から裏側守備表示で特殊召喚し、手札・デッキから「ゴーストリック」フィールド魔法・永続罠カード１枚を自分フィールドに表側表示で置く。その後、相手の墓地のカードが５枚以上の場合、手札からモンスター１体を裏側守備表示で特殊召喚できる。\n②：自分メインフェイズに発動できる。このカードを裏側守備表示にする（１ターンに１度のみ）。",
+      "released": true,
+      "aliases": [
+        "ゴーストリック・スパンキー",
+        "Ghostrick Spunkie",
+        "鬼计鬼火",
+        "鬼计小鬼火"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/24022",
+      "updatedAt": "2026-11-22T01:33:54.934Z",
+      "chineseNameSources": [
+        {
+          "name": "鬼计鬼火",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24022"
+        },
+        {
+          "name": "鬼计小鬼火",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24022"
+        }
+      ]
+    },
+    {
       "id": "10752",
       "type": "monster",
       "cardType": "monster",
@@ -385017,6 +385710,67 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "10986"
+        }
+      ]
+    },
+    {
+      "id": "24024",
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Spellcaster",
+      "monsterPropertyIds": [
+        "8",
+        "18",
+        "4"
+      ],
+      "monsterProperties": [
+        "Spellcaster",
+        "Xyz",
+        "Effect"
+      ],
+      "propertyIds": [
+        "8",
+        "18",
+        "4"
+      ],
+      "properties": [
+        "Spellcaster",
+        "Xyz",
+        "Effect"
+      ],
+      "attack": 900,
+      "atk": 900,
+      "defense": 900,
+      "def": 900,
+      "rank": 2,
+      "attribute": "dark",
+      "name": "ゴーストリックの妖狐",
+      "cnName": "鬼计妖狐",
+      "jaName": "ゴーストリックの妖狐",
+      "enName": "Ghostrick Yoko",
+      "effectText": "レベル２「ゴーストリック」モンスター×２\n自分は「ゴーストリックの妖狐」を１ターンに１度しかEXデッキから特殊召喚できない。\nこのカードは自分フィールドの裏側守備表示のレベルを持つ「ゴーストリック」モンスターの上に重ねてX召喚する事もできる。\n①：このカードはモンスターゾーンに存在する限り、相手の効果では破壊されない。\n②：１ターンに１度、このカードのX素材を１つ取り除いて発動できる。デッキから「ゴーストリック」モンスター１体を特殊召喚する。このターン、自分は闇属性モンスターしか特殊召喚できない。",
+      "released": true,
+      "aliases": [
+        "ゴーストリックの妖狐",
+        "Ghostrick Yoko",
+        "鬼计妖狐"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/24024",
+      "updatedAt": "2026-11-22T01:33:54.951Z",
+      "chineseNameSources": [
+        {
+          "name": "鬼计妖狐",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24024"
+        },
+        {
+          "name": "鬼计妖狐",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24024"
         }
       ]
     },
@@ -560708,6 +561462,63 @@
       ]
     },
     {
+      "id": "24015",
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Cyberse",
+      "monsterPropertyIds": [
+        "30",
+        "4"
+      ],
+      "monsterProperties": [
+        "Cyberse",
+        "Effect"
+      ],
+      "propertyIds": [
+        "30",
+        "4"
+      ],
+      "properties": [
+        "Cyberse",
+        "Effect"
+      ],
+      "attack": 1600,
+      "atk": 1600,
+      "defense": 1000,
+      "def": 1000,
+      "level": 3,
+      "attribute": "water",
+      "name": "海晶乙女アズリー",
+      "cnName": "海晶少女 蓝鲷",
+      "jaName": "海晶乙女アズリー",
+      "enName": "Marincess Azuri",
+      "effectText": "このカード名の①②の効果はそれぞれ１ターンに１度しか使用できない。\n①：このカードが召喚・特殊召喚した場合に発動できる。デッキから攻撃力１０００以下のサイバース族・水属性モンスター１体を特殊召喚する。このターン、自分は水属性モンスターしか特殊召喚できない。\n②：このカードが墓地に存在する状態で、自分が「マリンセス」LモンスターをL召喚した場合、このカードを除外して発動できる。そのLモンスター１体に自分の墓地から「マリンセス」モンスター１体を攻撃力６００アップの装備魔法カード扱いで装備する。",
+      "released": true,
+      "aliases": [
+        "海晶乙女アズリー",
+        "Marincess Azuri",
+        "海晶少女 蓝鲷"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/24015",
+      "updatedAt": "2026-11-22T01:34:12.839Z",
+      "chineseNameSources": [
+        {
+          "name": "海晶少女 蓝鲷",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24015"
+        },
+        {
+          "name": "海晶少女 蓝鲷",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24015"
+        }
+      ]
+    },
+    {
       "id": "14992",
       "type": "monster",
       "cardType": "monster",
@@ -560843,6 +561654,67 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "14680"
+        }
+      ]
+    },
+    {
+      "id": "24018",
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Cyberse",
+      "monsterPropertyIds": [
+        "30",
+        "23",
+        "4"
+      ],
+      "monsterProperties": [
+        "Cyberse",
+        "Link",
+        "Effect"
+      ],
+      "propertyIds": [
+        "30",
+        "23",
+        "4"
+      ],
+      "properties": [
+        "Cyberse",
+        "Link",
+        "Effect"
+      ],
+      "attack": 0,
+      "atk": 0,
+      "link": 2,
+      "linkRating": 2,
+      "linkArrows": "13",
+      "attribute": "water",
+      "name": "海晶乙女ブルークリスタルハート",
+      "cnName": "海晶少女 蓝水晶心",
+      "jaName": "海晶乙女ブルークリスタルハート",
+      "enName": "Marincess Blue Crystal Heart",
+      "effectText": "「マリンセス」モンスター２体\nこのカード名はルール上「海晶乙女クリスタルハート」として扱う。\nこのカード名の①②の効果はそれぞれ１ターンに１度しか使用できない。\n①：自分の墓地の「マリンセス」Lモンスター１体を対象として発動できる。そのモンスターをこのカードのリンク先となる自分フィールドに特殊召喚する。\n②：このカードがリンク３以上の「マリンセス」LモンスターのL素材として墓地へ送られた場合に発動できる。デッキから「マリンセス」カード１枚を墓地へ送る。",
+      "released": true,
+      "aliases": [
+        "海晶乙女ブルークリスタルハート",
+        "Marincess Blue Crystal Heart",
+        "海晶少女 蓝水晶心"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/24018",
+      "updatedAt": "2026-11-22T01:34:12.870Z",
+      "chineseNameSources": [
+        {
+          "name": "海晶少女 蓝水晶心",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24018"
+        },
+        {
+          "name": "海晶少女 蓝水晶心",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24018"
         }
       ]
     },
@@ -561858,6 +562730,40 @@
       ]
     },
     {
+      "id": "24021",
+      "type": "trap",
+      "cardType": "trap",
+      "name": "海晶乙女神流",
+      "cnName": "海晶少女神流",
+      "jaName": "海晶乙女神流",
+      "enName": "Marincess Overflow",
+      "effectText": "自分フィールドにリンク３以上の「マリンセス」Lモンスターが存在する場合、このカードの発動は手札からもできる。\n①：自分フィールドの「マリンセス」Lモンスターの数まで、フィールドの魔法・罠カードを対象として発動できる。そのカードを破壊する。\n②：墓地のこのカードを除外して発動できる。自分フィールドのリンク３以上の「マリンセス」Lモンスターカード１枚を墓地へ送る。その後、自分の手札・墓地からサイバース族・水属性の儀式モンスター１体を儀式召喚扱いで特殊召喚できる。",
+      "released": true,
+      "aliases": [
+        "海晶乙女神流",
+        "Marincess Overflow",
+        "海晶少女神流"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/24021",
+      "updatedAt": "2026-11-22T01:34:12.984Z",
+      "chineseNameSources": [
+        {
+          "name": "海晶少女神流",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24021"
+        },
+        {
+          "name": "海晶少女神流",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24021"
+        }
+      ]
+    },
+    {
       "id": "14788",
       "type": "monster",
       "cardType": "monster",
@@ -561934,6 +562840,44 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "14788"
+        }
+      ]
+    },
+    {
+      "id": "24020",
+      "type": "spell",
+      "cardType": "spell",
+      "property": "continuous",
+      "properties": [
+        "continuous"
+      ],
+      "name": "海晶乙女の礁湖",
+      "cnName": "海晶少女的礁湖",
+      "jaName": "海晶乙女の礁湖",
+      "enName": "Marincess Reef Lagoon",
+      "effectText": "このカード名のカードは１ターンに１枚しか発動できない。\n①：このカードの発動時の効果処理として、デッキからサイバース族・水属性モンスター１体を手札に加える事ができる。\n②：相手エンドフェイズに発動できる。自分の墓地・除外状態の水属性モンスターを３体までデッキに戻す。\n③：魔法＆罠ゾーンの表側表示のこのカードを墓地へ送って発動できる。レベルの合計が儀式召喚するモンスターのレベル以上になるように、自分の墓地の水属性モンスターを除外し、手札からサイバース族・水属性の儀式モンスター１体を儀式召喚する。",
+      "released": true,
+      "aliases": [
+        "海晶乙女の礁湖",
+        "Marincess Reef Lagoon",
+        "海晶少女的礁湖"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/24020",
+      "updatedAt": "2026-11-22T01:34:12.984Z",
+      "chineseNameSources": [
+        {
+          "name": "海晶少女的礁湖",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24020"
+        },
+        {
+          "name": "海晶少女的礁湖",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24020"
         }
       ]
     },
@@ -562388,6 +563332,126 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "17053"
+        }
+      ]
+    },
+    {
+      "id": "24019",
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Cyberse",
+      "monsterPropertyIds": [
+        "30",
+        "23",
+        "4"
+      ],
+      "monsterProperties": [
+        "Cyberse",
+        "Link",
+        "Effect"
+      ],
+      "propertyIds": [
+        "30",
+        "23",
+        "4"
+      ],
+      "properties": [
+        "Cyberse",
+        "Link",
+        "Effect"
+      ],
+      "attack": 2800,
+      "atk": 2800,
+      "link": 4,
+      "linkRating": 4,
+      "linkArrows": "8613",
+      "attribute": "water",
+      "name": "海晶乙女トゥルースハート",
+      "cnName": "海晶少女 真理心",
+      "jaName": "海晶乙女トゥルースハート",
+      "enName": "Marincess Truth Heart",
+      "effectText": "「マリンセス」モンスター２体以上\nこのカード名の①の効果は１ターンに１度しか使用できない。\n①：このカードが元々の攻撃力が０のLモンスターを素材としてL召喚した場合に発動できる。EXデッキからリンク３以下の「マリンセス」モンスター１体を特殊召喚する。\n②：自分のフィールド・墓地からLモンスターカード１枚を除外して発動できる。相手フィールドのカード１枚を破壊する。このターン、自分は「海晶乙女トゥルースハート」の効果を発動するためにリンクマーカーの数が同じモンスターを除外できない。",
+      "released": true,
+      "aliases": [
+        "海晶乙女トゥルースハート",
+        "Marincess Truth Heart",
+        "海晶少女 真理心",
+        "海晶少女 真晶心"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/24019",
+      "updatedAt": "2026-11-22T01:34:13.041Z",
+      "chineseNameSources": [
+        {
+          "name": "海晶少女 真理心",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24019"
+        },
+        {
+          "name": "海晶少女 真晶心",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24019"
+        }
+      ]
+    },
+    {
+      "id": "24016",
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Cyberse",
+      "monsterPropertyIds": [
+        "30",
+        "4"
+      ],
+      "monsterProperties": [
+        "Cyberse",
+        "Effect"
+      ],
+      "propertyIds": [
+        "30",
+        "4"
+      ],
+      "properties": [
+        "Cyberse",
+        "Effect"
+      ],
+      "attack": 600,
+      "atk": 600,
+      "defense": 2400,
+      "def": 2400,
+      "level": 5,
+      "attribute": "water",
+      "name": "海晶乙女ウルピス",
+      "cnName": "海晶少女 狐狸倒吊",
+      "jaName": "海晶乙女ウルピス",
+      "enName": "Marincess Ulpis",
+      "effectText": "このカード名の①②③の効果はそれぞれ１ターンに１度しか使用できない。\n①：このカードが手札に存在する場合、手札から他の、「マリンセス」カード１枚か水属性モンスター１体を捨てて発動できる。このカードを特殊召喚する。\n②：このカードが召喚・特殊召喚した場合に発動できる。デッキから「マリンセス」魔法・罠カード１枚を自分フィールドにセットする。\n③：自分フィールドの「マリンセス」Lモンスターカード１枚を墓地へ送って発動できる。自分は１枚ドローする。",
+      "released": true,
+      "aliases": [
+        "海晶乙女ウルピス",
+        "Marincess Ulpis",
+        "海晶少女 狐狸倒吊",
+        "海晶少女 狐蓝子鱼"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/24016",
+      "updatedAt": "2026-11-22T01:34:13.041Z",
+      "chineseNameSources": [
+        {
+          "name": "海晶少女 狐狸倒吊",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24016"
+        },
+        {
+          "name": "海晶少女 狐蓝子鱼",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24016"
         }
       ]
     },
@@ -704871,6 +705935,64 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "4511"
+        }
+      ]
+    },
+    {
+      "id": "24008",
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Machine",
+      "monsterPropertyIds": [
+        "9",
+        "4"
+      ],
+      "monsterProperties": [
+        "Machine",
+        "Effect"
+      ],
+      "propertyIds": [
+        "9",
+        "4"
+      ],
+      "properties": [
+        "Machine",
+        "Effect"
+      ],
+      "attack": 800,
+      "atk": 800,
+      "defense": 800,
+      "def": 800,
+      "level": 4,
+      "attribute": "earth",
+      "name": "無窮方界器プリティマ",
+      "cnName": "无穷方界器 地天",
+      "jaName": "無窮方界器プリティマ",
+      "enName": "Pritima the Infinity Cubic Vessel",
+      "effectText": "このカード名の①②の効果はそれぞれ１ターンに１度しか使用できず、この効果を発動するターン、自分は融合モンスターしかEXデッキから特殊召喚できない。\n①：自分メインフェイズに発動できる。このカードを手札から特殊召喚する。\n②：このカードが召喚・特殊召喚した場合、手札を１枚捨てて発動できる。デッキから「方界」魔法・罠カードを２枚まで手札に加える。\n③：１ターンに１度、自分・相手のバトルフェイズに発動できる。自分の手札・フィールドのモンスターを融合素材とし、「方界」融合モンスター１体を融合召喚する。",
+      "released": true,
+      "aliases": [
+        "無窮方界器プリティマ",
+        "Pritima the Infinity Cubic Vessel",
+        "无穷方界器 地天",
+        "无穷方界器 生祖"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/24008",
+      "updatedAt": "2026-11-22T01:34:27.480Z",
+      "chineseNameSources": [
+        {
+          "name": "无穷方界器 地天",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24008"
+        },
+        {
+          "name": "无穷方界器 生祖",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24008"
         }
       ]
     },
@@ -1008154,42 +1009276,6 @@
       ]
     },
     {
-      "id": "24071",
-      "type": "spell",
-      "cardType": "spell",
-      "property": "continuous",
-      "properties": [
-        "continuous"
-      ],
-      "name": "B・L・A・C・Kパルフェ",
-      "cnName": "莓柠苹巧奇之黑芭菲",
-      "jaName": "B・L・A・C・Kパルフェ",
-      "effectText": "このカード名の①の効果は１ターンに１度しか使用できない。\n①：自分メインフェイズに発動できる。デッキから「マジシャン・ガール」モンスター１体を手札に加える。\n②：相手がモンスターを召喚・特殊召喚した場合に発動できる。同じ属性のモンスターが自分フィールドに存在しない「マジシャン・ガール」モンスター１体を手札から特殊召喚する。その後、自分フィールドに「ブラック・マジシャン・ガール」が存在する場合、フィールドの他の表側表示カード１枚の効果をターン終了時まで無効にできる。",
-      "released": true,
-      "aliases": [
-        "B・L・A・C・Kパルフェ",
-        "莓柠苹巧奇之黑芭菲"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/24071",
-      "updatedAt": "2026-11-19T02:47:01.812Z",
-      "chineseNameSources": [
-        {
-          "name": "莓柠苹巧奇之黑芭菲",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "24071"
-        },
-        {
-          "name": "莓柠苹巧奇之黑芭菲",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "24071"
-        }
-      ]
-    },
-    {
       "id": "10588",
       "type": "monster",
       "cardType": "monster",
@@ -1008274,750 +1009360,6 @@
       ]
     },
     {
-      "id": "24011",
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Fiend",
-      "monsterPropertyIds": [
-        "14",
-        "11",
-        "4"
-      ],
-      "monsterProperties": [
-        "Fiend",
-        "Fusion",
-        "Effect"
-      ],
-      "propertyIds": [
-        "14",
-        "11",
-        "4"
-      ],
-      "properties": [
-        "Fiend",
-        "Fusion",
-        "Effect"
-      ],
-      "attack": 0,
-      "atk": 0,
-      "defense": 3000,
-      "def": 3000,
-      "level": 10,
-      "attribute": "light",
-      "name": "創世方界超神ディヴァイン・アニマ・インフィニティ",
-      "cnName": "创世方界超神 无穷圣魂",
-      "jaName": "創世方界超神ディヴァイン・アニマ・インフィニティ",
-      "effectText": "「方界」モンスター×４\nこのカードは融合召喚でしか特殊召喚できない。\n①：このカードは、攻撃力が自分の墓地の「方界胤ヴィジャム」の数×１５００アップし、このカードより攻撃力が低いモンスターの発動した効果を受けない。\n②：自分・相手ターンに１度、発動できる。自分の除外状態の「方界」カードを全てデッキに戻し、相手フィールドのカード１枚を破壊する。\n③：表側表示のこのカードが相手によってフィールドから離れた場合に発動できる。自分の墓地から「方界胤ヴィジャム」を３体まで特殊召喚する。",
-      "released": true,
-      "aliases": [
-        "創世方界超神ディヴァイン・アニマ・インフィニティ",
-        "创世方界超神 无穷圣魂",
-        "创世方界超神 天神之魂天·无穷"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/24011",
-      "updatedAt": "2026-11-21T02:51:25.514Z",
-      "chineseNameSources": [
-        {
-          "name": "创世方界超神 无穷圣魂",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "24011"
-        },
-        {
-          "name": "创世方界超神 天神之魂天·无穷",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "24011"
-        }
-      ]
-    },
-    {
-      "id": "24014",
-      "type": "trap",
-      "cardType": "trap",
-      "property": "counter",
-      "properties": [
-        "counter"
-      ],
-      "name": "方界防陣",
-      "cnName": "方界防阵",
-      "jaName": "方界防陣",
-      "effectText": "①：相手モンスターの攻撃宣言時に発動できる。その攻撃を無効にする。その後、手札・デッキから「方界」モンスターを２体まで召喚条件を無視して特殊召喚できる。\n②：墓地のこのカードを除外し、自分フィールドの「方界」カード１枚を対象として発動できる。このターン、そのカードを対象として相手が発動した効果は無効化される。",
-      "released": true,
-      "aliases": [
-        "方界防陣",
-        "方界防阵"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/24014",
-      "updatedAt": "2026-11-21T02:51:25.514Z",
-      "chineseNameSources": [
-        {
-          "name": "方界防阵",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "24014"
-        },
-        {
-          "name": "方界防阵",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "24014"
-        }
-      ]
-    },
-    {
-      "id": "24012",
-      "type": "spell",
-      "cardType": "spell",
-      "property": "field",
-      "properties": [
-        "field"
-      ],
-      "name": "方界領域",
-      "cnName": "方界领域",
-      "jaName": "方界領域",
-      "effectText": "このカード名のカードは１ターンに１枚しか発動できない。\n①：このカードの発動時の効果処理として、デッキからレベル４以下の「方界」モンスター１体を手札に加える事ができる。\n②：モンスター同士の戦闘で発生するお互いへの戦闘ダメージは０になる。\n③：１ターンに１度、自分メインフェイズに発動できる。手札から「方界」モンスター１体を召喚条件を無視して特殊召喚する。\n④：モンスターが戦闘で破壊された場合に発動する。破壊されたモンスターのコントローラーはその元々の攻撃力分のダメージを受ける。",
-      "released": true,
-      "aliases": [
-        "方界領域",
-        "方界领域"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/24012",
-      "updatedAt": "2026-11-21T02:51:25.514Z",
-      "chineseNameSources": [
-        {
-          "name": "方界领域",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "24012"
-        },
-        {
-          "name": "方界领域",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "24012"
-        }
-      ]
-    },
-    {
-      "id": "24013",
-      "type": "spell",
-      "cardType": "spell",
-      "property": "continuous",
-      "properties": [
-        "continuous"
-      ],
-      "name": "方界覚",
-      "cnName": "方界觉",
-      "jaName": "方界覚",
-      "effectText": "このカード名のカードは１ターンに１枚しか発動できない。\n①：このカードの発動時の効果処理として、デッキから「方界」カード１枚を墓地へ送る事ができる。\n②：１ターンに１度、手札を１枚捨てて発動できる。相手フィールドの表側表示モンスター１体に方界カウンターを１つ置く。方界カウンターが置かれているモンスターは攻撃できず、効果は無効化される。\n③：自分フィールドに「方界」モンスターが特殊召喚された場合に発動できる。自分の手札・フィールドのモンスターを融合素材とし、「方界」融合モンスター１体を融合召喚する。",
-      "released": true,
-      "aliases": [
-        "方界覚",
-        "方界觉"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/24013",
-      "updatedAt": "2026-11-21T02:51:25.514Z",
-      "chineseNameSources": [
-        {
-          "name": "方界觉",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "24013"
-        },
-        {
-          "name": "方界觉",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "24013"
-        }
-      ]
-    },
-    {
-      "id": "24008",
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Machine",
-      "monsterPropertyIds": [
-        "9",
-        "4"
-      ],
-      "monsterProperties": [
-        "Machine",
-        "Effect"
-      ],
-      "propertyIds": [
-        "9",
-        "4"
-      ],
-      "properties": [
-        "Machine",
-        "Effect"
-      ],
-      "attack": 800,
-      "atk": 800,
-      "defense": 800,
-      "def": 800,
-      "level": 4,
-      "attribute": "earth",
-      "name": "無窮方界器プリティマ",
-      "cnName": "无穷方界器 地天",
-      "jaName": "無窮方界器プリティマ",
-      "effectText": "このカード名の①②の効果はそれぞれ１ターンに１度しか使用できず、この効果を発動するターン、自分は融合モンスターしかEXデッキから特殊召喚できない。\n①：自分メインフェイズに発動できる。このカードを手札から特殊召喚する。\n②：このカードが召喚・特殊召喚した場合、手札を１枚捨てて発動できる。デッキから「方界」魔法・罠カードを２枚まで手札に加える。\n③：１ターンに１度、自分・相手のバトルフェイズに発動できる。自分の手札・フィールドのモンスターを融合素材とし、「方界」融合モンスター１体を融合召喚する。",
-      "released": true,
-      "aliases": [
-        "無窮方界器プリティマ",
-        "无穷方界器 地天",
-        "无穷方界器 生祖"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/24008",
-      "updatedAt": "2026-11-21T02:51:25.515Z",
-      "chineseNameSources": [
-        {
-          "name": "无穷方界器 地天",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "24008"
-        },
-        {
-          "name": "无穷方界器 生祖",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "24008"
-        }
-      ]
-    },
-    {
-      "id": "24010",
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Fiend",
-      "monsterPropertyIds": [
-        "14",
-        "11",
-        "4"
-      ],
-      "monsterProperties": [
-        "Fiend",
-        "Fusion",
-        "Effect"
-      ],
-      "propertyIds": [
-        "14",
-        "11",
-        "4"
-      ],
-      "properties": [
-        "Fiend",
-        "Fusion",
-        "Effect"
-      ],
-      "attack": 0,
-      "atk": 0,
-      "defense": 0,
-      "def": 0,
-      "level": 8,
-      "attribute": "water",
-      "name": "溟淵方界神アビス・ヴァグラーダ",
-      "cnName": "溟渊方界神 深渊伐萝陀",
-      "jaName": "溟淵方界神アビス・ヴァグラーダ",
-      "effectText": "「方界」モンスター×３\nこのカード名の②の効果は１ターンに１度しか使用できず、この効果を発動するターン、自分は融合モンスターしかEXデッキから特殊召喚できない。\n①：このカードは、攻撃力が自分の墓地の「方界胤ヴィジャム」の数×１０００アップし、このカードより攻撃力が低いモンスターの発動した効果を受けない。\n②：自分・相手ターンに発動できる。このカードをEXデッキに戻し、自分の墓地から「方界」モンスター３体を特殊召喚し、デッキから「方界」カード１枚を手札に加える。",
-      "released": true,
-      "aliases": [
-        "溟淵方界神アビス・ヴァグラーダ",
-        "溟渊方界神 深渊伐萝陀",
-        "溟渊方界神 深渊之伐格楼达"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/24010",
-      "updatedAt": "2026-11-21T02:51:25.515Z",
-      "chineseNameSources": [
-        {
-          "name": "溟渊方界神 深渊伐萝陀",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "24010"
-        },
-        {
-          "name": "溟渊方界神 深渊之伐格楼达",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "24010"
-        }
-      ]
-    },
-    {
-      "id": "24009",
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Fiend",
-      "monsterPropertyIds": [
-        "14",
-        "11",
-        "4"
-      ],
-      "monsterProperties": [
-        "Fiend",
-        "Fusion",
-        "Effect"
-      ],
-      "propertyIds": [
-        "14",
-        "11",
-        "4"
-      ],
-      "properties": [
-        "Fiend",
-        "Fusion",
-        "Effect"
-      ],
-      "attack": 0,
-      "atk": 0,
-      "defense": 0,
-      "def": 0,
-      "level": 6,
-      "attribute": "fire",
-      "name": "燎炎方界神アルディティア・ヘル・ブレイズ",
-      "cnName": "燎炎方界神 狱焰之阿底提",
-      "jaName": "燎炎方界神アルディティア・ヘル・ブレイズ",
-      "effectText": "「方界」モンスター＋「方界胤ヴィジャム」\n自分の手札・フィールドの上記のカードを墓地へ送った場合のみ特殊召喚できる。\nこのカード名の②の効果は１ターンに１度しか使用できず、この効果を発動するターン、自分は融合モンスターしかEXデッキから特殊召喚できない。\n①：このカードの攻撃力は、自分の墓地の「方界胤ヴィジャム」の数×８００アップする。\n②：自分・相手ターンに発動できる。このカードをEXデッキに戻し、自分の墓地から「方界」モンスター２体を特殊召喚し、デッキから「方界」カード１枚を手札に加える。",
-      "released": true,
-      "aliases": [
-        "燎炎方界神アルディティア・ヘル・ブレイズ",
-        "燎炎方界神 狱焰之阿底提",
-        "燎炎方界神 狱焰之阿尔底提亚"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/24009",
-      "updatedAt": "2026-11-21T02:51:25.515Z",
-      "chineseNameSources": [
-        {
-          "name": "燎炎方界神 狱焰之阿底提",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "24009"
-        },
-        {
-          "name": "燎炎方界神 狱焰之阿尔底提亚",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "24009"
-        }
-      ]
-    },
-    {
-      "id": "24017",
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Cyberse",
-      "monsterPropertyIds": [
-        "30",
-        "27",
-        "4"
-      ],
-      "monsterProperties": [
-        "Cyberse",
-        "Ritual",
-        "Effect"
-      ],
-      "propertyIds": [
-        "30",
-        "27",
-        "4"
-      ],
-      "properties": [
-        "Cyberse",
-        "Ritual",
-        "Effect"
-      ],
-      "attack": 2300,
-      "atk": 2300,
-      "defense": 2000,
-      "def": 2000,
-      "level": 7,
-      "attribute": "water",
-      "name": "アクア・リヴァイアサン＠マリンセス",
-      "cnName": "水海龙@海晶少女",
-      "jaName": "アクア・リヴァイアサン＠マリンセス",
-      "effectText": "「マリンセス」カードにより降臨\nこのカード名の①②の効果はそれぞれ１ターンに１度しか使用できない。\n①：手札のこのカードを相手に見せて発動できる。デッキから儀式モンスター以外の「マリンセス」カード１枚を手札に加える。その後、自分の手札を１枚選んで捨てる。\n②：このカードが儀式召喚した場合に発動できる。自分フィールドの「マリンセス」モンスターカードの数まで、相手フィールドのカードを手札に戻す。\n③：このカードがモンスターゾーンに存在する限り、相手フィールドのモンスターの攻撃力は１０００ダウンする。",
-      "released": true,
-      "aliases": [
-        "アクア・リヴァイアサン＠マリンセス",
-        "水海龙@海晶少女",
-        "水波海龙@海晶少女"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/24017",
-      "updatedAt": "2026-11-21T02:51:25.515Z",
-      "chineseNameSources": [
-        {
-          "name": "水海龙@海晶少女",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "24017"
-        },
-        {
-          "name": "水波海龙@海晶少女",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "24017"
-        }
-      ]
-    },
-    {
-      "id": "24024",
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Spellcaster",
-      "monsterPropertyIds": [
-        "8",
-        "18",
-        "4"
-      ],
-      "monsterProperties": [
-        "Spellcaster",
-        "Xyz",
-        "Effect"
-      ],
-      "propertyIds": [
-        "8",
-        "18",
-        "4"
-      ],
-      "properties": [
-        "Spellcaster",
-        "Xyz",
-        "Effect"
-      ],
-      "attack": 900,
-      "atk": 900,
-      "defense": 900,
-      "def": 900,
-      "rank": 2,
-      "attribute": "dark",
-      "name": "ゴーストリックの妖狐",
-      "cnName": "鬼计妖狐",
-      "jaName": "ゴーストリックの妖狐",
-      "effectText": "レベル２「ゴーストリック」モンスター×２\n自分は「ゴーストリックの妖狐」を１ターンに１度しかEXデッキから特殊召喚できない。\nこのカードは自分フィールドの裏側守備表示のレベルを持つ「ゴーストリック」モンスターの上に重ねてX召喚する事もできる。\n①：このカードはモンスターゾーンに存在する限り、相手の効果では破壊されない。\n②：１ターンに１度、このカードのX素材を１つ取り除いて発動できる。デッキから「ゴーストリック」モンスター１体を特殊召喚する。このターン、自分は闇属性モンスターしか特殊召喚できない。",
-      "released": true,
-      "aliases": [
-        "ゴーストリックの妖狐",
-        "鬼计妖狐"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/24024",
-      "updatedAt": "2026-11-21T02:51:25.570Z",
-      "chineseNameSources": [
-        {
-          "name": "鬼计妖狐",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "24024"
-        },
-        {
-          "name": "鬼计妖狐",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "24024"
-        }
-      ]
-    },
-    {
-      "id": "24027",
-      "type": "spell",
-      "cardType": "spell",
-      "property": "quickplay",
-      "properties": [
-        "quickplay"
-      ],
-      "name": "ゴーストリック・アート",
-      "cnName": "鬼计艺术",
-      "jaName": "ゴーストリック・アート",
-      "effectText": "このカード名の①②の効果はそれぞれ１ターンに１度しか使用できない。\n①：自分の手札・フィールドの「ゴーストリック」モンスターを２体までリリースし、その数だけデッキから「ゴーストリック」モンスターをそれぞれ表側守備表示か裏側守備表示で特殊召喚する（同名カードは１枚まで）。このカードの発動後、ターン終了時まで自分は闇属性モンスターしか特殊召喚できない。\n②：自分メインフェイズに墓地のこのカードを除外して発動できる。自分フィールドの裏側守備表示の「ゴーストリック」モンスター１体を表側守備表示にする。",
-      "released": true,
-      "aliases": [
-        "ゴーストリック・アート",
-        "鬼计艺术",
-        "鬼计错视画"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/24027",
-      "updatedAt": "2026-11-21T02:51:25.571Z",
-      "chineseNameSources": [
-        {
-          "name": "鬼计艺术",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "24027"
-        },
-        {
-          "name": "鬼计错视画",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "24027"
-        }
-      ]
-    },
-    {
-      "id": "24026",
-      "type": "spell",
-      "cardType": "spell",
-      "property": "field",
-      "properties": [
-        "field"
-      ],
-      "name": "ゴーストリック・ガーデン",
-      "cnName": "鬼计花园",
-      "jaName": "ゴーストリック・ガーデン",
-      "effectText": "このカード名のカードは１ターンに１枚しか発動できない。\n①：このカードが表側表示で存在する限り１度だけ、自分メインフェイズに発動できる。デッキから「ゴーストリック」モンスター１体を手札に加える。\n②：モンスターが相手の効果で墓地へ送られた場合、以下の効果から１つを選択して発動できる。\n●自分フィールドの表側表示か裏側守備表示の「ゴーストリック」モンスター１体を表側守備表示か裏側守備表示にする。\n●自分のデッキの一番上のカードを自分フィールドの「ゴーストリック」Xモンスター１体のX素材にする。",
-      "released": true,
-      "aliases": [
-        "ゴーストリック・ガーデン",
-        "鬼计花园"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/24026",
-      "updatedAt": "2026-11-21T02:51:25.571Z",
-      "chineseNameSources": [
-        {
-          "name": "鬼计花园",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "24026"
-        },
-        {
-          "name": "鬼计花园",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "24026"
-        }
-      ]
-    },
-    {
-      "id": "24022",
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Fiend",
-      "monsterPropertyIds": [
-        "14",
-        "4"
-      ],
-      "monsterProperties": [
-        "Fiend",
-        "Effect"
-      ],
-      "propertyIds": [
-        "14",
-        "4"
-      ],
-      "properties": [
-        "Fiend",
-        "Effect"
-      ],
-      "attack": 300,
-      "atk": 300,
-      "defense": 200,
-      "def": 200,
-      "level": 1,
-      "attribute": "dark",
-      "name": "ゴーストリック・スパンキー",
-      "cnName": "鬼计鬼火",
-      "jaName": "ゴーストリック・スパンキー",
-      "effectText": "自分フィールドに「ゴーストリック」モンスターが存在する場合のみ、このカードは召喚できる。\n①：相手がフィールドのモンスターの効果を発動した時に発動できる。このカードを手札から裏側守備表示で特殊召喚し、手札・デッキから「ゴーストリック」フィールド魔法・永続罠カード１枚を自分フィールドに表側表示で置く。その後、相手の墓地のカードが５枚以上の場合、手札からモンスター１体を裏側守備表示で特殊召喚できる。\n②：自分メインフェイズに発動できる。このカードを裏側守備表示にする（１ターンに１度のみ）。",
-      "released": true,
-      "aliases": [
-        "ゴーストリック・スパンキー",
-        "鬼计鬼火",
-        "鬼计小鬼火"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/24022",
-      "updatedAt": "2026-11-21T02:51:25.571Z",
-      "chineseNameSources": [
-        {
-          "name": "鬼计鬼火",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "24022"
-        },
-        {
-          "name": "鬼计小鬼火",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "24022"
-        }
-      ]
-    },
-    {
-      "id": "24028",
-      "type": "trap",
-      "cardType": "trap",
-      "property": "continuous",
-      "properties": [
-        "continuous"
-      ],
-      "name": "ゴーストリック・フリーズ",
-      "cnName": "鬼计冻结",
-      "jaName": "ゴーストリック・フリーズ",
-      "effectText": "①：自分フィールドに「ゴーストリック」カード以外の表側表示カードが存在しない状態で、相手フィールドに魔法・罠カードがセットされた時に適用する。そのカードは次のターンの終了時まで発動できない。\n②：自分・相手ターンに１度、発動できる。自分の墓地・除外状態の「ゴーストリック」カードを５枚までデッキに戻す。\n③：このカードが相手によって墓地へ送られた場合に発動できる。相手フィールドのモンスターを全て裏側守備表示にする。この効果で裏側守備表示になったモンスターは表示形式を変更できない。",
-      "released": true,
-      "aliases": [
-        "ゴーストリック・フリーズ",
-        "鬼计冻结",
-        "鬼计结冰"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/24028",
-      "updatedAt": "2026-11-21T02:51:25.572Z",
-      "chineseNameSources": [
-        {
-          "name": "鬼计冻结",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "24028"
-        },
-        {
-          "name": "鬼计结冰",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "24028"
-        }
-      ]
-    },
-    {
-      "id": "24025",
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Zombie",
-      "monsterPropertyIds": [
-        "32",
-        "18",
-        "4"
-      ],
-      "monsterProperties": [
-        "Zombie",
-        "Xyz",
-        "Effect"
-      ],
-      "propertyIds": [
-        "32",
-        "18",
-        "4"
-      ],
-      "properties": [
-        "Zombie",
-        "Xyz",
-        "Effect"
-      ],
-      "attack": 2800,
-      "atk": 2800,
-      "defense": 2600,
-      "def": 2600,
-      "rank": 6,
-      "attribute": "dark",
-      "name": "ゴーストリック・マスター アルカード",
-      "cnName": "鬼计之主 阿鲁卡德",
-      "jaName": "ゴーストリック・マスター アルカード",
-      "effectText": "レベル６モンスター×３\nこのカードは手札の「ゴーストリック」カード１枚を捨て、自分フィールドの「ゴーストリック・アルカード」の上に重ねてX召喚する事もできる。\nこのカードはX召喚の素材にできない。\n①：表側表示のこのカードは裏側守備表示にならない。\n②：自分・相手ターンに１度、このカードのX素材を１つ取り除いて発動できる。相手フィールドの裏側表示カードを全て破壊する。\n③：魔法・罠カードが発動した時、このカードのX素材を２つ取り除いて発動できる。その発動を無効にし、そのカードをそのままセットする。",
-      "released": true,
-      "aliases": [
-        "ゴーストリック・マスター アルカード",
-        "鬼计之主 阿鲁卡德",
-        "鬼计妖魔之主 阿鲁卡德"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/24025",
-      "updatedAt": "2026-11-21T02:51:25.572Z",
-      "chineseNameSources": [
-        {
-          "name": "鬼计之主 阿鲁卡德",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "24025"
-        },
-        {
-          "name": "鬼计妖魔之主 阿鲁卡德",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "24025"
-        }
-      ]
-    },
-    {
-      "id": "24023",
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Zombie",
-      "monsterPropertyIds": [
-        "32",
-        "4"
-      ],
-      "monsterProperties": [
-        "Zombie",
-        "Effect"
-      ],
-      "propertyIds": [
-        "32",
-        "4"
-      ],
-      "properties": [
-        "Zombie",
-        "Effect"
-      ],
-      "attack": 1500,
-      "atk": 1500,
-      "defense": 600,
-      "def": 600,
-      "level": 3,
-      "attribute": "dark",
-      "name": "ゴーストリック・リッチー",
-      "cnName": "鬼计巫妖",
-      "jaName": "ゴーストリック・リッチー",
-      "effectText": "自分フィールドに「ゴーストリック」モンスターが存在する場合のみ、このカードは召喚できる。\nこのカード名の①の効果は１ターンに１度しか使用できない。\n①：このカードが召喚・リバースした場合に発動する。デッキから「ゴーストリック」速攻魔法・通常罠カード１枚を自分フィールドにセットする。この効果でセットしたカードはセットしたターンでも発動できる。このターン、自分は闇属性モンスターしか特殊召喚できない。\n②：自分メインフェイズに発動できる。このカードを裏側守備表示にする（１ターンに１度のみ）。",
-      "released": true,
-      "aliases": [
-        "ゴーストリック・リッチー",
-        "鬼计巫妖"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/24023",
-      "updatedAt": "2026-11-21T02:51:25.572Z",
-      "chineseNameSources": [
-        {
-          "name": "鬼计巫妖",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "24023"
-        },
-        {
-          "name": "鬼计巫妖",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "24023"
-        }
-      ]
-    },
-    {
       "id": "6053",
       "type": "spell",
       "cardType": "spell",
@@ -1009065,304 +1009407,6 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "6053"
-        }
-      ]
-    },
-    {
-      "id": "24015",
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Cyberse",
-      "monsterPropertyIds": [
-        "30",
-        "4"
-      ],
-      "monsterProperties": [
-        "Cyberse",
-        "Effect"
-      ],
-      "propertyIds": [
-        "30",
-        "4"
-      ],
-      "properties": [
-        "Cyberse",
-        "Effect"
-      ],
-      "attack": 1600,
-      "atk": 1600,
-      "defense": 1000,
-      "def": 1000,
-      "level": 3,
-      "attribute": "water",
-      "name": "海晶乙女アズリー",
-      "cnName": "海晶少女 蓝鲷",
-      "jaName": "海晶乙女アズリー",
-      "effectText": "このカード名の①②の効果はそれぞれ１ターンに１度しか使用できない。\n①：このカードが召喚・特殊召喚した場合に発動できる。デッキから攻撃力１０００以下のサイバース族・水属性モンスター１体を特殊召喚する。このターン、自分は水属性モンスターしか特殊召喚できない。\n②：このカードが墓地に存在する状態で、自分が「マリンセス」LモンスターをL召喚した場合、このカードを除外して発動できる。そのLモンスター１体に自分の墓地から「マリンセス」モンスター１体を攻撃力６００アップの装備魔法カード扱いで装備する。",
-      "released": true,
-      "aliases": [
-        "海晶乙女アズリー",
-        "海晶少女 蓝鲷"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/24015",
-      "updatedAt": "2026-11-21T02:51:25.626Z",
-      "chineseNameSources": [
-        {
-          "name": "海晶少女 蓝鲷",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "24015"
-        },
-        {
-          "name": "海晶少女 蓝鲷",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "24015"
-        }
-      ]
-    },
-    {
-      "id": "24016",
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Cyberse",
-      "monsterPropertyIds": [
-        "30",
-        "4"
-      ],
-      "monsterProperties": [
-        "Cyberse",
-        "Effect"
-      ],
-      "propertyIds": [
-        "30",
-        "4"
-      ],
-      "properties": [
-        "Cyberse",
-        "Effect"
-      ],
-      "attack": 600,
-      "atk": 600,
-      "defense": 2400,
-      "def": 2400,
-      "level": 5,
-      "attribute": "water",
-      "name": "海晶乙女ウルピス",
-      "cnName": "海晶少女 狐狸倒吊",
-      "jaName": "海晶乙女ウルピス",
-      "effectText": "このカード名の①②③の効果はそれぞれ１ターンに１度しか使用できない。\n①：このカードが手札に存在する場合、手札から他の、「マリンセス」カード１枚か水属性モンスター１体を捨てて発動できる。このカードを特殊召喚する。\n②：このカードが召喚・特殊召喚した場合に発動できる。デッキから「マリンセス」魔法・罠カード１枚を自分フィールドにセットする。\n③：自分フィールドの「マリンセス」Lモンスターカード１枚を墓地へ送って発動できる。自分は１枚ドローする。",
-      "released": true,
-      "aliases": [
-        "海晶乙女ウルピス",
-        "海晶少女 狐狸倒吊",
-        "海晶少女 狐蓝子鱼"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/24016",
-      "updatedAt": "2026-11-21T02:51:25.627Z",
-      "chineseNameSources": [
-        {
-          "name": "海晶少女 狐狸倒吊",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "24016"
-        },
-        {
-          "name": "海晶少女 狐蓝子鱼",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "24016"
-        }
-      ]
-    },
-    {
-      "id": "24019",
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Cyberse",
-      "monsterPropertyIds": [
-        "30",
-        "23",
-        "4"
-      ],
-      "monsterProperties": [
-        "Cyberse",
-        "Link",
-        "Effect"
-      ],
-      "propertyIds": [
-        "30",
-        "23",
-        "4"
-      ],
-      "properties": [
-        "Cyberse",
-        "Link",
-        "Effect"
-      ],
-      "attack": 2800,
-      "atk": 2800,
-      "link": 4,
-      "linkRating": 4,
-      "linkArrows": "8613",
-      "attribute": "water",
-      "name": "海晶乙女トゥルースハート",
-      "cnName": "海晶少女 真理心",
-      "jaName": "海晶乙女トゥルースハート",
-      "effectText": "「マリンセス」モンスター２体以上\nこのカード名の①の効果は１ターンに１度しか使用できない。\n①：このカードが元々の攻撃力が０のLモンスターを素材としてL召喚した場合に発動できる。EXデッキからリンク３以下の「マリンセス」モンスター１体を特殊召喚する。\n②：自分のフィールド・墓地からLモンスターカード１枚を除外して発動できる。相手フィールドのカード１枚を破壊する。このターン、自分は「海晶乙女トゥルースハート」の効果を発動するためにリンクマーカーの数が同じモンスターを除外できない。",
-      "released": true,
-      "aliases": [
-        "海晶乙女トゥルースハート",
-        "海晶少女 真理心",
-        "海晶少女 真晶心"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/24019",
-      "updatedAt": "2026-11-21T02:51:25.627Z",
-      "chineseNameSources": [
-        {
-          "name": "海晶少女 真理心",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "24019"
-        },
-        {
-          "name": "海晶少女 真晶心",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "24019"
-        }
-      ]
-    },
-    {
-      "id": "24018",
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Cyberse",
-      "monsterPropertyIds": [
-        "30",
-        "23",
-        "4"
-      ],
-      "monsterProperties": [
-        "Cyberse",
-        "Link",
-        "Effect"
-      ],
-      "propertyIds": [
-        "30",
-        "23",
-        "4"
-      ],
-      "properties": [
-        "Cyberse",
-        "Link",
-        "Effect"
-      ],
-      "attack": 0,
-      "atk": 0,
-      "link": 2,
-      "linkRating": 2,
-      "linkArrows": "13",
-      "attribute": "water",
-      "name": "海晶乙女ブルークリスタルハート",
-      "cnName": "海晶少女 蓝水晶心",
-      "jaName": "海晶乙女ブルークリスタルハート",
-      "effectText": "「マリンセス」モンスター２体\nこのカード名はルール上「海晶乙女クリスタルハート」として扱う。\nこのカード名の①②の効果はそれぞれ１ターンに１度しか使用できない。\n①：自分の墓地の「マリンセス」Lモンスター１体を対象として発動できる。そのモンスターをこのカードのリンク先となる自分フィールドに特殊召喚する。\n②：このカードがリンク３以上の「マリンセス」LモンスターのL素材として墓地へ送られた場合に発動できる。デッキから「マリンセス」カード１枚を墓地へ送る。",
-      "released": true,
-      "aliases": [
-        "海晶乙女ブルークリスタルハート",
-        "海晶少女 蓝水晶心"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/24018",
-      "updatedAt": "2026-11-21T02:51:25.628Z",
-      "chineseNameSources": [
-        {
-          "name": "海晶少女 蓝水晶心",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "24018"
-        },
-        {
-          "name": "海晶少女 蓝水晶心",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "24018"
-        }
-      ]
-    },
-    {
-      "id": "24021",
-      "type": "trap",
-      "cardType": "trap",
-      "name": "海晶乙女神流",
-      "cnName": "海晶少女神流",
-      "jaName": "海晶乙女神流",
-      "effectText": "自分フィールドにリンク３以上の「マリンセス」Lモンスターが存在する場合、このカードの発動は手札からもできる。\n①：自分フィールドの「マリンセス」Lモンスターの数まで、フィールドの魔法・罠カードを対象として発動できる。そのカードを破壊する。\n②：墓地のこのカードを除外して発動できる。自分フィールドのリンク３以上の「マリンセス」Lモンスターカード１枚を墓地へ送る。その後、自分の手札・墓地からサイバース族・水属性の儀式モンスター１体を儀式召喚扱いで特殊召喚できる。",
-      "released": true,
-      "aliases": [
-        "海晶乙女神流",
-        "海晶少女神流"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/24021",
-      "updatedAt": "2026-11-21T02:51:25.628Z",
-      "chineseNameSources": [
-        {
-          "name": "海晶少女神流",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "24021"
-        },
-        {
-          "name": "海晶少女神流",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "24021"
-        }
-      ]
-    },
-    {
-      "id": "24020",
-      "type": "spell",
-      "cardType": "spell",
-      "property": "continuous",
-      "properties": [
-        "continuous"
-      ],
-      "name": "海晶乙女の礁湖",
-      "cnName": "海晶少女的礁湖",
-      "jaName": "海晶乙女の礁湖",
-      "effectText": "このカード名のカードは１ターンに１枚しか発動できない。\n①：このカードの発動時の効果処理として、デッキからサイバース族・水属性モンスター１体を手札に加える事ができる。\n②：相手エンドフェイズに発動できる。自分の墓地・除外状態の水属性モンスターを３体までデッキに戻す。\n③：魔法＆罠ゾーンの表側表示のこのカードを墓地へ送って発動できる。レベルの合計が儀式召喚するモンスターのレベル以上になるように、自分の墓地の水属性モンスターを除外し、手札からサイバース族・水属性の儀式モンスター１体を儀式召喚する。",
-      "released": true,
-      "aliases": [
-        "海晶乙女の礁湖",
-        "海晶少女的礁湖"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/24020",
-      "updatedAt": "2026-11-21T02:51:25.629Z",
-      "chineseNameSources": [
-        {
-          "name": "海晶少女的礁湖",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "24020"
-        },
-        {
-          "name": "海晶少女的礁湖",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "24020"
         }
       ]
     }

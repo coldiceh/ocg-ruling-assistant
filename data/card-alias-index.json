@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-21T02:51:48.768Z",
+  "generatedAt": "2026-11-22T01:35:21.806Z",
   "records": [
     {
       "alias": "“K9刑侦案件”",
@@ -3052,6 +3052,34 @@
       "normalizedAlias": "深渊的电赤鳐",
       "cardId": "11752",
       "cardName": "深淵のスタングレイ",
+      "language": "zh"
+    },
+    {
+      "alias": "溟淵方界神アビス・ヴァグラーダ",
+      "normalizedAlias": "溟淵方界神アビス・ヴァグラ-ダ",
+      "cardId": "24010",
+      "cardName": "溟淵方界神アビス・ヴァグラーダ",
+      "language": "ja"
+    },
+    {
+      "alias": "溟渊方界神 深渊伐萝陀",
+      "normalizedAlias": "溟渊方界神 深渊伐萝陀",
+      "cardId": "24010",
+      "cardName": "溟淵方界神アビス・ヴァグラーダ",
+      "language": "zh"
+    },
+    {
+      "alias": "Abyss Vagrada the Abyssal Cubic Lord",
+      "normalizedAlias": "abyss vagrada the abyssal cubic lord",
+      "cardId": "24010",
+      "cardName": "溟淵方界神アビス・ヴァグラーダ",
+      "language": "en"
+    },
+    {
+      "alias": "溟渊方界神 深渊之伐格楼达",
+      "normalizedAlias": "溟渊方界神 深渊之伐格楼达",
+      "cardId": "24010",
+      "cardName": "溟淵方界神アビス・ヴァグラーダ",
       "language": "zh"
     },
     {
@@ -6903,6 +6931,34 @@
       "cardId": "7467",
       "cardName": "アルケミー・サイクル",
       "language": "en"
+    },
+    {
+      "alias": "燎炎方界神アルディティア・ヘル・ブレイズ",
+      "normalizedAlias": "燎炎方界神アルディティア・ヘル・ブレイズ",
+      "cardId": "24009",
+      "cardName": "燎炎方界神アルディティア・ヘル・ブレイズ",
+      "language": "ja"
+    },
+    {
+      "alias": "燎炎方界神 狱焰之阿底提",
+      "normalizedAlias": "燎炎方界神 狱焰之阿底提",
+      "cardId": "24009",
+      "cardName": "燎炎方界神アルディティア・ヘル・ブレイズ",
+      "language": "zh"
+    },
+    {
+      "alias": "Alditia Hell Blaze the Burning Cubic Lord",
+      "normalizedAlias": "alditia hell blaze the burning cubic lord",
+      "cardId": "24009",
+      "cardName": "燎炎方界神アルディティア・ヘル・ブレイズ",
+      "language": "en"
+    },
+    {
+      "alias": "燎炎方界神 狱焰之阿尔底提亚",
+      "normalizedAlias": "燎炎方界神 狱焰之阿尔底提亚",
+      "cardId": "24009",
+      "cardName": "燎炎方界神アルディティア・ヘル・ブレイズ",
+      "language": "zh"
     },
     {
       "alias": "神禽王アレクトール",
@@ -18046,6 +18102,34 @@
       "normalizedAlias": "水流喷射器·浮上型",
       "cardId": "20524",
       "cardName": "水波喷气机・上浮",
+      "language": "zh"
+    },
+    {
+      "alias": "アクア・リヴァイアサン＠マリンセス",
+      "normalizedAlias": "アクア・リヴァイアサン@マリンセス",
+      "cardId": "24017",
+      "cardName": "アクア・リヴァイアサン＠マリンセス",
+      "language": "ja"
+    },
+    {
+      "alias": "水海龙@海晶少女",
+      "normalizedAlias": "水海龙@海晶少女",
+      "cardId": "24017",
+      "cardName": "アクア・リヴァイアサン＠マリンセス",
+      "language": "zh"
+    },
+    {
+      "alias": "Aqua Leviathan @Marincess",
+      "normalizedAlias": "aqua leviathan @marincess",
+      "cardId": "24017",
+      "cardName": "アクア・リヴァイアサン＠マリンセス",
+      "language": "en"
+    },
+    {
+      "alias": "水波海龙@海晶少女",
+      "normalizedAlias": "水波海龙@海晶少女",
+      "cardId": "24017",
+      "cardName": "アクア・リヴァイアサン＠マリンセス",
       "language": "zh"
     },
     {
@@ -29317,6 +29401,27 @@
       "cardId": "6498",
       "cardName": "巨大战舰 泰特朗",
       "language": "zh"
+    },
+    {
+      "alias": "B・L・A・C・Kパルフェ",
+      "normalizedAlias": "b・l・a・c・kパルフェ",
+      "cardId": "24071",
+      "cardName": "B・L・A・C・Kパルフェ",
+      "language": "ja"
+    },
+    {
+      "alias": "莓柠苹巧奇之黑芭菲",
+      "normalizedAlias": "莓柠苹巧奇之黑芭菲",
+      "cardId": "24071",
+      "cardName": "B・L・A・C・Kパルフェ",
+      "language": "zh"
+    },
+    {
+      "alias": "B.L.A.C.K. Parfait",
+      "normalizedAlias": "b.l.a.c.k. parfait",
+      "cardId": "24071",
+      "cardName": "B・L・A・C・Kパルフェ",
+      "language": "en"
     },
     {
       "alias": "BBS",
@@ -74182,6 +74287,27 @@
       "language": "en"
     },
     {
+      "alias": "方界覚",
+      "normalizedAlias": "方界覚",
+      "cardId": "24013",
+      "cardName": "方界覚",
+      "language": "zh"
+    },
+    {
+      "alias": "方界觉",
+      "normalizedAlias": "方界觉",
+      "cardId": "24013",
+      "cardName": "方界覚",
+      "language": "zh"
+    },
+    {
+      "alias": "Cubic Bodhi",
+      "normalizedAlias": "cubic bodhi",
+      "cardId": "24013",
+      "cardName": "方界覚",
+      "language": "en"
+    },
+    {
       "alias": "方界縁起",
       "normalizedAlias": "方界縁起",
       "cardId": "14382",
@@ -74217,6 +74343,27 @@
       "language": "en"
     },
     {
+      "alias": "方界防陣",
+      "normalizedAlias": "方界防陣",
+      "cardId": "24014",
+      "cardName": "方界防陣",
+      "language": "zh"
+    },
+    {
+      "alias": "方界防阵",
+      "normalizedAlias": "方界防阵",
+      "cardId": "24014",
+      "cardName": "方界防陣",
+      "language": "zh"
+    },
+    {
+      "alias": "Cubic Defense",
+      "normalizedAlias": "cubic defense",
+      "cardId": "24014",
+      "cardName": "方界防陣",
+      "language": "en"
+    },
+    {
       "alias": "方界法",
       "normalizedAlias": "方界法",
       "cardId": "14381",
@@ -74228,6 +74375,27 @@
       "normalizedAlias": "cubic dharma",
       "cardId": "14381",
       "cardName": "方界法",
+      "language": "en"
+    },
+    {
+      "alias": "方界領域",
+      "normalizedAlias": "方界領域",
+      "cardId": "24012",
+      "cardName": "方界領域",
+      "language": "zh"
+    },
+    {
+      "alias": "方界领域",
+      "normalizedAlias": "方界领域",
+      "cardId": "24012",
+      "cardName": "方界領域",
+      "language": "zh"
+    },
+    {
+      "alias": "Cubic Dimension",
+      "normalizedAlias": "cubic dimension",
+      "cardId": "24012",
+      "cardName": "方界領域",
       "language": "en"
     },
     {
@@ -102537,6 +102705,34 @@
       "cardId": "5546",
       "cardName": "攪乱作戦",
       "language": "en"
+    },
+    {
+      "alias": "創世方界超神ディヴァイン・アニマ・インフィニティ",
+      "normalizedAlias": "創世方界超神ディヴァイン・アニマ・インフィニティ",
+      "cardId": "24011",
+      "cardName": "創世方界超神ディヴァイン・アニマ・インフィニティ",
+      "language": "ja"
+    },
+    {
+      "alias": "创世方界超神 无穷圣魂",
+      "normalizedAlias": "创世方界超神 无穷圣魂",
+      "cardId": "24011",
+      "cardName": "創世方界超神ディヴァイン・アニマ・インフィニティ",
+      "language": "zh"
+    },
+    {
+      "alias": "Divine Anima Infinity the Creation Cubic Overlord",
+      "normalizedAlias": "divine anima infinity the creation cubic overlord",
+      "cardId": "24011",
+      "cardName": "創世方界超神ディヴァイン・アニマ・インフィニティ",
+      "language": "en"
+    },
+    {
+      "alias": "创世方界超神 天神之魂天·无穷",
+      "normalizedAlias": "创世方界超神 天神之魂天·无穷",
+      "cardId": "24011",
+      "cardName": "創世方界超神ディヴァイン・アニマ・インフィニティ",
+      "language": "zh"
     },
     {
       "alias": "神灭兵器－天霆号 扼宙斯",
@@ -160807,6 +161003,34 @@
       "language": "zh"
     },
     {
+      "alias": "ゴーストリック・アート",
+      "normalizedAlias": "ゴ-ストリック・ア-ト",
+      "cardId": "24027",
+      "cardName": "ゴーストリック・アート",
+      "language": "ja"
+    },
+    {
+      "alias": "鬼计艺术",
+      "normalizedAlias": "鬼计艺术",
+      "cardId": "24027",
+      "cardName": "ゴーストリック・アート",
+      "language": "zh"
+    },
+    {
+      "alias": "Ghostrick Art",
+      "normalizedAlias": "ghostrick art",
+      "cardId": "24027",
+      "cardName": "ゴーストリック・アート",
+      "language": "en"
+    },
+    {
+      "alias": "鬼计错视画",
+      "normalizedAlias": "鬼计错视画",
+      "cardId": "24027",
+      "cardName": "ゴーストリック・アート",
+      "language": "zh"
+    },
+    {
       "alias": "ゴーストリック・ブレイク",
       "normalizedAlias": "ゴ-ストリック・ブレイク",
       "cardId": "11209",
@@ -160982,6 +161206,55 @@
       "language": "zh"
     },
     {
+      "alias": "ゴーストリック・フリーズ",
+      "normalizedAlias": "ゴ-ストリック・フリ-ズ",
+      "cardId": "24028",
+      "cardName": "ゴーストリック・フリーズ",
+      "language": "ja"
+    },
+    {
+      "alias": "鬼计冻结",
+      "normalizedAlias": "鬼计冻结",
+      "cardId": "24028",
+      "cardName": "ゴーストリック・フリーズ",
+      "language": "zh"
+    },
+    {
+      "alias": "Ghostrick Freeze",
+      "normalizedAlias": "ghostrick freeze",
+      "cardId": "24028",
+      "cardName": "ゴーストリック・フリーズ",
+      "language": "en"
+    },
+    {
+      "alias": "鬼计结冰",
+      "normalizedAlias": "鬼计结冰",
+      "cardId": "24028",
+      "cardName": "ゴーストリック・フリーズ",
+      "language": "zh"
+    },
+    {
+      "alias": "ゴーストリック・ガーデン",
+      "normalizedAlias": "ゴ-ストリック・ガ-デン",
+      "cardId": "24026",
+      "cardName": "ゴーストリック・ガーデン",
+      "language": "ja"
+    },
+    {
+      "alias": "鬼计花园",
+      "normalizedAlias": "鬼计花园",
+      "cardId": "24026",
+      "cardName": "ゴーストリック・ガーデン",
+      "language": "zh"
+    },
+    {
+      "alias": "Ghostrick Garden",
+      "normalizedAlias": "ghostrick garden",
+      "cardId": "24026",
+      "cardName": "ゴーストリック・ガーデン",
+      "language": "en"
+    },
+    {
       "alias": "ゴーストリック・グール",
       "normalizedAlias": "ゴ-ストリック・グ-ル",
       "cardId": "10871",
@@ -161115,6 +161388,27 @@
       "language": "zh"
     },
     {
+      "alias": "ゴーストリック・リッチー",
+      "normalizedAlias": "ゴ-ストリック・リッチ-",
+      "cardId": "24023",
+      "cardName": "ゴーストリック・リッチー",
+      "language": "ja"
+    },
+    {
+      "alias": "鬼计巫妖",
+      "normalizedAlias": "鬼计巫妖",
+      "cardId": "24023",
+      "cardName": "ゴーストリック・リッチー",
+      "language": "zh"
+    },
+    {
+      "alias": "Ghostrick Lich",
+      "normalizedAlias": "ghostrick lich",
+      "cardId": "24023",
+      "cardName": "ゴーストリック・リッチー",
+      "language": "en"
+    },
+    {
       "alias": "鬼计屋",
       "normalizedAlias": "鬼计屋",
       "cardId": "10793",
@@ -161182,6 +161476,34 @@
       "normalizedAlias": "诡怪玛莉",
       "cardId": "10908",
       "cardName": "鬼计・玛丽",
+      "language": "zh"
+    },
+    {
+      "alias": "ゴーストリック・マスター アルカード",
+      "normalizedAlias": "ゴ-ストリック・マスタ- アルカ-ド",
+      "cardId": "24025",
+      "cardName": "ゴーストリック・マスター アルカード",
+      "language": "ja"
+    },
+    {
+      "alias": "鬼计之主 阿鲁卡德",
+      "normalizedAlias": "鬼计之主 阿鲁卡德",
+      "cardId": "24025",
+      "cardName": "ゴーストリック・マスター アルカード",
+      "language": "zh"
+    },
+    {
+      "alias": "Ghostrick Master Alucard",
+      "normalizedAlias": "ghostrick master alucard",
+      "cardId": "24025",
+      "cardName": "ゴーストリック・マスター アルカード",
+      "language": "en"
+    },
+    {
+      "alias": "鬼计妖魔之主 阿鲁卡德",
+      "normalizedAlias": "鬼计妖魔之主 阿鲁卡德",
+      "cardId": "24025",
+      "cardName": "ゴーストリック・マスター アルカード",
       "language": "zh"
     },
     {
@@ -161577,6 +161899,34 @@
       "language": "zh"
     },
     {
+      "alias": "ゴーストリック・スパンキー",
+      "normalizedAlias": "ゴ-ストリック・スパンキ-",
+      "cardId": "24022",
+      "cardName": "ゴーストリック・スパンキー",
+      "language": "ja"
+    },
+    {
+      "alias": "鬼计鬼火",
+      "normalizedAlias": "鬼计鬼火",
+      "cardId": "24022",
+      "cardName": "ゴーストリック・スパンキー",
+      "language": "zh"
+    },
+    {
+      "alias": "Ghostrick Spunkie",
+      "normalizedAlias": "ghostrick spunkie",
+      "cardId": "24022",
+      "cardName": "ゴーストリック・スパンキー",
+      "language": "en"
+    },
+    {
+      "alias": "鬼计小鬼火",
+      "normalizedAlias": "鬼计小鬼火",
+      "cardId": "24022",
+      "cardName": "ゴーストリック・スパンキー",
+      "language": "zh"
+    },
+    {
       "alias": "鬼计・科学怪人",
       "normalizedAlias": "鬼计・科学怪人",
       "cardId": "10752",
@@ -161736,6 +162086,27 @@
       "cardId": "10986",
       "cardName": "ゴーストリック・イエティ",
       "language": "zh"
+    },
+    {
+      "alias": "ゴーストリックの妖狐",
+      "normalizedAlias": "ゴ-ストリックの妖狐",
+      "cardId": "24024",
+      "cardName": "ゴーストリックの妖狐",
+      "language": "ja"
+    },
+    {
+      "alias": "鬼计妖狐",
+      "normalizedAlias": "鬼计妖狐",
+      "cardId": "24024",
+      "cardName": "ゴーストリックの妖狐",
+      "language": "zh"
+    },
+    {
+      "alias": "Ghostrick Yoko",
+      "normalizedAlias": "ghostrick yoko",
+      "cardId": "24024",
+      "cardName": "ゴーストリックの妖狐",
+      "language": "en"
     },
     {
       "alias": "鬼计的雪女",
@@ -234741,6 +235112,27 @@
       "language": "zh"
     },
     {
+      "alias": "海晶乙女アズリー",
+      "normalizedAlias": "海晶乙女アズリ-",
+      "cardId": "24015",
+      "cardName": "海晶乙女アズリー",
+      "language": "ja"
+    },
+    {
+      "alias": "海晶少女 蓝鲷",
+      "normalizedAlias": "海晶少女 蓝鲷",
+      "cardId": "24015",
+      "cardName": "海晶乙女アズリー",
+      "language": "zh"
+    },
+    {
+      "alias": "Marincess Azuri",
+      "normalizedAlias": "marincess azuri",
+      "cardId": "24015",
+      "cardName": "海晶乙女アズリー",
+      "language": "en"
+    },
+    {
       "alias": "海晶少女 角耳雪锉",
       "normalizedAlias": "海晶少女 角耳雪锉",
       "cardId": "14992",
@@ -234795,6 +235187,27 @@
       "cardId": "14680",
       "cardName": "海晶少女之斗海",
       "language": "zh"
+    },
+    {
+      "alias": "海晶乙女ブルークリスタルハート",
+      "normalizedAlias": "海晶乙女ブル-クリスタルハ-ト",
+      "cardId": "24018",
+      "cardName": "海晶乙女ブルークリスタルハート",
+      "language": "ja"
+    },
+    {
+      "alias": "海晶少女 蓝水晶心",
+      "normalizedAlias": "海晶少女 蓝水晶心",
+      "cardId": "24018",
+      "cardName": "海晶乙女ブルークリスタルハート",
+      "language": "zh"
+    },
+    {
+      "alias": "Marincess Blue Crystal Heart",
+      "normalizedAlias": "marincess blue crystal heart",
+      "cardId": "24018",
+      "cardName": "海晶乙女ブルークリスタルハート",
+      "language": "en"
     },
     {
       "alias": "海晶少女 蓝彩蛞蝓",
@@ -235161,6 +235574,27 @@
       "language": "zh"
     },
     {
+      "alias": "海晶乙女神流",
+      "normalizedAlias": "海晶乙女神流",
+      "cardId": "24021",
+      "cardName": "海晶乙女神流",
+      "language": "zh"
+    },
+    {
+      "alias": "海晶少女神流",
+      "normalizedAlias": "海晶少女神流",
+      "cardId": "24021",
+      "cardName": "海晶乙女神流",
+      "language": "zh"
+    },
+    {
+      "alias": "Marincess Overflow",
+      "normalizedAlias": "marincess overflow",
+      "cardId": "24021",
+      "cardName": "海晶乙女神流",
+      "language": "en"
+    },
+    {
       "alias": "海晶少女 紫红拟花",
       "normalizedAlias": "海晶少女 紫红拟花",
       "cardId": "14788",
@@ -235194,6 +235628,27 @@
       "cardId": "14788",
       "cardName": "海晶少女 紫红拟花",
       "language": "zh"
+    },
+    {
+      "alias": "海晶乙女の礁湖",
+      "normalizedAlias": "海晶乙女の礁湖",
+      "cardId": "24020",
+      "cardName": "海晶乙女の礁湖",
+      "language": "ja"
+    },
+    {
+      "alias": "海晶少女的礁湖",
+      "normalizedAlias": "海晶少女的礁湖",
+      "cardId": "24020",
+      "cardName": "海晶乙女の礁湖",
+      "language": "zh"
+    },
+    {
+      "alias": "Marincess Reef Lagoon",
+      "normalizedAlias": "marincess reef lagoon",
+      "cardId": "24020",
+      "cardName": "海晶乙女の礁湖",
+      "language": "en"
     },
     {
       "alias": "海晶少女 海洋天使",
@@ -235354,6 +235809,62 @@
       "normalizedAlias": "海晶少女 斯氏金翅雀鲷",
       "cardId": "17053",
       "cardName": "海晶少女 蓝宝女孩",
+      "language": "zh"
+    },
+    {
+      "alias": "海晶乙女トゥルースハート",
+      "normalizedAlias": "海晶乙女トゥル-スハ-ト",
+      "cardId": "24019",
+      "cardName": "海晶乙女トゥルースハート",
+      "language": "ja"
+    },
+    {
+      "alias": "海晶少女 真理心",
+      "normalizedAlias": "海晶少女 真理心",
+      "cardId": "24019",
+      "cardName": "海晶乙女トゥルースハート",
+      "language": "zh"
+    },
+    {
+      "alias": "Marincess Truth Heart",
+      "normalizedAlias": "marincess truth heart",
+      "cardId": "24019",
+      "cardName": "海晶乙女トゥルースハート",
+      "language": "en"
+    },
+    {
+      "alias": "海晶少女 真晶心",
+      "normalizedAlias": "海晶少女 真晶心",
+      "cardId": "24019",
+      "cardName": "海晶乙女トゥルースハート",
+      "language": "zh"
+    },
+    {
+      "alias": "海晶乙女ウルピス",
+      "normalizedAlias": "海晶乙女ウルピス",
+      "cardId": "24016",
+      "cardName": "海晶乙女ウルピス",
+      "language": "ja"
+    },
+    {
+      "alias": "海晶少女 狐狸倒吊",
+      "normalizedAlias": "海晶少女 狐狸倒吊",
+      "cardId": "24016",
+      "cardName": "海晶乙女ウルピス",
+      "language": "zh"
+    },
+    {
+      "alias": "Marincess Ulpis",
+      "normalizedAlias": "marincess ulpis",
+      "cardId": "24016",
+      "cardName": "海晶乙女ウルピス",
+      "language": "en"
+    },
+    {
+      "alias": "海晶少女 狐蓝子鱼",
+      "normalizedAlias": "海晶少女 狐蓝子鱼",
+      "cardId": "24016",
+      "cardName": "海晶乙女ウルピス",
       "language": "zh"
     },
     {
@@ -294757,6 +295268,34 @@
       "cardId": "4511",
       "cardName": "プリズマン",
       "language": "en"
+    },
+    {
+      "alias": "無窮方界器プリティマ",
+      "normalizedAlias": "無窮方界器プリティマ",
+      "cardId": "24008",
+      "cardName": "無窮方界器プリティマ",
+      "language": "ja"
+    },
+    {
+      "alias": "无穷方界器 地天",
+      "normalizedAlias": "无穷方界器 地天",
+      "cardId": "24008",
+      "cardName": "無窮方界器プリティマ",
+      "language": "zh"
+    },
+    {
+      "alias": "Pritima the Infinity Cubic Vessel",
+      "normalizedAlias": "pritima the infinity cubic vessel",
+      "cardId": "24008",
+      "cardName": "無窮方界器プリティマ",
+      "language": "en"
+    },
+    {
+      "alias": "无穷方界器 生祖",
+      "normalizedAlias": "无穷方界器 生祖",
+      "cardId": "24008",
+      "cardName": "無窮方界器プリティマ",
+      "language": "zh"
     },
     {
       "alias": "プログレオ",
@@ -421557,20 +422096,6 @@
       "language": "zh"
     },
     {
-      "alias": "B・L・A・C・Kパルフェ",
-      "normalizedAlias": "b・l・a・c・kパルフェ",
-      "cardId": "24071",
-      "cardName": "B・L・A・C・Kパルフェ",
-      "language": "ja"
-    },
-    {
-      "alias": "莓柠苹巧奇之黑芭菲",
-      "normalizedAlias": "莓柠苹巧奇之黑芭菲",
-      "cardId": "24071",
-      "cardName": "B・L・A・C・Kパルフェ",
-      "language": "zh"
-    },
-    {
       "alias": "青之眼少女",
       "normalizedAlias": "青之眼少女",
       "cardId": "10588",
@@ -421606,382 +422131,11 @@
       "language": "zh"
     },
     {
-      "alias": "創世方界超神ディヴァイン・アニマ・インフィニティ",
-      "normalizedAlias": "創世方界超神ディヴァイン・アニマ・インフィニティ",
-      "cardId": "24011",
-      "cardName": "創世方界超神ディヴァイン・アニマ・インフィニティ",
-      "language": "ja"
-    },
-    {
-      "alias": "创世方界超神 无穷圣魂",
-      "normalizedAlias": "创世方界超神 无穷圣魂",
-      "cardId": "24011",
-      "cardName": "創世方界超神ディヴァイン・アニマ・インフィニティ",
-      "language": "zh"
-    },
-    {
-      "alias": "创世方界超神 天神之魂天·无穷",
-      "normalizedAlias": "创世方界超神 天神之魂天·无穷",
-      "cardId": "24011",
-      "cardName": "創世方界超神ディヴァイン・アニマ・インフィニティ",
-      "language": "zh"
-    },
-    {
-      "alias": "方界防陣",
-      "normalizedAlias": "方界防陣",
-      "cardId": "24014",
-      "cardName": "方界防陣",
-      "language": "zh"
-    },
-    {
-      "alias": "方界防阵",
-      "normalizedAlias": "方界防阵",
-      "cardId": "24014",
-      "cardName": "方界防陣",
-      "language": "zh"
-    },
-    {
-      "alias": "方界領域",
-      "normalizedAlias": "方界領域",
-      "cardId": "24012",
-      "cardName": "方界領域",
-      "language": "zh"
-    },
-    {
-      "alias": "方界领域",
-      "normalizedAlias": "方界领域",
-      "cardId": "24012",
-      "cardName": "方界領域",
-      "language": "zh"
-    },
-    {
-      "alias": "方界覚",
-      "normalizedAlias": "方界覚",
-      "cardId": "24013",
-      "cardName": "方界覚",
-      "language": "zh"
-    },
-    {
-      "alias": "方界觉",
-      "normalizedAlias": "方界觉",
-      "cardId": "24013",
-      "cardName": "方界覚",
-      "language": "zh"
-    },
-    {
-      "alias": "無窮方界器プリティマ",
-      "normalizedAlias": "無窮方界器プリティマ",
-      "cardId": "24008",
-      "cardName": "無窮方界器プリティマ",
-      "language": "ja"
-    },
-    {
-      "alias": "无穷方界器 地天",
-      "normalizedAlias": "无穷方界器 地天",
-      "cardId": "24008",
-      "cardName": "無窮方界器プリティマ",
-      "language": "zh"
-    },
-    {
-      "alias": "无穷方界器 生祖",
-      "normalizedAlias": "无穷方界器 生祖",
-      "cardId": "24008",
-      "cardName": "無窮方界器プリティマ",
-      "language": "zh"
-    },
-    {
-      "alias": "溟淵方界神アビス・ヴァグラーダ",
-      "normalizedAlias": "溟淵方界神アビス・ヴァグラ-ダ",
-      "cardId": "24010",
-      "cardName": "溟淵方界神アビス・ヴァグラーダ",
-      "language": "ja"
-    },
-    {
-      "alias": "溟渊方界神 深渊伐萝陀",
-      "normalizedAlias": "溟渊方界神 深渊伐萝陀",
-      "cardId": "24010",
-      "cardName": "溟淵方界神アビス・ヴァグラーダ",
-      "language": "zh"
-    },
-    {
-      "alias": "溟渊方界神 深渊之伐格楼达",
-      "normalizedAlias": "溟渊方界神 深渊之伐格楼达",
-      "cardId": "24010",
-      "cardName": "溟淵方界神アビス・ヴァグラーダ",
-      "language": "zh"
-    },
-    {
-      "alias": "燎炎方界神アルディティア・ヘル・ブレイズ",
-      "normalizedAlias": "燎炎方界神アルディティア・ヘル・ブレイズ",
-      "cardId": "24009",
-      "cardName": "燎炎方界神アルディティア・ヘル・ブレイズ",
-      "language": "ja"
-    },
-    {
-      "alias": "燎炎方界神 狱焰之阿底提",
-      "normalizedAlias": "燎炎方界神 狱焰之阿底提",
-      "cardId": "24009",
-      "cardName": "燎炎方界神アルディティア・ヘル・ブレイズ",
-      "language": "zh"
-    },
-    {
-      "alias": "燎炎方界神 狱焰之阿尔底提亚",
-      "normalizedAlias": "燎炎方界神 狱焰之阿尔底提亚",
-      "cardId": "24009",
-      "cardName": "燎炎方界神アルディティア・ヘル・ブレイズ",
-      "language": "zh"
-    },
-    {
-      "alias": "アクア・リヴァイアサン＠マリンセス",
-      "normalizedAlias": "アクア・リヴァイアサン@マリンセス",
-      "cardId": "24017",
-      "cardName": "アクア・リヴァイアサン＠マリンセス",
-      "language": "ja"
-    },
-    {
-      "alias": "水海龙@海晶少女",
-      "normalizedAlias": "水海龙@海晶少女",
-      "cardId": "24017",
-      "cardName": "アクア・リヴァイアサン＠マリンセス",
-      "language": "zh"
-    },
-    {
-      "alias": "水波海龙@海晶少女",
-      "normalizedAlias": "水波海龙@海晶少女",
-      "cardId": "24017",
-      "cardName": "アクア・リヴァイアサン＠マリンセス",
-      "language": "zh"
-    },
-    {
-      "alias": "ゴーストリックの妖狐",
-      "normalizedAlias": "ゴ-ストリックの妖狐",
-      "cardId": "24024",
-      "cardName": "ゴーストリックの妖狐",
-      "language": "ja"
-    },
-    {
-      "alias": "鬼计妖狐",
-      "normalizedAlias": "鬼计妖狐",
-      "cardId": "24024",
-      "cardName": "ゴーストリックの妖狐",
-      "language": "zh"
-    },
-    {
-      "alias": "ゴーストリック・アート",
-      "normalizedAlias": "ゴ-ストリック・ア-ト",
-      "cardId": "24027",
-      "cardName": "ゴーストリック・アート",
-      "language": "ja"
-    },
-    {
-      "alias": "鬼计艺术",
-      "normalizedAlias": "鬼计艺术",
-      "cardId": "24027",
-      "cardName": "ゴーストリック・アート",
-      "language": "zh"
-    },
-    {
-      "alias": "鬼计错视画",
-      "normalizedAlias": "鬼计错视画",
-      "cardId": "24027",
-      "cardName": "ゴーストリック・アート",
-      "language": "zh"
-    },
-    {
-      "alias": "ゴーストリック・ガーデン",
-      "normalizedAlias": "ゴ-ストリック・ガ-デン",
-      "cardId": "24026",
-      "cardName": "ゴーストリック・ガーデン",
-      "language": "ja"
-    },
-    {
-      "alias": "鬼计花园",
-      "normalizedAlias": "鬼计花园",
-      "cardId": "24026",
-      "cardName": "ゴーストリック・ガーデン",
-      "language": "zh"
-    },
-    {
-      "alias": "ゴーストリック・スパンキー",
-      "normalizedAlias": "ゴ-ストリック・スパンキ-",
-      "cardId": "24022",
-      "cardName": "ゴーストリック・スパンキー",
-      "language": "ja"
-    },
-    {
-      "alias": "鬼计鬼火",
-      "normalizedAlias": "鬼计鬼火",
-      "cardId": "24022",
-      "cardName": "ゴーストリック・スパンキー",
-      "language": "zh"
-    },
-    {
-      "alias": "鬼计小鬼火",
-      "normalizedAlias": "鬼计小鬼火",
-      "cardId": "24022",
-      "cardName": "ゴーストリック・スパンキー",
-      "language": "zh"
-    },
-    {
-      "alias": "ゴーストリック・フリーズ",
-      "normalizedAlias": "ゴ-ストリック・フリ-ズ",
-      "cardId": "24028",
-      "cardName": "ゴーストリック・フリーズ",
-      "language": "ja"
-    },
-    {
-      "alias": "鬼计冻结",
-      "normalizedAlias": "鬼计冻结",
-      "cardId": "24028",
-      "cardName": "ゴーストリック・フリーズ",
-      "language": "zh"
-    },
-    {
-      "alias": "鬼计结冰",
-      "normalizedAlias": "鬼计结冰",
-      "cardId": "24028",
-      "cardName": "ゴーストリック・フリーズ",
-      "language": "zh"
-    },
-    {
-      "alias": "ゴーストリック・マスター アルカード",
-      "normalizedAlias": "ゴ-ストリック・マスタ- アルカ-ド",
-      "cardId": "24025",
-      "cardName": "ゴーストリック・マスター アルカード",
-      "language": "ja"
-    },
-    {
-      "alias": "鬼计之主 阿鲁卡德",
-      "normalizedAlias": "鬼计之主 阿鲁卡德",
-      "cardId": "24025",
-      "cardName": "ゴーストリック・マスター アルカード",
-      "language": "zh"
-    },
-    {
-      "alias": "鬼计妖魔之主 阿鲁卡德",
-      "normalizedAlias": "鬼计妖魔之主 阿鲁卡德",
-      "cardId": "24025",
-      "cardName": "ゴーストリック・マスター アルカード",
-      "language": "zh"
-    },
-    {
-      "alias": "ゴーストリック・リッチー",
-      "normalizedAlias": "ゴ-ストリック・リッチ-",
-      "cardId": "24023",
-      "cardName": "ゴーストリック・リッチー",
-      "language": "ja"
-    },
-    {
-      "alias": "鬼计巫妖",
-      "normalizedAlias": "鬼计巫妖",
-      "cardId": "24023",
-      "cardName": "ゴーストリック・リッチー",
-      "language": "zh"
-    },
-    {
       "alias": "７",
       "normalizedAlias": "7",
       "cardId": "6053",
       "cardName": "7",
       "language": "unknown"
-    },
-    {
-      "alias": "海晶乙女アズリー",
-      "normalizedAlias": "海晶乙女アズリ-",
-      "cardId": "24015",
-      "cardName": "海晶乙女アズリー",
-      "language": "ja"
-    },
-    {
-      "alias": "海晶少女 蓝鲷",
-      "normalizedAlias": "海晶少女 蓝鲷",
-      "cardId": "24015",
-      "cardName": "海晶乙女アズリー",
-      "language": "zh"
-    },
-    {
-      "alias": "海晶乙女ウルピス",
-      "normalizedAlias": "海晶乙女ウルピス",
-      "cardId": "24016",
-      "cardName": "海晶乙女ウルピス",
-      "language": "ja"
-    },
-    {
-      "alias": "海晶少女 狐狸倒吊",
-      "normalizedAlias": "海晶少女 狐狸倒吊",
-      "cardId": "24016",
-      "cardName": "海晶乙女ウルピス",
-      "language": "zh"
-    },
-    {
-      "alias": "海晶少女 狐蓝子鱼",
-      "normalizedAlias": "海晶少女 狐蓝子鱼",
-      "cardId": "24016",
-      "cardName": "海晶乙女ウルピス",
-      "language": "zh"
-    },
-    {
-      "alias": "海晶乙女トゥルースハート",
-      "normalizedAlias": "海晶乙女トゥル-スハ-ト",
-      "cardId": "24019",
-      "cardName": "海晶乙女トゥルースハート",
-      "language": "ja"
-    },
-    {
-      "alias": "海晶少女 真理心",
-      "normalizedAlias": "海晶少女 真理心",
-      "cardId": "24019",
-      "cardName": "海晶乙女トゥルースハート",
-      "language": "zh"
-    },
-    {
-      "alias": "海晶少女 真晶心",
-      "normalizedAlias": "海晶少女 真晶心",
-      "cardId": "24019",
-      "cardName": "海晶乙女トゥルースハート",
-      "language": "zh"
-    },
-    {
-      "alias": "海晶乙女ブルークリスタルハート",
-      "normalizedAlias": "海晶乙女ブル-クリスタルハ-ト",
-      "cardId": "24018",
-      "cardName": "海晶乙女ブルークリスタルハート",
-      "language": "ja"
-    },
-    {
-      "alias": "海晶少女 蓝水晶心",
-      "normalizedAlias": "海晶少女 蓝水晶心",
-      "cardId": "24018",
-      "cardName": "海晶乙女ブルークリスタルハート",
-      "language": "zh"
-    },
-    {
-      "alias": "海晶乙女神流",
-      "normalizedAlias": "海晶乙女神流",
-      "cardId": "24021",
-      "cardName": "海晶乙女神流",
-      "language": "zh"
-    },
-    {
-      "alias": "海晶少女神流",
-      "normalizedAlias": "海晶少女神流",
-      "cardId": "24021",
-      "cardName": "海晶乙女神流",
-      "language": "zh"
-    },
-    {
-      "alias": "海晶乙女の礁湖",
-      "normalizedAlias": "海晶乙女の礁湖",
-      "cardId": "24020",
-      "cardName": "海晶乙女の礁湖",
-      "language": "ja"
-    },
-    {
-      "alias": "海晶少女的礁湖",
-      "normalizedAlias": "海晶少女的礁湖",
-      "cardId": "24020",
-      "cardName": "海晶乙女の礁湖",
-      "language": "zh"
     }
   ]
 }
