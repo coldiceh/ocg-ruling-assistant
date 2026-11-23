@@ -7,6 +7,7 @@ import {
   buildFaqRecords,
   classifyRemoteItemFetchFailure,
   collectDiscoveredQaIds,
+  collectJapaneseIndexQaIds,
   isAuthoritativeQaDetailSnapshot,
   isCompleteCardSnapshotRun,
   mergeCardQaDiscoveryIndex,
@@ -19,6 +20,7 @@ import {
   rankCardQaIds,
   retainBoundedQaDetails,
   selectQaIdsForSync,
+  selectUnfetchedQaIds,
   decodeFaqHtml,
 } from "../scripts/sync-ygoresources.mjs";
 import { quarantineRulingData } from "../backend/rulingDataQuality.mjs";
@@ -71,6 +73,57 @@ test("discovered QA missing from the lightweight index is refreshed before ordin
 
   assert.deepEqual(selected.ids, ["900", "901", "902", "903"]);
   assert.equal(selected.prioritySelectedCount, 2);
+});
+
+test("Japanese Q&A indexes yield each listed Q&A id once in numeric order", () => {
+  const ids = collectJapaneseIndexQaIds([
+    { 1000: [8015, 2], 5248: [2, "37"] },
+    null,
+    [1, 2, 3],
+    { term: ["not-an-id", -5, 0, 99, ""], meta: "ignored" },
+  ]);
+
+  assert.deepEqual(ids, ["2", "37", "99", "8015"]);
+});
+
+test("Q&A rows never fetched from the source are selected before rotation, fetched rows are not", () => {
+  const unfetched = selectUnfetchedQaIds({
+    previousQaRecords: [
+      { id: "ygoresources-qa-10", recordType: "qa", title: "fetched", sourceId: "10", sourceName: "YGOResources DB", answer: "はい" },
+      { id: "ygoresources-qa-193", recordType: "qa", title: "only a title", cards: ["x"], text: "only a title" },
+      { id: "ygoresources-qa-24339", recordType: "qa", title: "another title-only row" },
+      { id: "official-response-1", recordType: "qa", title: "not from YGOResources" },
+      { id: "faq-1", recordType: "card-faq", title: "not a Q&A" },
+    ],
+    discoveredQaIds: ["10", "11"],
+    japaneseIndexQaIds: ["2", "10", "193"],
+  });
+
+  // 2: only in the Japanese index (not on any card page); 11: discovered but
+  // never stored; 193 and 24339: stored without question and answer.
+  assert.deepEqual(unfetched, ["2", "11", "193", "24339"]);
+});
+
+test("missing Q&A share the daily cap after changed and recent items", () => {
+  const unfetched = selectUnfetchedQaIds({
+    previousQaRecords: [],
+    discoveredQaIds: [],
+    japaneseIndexQaIds: Array.from({ length: 400 }, (_, index) => index + 2),
+  });
+  const selected = selectQaIdsForSync({
+    changedQaIds: [30001, 30002],
+    recentQaIds: Array.from({ length: 120 }, (_, index) => 20001 + index),
+    priorityQaIds: unfetched,
+    cardQaIds: [40001],
+    coverageQaIds: [40001, 40002],
+    limit: 250,
+  });
+
+  assert.equal(selected.ids.length, 250);
+  assert.equal(selected.changedSelectedCount, 2);
+  assert.equal(selected.recentSelectedCount, 120);
+  assert.equal(selected.prioritySelectedCount, 128);
+  assert.deepEqual(selected.ids.slice(122, 125), ["2", "3", "4"]);
 });
 
 test("card QA ranking prioritizes interactions referenced by multiple cards", () => {

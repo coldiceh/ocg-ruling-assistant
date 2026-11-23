@@ -76,12 +76,16 @@ async function main() {
     currentQaDiscovery,
     { authoritative: cardSnapshotAuthoritative },
   );
-  const indexedQaIds = new Set((previousQaIndex.records || [])
-    .filter(isYgoresourcesQaRecord)
-    .map(qaSourceId)
-    .filter(Boolean));
-  const unindexedQaIds = collectDiscoveredQaIds(qaDiscoveryRecords)
-    .filter((qaId) => !indexedQaIds.has(qaId));
+  // Card pages do not list every Q&A (most ids below 100 are missing there),
+  // so also read the source's Japanese Q&A indexes.  Rows that were never
+  // fetched from /data/qa/{id} (title-only rows) count as missing too; both
+  // kinds are fetched before the rotating refresh.
+  const japaneseIndexQaIds = await loadJapaneseQaIndexIds();
+  const unindexedQaIds = selectUnfetchedQaIds({
+    previousQaRecords: previousQaIndex.records || [],
+    discoveredQaIds: collectDiscoveredQaIds(qaDiscoveryRecords),
+    japaneseIndexQaIds,
+  });
   const manifest = await loadManifest(previousMeta.sourceRevision);
   let cards = cardPayloads.map(({ record }) => record);
   const pendingChanges = uniqueIds([...(previousMeta.pendingQaIds || []), ...manifest.changedQaIds]);
@@ -249,6 +253,8 @@ async function main() {
     maxQaTotal,
     qaSyncSelection: qaSyncSelectionStats,
     pendingQaCount: rulingSync.pendingQaIds.length,
+    qaJapaneseIndexQaCount: japaneseIndexQaIds.length,
+    qaUnfetchedBeforeSyncCount: unindexedQaIds.length,
     qaDiscoveryCardCount: qaDiscoveryRecords.length,
     qaDiscoveryQaCount: discoveredQaIds.length,
     qaDiscoveryRelationCount: qaDiscoveryRecords.reduce((sum, record) => sum + record.qaIds.length, 0),
@@ -622,6 +628,67 @@ export function mergeCardQaDiscoveryIndex(previousRecords = [], currentRecords =
 
 export function collectDiscoveredQaIds(discoveryRecords = []) {
   return uniqueIds((discoveryRecords || []).flatMap((record) => record?.qaIds || [])).sort(compareNumericIds);
+}
+
+const JAPANESE_QA_INDEX_PATHS = Object.freeze([
+  "/data/idx/qa/title/ja",
+  "/data/idx/qa/question/ja",
+  "/data/idx/qa/answer/ja",
+]);
+
+async function loadJapaneseQaIndexIds() {
+  const payloads = [];
+  for (const path of JAPANESE_QA_INDEX_PATHS) {
+    try {
+      payloads.push(await fetchJson(path));
+    } catch (error) {
+      addSourceWarning(`Japanese Q&A index ${path} failed: ${formatError(error)}`);
+    }
+  }
+  return collectJapaneseIndexQaIds(payloads);
+}
+
+// Each index maps a search term to the Q&A ids whose Japanese text contains
+// it, so the union of the id lists is every Q&A with official Japanese text.
+export function collectJapaneseIndexQaIds(payloads = []) {
+  const ids = [];
+  for (const payload of payloads || []) {
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)) continue;
+    for (const list of Object.values(payload)) {
+      if (!Array.isArray(list)) continue;
+      for (const id of list) {
+        const text = String(id ?? "").trim();
+        if (/^\d+$/u.test(text) && Number(text) > 0) ids.push(text);
+      }
+    }
+  }
+  return uniqueIds(ids).sort(compareNumericIds);
+}
+
+// A row counts as fetched only when normalizeQa built it from /data/qa/{id}
+// (it then carries sourceId).  Older title-only rows have just an id and a
+// title, never a question body or answer.
+function hasFetchedQaDetail(record = {}) {
+  return Boolean(String(record?.sourceId || "").trim());
+}
+
+export function selectUnfetchedQaIds({
+  previousQaRecords = [],
+  discoveredQaIds = [],
+  japaneseIndexQaIds = [],
+} = {}) {
+  const ygoresourcesRows = (previousQaRecords || []).filter(isYgoresourcesQaRecord);
+  const fetched = new Set(ygoresourcesRows
+    .filter(hasFetchedQaDetail)
+    .map(qaSourceId)
+    .filter(Boolean));
+  const titleOnly = ygoresourcesRows
+    .filter((record) => !hasFetchedQaDetail(record))
+    .map(qaSourceId)
+    .filter(Boolean);
+  return uniqueIds([...discoveredQaIds, ...japaneseIndexQaIds, ...titleOnly])
+    .filter((id) => !fetched.has(id))
+    .sort(compareNumericIds);
 }
 
 export function buildFairQaCoverageOrder(discoveryRecords = []) {
