@@ -11,6 +11,10 @@ on:
         description: 'Bounded CPU continuation sequence, 0 through 8; 0 derives the next saved sequence'
         required: false
         default: '0'
+      max_qa_total:
+        description: 'Q&A details to fetch in this run, 1 through 3000 (scheduled runs use 250)'
+        required: false
+        default: '250'
   schedule:
     # Every day at 05:30 China Standard Time (no daylight saving), i.e. 21:30 UTC the day before.
     - cron: "30 5 * * *"
@@ -103,8 +107,12 @@ jobs:
           FETCH_CONCURRENCY: "8"
           # Keep each CPU embedding increment within the job's time budget;
           # the existing cursor rotates coverage and retains prior Q&A.
-          MAX_QA_TOTAL: "250"
-        run: node scripts/sync-data.mjs
+          # A manual run may raise the cap once, e.g. to backfill missing Q&A.
+          MAX_QA_TOTAL: ${{ github.event_name == 'workflow_dispatch' && inputs.max_qa_total || '250' }}
+        run: |
+          case "$MAX_QA_TOTAL" in ''|*[!0-9]*) echo "max_qa_total must be a whole number" >&2; exit 1;; esac
+          if [ "$MAX_QA_TOTAL" -lt 1 ] || [ "$MAX_QA_TOTAL" -gt 3000 ]; then echo "max_qa_total must be between 1 and 3000" >&2; exit 1; fi
+          node scripts/sync-data.mjs
 
       - name: Sync OCG rule corpus
         if: steps.restore.outputs.resumed != 'true'
