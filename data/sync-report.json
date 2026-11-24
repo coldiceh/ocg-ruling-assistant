@@ -1,30 +1,30 @@
 {
-  "generatedAt": "2026-11-23T02:54:37.529Z",
+  "generatedAt": "2026-11-24T05:31:46.909Z",
   "cardCount": 14527,
-  "rulingCount": 42679,
+  "rulingCount": 40729,
   "cardAliasCount": 60305,
   "qaIndexCount": 37643,
-  "qaIndexBytes": 74296916,
+  "qaIndexBytes": 74321893,
   "maxQaIndexBytes": 94371840,
   "syncAllReleasedCards": true,
   "syncOnlyReleasedCards": true,
   "maxCards": 0,
-  "maxQaTotal": 2200,
+  "maxQaTotal": 250,
   "qaSyncSelection": {
-    "selectedCount": 2200,
-    "discoveredCount": 11554,
-    "truncatedCount": 9354,
+    "selectedCount": 250,
+    "discoveredCount": 11439,
+    "truncatedCount": 11189,
     "changedSelectedCount": 0,
     "recentSelectedCount": 120,
-    "prioritySelectedCount": 1848,
-    "hotSelectedCount": 116,
-    "coverageSelectedCount": 116,
-    "detailCursor": 3220,
-    "nextDetailCursor": 3382
+    "prioritySelectedCount": 2,
+    "hotSelectedCount": 64,
+    "coverageSelectedCount": 64,
+    "detailCursor": 3382,
+    "nextDetailCursor": 3446
   },
   "pendingQaCount": 0,
   "qaJapaneseIndexQaCount": 11470,
-  "qaUnfetchedBeforeSyncCount": 1848,
+  "qaUnfetchedBeforeSyncCount": 2,
   "qaDiscoveryCardCount": 14444,
   "qaDiscoveryQaCount": 11439,
   "qaDiscoveryRelationCount": 36461,
@@ -48,5 +48,10 @@
     "Q&A 13922 was removed upstream (404)"
   ],
   "dataQualityWarnings": [],
-  "changedPaths": []
+  "changedPaths": [
+    "/data/card/21610",
+    "/data/card/22690",
+    "/data/card/23393",
+    "/data/card/23588"
+  ]
 }

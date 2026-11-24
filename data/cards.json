@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-23T02:54:37.529Z",
+  "generatedAt": "2026-11-24T05:31:46.909Z",
   "records": [
     {
       "id": "21385",
@@ -60902,7 +60902,7 @@
         "艮鬼神 夜魅"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23850",
-      "updatedAt": "2026-11-13T02:04:44.816Z",
+      "updatedAt": "2026-11-24T05:30:49.481Z",
       "chineseNameSources": [
         {
           "name": "鬼神 夜魅",
@@ -60922,6 +60922,13 @@
           "name": "艮鬼神 夜魅",
           "source": "baige",
           "sourceField": "sc_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23850"
+        },
+        {
+          "name": "艮鬼神 夜魅",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23850"
         }
