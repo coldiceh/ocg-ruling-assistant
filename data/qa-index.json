@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-24T05:31:46.909Z",
+  "generatedAt": "2026-11-25T04:37:13.804Z",
   "records": [
     {
       "id": "ygoresources-qa-24345",
@@ -129614,7 +129614,17 @@
       "sourceUrl": "https://db.ygoresources.com/data/qa/6252",
       "questionLocale": "ja",
       "detailedQuestionLocale": "ja",
-      "answerLocale": "ja"
+      "answerLocale": "ja",
+      "questionLocales": {
+        "en": {
+          "title": "What happens when your opponent takes control of your <<13525>> when you resolve its effect?",
+          "question": "When you activate the Quick Effect of <<13525>>, your opponent chains <<5505>> to take control of <<13525>>. In that situation, what happens when you resolve the effect of <<13525>>?"
+        },
+        "ja": {
+          "title": "「<<13525>>」のモンスター効果の処理時に、自身のコントロールが相手に移っている場合、処理はどうなりますか?",
+          "question": "自分が「<<13525>>」の『3:1ターンに1度、このカードが通常召喚されている場合に発動できる。表側表示のこのカードを破壊し、その攻撃力以下の攻撃力を持つメインモンスターゾーンのモンスターを全て破壊する。この効果は相手ターンでも発動できる』モンスター効果を発動した際に、相手がチェーンをして「<<13525>>」を対象に「<<5505>>」の『●自分フィールドのモンスター1体をリリースし、相手フィールドの表側表示モンスター1体を対象として発動できる。その表側表示モンスターのコントロールをエンドフェイズまで得る』効果を発動しました。\n\nこの場合、効果処理はどうなりますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-6254",
@@ -137959,7 +137969,17 @@
       "sourceUrl": "https://db.ygoresources.com/data/qa/7282",
       "questionLocale": "ja",
       "detailedQuestionLocale": "ja",
-      "answerLocale": "ja"
+      "answerLocale": "ja",
+      "questionLocales": {
+        "en": {
+          "title": "If a Link Summoned <<13516>> is destroyed by battle or card effect and sent to the Graveyard, can I activate its effect and target a Dragon-Type Fusion, Synchro, Xyz, or Link Monster in my Graveyard?",
+          "question": "If a Link Summoned <<13516>> is destroyed by battle or card effect and sent to the Graveyard, can I activate its effect and target a Dragon-Type Fusion, Synchro, Xyz, or Link Monster in my Graveyard?"
+        },
+        "ja": {
+          "title": "墓地で発動する「<<13516>>」のモンスター効果の対象として、ドラゴン族の融合・シンクロ・エクシーズ・リンクモンスターを選択できますか?",
+          "question": "「<<13516>>」の『2:リンク召喚したこのカードが戦闘・効果で破壊され墓地へ送られた場合、このカード以外の自分の墓地のドラゴン族モンスター1体を対象として発動できる。そのモンスターを特殊召喚する』効果の対象として、ドラゴン族の融合・シンクロ・エクシーズ・リンクモンスターを選択する事はできますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-7283",
@@ -150494,7 +150514,17 @@
       "sourceUrl": "https://db.ygoresources.com/data/qa/8557",
       "questionLocale": "ja",
       "detailedQuestionLocale": "ja",
-      "answerLocale": "ja"
+      "answerLocale": "ja",
+      "questionLocales": {
+        "en": {
+          "title": "<<13540>> is face-up in my Field Zone, and my <<13214>> is Level 6 due to its effect. In this situation, if I activate the effect of <<13538>> targeting that <<13214>>, what happens to each of their Levels?",
+          "question": "<<13540>> is face-up in my Field Zone, and my <<13214>> is Level 6 due to its effect. In this situation, if I activate the effect of <<13538>> targeting that <<13214>>, what happens to each of their Levels?"
+        },
+        "ja": {
+          "title": "「<<13540>>」の効果適用中に、「<<13538>>」のモンスター効果が適用された場合、それぞれのレベルはどうなりますか?",
+          "question": "「<<13540>>」がフィールドゾーンに表側表示で存在し、『1:このカードがフィールドゾーンに存在する限り、フィールドの「F.A.」モンスターのレベルはメインフェイズ及びバトルフェイズの間だけ2つ上がる』効果によって、「<<13214>>」のレベルが6の状態となっています。\n\nこの状況で、「<<13538>>」の『1:このカードが手札・墓地に存在する場合、自分フィールドの元々のレベルより高いレベルを持つ「F.A.」モンスター1体を対象として発動できる。このカードを特殊召喚し、対象のモンスターのレベルをその元々のレベルとの差分だけ下げる。この効果で特殊召喚したこのカードのレベルはその差分の数値と同じになる』モンスター効果を発動した場合、それぞれのレベルはどうなりますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-8558",
@@ -150610,7 +150640,17 @@
       "sourceUrl": "https://db.ygoresources.com/data/qa/8564",
       "questionLocale": "ja",
       "detailedQuestionLocale": "ja",
-      "answerLocale": "ja"
+      "answerLocale": "ja",
+      "questionLocales": {
+        "en": {
+          "title": "My opponent's <<8007>> attacks my <<13492>> and destroys it by battle. After damage calculation, if the effect of <<8007>> destroys all other monsters on the field and <<13492>> is destroyed by that effect, will the effect of <<13492>> that adds a card from my Graveyard to my hand activate twice?",
+          "question": "My opponent's <<8007>> attacks my <<13492>> and destroys it by battle. After damage calculation, if the effect of <<8007>> destroys all other monsters on the field and <<13492>> is destroyed by that effect, will the effect of <<13492>> that adds a card from my Graveyard to my hand activate twice?"
+        },
+        "ja": {
+          "title": "相手の「<<8007>>」の攻撃によって、自分の「<<13492>>」が破壊された場合、「<<13492>>」のモンスター効果は2度発動できますか?",
+          "question": "相手の「<<8007>>」の攻撃によって、自分の「<<13492>>」が戦闘で破壊されました。\n\nそのダメージ計算後に、相手の「<<8007>>」が『このカードが攻撃した場合、ダメージ計算後にこのカード以外のフィールド上のモンスターを全て破壊する』モンスター効果によって、「<<13492>>」が破壊された場合、その「<<13492>>」の『3:表側表示のこのカードが相手の効果でフィールドから離れた場合、または戦闘で破壊された場合、自分の墓地のカード1枚を対象として発動できる。そのカードを手札に加える』モンスター効果はどのように発動する事ができますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-8566",
@@ -152050,7 +152090,17 @@
       "sourceUrl": "https://db.ygoresources.com/data/qa/8652",
       "questionLocale": "ja",
       "detailedQuestionLocale": "ja",
-      "answerLocale": "ja"
+      "answerLocale": "ja",
+      "questionLocales": {
+        "en": {
+          "title": "My opponent's <<13476>> is face-up in the Extra Monster Zone. If there is a banished <<12777>>, can I activate the effect of an <<12777>> on my field that inflict 1000 damage?",
+          "question": "My opponent's <<13476>> is face-up in the Extra Monster Zone. If there is a banished <<12777>>, can I activate the effect of an <<12777>> on my field that inflict 1000 damage?"
+        },
+        "ja": {
+          "title": "「<<12777>>」が除外されている状況で、「<<13476>>」のモンスター効果が適用されている場合、自分は、「<<12777>>」のモンスター効果を発動できますか?",
+          "question": "エクストラモンスターゾーンに相手の「<<13476>>」が表側表示で存在し、『1:このカードがモンスターゾーンに存在する限り、相手は除外されている自分・相手のカードと同名カードの効果を発動できない』モンスター効果が適用されています。\n\n「<<12777>>」が除外されている状況で、自分のモンスターゾーンに「<<12777>>」が表側表示で存在する場合、自分は『2:自分メインフェイズに発動できる。相手に1000ダメージを与える』モンスター効果を発動する事はできますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-8654",
@@ -164543,7 +164593,17 @@
       "sourceUrl": "https://db.ygoresources.com/data/qa/9994",
       "questionLocale": "ja",
       "detailedQuestionLocale": "ja",
-      "answerLocale": "ja"
+      "answerLocale": "ja",
+      "questionLocales": {
+        "en": {
+          "title": "<<5740>> is face-up in my opponent's Spell & Trap Zone. In this situation, if I Normal or Special Summon <<13585>> to a Main Monster Zone other than the center one, will it be destroyed?",
+          "question": "<<5740>> is face-up in my opponent's Spell & Trap Zone. In this situation, if I Normal or Special Summon <<13585>> to a Main Monster Zone other than the center one, will it be destroyed?"
+        },
+        "ja": {
+          "title": "「<<5740>>」の適用中に「<<13585>>」を召喚・特殊召喚した場合、自身のモンスター効果で破壊されますか?",
+          "question": "相手の魔法&罠ゾーンに「<<5740>>」が表側表示で存在し、『1:このカードが魔法&罠ゾーンに存在する限り、フィールドの全ての表側表示モンスターの効果は無効化される』モンスター効果が適用されています。\n\nこの状況で、自分が中央以外のメインモンスターゾーンに「<<13585>>」を召喚・特殊召喚した場合、『1:このカードは中央以外のメインモンスターゾーンに召喚・特殊召喚した場合、破壊される』モンスター効果はどのように適用されますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-9999",
@@ -169108,7 +169168,17 @@
       "sourceUrl": "https://db.ygoresources.com/data/qa/10456",
       "questionLocale": "ja",
       "detailedQuestionLocale": "ja",
-      "answerLocale": "ja"
+      "answerLocale": "ja",
+      "questionLocales": {
+        "en": {
+          "title": "If <<13547>> is activated, can <<4826>> be chained to it?",
+          "question": "If <<13547>> is activated, can <<4826>> be chained to it?"
+        },
+        "ja": {
+          "title": "「<<13547>>」の発動にチェーンして「<<4826>>」を発動できますか?",
+          "question": "「<<13547>>」の『1:自分のEXデッキに表側表示のPモンスターが3種類以上存在する場合に発動できる。自分はデッキから2枚ドローする。このカードの発動後、ターン終了時まで自分はデッキからカードを手札に加える事はできない』効果の発動にチェーンして、「<<4826>>」を発動する事はできますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-10459",
@@ -169219,7 +169289,17 @@
       "sourceUrl": "https://db.ygoresources.com/data/qa/10471",
       "questionLocale": "ja",
       "detailedQuestionLocale": "ja",
-      "answerLocale": "ja"
+      "answerLocale": "ja",
+      "questionLocales": {
+        "en": {
+          "title": "If I Link Summon <<13598>> to the Extra Monster Zone, can I activate its effect that allows me to perform an additional Normal Summon that turn?",
+          "question": "If I Link Summon <<13598>> to the Extra Monster Zone, can I activate its effect that allows me to perform an additional Normal Summon that turn?"
+        },
+        "ja": {
+          "title": "エクストラモンスターゾーンに「<<13598>>」をリンク召喚した場合、そのモンスター効果を発動できますか?",
+          "question": "エクストラモンスターゾーンに「<<13598>>」をリンク召喚しました。\n\nこの時、自分は『1:このカードがリンク召喚に成功した場合、手札を1枚捨てて発動できる。この効果の発動時にこのカードが相互リンク状態だった場合、自分はデッキから1枚ドローできる。自分は通常召喚に加えて1度だけ、このターンのメインフェイズにこのカードのリンク先となる自分フィールドに手札からモンスター1体を召喚できる』モンスター効果を発動する事はできますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-10472",
@@ -170575,7 +170655,17 @@
       "sourceUrl": "https://db.ygoresources.com/data/qa/10637",
       "questionLocale": "ja",
       "detailedQuestionLocale": "ja",
-      "answerLocale": "ja"
+      "answerLocale": "ja",
+      "questionLocales": {
+        "en": {
+          "title": "My <<13596>> is in the Extra Monster Zone, and a face-up Attack Position <<13230>> is in my Main Monster Zone. In this situation, <<13230>> attacks directly with its effect, and inflicts battle damage to my opponent. At this time, can the effects of <<13230>> and <<13596>> each activate?",
+          "question": "My <<13596>> is in the Extra Monster Zone, and a face-up Attack Position <<13230>> is in my Main Monster Zone. In this situation, <<13230>> attacks directly with its effect, and inflicts battle damage to my opponent. At this time, can the effects of <<13230>> and <<13596>> each activate?"
+        },
+        "ja": {
+          "title": "「<<13230>>」が戦闘ダメージを与えた時、「<<13230>>」と「<<13596>>」のそれぞれのモンスター効果を発動できますか?",
+          "question": "エクストラモンスターゾーンに自分の「<<13596>>」が存在し、自分のメインモンスターゾーンに「<<13230>>」が表側攻撃表示で存在しています。\n\nこの状況で、「<<13230>>」が『1:このカードは直接攻撃できる』モンスター効果によって直接攻撃を行い、相手に戦闘ダメージを与えました。\n\nこの時、「<<13230>>」の『2:このカードが相手に戦闘ダメージを与えた時、相手フィールドのカード1枚を対象として発動できる。そのカードを墓地へ送る』モンスター効果と、「<<13596>>」の『1:このカード以外の自分の「オルターガイスト」モンスターが相手に戦闘ダメージを与えた時、相手の墓地のモンスター1体を対象として発動できる。そのモンスターをこのカードのリンク先となる自分フィールドに特殊召喚する。この効果で特殊召喚したモンスターは、このカードが攻撃宣言したターンしか攻撃できない』モンスター効果をそれぞれ発動する事はできますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-10638",
@@ -171830,7 +171920,17 @@
       "sourceUrl": "https://db.ygoresources.com/data/qa/10788",
       "questionLocale": "ja",
       "detailedQuestionLocale": "ja",
-      "answerLocale": "ja"
+      "answerLocale": "ja",
+      "questionLocales": {
+        "en": {
+          "title": "<<7934>> is face-up in my opponent's Spell & Trap Zone, and an <<13574>> with the WIND Attribute is face-up in my Monster Zone. In this situation, if I activate the effect of another <<13574>> in my Graveyard and make it become an EARTH monster, can I then activate <<4842>> and target that <<13574>>?",
+          "question": "<<7934>> is face-up in my opponent's Spell & Trap Zone, and an <<13574>> with the WIND Attribute is face-up in my Monster Zone. In this situation, if I activate the effect of another <<13574>> in my Graveyard and make it become an EARTH monster, can I then activate <<4842>> and target that <<13574>>?"
+        },
+        "ja": {
+          "title": "自分のモンスターゾーンに「<<13574>>」が存在し「<<7934>>」の効果が適用されている場合、自身のモンスター効果で墓地で地属性となっている「<<13574>>」を対象として「<<4842>>」を発動できますか?",
+          "question": "自分のモンスターゾーンに風属性の「<<13574>>」が表側表示で存在し、相手の魔法&罠ゾーンに表側表示で存在する「<<7934>>」の『1:このカードが魔法&罠ゾーンに存在する限り、お互いのフィールドにそれぞれ1種類の属性のモンスターしか表側表示で存在できない』効果が適用されています。\n\nこの状況で、自分の墓地の「<<13574>>」の『2:このカードが墓地に存在する場合、1ターンに1度、属性を1つ宣言して発動できる。墓地のこのカードはターン終了時まで宣言した属性になる』モンスター効果を発動し、その属性が地属性となった場合、自分はその「<<13574>>」を対象として「<<4842>>」を発動する事はできますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-10790",
@@ -179221,7 +179321,17 @@
       "sourceUrl": "https://db.ygoresources.com/data/qa/11561",
       "questionLocale": "ja",
       "detailedQuestionLocale": "ja",
-      "answerLocale": "ja"
+      "answerLocale": "ja",
+      "questionLocales": {
+        "en": {
+          "title": "While <<13571>> is face-up in my Monster Zone, can I activate <<4842>>?",
+          "question": "While <<13571>> is face-up in my Monster Zone, can I activate <<4842>>?"
+        },
+        "ja": {
+          "title": "自分のモンスターゾーンに「<<13571>>」が表側表示で存在する場合、自分は「<<4842>>」を発動できますか?",
+          "question": "自分のモンスターゾーンに「<<13571>>」が表側表示で存在しています。\n\nこの状況で、自分は「<<4842>>」を発動する事はできますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-11562",
@@ -180472,7 +180582,17 @@
       "sourceUrl": "https://db.ygoresources.com/data/qa/11713",
       "questionLocale": "ja",
       "detailedQuestionLocale": "ja",
-      "answerLocale": "ja"
+      "answerLocale": "ja",
+      "questionLocales": {
+        "en": {
+          "title": "When I activate the effect of <<13567>> in my Graveyard, but my opponent chains the effect of <<6980>> and banishes it, how does the effect resolve?",
+          "question": "When I activate the effect of <<13567>> in my Graveyard, but my opponent chains the effect of <<6980>> and banishes it, how does the effect resolve?"
+        },
+        "ja": {
+          "title": "「<<13567>>」のモンスター効果の処理時に、自分の墓地に「<<13567>>」自身が存在しなくなっている場合、処理はどうなりますか?",
+          "question": "自分が墓地の「<<13567>>」の『1:このカードが墓地に存在し、自分フィールドにカードが存在しない場合に発動できる。墓地のこのカードと手札のレベル4以下のドラゴン族モンスター1体を守備表示で特殊召喚する。この効果で特殊召喚したこのカードは、フィールドから離れた場合に除外される』モンスター効果を発動した時、チェーンして相手が「<<6980>>」のモンスター効果を発動した事によって、効果を発動した「<<13567>>」自身が墓地に存在しなくなっている場合、効果処理はどうなりますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-11714",
@@ -181706,7 +181826,17 @@
       "sourceUrl": "https://db.ygoresources.com/data/qa/11873",
       "questionLocale": "ja",
       "detailedQuestionLocale": "ja",
-      "answerLocale": "ja"
+      "answerLocale": "ja",
+      "questionLocales": {
+        "en": {
+          "title": "<<4965>> is activated while my <<13590>> is in the Extra Monster Zone. When it resolves, if both players Special Summon their monsters to zones that <<13590>> points to, what happens?",
+          "question": "<<4965>> is activated while my <<13590>> is in the Extra Monster Zone. When it resolves, if both players Special Summon their monsters to zones that <<13590>> points to, what happens?"
+        },
+        "ja": {
+          "title": "「<<4965>>」の効果によって特殊召喚されたモンスターが2体とも「<<13590>>」のリンク先に特殊召喚された場合、処理はどうなりますか?",
+          "question": "エクストラモンスターゾーンに自分の「<<13590>>」が存在している状況で、相手が「<<4965>>」の『お互いのプレイヤーはそれぞれの墓地のモンスター1体を選択し、それぞれのフィールド上に裏側守備表示でセットする』効果を発動しました。\n\nその「<<4965>>」の効果処理の結果、自分のモンスターと相手のモンスターがいずれも、「<<13590>>」のリンク先に特殊召喚された場合、「<<13590>>」の『1:このカードのリンク先にモンスターが特殊召喚された場合に発動する。そのモンスター及びフィールドの魔法・罠カードを全て除外し、この効果で除外した相手のカードの数×500ダメージを相手に与える』モンスター効果の処理はどうなりますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-11874",
@@ -183122,7 +183252,17 @@
       "sourceUrl": "https://db.ygoresources.com/data/qa/12109",
       "questionLocale": "ja",
       "detailedQuestionLocale": "ja",
-      "answerLocale": "ja"
+      "answerLocale": "ja",
+      "questionLocales": {
+        "en": {
+          "title": "<<5533>> is face-up in my opponent's Field Zone. In this situation, if my <<13498>> would be destroyed by battle or card effect, can I apply its effect that returns a \"Madolche\" monster in my Graveyard to the Deck instead?",
+          "question": "<<5533>> is face-up in my opponent's Field Zone. In this situation, if my <<13498>> would be destroyed by battle or card effect, can I apply its effect that returns a \"Madolche\" monster in my Graveyard to the Deck instead?"
+        },
+        "ja": {
+          "title": "「<<5533>>」の効果適用中に、「<<13498>>」が戦闘・効果で破壊される場合、そのモンスター効果を適用できますか?",
+          "question": "「<<5533>>」が相手のフィールドゾーンに表側表示で存在し、『2:このカードがフィールドゾーンに存在する限り、お互いに墓地のカードを除外できず、墓地のカードへ及ぶ効果は無効化され、適用されない』効果が適用されています。\n\nこの状況で、自分の「<<13498>>」が戦闘またはカードの効果によって破壊される場合に、『2:フィールドのこのカードが戦闘・効果で破壊される場合、代わりに自分の墓地の「マドルチェ」モンスター1体をデッキに戻す事ができる』モンスター効果を適用する事はできますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-12111",
@@ -183817,7 +183957,17 @@
       "sourceUrl": "https://db.ygoresources.com/data/qa/12158",
       "questionLocale": "ja",
       "detailedQuestionLocale": "ja",
-      "answerLocale": "ja"
+      "answerLocale": "ja",
+      "questionLocales": {
+        "en": {
+          "title": "My <<13602>> is in the Extra Monster Zone, and its effect that prevents monsters from activating their effects unless they are linked is applying. In this situation, if a <<13346>> in my Main Monster Zone is linked to Knightmare Griffin, can I activate its effect by Tributing it when an opponent's monster attacks?",
+          "question": "My Knightmare Griffin is in the Extra Monster Zone, and its effect that prevents monsters from activating their effects unless they are linked is applying. In this situation, if a <<13346>> in my Main Monster Zone is linked to Knightmare Griffin, can I activate its effect by Tributing it when an opponent's monster attacks?"
+        },
+        "ja": {
+          "title": "「<<13602>>」のリンク先に存在する「<<13346>>」は自身をリリースしてモンスター効果を発動できますか?",
+          "question": "エクストラモンスターゾーンに自分の「<<13602>>」が存在し、『2:このカードがモンスターゾーンに存在する限り、フィールドの特殊召喚されたモンスターはリンク状態でなければ効果を発動できない』モンスター効果が適用されています。\n\nこの状況で、「<<13602>>」のリンク先となる自分のメインモンスターゾーンに存在する「<<13346>>」は『1:相手モンスターの攻撃宣言時、このカードをリリースして発動できる。その相手モンスターの攻撃力はターン終了時まで0になる』モンスター効果を発動する事はできますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-12159",
@@ -186113,7 +186263,17 @@
       "sourceUrl": "https://db.ygoresources.com/data/qa/12370",
       "questionLocale": "ja",
       "detailedQuestionLocale": "ja",
-      "answerLocale": "ja"
+      "answerLocale": "ja",
+      "questionLocales": {
+        "en": {
+          "title": "I activate <<13607>>, targeting a <<13496>> in my opponent's Extra Monster Zone. If my opponent chains the effect of <<13496>> by Tributing it, what happens?",
+          "question": "I activate <<13607>>, targeting a <<13496>> in my opponent's Extra Monster Zone. If my opponent chains the effect of <<13496>> by Tributing it, what happens?"
+        },
+        "ja": {
+          "title": "「<<13607>>」の効果処理時に、対象のリンクモンスターがフィールドに存在しなくなっている場合、処理はどうなりますか?",
+          "question": "自分のターンに、自分が「<<13607>>」の『1:相手フィールドのリンクモンスター1体を対象として発動できる。そのモンスターとリンクマーカーの数が同じモンスター1体を自分の墓地から選んで除外し、対象のモンスターを破壊する。この効果で除外した自分のモンスターの元々の種族がサイバース族の場合、さらに相手の魔法&罠ゾーンの表側表示のカード1枚を選んで破壊できる』効果を発動し、エクストラモンスターゾーンに存在する相手の「<<13496>>」を対象としました。\n\nその発動にチェーンして、相手が「<<13496>>」の『1:相手ターンに1度、このカードがEXモンスターゾーンに存在する場合、自分の手札・フィールドのモンスター1体をリリースして発動できる。フィールドの表側表示のカード1枚を選んで持ち主の手札に戻す』モンスター効果を発動し、「<<13496>>」自身をリリースした場合、処理はどうなりますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-12371",
@@ -192451,7 +192611,17 @@
       "sourceUrl": "https://db.ygoresources.com/data/qa/12767",
       "questionLocale": "ja",
       "detailedQuestionLocale": "ja",
-      "answerLocale": "ja"
+      "answerLocale": "ja",
+      "questionLocales": {
+        "en": {
+          "title": "If there are no Cyberse Link Monsters in my Extra Deck, can I activate the effect of <<13526>>?",
+          "question": "If there are no Cyberse Link Monsters in my face-down Extra Deck, can I activate <<13526>>'s effect?"
+        },
+        "ja": {
+          "title": "自分のエクストラデッキにサイバース族のリンクモンスターが存在しない場合、「<<13526>>」の効果を発動できますか?",
+          "question": "自分のエクストラデッキに存在する裏側表示のカードの中にサイバース族のリンクモンスターが存在しない場合、「<<13526>>」の『3:自分が2000以上の戦闘・効果ダメージを受けた場合に発動できる。自分のEXデッキの裏側表示のカードだけをシャッフルし、その一番上のカードをめくる。めくったカードがサイバース族リンクモンスターだった場合、そのモンスターを特殊召喚する。違った場合は元に戻す』効果を発動する事はできますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-12769",
@@ -192574,7 +192744,13 @@
       "sourceUrl": "https://db.ygoresources.com/data/qa/12772",
       "questionLocale": "ja",
       "detailedQuestionLocale": "ja",
-      "answerLocale": "ja"
+      "answerLocale": "ja",
+      "questionLocales": {
+        "ja": {
+          "title": "フィールドにリンクモンスターが複数体存在する場合、「<<13527>>」の効果によってどのリンクモンスターのリンク先に特殊召喚しますか?",
+          "question": "エクストラモンスターゾーンがある縦列の自分のメインモンスターゾーンに「<<13035>>」と「<<13167>>」が存在しています。\n\nこの状況で、自分がメインフェイズ2に「<<13527>>」の『1:自分・相手のメインフェイズ2に発動できる。自分の手札・デッキ・墓地のレベル2以下のモンスターを任意の数だけ選び、フィールドのリンクモンスターのリンク先となる自分フィールドに特殊召喚する(同名カードは1枚まで)』効果を発動した場合、自分はどちらのリンクモンスターのリンク先にモンスターを特殊召喚する事になりますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-12773",
@@ -202012,7 +202188,17 @@
       "sourceUrl": "https://db.ygoresources.com/data/qa/13299",
       "questionLocale": "ja",
       "detailedQuestionLocale": "ja",
-      "answerLocale": "ja"
+      "answerLocale": "ja",
+      "questionLocales": {
+        "en": {
+          "title": "If <<5301>> is sent to my Graveyard, can I activate the die roll effect of <<13490>>?",
+          "question": "If <<5301>> is sent to my Graveyard, can I activate the die roll effect of <<13490>>?"
+        },
+        "ja": {
+          "title": "「<<5301>>」が自分の墓地へ送られた際に「<<13490>>」のモンスター効果を発動できますか?",
+          "question": "「<<5301>>」が墓地へ送られた際に、「<<13490>>」の『2:悪魔族モンスターが自分の墓地へ送られた場合に発動できる。サイコロを1回振り、その内の1体に出た目の効果を適用する』モンスター効果を発動する事はできますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-13300",
@@ -203309,7 +203495,17 @@
       "sourceUrl": "https://db.ygoresources.com/data/qa/13379",
       "questionLocale": "ja",
       "detailedQuestionLocale": "ja",
-      "answerLocale": "ja"
+      "answerLocale": "ja",
+      "questionLocales": {
+        "en": {
+          "title": "Can <<13503>> be Special Summoned from the Extra Deck by the effect of <<12761>>?",
+          "question": "Can <<13503>> be Special Summoned from the Extra Deck by the effect of <<12761>>?"
+        },
+        "ja": {
+          "title": "「<<12761>>」の『1』のモンスター効果によって、エクストラデッキから「<<13503>>」を特殊召喚できますか?",
+          "question": "「<<12761>>」の『1』のモンスター効果によって、エクストラデッキから「<<13503>>」を特殊召喚する事はできますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-13381",
@@ -228706,7 +228902,17 @@
       "sourceUrl": "https://db.ygoresources.com/data/qa/14917",
       "questionLocale": "ja",
       "detailedQuestionLocale": "ja",
-      "answerLocale": "ja"
+      "answerLocale": "ja",
+      "questionLocales": {
+        "en": {
+          "title": "If a <<13254>>, Special Summoned by its own effect, is returned to the Deck by <<13601>>'s effect, what happens?",
+          "question": "My opponent controls a <<13254>> that was Special Summoned by its own 1st effect, and therefore has『place this card on the bottom of the Deck if it leaves the field』applied to it.\n\nI now activate the『return it to the Deck, then, if this card was co-linked when this effect was activated, you can draw 1 card』effect of my co-linked <<13601>>, by targeting that same <<13254>>. What happens when it resolves?"
+        },
+        "ja": {
+          "title": "「<<13601>>」の効果によって、自身の効果で特殊召喚した「<<13254>>」がデッキに戻った場合、どうなりますか?",
+          "question": "相手の「<<13254>>」が自身の『1:このカードが手札・墓地に存在する場合、LPを半分払い、自分フィールドのレベル6以下のモンスター1体を対象として発動できる。このカードを特殊召喚する。この効果で特殊召喚したこのカードは、レベルが対象のモンスターのレベル分だけ下がり、フィールドから離れた場合に持ち主のデッキの一番下に戻る』効果によって特殊召喚されています。\n\nこの状況で、自分が相互リンク状態の「<<13601>>」の『1:このカードがリンク召喚に成功した場合、手札を1枚捨て、フィールドのカード1枚を対象として発動できる。そのカードを持ち主のデッキに戻す。この効果の発動時にこのカードが相互リンク状態だった場合、さらに自分はデッキから1枚ドローできる』効果を発動し、その「<<13254>>」を対象とした場合、処理はどうなりますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-14918",
@@ -283172,7 +283378,17 @@
       "sourceUrl": "https://db.ygoresources.com/data/qa/18775",
       "questionLocale": "ja",
       "detailedQuestionLocale": "ja",
-      "answerLocale": "ja"
+      "answerLocale": "ja",
+      "questionLocales": {
+        "en": {
+          "title": "<<13479>> is face-up in my Spell & Trap Zone, and I have no cards in my hand. In this case, can I activate the effect of <<13479>> that adds an \"Ojama\" card from my Deck to my hand and then discards a card?",
+          "question": "<<13479>> is face-up in my Spell & Trap Zone, and I have no cards in my hand. In this case, can I activate the effect of <<13479>> that adds an \"Ojama\" card from my Deck to my hand and then discards a card?"
+        },
+        "ja": {
+          "title": "自分の手札が0枚の場合、「<<13479>>」の『デッキから「おジャマ」カード1枚を手札に加え、その後手札を1枚選んで捨てる』効果を発動できますか?",
+          "question": "自分の魔法&罠ゾーンに「<<13479>>」が表側表示で存在し、自分の手札が0枚の状態です。\n\nこの状況で、自分は、「<<13479>>」の『1:自分・相手のメインフェイズに発動できる。デッキから「おジャマ」カード1枚を手札に加え、その後手札を1枚選んで捨てる』効果を発動する事はできますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-18778",
@@ -317143,7 +317359,7 @@
       "question": "エクシーズ召喚やリンク召喚の素材として、裏側守備表示のモンスターを使用できますか?",
       "rawQuestion": "エクシーズ召喚やリンク召喚の素材として、裏側守備表示のモンスターを使用できますか?",
       "rawDetailedQuestion": "エクシーズ召喚やリンク召喚を行う際の素材として、裏側守備表示のモンスターを使用できますか?",
-      "answer": "原則として、裏側守備表示のモンスターはエクシーズ召喚やリンク召喚の素材にできません。(表側表示モンスターしか素材にできません。)\n\n例外的に、テキストに記載のある「<<24024>>」や「<<16852>>」については、自分フィールドに裏側守備表示で存在する「ゴーストリック」モンスターを素材としてエクシーズ召喚やリンク召喚できます。\n\nその場合でも、エクシーズ素材とするカードは「<<24024>>」の下に表側にし、縦向きで重ねます。(その場合でもエクシーズ素材になったモンスターカードの『リバースした場合に発動する』効果は発動しません。)",
+      "answer": "原則として、裏側守備表示のモンスターはエクシーズ召喚やリンク召喚の素材にできません。(表側表示モンスターしか素材にできません。)\n\n例外的に、テキストに記載のある「<<24024>>」や「<<16852>>」については、自分フィールドに裏側守備表示で存在する「ゴーストリック」モンスターを素材としてエクシーズ召喚やリンク召喚できます。\n\nなお、エクシーズ素材とするカードは「<<24024>>」の下に表側にし、縦向きで重ねます。(その場合でもエクシーズ素材になったモンスターカードの『リバースした場合に発動する』効果は発動しません。)",
       "cards": [
         "ゴースト"
       ],
@@ -317154,7 +317370,7 @@
       ],
       "questionCardIds": [],
       "keywords": [],
-      "text": "エクシーズ召喚やリンク召喚の素材として、裏側守備表示のモンスターを使用できますか?\nエクシーズ召喚やリンク召喚を行う際の素材として、裏側守備表示のモンスターを使用できますか?\nエクシーズ召喚やリンク召喚の素材として、裏側守備表示のモンスターを使用できますか?\n原則として、裏側守備表示のモンスターはエクシーズ召喚やリンク召喚の素材にできません。(表側表示モンスターしか素材にできません。)\n\n例外的に、テキストに記載のある「<<24024>>」や「<<16852>>」については、自分フィールドに裏側守備表示で存在する「ゴーストリック」モンスターを素材としてエクシーズ召喚やリンク召喚できます。\n\nその場合でも、エクシーズ素材とするカードは「<<24024>>」の下に表側にし、縦向きで重ねます。(その場合でもエクシーズ素材になったモンスターカードの『リバースした場合に発動する』効果は発動しません。)",
+      "text": "エクシーズ召喚やリンク召喚の素材として、裏側守備表示のモンスターを使用できますか?\nエクシーズ召喚やリンク召喚を行う際の素材として、裏側守備表示のモンスターを使用できますか?\nエクシーズ召喚やリンク召喚の素材として、裏側守備表示のモンスターを使用できますか?\n原則として、裏側守備表示のモンスターはエクシーズ召喚やリンク召喚の素材にできません。(表側表示モンスターしか素材にできません。)\n\n例外的に、テキストに記載のある「<<24024>>」や「<<16852>>」については、自分フィールドに裏側守備表示で存在する「ゴーストリック」モンスターを素材としてエクシーズ召喚やリンク召喚できます。\n\nなお、エクシーズ素材とするカードは「<<24024>>」の下に表側にし、縦向きで重ねます。(その場合でもエクシーズ素材になったモンスターカードの『リバースした場合に発動する』効果は発動しません。)",
       "sourceId": "20744",
       "sourceName": "YGOResources DB",
       "sourceUrl": "https://db.ygoresources.com/data/qa/20744",
@@ -451645,6 +451861,57 @@
       "text": "无穷机龙 卡诺 FAQ 0.875\n【『自分は「<<19480>>」を1ターンに1度しか特殊召喚できない』について】\n効果として扱いません。"
     },
     {
+      "id": "card-faq-23544-1",
+      "recordType": "card-faq",
+      "title": "レイズ・ムーンの雅 キャロル FAQ 1",
+      "question": "",
+      "rawQuestion": "",
+      "rawDetailedQuestion": "",
+      "cards": [
+        "レイズ・ムーンの雅 キャロル"
+      ],
+      "cardIds": [
+        "23544"
+      ],
+      "questionCardIds": [],
+      "keywords": [],
+      "text": "レイズ・ムーンの雅 キャロル FAQ 1\n【1の効果について】\n手札で発動できる誘発効果です。\nダメージステップでも発動できます。\nこのカードをドローした直後にのみ発動できます。チェーン2以降で発動した効果によってドローした場合など、このカードをドローした後に別の処理が続いた場合には、この効果を発動できません。"
+    },
+    {
+      "id": "card-faq-23544-2",
+      "recordType": "card-faq",
+      "title": "レイズ・ムーンの雅 キャロル FAQ 2",
+      "question": "",
+      "rawQuestion": "",
+      "rawDetailedQuestion": "",
+      "cards": [
+        "レイズ・ムーンの雅 キャロル"
+      ],
+      "cardIds": [
+        "23544"
+      ],
+      "questionCardIds": [],
+      "keywords": [],
+      "text": "レイズ・ムーンの雅 キャロル FAQ 2\n【2の効果について】\n起動効果・誘発効果・誘発即時効果・永続効果のいずれにも分類されない効果です。\nこの方法によってこのカードを攻撃表示で召喚できます。(裏側守備表示でのセットは行えません。)\nこの効果で特殊召喚したこのカードがモンスターゾーンに表側表示で存在しなくなった場合に、『このカードの元々の攻撃力は700になる』効果の適用はなくなります。"
+    },
+    {
+      "id": "card-faq-23544-3",
+      "recordType": "card-faq",
+      "title": "レイズ・ムーンの雅 キャロル FAQ 3",
+      "question": "",
+      "rawQuestion": "",
+      "rawDetailedQuestion": "",
+      "cards": [
+        "レイズ・ムーンの雅 キャロル"
+      ],
+      "cardIds": [
+        "23544"
+      ],
+      "questionCardIds": [],
+      "keywords": [],
+      "text": "レイズ・ムーンの雅 キャロル FAQ 3\n【3の効果について】\nモンスターゾーンで発動できる誘発効果です。\nダメージステップでも発動できます。\n既に自分がドロー以外の方法でデッキからカードを手札に加えたターンには、この効果は発動できません。また、この効果を発動したターンには、自分はドロー以外の方法でデッキからカードを手札に加えることができません。\nこの効果を発動した時点で、(実際に処理が行われたかどうかにかかわらず、)そのターン、自分はドロー以外の方法でデッキからカードを手札に加えることができなくなります。ただし、この効果の発動が無効になった場合、ドロー以外の方法でデッキからカードを手札に加えることができる状態に戻ります。\nこの効果の処理以降、『ターン終了時まで自分は光属性XモンスターしかEXデッキから特殊召喚できない』状態になります。(既に光属性エクシーズモンスター以外のモンスターをエクストラデッキから特殊召喚したターンでもこの効果を発動できます。)\nドローする処理に成功したかに関わらず、この効果の発動や効果が無効にならなかったのであれば、『ターン終了時まで自分は光属性XモンスターしかEXデッキから特殊召喚できない』状態になります。"
+    },
+    {
       "id": "card-faq-16211-1",
       "recordType": "card-faq",
       "title": "森之圣兽 千斤榆熊 FAQ 1",
@@ -546289,7 +546556,7 @@
       "keywords": [
         "魔法"
       ],
-      "text": "焰圣骑士导－罗兰 FAQ 1\n【1の効果について】\nモンスターゾーンで発動できる誘発効果です。\n『このターンのエンドフェイズに、デッキから装備魔法カード1枚を墓地へ送る。その後、デッキから戦士族モンスター1体を手札に加える』処理にチェーンブロックは作られません。また、『デッキから装備魔法カード1枚を墓地へ送る』処理と、『デッキから戦士族モンスター1体を手札に加える』処理は同時に行われる扱いではありません。\nデッキに装備魔法カードや戦士族モンスターが1枚も存在しない状況でも発動できます。\n処理を行う時点で、デッキからカードを手札に加えることができない場合でも、『デッキから装備魔法カード1枚を墓地へ送る』処理を行います。\nダメージステップには発動できません。"
+      "text": "焰圣骑士导－罗兰 FAQ 1\n【1の効果について】\nモンスターゾーンで発動できる誘発効果です。\n『このターンのエンドフェイズに、デッキから装備魔法カード1枚を墓地へ送る。その後、デッキから戦士族モンスター1体を手札に加える』処理にチェーンブロックは作られません。\nエンドフェイズに『デッキから装備魔法カード1枚を墓地へ送る』処理を行い、この処理に成功した場合、『デッキから戦士族モンスター1体を手札に加える』処理を行います。これらは同時に行われません。\nデッキに装備魔法カードや戦士族モンスターが1枚も存在しない状況でも発動できます。\n処理を行う時点で、デッキからカードを手札に加えることができない場合でも、『デッキから装備魔法カード1枚を墓地へ送る』処理を行います。\nダメージステップには発動できません。\nDuring the End Phase of that turn, sending 1 Equip Spell from your Deck to the Graveyard, and adding 1 Warrior monster from your Deck to your hand, are not treated as happening simultaneously."
     },
     {
       "id": "card-faq-15275-2",
@@ -614628,6 +614895,57 @@
       "text": "切纸九字的咒符 FAQ 0\n対象を取る効果ではありません。\n発動時にコストとして、自分の手札のレベル9モンスター1体、または自分のモンスターゾーンに表側表示で存在するレベル9のモンスター1体を墓地へ送ります。"
     },
     {
+      "id": "card-faq-23547-1",
+      "recordType": "card-faq",
+      "title": "レイズ・ムーンの灯 クルーシェ FAQ 1",
+      "question": "",
+      "rawQuestion": "",
+      "rawDetailedQuestion": "",
+      "cards": [
+        "レイズ・ムーンの灯 クルーシェ"
+      ],
+      "cardIds": [
+        "23547"
+      ],
+      "questionCardIds": [],
+      "keywords": [],
+      "text": "レイズ・ムーンの灯 クルーシェ FAQ 1\n【1の効果について】\n手札で発動できる誘発効果です。\nダメージステップでも発動できます。\nこのカードをドローした直後にのみ発動できます。チェーン2以降で発動した効果によってドローした場合など、このカードをドローした後に別の処理が続いた場合には、この効果を発動できません。"
+    },
+    {
+      "id": "card-faq-23547-2",
+      "recordType": "card-faq",
+      "title": "レイズ・ムーンの灯 クルーシェ FAQ 2",
+      "question": "",
+      "rawQuestion": "",
+      "rawDetailedQuestion": "",
+      "cards": [
+        "レイズ・ムーンの灯 クルーシェ"
+      ],
+      "cardIds": [
+        "23547"
+      ],
+      "questionCardIds": [],
+      "keywords": [],
+      "text": "レイズ・ムーンの灯 クルーシェ FAQ 2\n【2の効果について】\nモンスターゾーンで発動できる誘発効果です。\nダメージステップでも発動できます。"
+    },
+    {
+      "id": "card-faq-23547-3",
+      "recordType": "card-faq",
+      "title": "レイズ・ムーンの灯 クルーシェ FAQ 3",
+      "question": "",
+      "rawQuestion": "",
+      "rawDetailedQuestion": "",
+      "cards": [
+        "レイズ・ムーンの灯 クルーシェ"
+      ],
+      "cardIds": [
+        "23547"
+      ],
+      "questionCardIds": [],
+      "keywords": [],
+      "text": "レイズ・ムーンの灯 クルーシェ FAQ 3\n【3の効果について】\n手札で発動できる起動効果です。\n既に自分がドロー以外の方法でデッキからカードを手札に加えたターンには、この効果は発動できません。また、この効果を発動したターンには、自分はドロー以外の方法でデッキからカードを手札に加えることができません。\nこの効果を発動した時点で、(実際に処理が行われたかどうかにかかわらず、)そのターン、自分はドロー以外の方法でデッキからカードを手札に加えることができなくなります。ただし、この効果の発動が無効になった場合、ドロー以外の方法でデッキからカードを手札に加えることができる状態に戻ります。"
+    },
+    {
       "id": "card-faq-12039-1",
       "recordType": "card-faq",
       "title": "粘丝坏兽 蛛默鼓丝 FAQ 1",
@@ -616921,6 +617239,57 @@
       "questionCardIds": [],
       "keywords": [],
       "text": "灯笼鲨 FAQ 2\n【2の効果について】\n起動効果・誘発効果・誘発即時効果・永続効果のいずれにも分類されない効果です。"
+    },
+    {
+      "id": "card-faq-23545-1",
+      "recordType": "card-faq",
+      "title": "レイズ・ムーンの翼 ラピ FAQ 1",
+      "question": "",
+      "rawQuestion": "",
+      "rawDetailedQuestion": "",
+      "cards": [
+        "レイズ・ムーンの翼 ラピ"
+      ],
+      "cardIds": [
+        "23545"
+      ],
+      "questionCardIds": [],
+      "keywords": [],
+      "text": "レイズ・ムーンの翼 ラピ FAQ 1\n【1の効果について】\n手札で発動できる誘発効果です。\nダメージステップでも発動できます。\nこのカードをドローした直後にのみ発動できます。チェーン2以降で発動した効果によってドローした場合など、このカードをドローした後に別の処理が続いた場合には、この効果を発動できません。"
+    },
+    {
+      "id": "card-faq-23545-2",
+      "recordType": "card-faq",
+      "title": "レイズ・ムーンの翼 ラピ FAQ 2",
+      "question": "",
+      "rawQuestion": "",
+      "rawDetailedQuestion": "",
+      "cards": [
+        "レイズ・ムーンの翼 ラピ"
+      ],
+      "cardIds": [
+        "23545"
+      ],
+      "questionCardIds": [],
+      "keywords": [],
+      "text": "レイズ・ムーンの翼 ラピ FAQ 2\n【2の効果について】\nモンスターゾーンで発動できる誘発効果です。\nダメージステップでも発動できます。\n既に自分がドロー以外の方法でデッキからカードを手札に加えたターンには、この効果は発動できません。また、この効果を発動したターンには、自分はドロー以外の方法でデッキからカードを手札に加えることができません。\nこの効果を発動した時点で、(実際に処理が行われたかどうかにかかわらず、)そのターン、自分はドロー以外の方法でデッキからカードを手札に加えることができなくなります。ただし、この効果の発動が無効になった場合、ドロー以外の方法でデッキからカードを手札に加えることができる状態に戻ります。\nこの効果の処理以降、『ターン終了時まで自分は光属性XモンスターしかEXデッキから特殊召喚できない』状態になります。(既に光属性エクシーズモンスター以外のモンスターをエクストラデッキから特殊召喚したターンでもこの効果を発動できます。)\nドローする処理に成功したかに関わらず、この効果の発動や効果が無効にならなかったのであれば、『ターン終了時まで自分は光属性XモンスターしかEXデッキから特殊召喚できない』状態になります。"
+    },
+    {
+      "id": "card-faq-23545-3",
+      "recordType": "card-faq",
+      "title": "レイズ・ムーンの翼 ラピ FAQ 3",
+      "question": "",
+      "rawQuestion": "",
+      "rawDetailedQuestion": "",
+      "cards": [
+        "レイズ・ムーンの翼 ラピ"
+      ],
+      "cardIds": [
+        "23545"
+      ],
+      "questionCardIds": [],
+      "keywords": [],
+      "text": "レイズ・ムーンの翼 ラピ FAQ 3\n【3の効果について】\nモンスターゾーンで発動できる誘発即時効果です。\nダメージステップには発動できません。"
     },
     {
       "id": "card-faq-14104-1",
@@ -713513,57 +713882,6 @@
       "text": "レイズ・ムーンの刃 シェーナ FAQ 3\n【3の効果について】\n手札で発動できる起動効果です。\n既に自分がドロー以外の方法でデッキからカードを手札に加えたターンには、この効果は発動できません。また、この効果を発動したターンには、自分はドロー以外の方法でデッキからカードを手札に加えることができません。\nこの効果を発動した時点で、(実際に処理が行われたかどうかにかかわらず、)そのターン、自分はドロー以外の方法でデッキからカードを手札に加えることができなくなります。ただし、この効果の発動が無効になった場合、ドロー以外の方法でデッキからカードを手札に加えることができる状態に戻ります。"
     },
     {
-      "id": "card-faq-23544-1",
-      "recordType": "card-faq",
-      "title": "レイズ・ムーンの雅 キャロル FAQ 1",
-      "question": "",
-      "rawQuestion": "",
-      "rawDetailedQuestion": "",
-      "cards": [
-        "レイズ・ムーンの雅 キャロル"
-      ],
-      "cardIds": [
-        "23544"
-      ],
-      "questionCardIds": [],
-      "keywords": [],
-      "text": "レイズ・ムーンの雅 キャロル FAQ 1\n【1の効果について】\n手札で発動できる誘発効果です。\nダメージステップでも発動できます。\nこのカードをドローした直後にのみ発動できます。チェーン2以降で発動した効果によってドローした場合など、このカードをドローした後に別の処理が続いた場合には、この効果を発動できません。"
-    },
-    {
-      "id": "card-faq-23544-2",
-      "recordType": "card-faq",
-      "title": "レイズ・ムーンの雅 キャロル FAQ 2",
-      "question": "",
-      "rawQuestion": "",
-      "rawDetailedQuestion": "",
-      "cards": [
-        "レイズ・ムーンの雅 キャロル"
-      ],
-      "cardIds": [
-        "23544"
-      ],
-      "questionCardIds": [],
-      "keywords": [],
-      "text": "レイズ・ムーンの雅 キャロル FAQ 2\n【2の効果について】\n起動効果・誘発効果・誘発即時効果・永続効果のいずれにも分類されない効果です。\nこの方法によってこのカードを攻撃表示で召喚できます。(裏側守備表示でのセットは行えません。)\nこの効果で特殊召喚したこのカードがモンスターゾーンに表側表示で存在しなくなった場合に、『このカードの元々の攻撃力は700になる』効果の適用はなくなります。"
-    },
-    {
-      "id": "card-faq-23544-3",
-      "recordType": "card-faq",
-      "title": "レイズ・ムーンの雅 キャロル FAQ 3",
-      "question": "",
-      "rawQuestion": "",
-      "rawDetailedQuestion": "",
-      "cards": [
-        "レイズ・ムーンの雅 キャロル"
-      ],
-      "cardIds": [
-        "23544"
-      ],
-      "questionCardIds": [],
-      "keywords": [],
-      "text": "レイズ・ムーンの雅 キャロル FAQ 3\n【3の効果について】\nモンスターゾーンで発動できる誘発効果です。\nダメージステップでも発動できます。\n既に自分がドロー以外の方法でデッキからカードを手札に加えたターンには、この効果は発動できません。また、この効果を発動したターンには、自分はドロー以外の方法でデッキからカードを手札に加えることができません。\nこの効果を発動した時点で、(実際に処理が行われたかどうかにかかわらず、)そのターン、自分はドロー以外の方法でデッキからカードを手札に加えることができなくなります。ただし、この効果の発動が無効になった場合、ドロー以外の方法でデッキからカードを手札に加えることができる状態に戻ります。\nこの効果の処理以降、『ターン終了時まで自分は光属性XモンスターしかEXデッキから特殊召喚できない』状態になります。(既に光属性エクシーズモンスター以外のモンスターをエクストラデッキから特殊召喚したターンでもこの効果を発動できます。)\nドローする処理に成功したかに関わらず、この効果の発動や効果が無効にならなかったのであれば、『ターン終了時まで自分は光属性XモンスターしかEXデッキから特殊召喚できない』状態になります。"
-    },
-    {
       "id": "card-faq-23550-1",
       "recordType": "card-faq",
       "title": "レイズ・ムーンの望 スクイーズ－ジャックポット FAQ 1",
@@ -713615,57 +713933,6 @@
       "text": "レイズ・ムーンの望 スクイーズ－ジャックポット FAQ 3\n【3の効果について】\nモンスターゾーンで発動できる誘発効果です。\nダメージステップには発動できません。\nこのカードがモンスターゾーンに存在する状況で、ドロー以外の方法で相手によって相手のカードがデッキから離れる度に発動できます。\n同一チェーン上で複数回デッキから離れた場合、その一連のチェーン処理後にその回数まで発動できます。\n処理時にこのカードが裏側守備表示になっている場合でも、テキスト通りに処理を行います。\n処理時にこのカードがモンスターゾーンに存在しない場合、処理は何も行いません。"
     },
     {
-      "id": "card-faq-23547-1",
-      "recordType": "card-faq",
-      "title": "レイズ・ムーンの灯 クルーシェ FAQ 1",
-      "question": "",
-      "rawQuestion": "",
-      "rawDetailedQuestion": "",
-      "cards": [
-        "レイズ・ムーンの灯 クルーシェ"
-      ],
-      "cardIds": [
-        "23547"
-      ],
-      "questionCardIds": [],
-      "keywords": [],
-      "text": "レイズ・ムーンの灯 クルーシェ FAQ 1\n【1の効果について】\n手札で発動できる誘発効果です。\nダメージステップでも発動できます。\nこのカードをドローした直後にのみ発動できます。チェーン2以降で発動した効果によってドローした場合など、このカードをドローした後に別の処理が続いた場合には、この効果を発動できません。"
-    },
-    {
-      "id": "card-faq-23547-2",
-      "recordType": "card-faq",
-      "title": "レイズ・ムーンの灯 クルーシェ FAQ 2",
-      "question": "",
-      "rawQuestion": "",
-      "rawDetailedQuestion": "",
-      "cards": [
-        "レイズ・ムーンの灯 クルーシェ"
-      ],
-      "cardIds": [
-        "23547"
-      ],
-      "questionCardIds": [],
-      "keywords": [],
-      "text": "レイズ・ムーンの灯 クルーシェ FAQ 2\n【2の効果について】\nモンスターゾーンで発動できる誘発効果です。\nダメージステップでも発動できます。"
-    },
-    {
-      "id": "card-faq-23547-3",
-      "recordType": "card-faq",
-      "title": "レイズ・ムーンの灯 クルーシェ FAQ 3",
-      "question": "",
-      "rawQuestion": "",
-      "rawDetailedQuestion": "",
-      "cards": [
-        "レイズ・ムーンの灯 クルーシェ"
-      ],
-      "cardIds": [
-        "23547"
-      ],
-      "questionCardIds": [],
-      "keywords": [],
-      "text": "レイズ・ムーンの灯 クルーシェ FAQ 3\n【3の効果について】\n手札で発動できる起動効果です。\n既に自分がドロー以外の方法でデッキからカードを手札に加えたターンには、この効果は発動できません。また、この効果を発動したターンには、自分はドロー以外の方法でデッキからカードを手札に加えることができません。\nこの効果を発動した時点で、(実際に処理が行われたかどうかにかかわらず、)そのターン、自分はドロー以外の方法でデッキからカードを手札に加えることができなくなります。ただし、この効果の発動が無効になった場合、ドロー以外の方法でデッキからカードを手札に加えることができる状態に戻ります。"
-    },
-    {
       "id": "card-faq-23548-1",
       "recordType": "card-faq",
       "title": "レイズ・ムーンの朔 スクイーズ FAQ 1",
@@ -713715,57 +713982,6 @@
       "questionCardIds": [],
       "keywords": [],
       "text": "レイズ・ムーンの朔 スクイーズ FAQ 1.5\n【1つ目の『●』の効果について】\nドローができない状況でも発動できます。(実際にカードをドローする際に、デッキが0枚の場合は敗北になります。)\nこの効果の処理以降、『次のターンの終了時まで自分はランク7のXモンスターしかEXデッキから特殊召喚できない』状態になります。(既にランク7のエクシーズモンスター以外のモンスターをエクストラデッキから特殊召喚したターンでもこの効果を発動できます。)\nドローする処理に成功したかに関わらず、この効果の発動や効果が無効にならなかったのであれば、『次のターンの終了時まで自分はランク7のXモンスターしかEXデッキから特殊召喚できない』状態になります。\nドローする際にチェーンブロックは作られません。\nダメージステップ中にドロー以外の方法で相手の手札にカードが加わった場合でも適用されます。\n相手の手札に加わったカードの数ではなく、相手の手札にカードが加わった回数に応じて適用されます。(同時に複数枚のカードが手札に加わった場合、処理は1度だけ適用され、1枚ドローします。)"
-    },
-    {
-      "id": "card-faq-23545-1",
-      "recordType": "card-faq",
-      "title": "レイズ・ムーンの翼 ラピ FAQ 1",
-      "question": "",
-      "rawQuestion": "",
-      "rawDetailedQuestion": "",
-      "cards": [
-        "レイズ・ムーンの翼 ラピ"
-      ],
-      "cardIds": [
-        "23545"
-      ],
-      "questionCardIds": [],
-      "keywords": [],
-      "text": "レイズ・ムーンの翼 ラピ FAQ 1\n【1の効果について】\n手札で発動できる誘発効果です。\nダメージステップでも発動できます。\nこのカードをドローした直後にのみ発動できます。チェーン2以降で発動した効果によってドローした場合など、このカードをドローした後に別の処理が続いた場合には、この効果を発動できません。"
-    },
-    {
-      "id": "card-faq-23545-2",
-      "recordType": "card-faq",
-      "title": "レイズ・ムーンの翼 ラピ FAQ 2",
-      "question": "",
-      "rawQuestion": "",
-      "rawDetailedQuestion": "",
-      "cards": [
-        "レイズ・ムーンの翼 ラピ"
-      ],
-      "cardIds": [
-        "23545"
-      ],
-      "questionCardIds": [],
-      "keywords": [],
-      "text": "レイズ・ムーンの翼 ラピ FAQ 2\n【2の効果について】\nモンスターゾーンで発動できる誘発効果です。\nダメージステップでも発動できます。\n既に自分がドロー以外の方法でデッキからカードを手札に加えたターンには、この効果は発動できません。また、この効果を発動したターンには、自分はドロー以外の方法でデッキからカードを手札に加えることができません。\nこの効果を発動した時点で、(実際に処理が行われたかどうかにかかわらず、)そのターン、自分はドロー以外の方法でデッキからカードを手札に加えることができなくなります。ただし、この効果の発動が無効になった場合、ドロー以外の方法でデッキからカードを手札に加えることができる状態に戻ります。\nこの効果の処理以降、『ターン終了時まで自分は光属性XモンスターしかEXデッキから特殊召喚できない』状態になります。(既に光属性エクシーズモンスター以外のモンスターをエクストラデッキから特殊召喚したターンでもこの効果を発動できます。)\nドローする処理に成功したかに関わらず、この効果の発動や効果が無効にならなかったのであれば、『ターン終了時まで自分は光属性XモンスターしかEXデッキから特殊召喚できない』状態になります。"
-    },
-    {
-      "id": "card-faq-23545-3",
-      "recordType": "card-faq",
-      "title": "レイズ・ムーンの翼 ラピ FAQ 3",
-      "question": "",
-      "rawQuestion": "",
-      "rawDetailedQuestion": "",
-      "cards": [
-        "レイズ・ムーンの翼 ラピ"
-      ],
-      "cardIds": [
-        "23545"
-      ],
-      "questionCardIds": [],
-      "keywords": [],
-      "text": "レイズ・ムーンの翼 ラピ FAQ 3\n【3の効果について】\nモンスターゾーンで発動できる誘発即時効果です。\nダメージステップには発動できません。"
     },
     {
       "id": "card-faq-11250-0",
@@ -762363,6 +762579,57 @@
       "text": "星逢之神篱 FAQ 2\n【2の効果について】\nフィールドゾーンの表側表示のこのカードが発動できるチェーンブロックの作られる効果です。\nダメージステップには発動できません。\nこの効果を発動する際に●を1つ選択し、その●の効果として発動します。"
     },
     {
+      "id": "card-faq-23551-1",
+      "recordType": "card-faq",
+      "title": "レイズ・ムーンの星々 FAQ 1",
+      "question": "",
+      "rawQuestion": "",
+      "rawDetailedQuestion": "",
+      "cards": [
+        "レイズ・ムーンの星々"
+      ],
+      "cardIds": [
+        "23551"
+      ],
+      "questionCardIds": [],
+      "keywords": [],
+      "text": "レイズ・ムーンの星々 FAQ 1\n【1の効果について】\nこのカードの発動時の効果です。\n処理時に、「<<23551>>」を除く、このターン「<<23551>>」の1の効果で選んでいない「レイズ・ムーン」カード1枚をデッキから選び、相手に確認させてからデッキの一番上に置きます。\nこの効果の処理以降、『ターン終了時までお互いにドロー以外の方法でデッキからカードを手札に加える事はできない』状態になります。(既に自分または相手がドロー以外の方法でデッキからカードを手札に加えたターンでもこの効果を発動できます。)\nデッキの一番上に置く処理に成功したかに関わらず、この効果の発動や効果が無効にならなかったのであれば、『ターン終了時までお互いにドロー以外の方法でデッキからカードを手札に加える事はできない』状態になります。"
+    },
+    {
+      "id": "card-faq-23551-2",
+      "recordType": "card-faq",
+      "title": "レイズ・ムーンの星々 FAQ 2",
+      "question": "",
+      "rawQuestion": "",
+      "rawDetailedQuestion": "",
+      "cards": [
+        "レイズ・ムーンの星々"
+      ],
+      "cardIds": [
+        "23551"
+      ],
+      "questionCardIds": [],
+      "keywords": [],
+      "text": "レイズ・ムーンの星々 FAQ 2\n【2の効果について】\n墓地で発動できるチェーンブロックの作られる効果です。\nこの効果を発動する際に『●』を1つ選択し、その『●』の効果として発動します。"
+    },
+    {
+      "id": "card-faq-23551-2.5",
+      "recordType": "card-faq",
+      "title": "レイズ・ムーンの星々 FAQ 2.5",
+      "question": "",
+      "rawQuestion": "",
+      "rawDetailedQuestion": "",
+      "cards": [
+        "レイズ・ムーンの星々"
+      ],
+      "cardIds": [
+        "23551"
+      ],
+      "questionCardIds": [],
+      "keywords": [],
+      "text": "レイズ・ムーンの星々 FAQ 2.5\n【1つ目の『●』について】\n自分または相手のデッキが0枚の場合には、この効果を選択して発動することはできません。"
+    },
+    {
       "id": "card-faq-21408-1",
       "recordType": "card-faq",
       "title": "スターシップ・アジャスト・プレーン FAQ 1",
@@ -783026,6 +783293,59 @@
       "text": "粉砕せし破壊神 FAQ 0.5\n【『このカード名の12の効果はそれぞれ1ターンに1度しか使用できず、その発動と効果は無効化されない』について】\n効果として扱いません。"
     },
     {
+      "id": "card-faq-23553-1",
+      "recordType": "card-faq",
+      "title": "レイズ・ムーンの煌めき FAQ 1",
+      "question": "",
+      "rawQuestion": "",
+      "rawDetailedQuestion": "",
+      "cards": [
+        "レイズ・ムーンの煌めき"
+      ],
+      "cardIds": [
+        "23553"
+      ],
+      "questionCardIds": [],
+      "keywords": [
+        "魔法"
+      ],
+      "text": "レイズ・ムーンの煌めき FAQ 1\n【1の効果について】\nこのカードの発動時の効果です。\n処理時に、『EXデッキから「レイズ・ムーン」Xモンスター1体を特殊召喚し』の処理を行い、特殊召喚に成功した場合、『このカードをそのX素材にする』処理を行います。エクシーズ素材にする処理に成功した場合、その後、『自分の墓地の「レイズ・ムーン」カードを全てデッキに戻す』処理を行うことができます。\n特殊召喚する処理とエクシーズ素材にする処理は同時に行われる扱いです。\nエクシーズ素材にする処理とデッキに戻す処理を両方行う場合、それらは同時には行われません。\n処理時に、このカードが魔法&罠ゾーンに存在しない場合、特殊召喚の処理のみを行います。(エクシーズ素材にする処理やデッキに戻す処理は行われません。)"
+    },
+    {
+      "id": "card-faq-23553-2",
+      "recordType": "card-faq",
+      "title": "レイズ・ムーンの煌めき FAQ 2",
+      "question": "",
+      "rawQuestion": "",
+      "rawDetailedQuestion": "",
+      "cards": [
+        "レイズ・ムーンの煌めき"
+      ],
+      "cardIds": [
+        "23553"
+      ],
+      "questionCardIds": [],
+      "keywords": [],
+      "text": "レイズ・ムーンの煌めき FAQ 2\n【2の効果について】\n墓地で発動できるチェーンブロックの作られる効果です。\nダメージステップには発動できません。\nこの効果のスペルスピードは2です。"
+    },
+    {
+      "id": "card-faq-23553-0.5",
+      "recordType": "card-faq",
+      "title": "レイズ・ムーンの煌めき FAQ 0.5",
+      "question": "",
+      "rawQuestion": "",
+      "rawDetailedQuestion": "",
+      "cards": [
+        "レイズ・ムーンの煌めき"
+      ],
+      "cardIds": [
+        "23553"
+      ],
+      "questionCardIds": [],
+      "keywords": [],
+      "text": "レイズ・ムーンの煌めき FAQ 0.5\n【『このカード名の、2の効果は1ターンに1度しか使用できず、12の効果を発動するデュエル中、自分はドロー以外の方法でデッキからカードを手札に加える事ができない』について】\n既に自分がドロー以外の方法でデッキからカードを手札に加えたデュエル中には、このカード名の1や2の効果を発動できません。また、このカード名の1や2の効果を発動したデュエル中、ドロー以外の方法でデッキからカードを手札に加えることができません。\nこのカード名の1や2の効果を発動した時点で、(実際に処理が行われたかどうかにかかわらず、)そのデュエル中、自分はドロー以外の方法でデッキからカードを手札に加えられなくなります。ただし、このカード名の1や2の効果の発動が無効になった場合、ドロー以外の方法でデッキからカードを手札に加えることができる状態に戻ります。"
+    },
+    {
       "id": "card-faq-17766-1",
       "recordType": "card-faq",
       "title": "深渊兽 阿尔白・洛斯 FAQ 1",
@@ -784642,59 +784962,6 @@
       "questionCardIds": [],
       "keywords": [],
       "text": "強欲な贈り物 FAQ 0\n対象を取る効果ではありません。\nダメージステップに発動する事はできません。\n相手のデッキが1枚または0枚の時には、「<<7235>>」を発動する事自体ができません。"
-    },
-    {
-      "id": "card-faq-23553-1",
-      "recordType": "card-faq",
-      "title": "レイズ・ムーンの煌めき FAQ 1",
-      "question": "",
-      "rawQuestion": "",
-      "rawDetailedQuestion": "",
-      "cards": [
-        "レイズ・ムーンの煌めき"
-      ],
-      "cardIds": [
-        "23553"
-      ],
-      "questionCardIds": [],
-      "keywords": [
-        "魔法"
-      ],
-      "text": "レイズ・ムーンの煌めき FAQ 1\n【1の効果について】\nこのカードの発動時の効果です。\n処理時に、『EXデッキから「レイズ・ムーン」Xモンスター1体を特殊召喚し』の処理を行い、特殊召喚に成功した場合、『このカードをそのX素材にする』処理を行います。エクシーズ素材にする処理に成功した場合、その後、『自分の墓地の「レイズ・ムーン」カードを全てデッキに戻す』処理を行うことができます。\n特殊召喚する処理とエクシーズ素材にする処理は同時に行われる扱いです。\nエクシーズ素材にする処理とデッキに戻す処理を両方行う場合、それらは同時には行われません。\n処理時に、このカードが魔法&罠ゾーンに存在しない場合、特殊召喚の処理のみを行います。(エクシーズ素材にする処理やデッキに戻す処理は行われません。)"
-    },
-    {
-      "id": "card-faq-23553-2",
-      "recordType": "card-faq",
-      "title": "レイズ・ムーンの煌めき FAQ 2",
-      "question": "",
-      "rawQuestion": "",
-      "rawDetailedQuestion": "",
-      "cards": [
-        "レイズ・ムーンの煌めき"
-      ],
-      "cardIds": [
-        "23553"
-      ],
-      "questionCardIds": [],
-      "keywords": [],
-      "text": "レイズ・ムーンの煌めき FAQ 2\n【2の効果について】\n墓地で発動できるチェーンブロックの作られる効果です。\nダメージステップには発動できません。\nこの効果のスペルスピードは2です。"
-    },
-    {
-      "id": "card-faq-23553-0.5",
-      "recordType": "card-faq",
-      "title": "レイズ・ムーンの煌めき FAQ 0.5",
-      "question": "",
-      "rawQuestion": "",
-      "rawDetailedQuestion": "",
-      "cards": [
-        "レイズ・ムーンの煌めき"
-      ],
-      "cardIds": [
-        "23553"
-      ],
-      "questionCardIds": [],
-      "keywords": [],
-      "text": "レイズ・ムーンの煌めき FAQ 0.5\n【『このカード名の、2の効果は1ターンに1度しか使用できず、12の効果を発動するデュエル中、自分はドロー以外の方法でデッキからカードを手札に加える事ができない』について】\n既に自分がドロー以外の方法でデッキからカードを手札に加えたデュエル中には、このカード名の1や2の効果を発動できません。また、このカード名の1や2の効果を発動したデュエル中、ドロー以外の方法でデッキからカードを手札に加えることができません。\nこのカード名の1や2の効果を発動した時点で、(実際に処理が行われたかどうかにかかわらず、)そのデュエル中、自分はドロー以外の方法でデッキからカードを手札に加えられなくなります。ただし、このカード名の1や2の効果の発動が無効になった場合、ドロー以外の方法でデッキからカードを手札に加えることができる状態に戻ります。"
     },
     {
       "id": "card-faq-9362-0",
@@ -787991,57 +788258,6 @@
       "questionCardIds": [],
       "keywords": [],
       "text": "生命力吸収魔術 FAQ 0\n裏側守備表示のモンスターか、表側表示の効果モンスターのいずれかが存在する場合に発動する事ができます。\n対象を取る効果ではありません。\nダメージステップにて発動する事はできません。\n『フィールド上の全ての裏側守備表示モンスターを表側表示にする。この時、リバース効果モンスターの効果は発動しない』処理と、『自分はフィールド上の効果モンスター1体につき400ライフポイント回復する』処理は同時に行われる扱いとなります。"
-    },
-    {
-      "id": "card-faq-23551-1",
-      "recordType": "card-faq",
-      "title": "レイズ・ムーンの星々 FAQ 1",
-      "question": "",
-      "rawQuestion": "",
-      "rawDetailedQuestion": "",
-      "cards": [
-        "レイズ・ムーンの星々"
-      ],
-      "cardIds": [
-        "23551"
-      ],
-      "questionCardIds": [],
-      "keywords": [],
-      "text": "レイズ・ムーンの星々 FAQ 1\n【1の効果について】\nこのカードの発動時の効果です。\n処理時に、「<<23551>>」を除く、このターン「<<23551>>」の1の効果で選んでいない「レイズ・ムーン」カード1枚をデッキから選び、相手に確認させてからデッキの一番上に置きます。\nこの効果の処理以降、『ターン終了時までお互いにドロー以外の方法でデッキからカードを手札に加える事はできない』状態になります。(既に自分または相手がドロー以外の方法でデッキからカードを手札に加えたターンでもこの効果を発動できます。)\nデッキの一番上に置く処理に成功したかに関わらず、この効果の発動や効果が無効にならなかったのであれば、『ターン終了時までお互いにドロー以外の方法でデッキからカードを手札に加える事はできない』状態になります。"
-    },
-    {
-      "id": "card-faq-23551-2",
-      "recordType": "card-faq",
-      "title": "レイズ・ムーンの星々 FAQ 2",
-      "question": "",
-      "rawQuestion": "",
-      "rawDetailedQuestion": "",
-      "cards": [
-        "レイズ・ムーンの星々"
-      ],
-      "cardIds": [
-        "23551"
-      ],
-      "questionCardIds": [],
-      "keywords": [],
-      "text": "レイズ・ムーンの星々 FAQ 2\n【2の効果について】\n墓地で発動できるチェーンブロックの作られる効果です。\nこの効果を発動する際に『●』を1つ選択し、その『●』の効果として発動します。"
-    },
-    {
-      "id": "card-faq-23551-2.5",
-      "recordType": "card-faq",
-      "title": "レイズ・ムーンの星々 FAQ 2.5",
-      "question": "",
-      "rawQuestion": "",
-      "rawDetailedQuestion": "",
-      "cards": [
-        "レイズ・ムーンの星々"
-      ],
-      "cardIds": [
-        "23551"
-      ],
-      "questionCardIds": [],
-      "keywords": [],
-      "text": "レイズ・ムーンの星々 FAQ 2.5\n【1つ目の『●』について】\n自分または相手のデッキが0枚の場合には、この効果を選択して発動することはできません。"
     },
     {
       "id": "card-faq-4879-1",
@@ -803429,6 +803645,108 @@
       "text": "トライポッド・フィッシュ FAQ 0\n「<<10228>>」のモンスター効果は誘発効果です。\n「<<10228>>」のモンスター効果は、「<<10228>>」自身が墓地からの特殊召喚に成功した時に、任意に発動する事ができる効果です。(ダメージステップでも発動する事ができます。)\n自分のモンスターゾーンに表側表示で存在する魚族・海竜族・水族モンスター1体を対象に取る効果です。(「<<10228>>」自身を対象とする事もできます。)\n「<<10228>>」の効果によって上がったレベルは、そのモンスターがモンスターゾーンに表側表示で存在する限り適用されたままとなります。"
     },
     {
+      "id": "card-faq-23557-1",
+      "recordType": "card-faq",
+      "title": "緋ノ異解△ナラカ FAQ 1",
+      "question": "",
+      "rawQuestion": "",
+      "rawDetailedQuestion": "",
+      "cards": [
+        "緋ノ異解△ナラカ"
+      ],
+      "cardIds": [
+        "23557"
+      ],
+      "questionCardIds": [],
+      "keywords": [],
+      "text": "緋ノ異解△ナラカ FAQ 1\n【1の効果について】\n手札で発動できる誘発効果です。\nダメージステップには発動できません。"
+    },
+    {
+      "id": "card-faq-23557-2",
+      "recordType": "card-faq",
+      "title": "緋ノ異解△ナラカ FAQ 2",
+      "question": "",
+      "rawQuestion": "",
+      "rawDetailedQuestion": "",
+      "cards": [
+        "緋ノ異解△ナラカ"
+      ],
+      "cardIds": [
+        "23557"
+      ],
+      "questionCardIds": [],
+      "keywords": [],
+      "text": "緋ノ異解△ナラカ FAQ 2\n【2の効果について】\nモンスターゾーンで発動する誘発効果です。\n必ず発動する効果です。(自分のデッキが3枚以下の場合でも発動します。)\nダメージステップでも発動します。\n処理時に、自分のデッキが3枚以下である場合、デッキのカードを全て裏側で除外します。"
+    },
+    {
+      "id": "card-faq-23557-3",
+      "recordType": "card-faq",
+      "title": "緋ノ異解△ナラカ FAQ 3",
+      "question": "",
+      "rawQuestion": "",
+      "rawDetailedQuestion": "",
+      "cards": [
+        "緋ノ異解△ナラカ"
+      ],
+      "cardIds": [
+        "23557"
+      ],
+      "questionCardIds": [],
+      "keywords": [],
+      "text": "緋ノ異解△ナラカ FAQ 3\n【3の効果について】\nモンスターゾーンで発動できる誘発即時効果です。\nこの効果の処理以降、『このターン、自分は「異解△」カード以外のカードの効果を発動できない』状態になります。(既に「異解△」以外のカードの効果を発動したターンでもこの効果を発動できます。)\n特殊召喚する処理に成功したかに関わらず、この効果の発動や効果が無効にならなかったのであれば、『このターン、自分は「異解△」カード以外のカードの効果を発動できない』状態になります。"
+    },
+    {
+      "id": "card-faq-23556-1",
+      "recordType": "card-faq",
+      "title": "碧ノ異解△トゥオネラ FAQ 1",
+      "question": "",
+      "rawQuestion": "",
+      "rawDetailedQuestion": "",
+      "cards": [
+        "碧ノ異解△トゥオネラ"
+      ],
+      "cardIds": [
+        "23556"
+      ],
+      "questionCardIds": [],
+      "keywords": [],
+      "text": "碧ノ異解△トゥオネラ FAQ 1\n【1の効果について】\n手札で発動できる起動効果です。"
+    },
+    {
+      "id": "card-faq-23556-2",
+      "recordType": "card-faq",
+      "title": "碧ノ異解△トゥオネラ FAQ 2",
+      "question": "",
+      "rawQuestion": "",
+      "rawDetailedQuestion": "",
+      "cards": [
+        "碧ノ異解△トゥオネラ"
+      ],
+      "cardIds": [
+        "23556"
+      ],
+      "questionCardIds": [],
+      "keywords": [],
+      "text": "碧ノ異解△トゥオネラ FAQ 2\n【2の効果について】\nモンスターゾーンで発動する誘発効果です。\n必ず発動する効果です。(自分のデッキが2枚以下の場合でも発動します。)\nダメージステップでも発動します。\n処理時に、自分のデッキが2枚以下である場合、デッキのカードを全て裏側で除外します。"
+    },
+    {
+      "id": "card-faq-23556-3",
+      "recordType": "card-faq",
+      "title": "碧ノ異解△トゥオネラ FAQ 3",
+      "question": "",
+      "rawQuestion": "",
+      "rawDetailedQuestion": "",
+      "cards": [
+        "碧ノ異解△トゥオネラ"
+      ],
+      "cardIds": [
+        "23556"
+      ],
+      "questionCardIds": [],
+      "keywords": [],
+      "text": "碧ノ異解△トゥオネラ FAQ 3\n【3の効果について】\nモンスターゾーンで発動できる起動効果です。\nこの効果の処理以降、『このターン、自分は「異解△」カード以外のカードの効果を発動できない』状態になります。(既に「異解△」以外のカードの効果を発動したターンでもこの効果を発動できます。)\n特殊召喚する処理に成功したかに関わらず、この効果の発動や効果が無効にならなかったのであれば、『このターン、自分は「異解△」カード以外のカードの効果を発動できない』状態になります。"
+    },
+    {
       "id": "card-faq-23562-1",
       "recordType": "card-faq",
       "title": "異解△福音 FAQ 1",
@@ -803482,6 +803800,216 @@
       "questionCardIds": [],
       "keywords": [],
       "text": "異解△福音 FAQ 0.5\n【『自分のデッキの上・墓地から合計5枚のカードを裏側で除外してこのカードを発動できる』について】\n効果として扱いません。このカードを発動するコストです。\n自分のデッキ・墓地のカードの合計が4枚以下の場合、このカードは発動できません。\nこのカードを発動する際に、デッキの上または墓地からそれぞれ何枚のカードを除外するかを決めた上で、同時に除外します。"
+    },
+    {
+      "id": "card-faq-23555-1",
+      "recordType": "card-faq",
+      "title": "天ノ異解△シェオル FAQ 1",
+      "question": "",
+      "rawQuestion": "",
+      "rawDetailedQuestion": "",
+      "cards": [
+        "天ノ異解△シェオル"
+      ],
+      "cardIds": [
+        "23555"
+      ],
+      "questionCardIds": [],
+      "keywords": [],
+      "text": "天ノ異解△シェオル FAQ 1\n【1の効果について】\n手札で発動できる起動効果です。"
+    },
+    {
+      "id": "card-faq-23555-2",
+      "recordType": "card-faq",
+      "title": "天ノ異解△シェオル FAQ 2",
+      "question": "",
+      "rawQuestion": "",
+      "rawDetailedQuestion": "",
+      "cards": [
+        "天ノ異解△シェオル"
+      ],
+      "cardIds": [
+        "23555"
+      ],
+      "questionCardIds": [],
+      "keywords": [],
+      "text": "天ノ異解△シェオル FAQ 2\n【2の効果について】\nモンスターゾーンで発動する誘発効果です。\n必ず発動する効果です。(デッキが1枚以下の場合でも発動します。)\nダメージステップでも発動します。\n処理時に、自分のデッキが1枚である場合、デッキのカードを全て裏側で除外します。"
+    },
+    {
+      "id": "card-faq-23555-3",
+      "recordType": "card-faq",
+      "title": "天ノ異解△シェオル FAQ 3",
+      "question": "",
+      "rawQuestion": "",
+      "rawDetailedQuestion": "",
+      "cards": [
+        "天ノ異解△シェオル"
+      ],
+      "cardIds": [
+        "23555"
+      ],
+      "questionCardIds": [],
+      "keywords": [
+        "魔法"
+      ],
+      "text": "天ノ異解△シェオル FAQ 3\n【3の効果について】\nモンスターゾーンで発動できる起動効果です。\n処理時に、裏側で除外されている自分のカードの中から、「異解△」魔法・罠カードを2枚まで選び、相手に確認させたうえで手札に加えます。\nこの効果の処理以降、『このターン、自分は「異解△」カード以外のカードの効果を発動できない』状態になります。(既に「異解△」以外のカードの効果を発動したターンでもこの効果を発動できます。)\n手札に加える処理に成功したかに関わらず、この効果の発動や効果が無効にならなかったのであれば、『このターン、自分は「異解△」カード以外のカードの効果を発動できない』状態になります。"
+    },
+    {
+      "id": "card-faq-23554-1",
+      "recordType": "card-faq",
+      "title": "虚ノ異解△ゲヘナ FAQ 1",
+      "question": "",
+      "rawQuestion": "",
+      "rawDetailedQuestion": "",
+      "cards": [
+        "虚ノ異解△ゲヘナ"
+      ],
+      "cardIds": [
+        "23554"
+      ],
+      "questionCardIds": [],
+      "keywords": [],
+      "text": "虚ノ異解△ゲヘナ FAQ 1\n【1の効果について】\n手札で発動できる起動効果です。"
+    },
+    {
+      "id": "card-faq-23554-2",
+      "recordType": "card-faq",
+      "title": "虚ノ異解△ゲヘナ FAQ 2",
+      "question": "",
+      "rawQuestion": "",
+      "rawDetailedQuestion": "",
+      "cards": [
+        "虚ノ異解△ゲヘナ"
+      ],
+      "cardIds": [
+        "23554"
+      ],
+      "questionCardIds": [],
+      "keywords": [],
+      "text": "虚ノ異解△ゲヘナ FAQ 2\n【2の効果について】\nモンスターゾーンで発動する誘発効果です。\n必ず発動する効果です。(デッキが0枚の場合でも発動します。また、処理時に、デッキが0枚の場合、処理は何も行いません。)\nダメージステップでも発動します。"
+    },
+    {
+      "id": "card-faq-23554-3",
+      "recordType": "card-faq",
+      "title": "虚ノ異解△ゲヘナ FAQ 3",
+      "question": "",
+      "rawQuestion": "",
+      "rawDetailedQuestion": "",
+      "cards": [
+        "虚ノ異解△ゲヘナ"
+      ],
+      "cardIds": [
+        "23554"
+      ],
+      "questionCardIds": [],
+      "keywords": [],
+      "text": "虚ノ異解△ゲヘナ FAQ 3\n【3の効果について】\nモンスターゾーンで発動できる起動効果です。\n処理時に、裏側で除外されている自分のカードの中から、「異解△」モンスターを2体まで選び、相手に確認させたうえで手札に加えます。\nこの効果の処理以降、『このターン、自分は「異解△」カード以外のカードの効果を発動できない』状態になります。(既に「異解△」以外のカードの効果を発動したターンでもこの効果を発動できます。)\n手札に加える処理に成功したかに関わらず、この効果の発動や効果が無効にならなかったのであれば、『このターン、自分は「異解△」カード以外のカードの効果を発動できない』状態になります。"
+    },
+    {
+      "id": "card-faq-23564-0",
+      "recordType": "card-faq",
+      "title": "異解△審判 FAQ 0",
+      "question": "",
+      "rawQuestion": "",
+      "rawDetailedQuestion": "",
+      "cards": [
+        "異解△審判"
+      ],
+      "cardIds": [
+        "23564"
+      ],
+      "questionCardIds": [],
+      "keywords": [],
+      "text": "異解△審判 FAQ 0\nカードの発動のみを行うか、カードの発動と同じチェーンブロックで1の効果を発動するか、カードの発動と同じチェーンブロックで2の効果を発動するかの、いずれかの方法でこのカードを発動できます。\nカードの発動のみを行う場合、発動の条件はありません。ただし、ダメージステップには発動できません。また、カードの発動のみを行った同一チェーン上(チェーン2以降)で、改めて1や2の効果を発動することはできません。\n1の効果の発動の条件を満たしている場合、カードの発動と同じチェーンブロックで1の効果を発動できます。ただし、ダメージステップには発動できません。\n2の効果の発動の条件を満たしている場合、カードの発動と同じチェーンブロックで2の効果を発動できます。"
+    },
+    {
+      "id": "card-faq-23564-1",
+      "recordType": "card-faq",
+      "title": "異解△審判 FAQ 1",
+      "question": "",
+      "rawQuestion": "",
+      "rawDetailedQuestion": "",
+      "cards": [
+        "異解△審判"
+      ],
+      "cardIds": [
+        "23564"
+      ],
+      "questionCardIds": [],
+      "keywords": [
+        "魔法"
+      ],
+      "text": "異解△審判 FAQ 1\n【1の効果について】\n魔法&罠ゾーンで発動できるチェーンブロックの作られる効果です。\nダメージステップには発動できません。\n同一チェーン上で複数回相手がモンスターを召喚・特殊召喚した場合、この効果は一連のチェーン処理後に1回のみ発動できます。(該当のモンスターの内1体を対象に選択します。)\n処理時に、裏側で除外されている自分のカードの中から、該当の属性を持つ「異解△」モンスターを1体選び、相手に確認させたうえで手札に加えるか特殊召喚します。\nこの効果の処理以降、『このターン、自分は「異解△」カード以外のカードの効果を発動できない』状態になります。(既に「異解△」以外のカードの効果を発動したターンでもこの効果を発動できます。)\n処理時に、対象のモンスターがモンスターゾーンに表側表示で存在しない場合、手札に加えるか特殊召喚する処理は行われません。(モンスターを選びませんので、そのターンに同じ属性のモンスターを対象に、再度発動することができます。)\n手札に加える処理や特殊召喚する処理に成功したかに関わらず、この効果の発動や効果が無効にならなかったのであれば、『このターン、自分は「異解△」カード以外のカードの効果を発動できない』状態になります。"
+    },
+    {
+      "id": "card-faq-23564-2",
+      "recordType": "card-faq",
+      "title": "異解△審判 FAQ 2",
+      "question": "",
+      "rawQuestion": "",
+      "rawDetailedQuestion": "",
+      "cards": [
+        "異解△審判"
+      ],
+      "cardIds": [
+        "23564"
+      ],
+      "questionCardIds": [],
+      "keywords": [
+        "魔法"
+      ],
+      "text": "異解△審判 FAQ 2\n【2の効果について】\n魔法&罠ゾーンで発動できるチェーンブロックの作られる効果です。"
+    },
+    {
+      "id": "card-faq-23563-1",
+      "recordType": "card-faq",
+      "title": "異解△領域－ヴァルヴォルス FAQ 1",
+      "question": "",
+      "rawQuestion": "",
+      "rawDetailedQuestion": "",
+      "cards": [
+        "異解△領域－ヴァルヴォルス"
+      ],
+      "cardIds": [
+        "23563"
+      ],
+      "questionCardIds": [],
+      "keywords": [],
+      "text": "異解△領域－ヴァルヴォルス FAQ 1\n【1の効果について】\nフィールドゾーンで発動できるチェーンブロックの作られる効果です。\n処理時に、裏側で除外されている自分のカードの中から、「異解△」カードを1枚選び、相手に確認させたうえで手札に加えます。"
+    },
+    {
+      "id": "card-faq-23563-2",
+      "recordType": "card-faq",
+      "title": "異解△領域－ヴァルヴォルス FAQ 2",
+      "question": "",
+      "rawQuestion": "",
+      "rawDetailedQuestion": "",
+      "cards": [
+        "異解△領域－ヴァルヴォルス"
+      ],
+      "cardIds": [
+        "23563"
+      ],
+      "questionCardIds": [],
+      "keywords": [],
+      "text": "異解△領域－ヴァルヴォルス FAQ 2\n【2の効果について】\nフィールドゾーンで適用するチェーンブロックの作られない効果です。\nこのカードを発動したチェーンブロックの処理が完了した後から適用されます。(このカードを発動するためにデッキの上からカードを裏側で除外したことでデッキの枚数が0枚になっても、相手はチェーンして効果を発動できます。)"
+    },
+    {
+      "id": "card-faq-23563-0.5",
+      "recordType": "card-faq",
+      "title": "異解△領域－ヴァルヴォルス FAQ 0.5",
+      "question": "",
+      "rawQuestion": "",
+      "rawDetailedQuestion": "",
+      "cards": [
+        "異解△領域－ヴァルヴォルス"
+      ],
+      "cardIds": [
+        "23563"
+      ],
+      "questionCardIds": [],
+      "keywords": [],
+      "text": "異解△領域－ヴァルヴォルス FAQ 0.5\n【『自分のデッキの上・墓地から合計5枚のカードを裏側で除外してこのカードを発動できる』について】\n効果として扱いません。このカードを発動するコストです。\n自分のデッキ・墓地のカードの合計が4枚以下の場合、このカードは発動できません。\nこのカードを発動する際に、デッキの上または墓地からそれぞれ何枚のカードを除外するかを決めた上で、同時に除外します。"
     },
     {
       "id": "card-faq-15620-1",
@@ -832056,318 +832584,6 @@
       "questionCardIds": [],
       "keywords": [],
       "text": "异界厄兆陨龙 FAQ 2\n【2の効果について】\nモンスターゾーンで発動できる起動効果です。\n恐竜族モンスターが自分の手札またはフィールド(表側表示)に存在し、そのモンスター以外の恐竜族の通常モンスターが、自分の手札またはデッキに存在する状況で発動できます。\n自分のメインモンスターゾーンに表側表示の恐竜族モンスターが存在するのであれば、使用可能な自分のメインモンスターゾーンが存在しない状況でも発動できます。\n処理時に、『自分の手札・フィールドの恐竜族モンスター1体を選んで破壊する』処理を行います。破壊することに成功し、使用可能な自分のメインモンスターゾーンが存在する場合、その後、『手札・デッキから恐竜族の通常モンスター1体を特殊召喚する』処理を行います。また、処理時に、『ターン終了時まで自分はドラゴン族・恐竜族・海竜族・幻竜族モンスターしかEXデッキから特殊召喚できない』効果が適用されます。\n破壊するモンスターを選ぶ際に、使用可能な自分のメインモンスターゾーンが存在しない場合、メインモンスターゾーンに恐竜族モンスターが存在するのであればメインモンスターゾーンから選びます。メインモンスターゾーンに恐竜族モンスターが存在しないのであれば手札やエクストラモンスターゾーンから選びます。\n破壊の処理と特殊召喚の処理は同時に行われません。"
-    },
-    {
-      "id": "card-faq-23564-0",
-      "recordType": "card-faq",
-      "title": "異解△審判 FAQ 0",
-      "question": "",
-      "rawQuestion": "",
-      "rawDetailedQuestion": "",
-      "cards": [
-        "異解△審判"
-      ],
-      "cardIds": [
-        "23564"
-      ],
-      "questionCardIds": [],
-      "keywords": [],
-      "text": "異解△審判 FAQ 0\nカードの発動のみを行うか、カードの発動と同じチェーンブロックで1の効果を発動するか、カードの発動と同じチェーンブロックで2の効果を発動するかの、いずれかの方法でこのカードを発動できます。\nカードの発動のみを行う場合、発動の条件はありません。ただし、ダメージステップには発動できません。また、カードの発動のみを行った同一チェーン上(チェーン2以降)で、改めて1や2の効果を発動することはできません。\n1の効果の発動の条件を満たしている場合、カードの発動と同じチェーンブロックで1の効果を発動できます。ただし、ダメージステップには発動できません。\n2の効果の発動の条件を満たしている場合、カードの発動と同じチェーンブロックで2の効果を発動できます。"
-    },
-    {
-      "id": "card-faq-23564-1",
-      "recordType": "card-faq",
-      "title": "異解△審判 FAQ 1",
-      "question": "",
-      "rawQuestion": "",
-      "rawDetailedQuestion": "",
-      "cards": [
-        "異解△審判"
-      ],
-      "cardIds": [
-        "23564"
-      ],
-      "questionCardIds": [],
-      "keywords": [
-        "魔法"
-      ],
-      "text": "異解△審判 FAQ 1\n【1の効果について】\n魔法&罠ゾーンで発動できるチェーンブロックの作られる効果です。\nダメージステップには発動できません。\n同一チェーン上で複数回相手がモンスターを召喚・特殊召喚した場合、この効果は一連のチェーン処理後に1回のみ発動できます。(該当のモンスターの内1体を対象に選択します。)\n処理時に、裏側で除外されている自分のカードの中から、該当の属性を持つ「異解△」モンスターを1体選び、相手に確認させたうえで手札に加えるか特殊召喚します。\nこの効果の処理以降、『このターン、自分は「異解△」カード以外のカードの効果を発動できない』状態になります。(既に「異解△」以外のカードの効果を発動したターンでもこの効果を発動できます。)\n処理時に、対象のモンスターがモンスターゾーンに表側表示で存在しない場合、手札に加えるか特殊召喚する処理は行われません。(モンスターを選びませんので、そのターンに同じ属性のモンスターを対象に、再度発動することができます。)\n手札に加える処理や特殊召喚する処理に成功したかに関わらず、この効果の発動や効果が無効にならなかったのであれば、『このターン、自分は「異解△」カード以外のカードの効果を発動できない』状態になります。"
-    },
-    {
-      "id": "card-faq-23564-2",
-      "recordType": "card-faq",
-      "title": "異解△審判 FAQ 2",
-      "question": "",
-      "rawQuestion": "",
-      "rawDetailedQuestion": "",
-      "cards": [
-        "異解△審判"
-      ],
-      "cardIds": [
-        "23564"
-      ],
-      "questionCardIds": [],
-      "keywords": [
-        "魔法"
-      ],
-      "text": "異解△審判 FAQ 2\n【2の効果について】\n魔法&罠ゾーンで発動できるチェーンブロックの作られる効果です。"
-    },
-    {
-      "id": "card-faq-23563-1",
-      "recordType": "card-faq",
-      "title": "異解△領域－ヴァルヴォルス FAQ 1",
-      "question": "",
-      "rawQuestion": "",
-      "rawDetailedQuestion": "",
-      "cards": [
-        "異解△領域－ヴァルヴォルス"
-      ],
-      "cardIds": [
-        "23563"
-      ],
-      "questionCardIds": [],
-      "keywords": [],
-      "text": "異解△領域－ヴァルヴォルス FAQ 1\n【1の効果について】\nフィールドゾーンで発動できるチェーンブロックの作られる効果です。\n処理時に、裏側で除外されている自分のカードの中から、「異解△」カードを1枚選び、相手に確認させたうえで手札に加えます。"
-    },
-    {
-      "id": "card-faq-23563-2",
-      "recordType": "card-faq",
-      "title": "異解△領域－ヴァルヴォルス FAQ 2",
-      "question": "",
-      "rawQuestion": "",
-      "rawDetailedQuestion": "",
-      "cards": [
-        "異解△領域－ヴァルヴォルス"
-      ],
-      "cardIds": [
-        "23563"
-      ],
-      "questionCardIds": [],
-      "keywords": [],
-      "text": "異解△領域－ヴァルヴォルス FAQ 2\n【2の効果について】\nフィールドゾーンで適用するチェーンブロックの作られない効果です。\nこのカードを発動したチェーンブロックの処理が完了した後から適用されます。(このカードを発動するためにデッキの上からカードを裏側で除外したことでデッキの枚数が0枚になっても、相手はチェーンして効果を発動できます。)"
-    },
-    {
-      "id": "card-faq-23563-0.5",
-      "recordType": "card-faq",
-      "title": "異解△領域－ヴァルヴォルス FAQ 0.5",
-      "question": "",
-      "rawQuestion": "",
-      "rawDetailedQuestion": "",
-      "cards": [
-        "異解△領域－ヴァルヴォルス"
-      ],
-      "cardIds": [
-        "23563"
-      ],
-      "questionCardIds": [],
-      "keywords": [],
-      "text": "異解△領域－ヴァルヴォルス FAQ 0.5\n【『自分のデッキの上・墓地から合計5枚のカードを裏側で除外してこのカードを発動できる』について】\n効果として扱いません。このカードを発動するコストです。\n自分のデッキ・墓地のカードの合計が4枚以下の場合、このカードは発動できません。\nこのカードを発動する際に、デッキの上または墓地からそれぞれ何枚のカードを除外するかを決めた上で、同時に除外します。"
-    },
-    {
-      "id": "card-faq-23556-1",
-      "recordType": "card-faq",
-      "title": "碧ノ異解△トゥオネラ FAQ 1",
-      "question": "",
-      "rawQuestion": "",
-      "rawDetailedQuestion": "",
-      "cards": [
-        "碧ノ異解△トゥオネラ"
-      ],
-      "cardIds": [
-        "23556"
-      ],
-      "questionCardIds": [],
-      "keywords": [],
-      "text": "碧ノ異解△トゥオネラ FAQ 1\n【1の効果について】\n手札で発動できる起動効果です。"
-    },
-    {
-      "id": "card-faq-23556-2",
-      "recordType": "card-faq",
-      "title": "碧ノ異解△トゥオネラ FAQ 2",
-      "question": "",
-      "rawQuestion": "",
-      "rawDetailedQuestion": "",
-      "cards": [
-        "碧ノ異解△トゥオネラ"
-      ],
-      "cardIds": [
-        "23556"
-      ],
-      "questionCardIds": [],
-      "keywords": [],
-      "text": "碧ノ異解△トゥオネラ FAQ 2\n【2の効果について】\nモンスターゾーンで発動する誘発効果です。\n必ず発動する効果です。(自分のデッキが2枚以下の場合でも発動します。)\nダメージステップでも発動します。\n処理時に、自分のデッキが2枚以下である場合、デッキのカードを全て裏側で除外します。"
-    },
-    {
-      "id": "card-faq-23556-3",
-      "recordType": "card-faq",
-      "title": "碧ノ異解△トゥオネラ FAQ 3",
-      "question": "",
-      "rawQuestion": "",
-      "rawDetailedQuestion": "",
-      "cards": [
-        "碧ノ異解△トゥオネラ"
-      ],
-      "cardIds": [
-        "23556"
-      ],
-      "questionCardIds": [],
-      "keywords": [],
-      "text": "碧ノ異解△トゥオネラ FAQ 3\n【3の効果について】\nモンスターゾーンで発動できる起動効果です。\nこの効果の処理以降、『このターン、自分は「異解△」カード以外のカードの効果を発動できない』状態になります。(既に「異解△」以外のカードの効果を発動したターンでもこの効果を発動できます。)\n特殊召喚する処理に成功したかに関わらず、この効果の発動や効果が無効にならなかったのであれば、『このターン、自分は「異解△」カード以外のカードの効果を発動できない』状態になります。"
-    },
-    {
-      "id": "card-faq-23554-1",
-      "recordType": "card-faq",
-      "title": "虚ノ異解△ゲヘナ FAQ 1",
-      "question": "",
-      "rawQuestion": "",
-      "rawDetailedQuestion": "",
-      "cards": [
-        "虚ノ異解△ゲヘナ"
-      ],
-      "cardIds": [
-        "23554"
-      ],
-      "questionCardIds": [],
-      "keywords": [],
-      "text": "虚ノ異解△ゲヘナ FAQ 1\n【1の効果について】\n手札で発動できる起動効果です。"
-    },
-    {
-      "id": "card-faq-23554-2",
-      "recordType": "card-faq",
-      "title": "虚ノ異解△ゲヘナ FAQ 2",
-      "question": "",
-      "rawQuestion": "",
-      "rawDetailedQuestion": "",
-      "cards": [
-        "虚ノ異解△ゲヘナ"
-      ],
-      "cardIds": [
-        "23554"
-      ],
-      "questionCardIds": [],
-      "keywords": [],
-      "text": "虚ノ異解△ゲヘナ FAQ 2\n【2の効果について】\nモンスターゾーンで発動する誘発効果です。\n必ず発動する効果です。(デッキが0枚の場合でも発動します。また、処理時に、デッキが0枚の場合、処理は何も行いません。)\nダメージステップでも発動します。"
-    },
-    {
-      "id": "card-faq-23554-3",
-      "recordType": "card-faq",
-      "title": "虚ノ異解△ゲヘナ FAQ 3",
-      "question": "",
-      "rawQuestion": "",
-      "rawDetailedQuestion": "",
-      "cards": [
-        "虚ノ異解△ゲヘナ"
-      ],
-      "cardIds": [
-        "23554"
-      ],
-      "questionCardIds": [],
-      "keywords": [],
-      "text": "虚ノ異解△ゲヘナ FAQ 3\n【3の効果について】\nモンスターゾーンで発動できる起動効果です。\n処理時に、裏側で除外されている自分のカードの中から、「異解△」モンスターを2体まで選び、相手に確認させたうえで手札に加えます。\nこの効果の処理以降、『このターン、自分は「異解△」カード以外のカードの効果を発動できない』状態になります。(既に「異解△」以外のカードの効果を発動したターンでもこの効果を発動できます。)\n手札に加える処理に成功したかに関わらず、この効果の発動や効果が無効にならなかったのであれば、『このターン、自分は「異解△」カード以外のカードの効果を発動できない』状態になります。"
-    },
-    {
-      "id": "card-faq-23557-1",
-      "recordType": "card-faq",
-      "title": "緋ノ異解△ナラカ FAQ 1",
-      "question": "",
-      "rawQuestion": "",
-      "rawDetailedQuestion": "",
-      "cards": [
-        "緋ノ異解△ナラカ"
-      ],
-      "cardIds": [
-        "23557"
-      ],
-      "questionCardIds": [],
-      "keywords": [],
-      "text": "緋ノ異解△ナラカ FAQ 1\n【1の効果について】\n手札で発動できる誘発効果です。\nダメージステップには発動できません。"
-    },
-    {
-      "id": "card-faq-23557-2",
-      "recordType": "card-faq",
-      "title": "緋ノ異解△ナラカ FAQ 2",
-      "question": "",
-      "rawQuestion": "",
-      "rawDetailedQuestion": "",
-      "cards": [
-        "緋ノ異解△ナラカ"
-      ],
-      "cardIds": [
-        "23557"
-      ],
-      "questionCardIds": [],
-      "keywords": [],
-      "text": "緋ノ異解△ナラカ FAQ 2\n【2の効果について】\nモンスターゾーンで発動する誘発効果です。\n必ず発動する効果です。(自分のデッキが3枚以下の場合でも発動します。)\nダメージステップでも発動します。\n処理時に、自分のデッキが3枚以下である場合、デッキのカードを全て裏側で除外します。"
-    },
-    {
-      "id": "card-faq-23557-3",
-      "recordType": "card-faq",
-      "title": "緋ノ異解△ナラカ FAQ 3",
-      "question": "",
-      "rawQuestion": "",
-      "rawDetailedQuestion": "",
-      "cards": [
-        "緋ノ異解△ナラカ"
-      ],
-      "cardIds": [
-        "23557"
-      ],
-      "questionCardIds": [],
-      "keywords": [],
-      "text": "緋ノ異解△ナラカ FAQ 3\n【3の効果について】\nモンスターゾーンで発動できる誘発即時効果です。\nこの効果の処理以降、『このターン、自分は「異解△」カード以外のカードの効果を発動できない』状態になります。(既に「異解△」以外のカードの効果を発動したターンでもこの効果を発動できます。)\n特殊召喚する処理に成功したかに関わらず、この効果の発動や効果が無効にならなかったのであれば、『このターン、自分は「異解△」カード以外のカードの効果を発動できない』状態になります。"
-    },
-    {
-      "id": "card-faq-23555-1",
-      "recordType": "card-faq",
-      "title": "天ノ異解△シェオル FAQ 1",
-      "question": "",
-      "rawQuestion": "",
-      "rawDetailedQuestion": "",
-      "cards": [
-        "天ノ異解△シェオル"
-      ],
-      "cardIds": [
-        "23555"
-      ],
-      "questionCardIds": [],
-      "keywords": [],
-      "text": "天ノ異解△シェオル FAQ 1\n【1の効果について】\n手札で発動できる起動効果です。"
-    },
-    {
-      "id": "card-faq-23555-2",
-      "recordType": "card-faq",
-      "title": "天ノ異解△シェオル FAQ 2",
-      "question": "",
-      "rawQuestion": "",
-      "rawDetailedQuestion": "",
-      "cards": [
-        "天ノ異解△シェオル"
-      ],
-      "cardIds": [
-        "23555"
-      ],
-      "questionCardIds": [],
-      "keywords": [],
-      "text": "天ノ異解△シェオル FAQ 2\n【2の効果について】\nモンスターゾーンで発動する誘発効果です。\n必ず発動する効果です。(デッキが1枚以下の場合でも発動します。)\nダメージステップでも発動します。\n処理時に、自分のデッキが1枚である場合、デッキのカードを全て裏側で除外します。"
-    },
-    {
-      "id": "card-faq-23555-3",
-      "recordType": "card-faq",
-      "title": "天ノ異解△シェオル FAQ 3",
-      "question": "",
-      "rawQuestion": "",
-      "rawDetailedQuestion": "",
-      "cards": [
-        "天ノ異解△シェオル"
-      ],
-      "cardIds": [
-        "23555"
-      ],
-      "questionCardIds": [],
-      "keywords": [
-        "魔法"
-      ],
-      "text": "天ノ異解△シェオル FAQ 3\n【3の効果について】\nモンスターゾーンで発動できる起動効果です。\n処理時に、裏側で除外されている自分のカードの中から、「異解△」魔法・罠カードを2枚まで選び、相手に確認させたうえで手札に加えます。\nこの効果の処理以降、『このターン、自分は「異解△」カード以外のカードの効果を発動できない』状態になります。(既に「異解△」以外のカードの効果を発動したターンでもこの効果を発動できます。)\n手札に加える処理に成功したかに関わらず、この効果の発動や効果が無効にならなかったのであれば、『このターン、自分は「異解△」カード以外のカードの効果を発動できない』状態になります。"
     },
     {
       "id": "card-faq-11787-0.5",

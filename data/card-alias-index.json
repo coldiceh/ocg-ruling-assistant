@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-24T05:31:46.909Z",
+  "generatedAt": "2026-11-25T04:37:13.804Z",
   "records": [
     {
       "alias": "“K9刑侦案件”",
@@ -255,8 +255,8 @@
       "language": "zh"
     },
     {
-      "alias": "\"Raise Moon\" the City that Never Sleeps",
-      "normalizedAlias": "\"raise moon\" the city that never sleeps",
+      "alias": "Raise Moon - The City that Never Sleeps",
+      "normalizedAlias": "raise moon - the city that never sleeps",
       "cardId": "23552",
       "cardName": "眠らない街の『レイズ・ムーン』",
       "language": "en"
@@ -696,8 +696,8 @@
       "language": "zh"
     },
     {
-      "alias": "A Journey Back to the Light - \"Zenet\"",
-      "normalizedAlias": "a journey back to the light - \"zenet\"",
+      "alias": "Return Journey to the Light \"Zenet\"",
+      "normalizedAlias": "return journey to the light \"zenet\"",
       "cardId": "23539",
       "cardName": "光帰の旅－『セネト』",
       "language": "en"
@@ -10230,8 +10230,8 @@
       "language": "zh"
     },
     {
-      "alias": "Am Duazenet",
-      "normalizedAlias": "am duazenet",
+      "alias": "Amduat Zenet",
+      "normalizedAlias": "amduat zenet",
       "cardId": "23540",
       "cardName": "光器還魂の儀",
       "language": "en"
@@ -51460,8 +51460,8 @@
       "language": "zh"
     },
     {
-      "alias": "Burial Summit Xenovader△ Helheim",
-      "normalizedAlias": "burial summit xenovader△ helheim",
+      "alias": "Trirealm Rift Gorging Gorge",
+      "normalizedAlias": "trirealm rift gorging gorge",
       "cardId": "23559",
       "cardName": "葬嶺異解△ヴェルヘイム",
       "language": "en"
@@ -55496,6 +55496,41 @@
       "normalizedAlias": "无穷机龙 卡诺鲁",
       "cardId": "19480",
       "cardName": "无穷机龙 卡诺",
+      "language": "zh"
+    },
+    {
+      "alias": "レイズ・ムーンの雅 キャロル",
+      "normalizedAlias": "レイズ・ム-ンの雅 キャロル",
+      "cardId": "23544",
+      "cardName": "レイズ・ムーンの雅 キャロル",
+      "language": "ja"
+    },
+    {
+      "alias": "盈彩月夜之雅 卡萝尔",
+      "normalizedAlias": "盈彩月夜之雅 卡萝尔",
+      "cardId": "23544",
+      "cardName": "レイズ・ムーンの雅 キャロル",
+      "language": "zh"
+    },
+    {
+      "alias": "Carol, the Elegance of Raise Moon",
+      "normalizedAlias": "carol, the elegance of raise moon",
+      "cardId": "23544",
+      "cardName": "レイズ・ムーンの雅 キャロル",
+      "language": "en"
+    },
+    {
+      "alias": "加辉瑞月之雅 卡萝尔",
+      "normalizedAlias": "加辉瑞月之雅 卡萝尔",
+      "cardId": "23544",
+      "cardName": "レイズ・ムーンの雅 キャロル",
+      "language": "zh"
+    },
+    {
+      "alias": "升月之雅 卡萝尔",
+      "normalizedAlias": "升月之雅 卡萝尔",
+      "cardId": "23544",
+      "cardName": "レイズ・ムーンの雅 キャロル",
       "language": "zh"
     },
     {
@@ -60499,6 +60534,13 @@
     {
       "alias": "密林的狩猎者 野狍",
       "normalizedAlias": "密林的狩猎者 野狍",
+      "cardId": "22067",
+      "cardName": "密林の狩猟者シュヴルイユ",
+      "language": "zh"
+    },
+    {
+      "alias": "密林狩猎者须鲁依",
+      "normalizedAlias": "密林狩猎者须鲁依",
       "cardId": "22067",
       "cardName": "密林の狩猟者シュヴルイユ",
       "language": "zh"
@@ -71261,6 +71303,13 @@
       "cardId": "12523",
       "cardName": "暗黒方界邪神クリムゾン・ノヴァ・トリニティ",
       "language": "zh"
+    },
+    {
+      "alias": "暗黑方界邪神 深红新星・三相",
+      "normalizedAlias": "暗黑方界邪神 深红新星・三相",
+      "cardId": "12523",
+      "cardName": "暗黒方界邪神クリムゾン・ノヴァ・トリニティ",
+      "language": "ja"
     },
     {
       "alias": "暗黒方界神クリムゾン・ノヴァ",
@@ -102686,6 +102735,13 @@
       "language": "zh"
     },
     {
+      "alias": "猜疑神 帕拉诺亚",
+      "normalizedAlias": "猜疑神 帕拉诺亚",
+      "cardId": "23297",
+      "cardName": "Distrust Paranoia",
+      "language": "zh"
+    },
+    {
       "alias": "攪乱作戦",
       "normalizedAlias": "攪乱作戦",
       "cardId": "5546",
@@ -102733,6 +102789,13 @@
       "cardId": "24011",
       "cardName": "創世方界超神ディヴァイン・アニマ・インフィニティ",
       "language": "zh"
+    },
+    {
+      "alias": "创世方界超神 圣辉神魂・无量",
+      "normalizedAlias": "创世方界超神 圣辉神魂・无量",
+      "cardId": "24011",
+      "cardName": "創世方界超神ディヴァイン・アニマ・インフィニティ",
+      "language": "ja"
     },
     {
       "alias": "神灭兵器－天霆号 扼宙斯",
@@ -124666,8 +124729,8 @@
       "language": "zh"
     },
     {
-      "alias": "Emptiness Devouring Xenovader△ Jahannam",
-      "normalizedAlias": "emptiness devouring xenovader△ jahannam",
+      "alias": "Trirealm Rift Darkness",
+      "normalizedAlias": "trirealm rift darkness",
       "cardId": "23561",
       "cardName": "虚蝕異解△ジャハンナム",
       "language": "en"
@@ -143321,6 +143384,13 @@
       "language": "en"
     },
     {
+      "alias": "魔术师之空华",
+      "normalizedAlias": "魔术师之空华",
+      "cardId": "22071",
+      "cardName": "魔術師の空華",
+      "language": "zh"
+    },
+    {
       "alias": "假形幻脸师",
       "normalizedAlias": "假形幻脸师",
       "cardId": "22532",
@@ -161502,6 +161572,13 @@
     {
       "alias": "鬼计妖魔之主 阿鲁卡德",
       "normalizedAlias": "鬼计妖魔之主 阿鲁卡德",
+      "cardId": "24025",
+      "cardName": "ゴーストリック・マスター アルカード",
+      "language": "zh"
+    },
+    {
+      "alias": "鬼计主宰 阿尔卡德",
+      "normalizedAlias": "鬼计主宰 阿尔卡德",
       "cardId": "24025",
       "cardName": "ゴーストリック・マスター アルカード",
       "language": "zh"
@@ -189521,6 +189598,13 @@
       "language": "zh"
     },
     {
+      "alias": "狩猎号角",
+      "normalizedAlias": "狩猎号角",
+      "cardId": "22068",
+      "cardName": "ハンティングホーン",
+      "language": "zh"
+    },
+    {
       "alias": "狩猟本能",
       "normalizedAlias": "狩猟本能",
       "cardId": "6817",
@@ -211277,6 +211361,41 @@
       "language": "zh"
     },
     {
+      "alias": "レイズ・ムーンの灯 クルーシェ",
+      "normalizedAlias": "レイズ・ム-ンの灯 クル-シェ",
+      "cardId": "23547",
+      "cardName": "レイズ・ムーンの灯 クルーシェ",
+      "language": "ja"
+    },
+    {
+      "alias": "盈彩月夜之灯 库露雪",
+      "normalizedAlias": "盈彩月夜之灯 库露雪",
+      "cardId": "23547",
+      "cardName": "レイズ・ムーンの灯 クルーシェ",
+      "language": "zh"
+    },
+    {
+      "alias": "Kulshe, the Beacon of Raise Moon",
+      "normalizedAlias": "kulshe, the beacon of raise moon",
+      "cardId": "23547",
+      "cardName": "レイズ・ムーンの灯 クルーシェ",
+      "language": "en"
+    },
+    {
+      "alias": "加辉瑞月之灯 库路西",
+      "normalizedAlias": "加辉瑞月之灯 库路西",
+      "cardId": "23547",
+      "cardName": "レイズ・ムーンの灯 クルーシェ",
+      "language": "zh"
+    },
+    {
+      "alias": "升月之灯 库露雪",
+      "normalizedAlias": "升月之灯 库露雪",
+      "cardId": "23547",
+      "cardName": "レイズ・ムーンの灯 クルーシェ",
+      "language": "zh"
+    },
+    {
       "alias": "Kumenyo, the Nine-Hued Deer",
       "normalizedAlias": "kumenyo, the nine-hued deer",
       "cardId": "23516",
@@ -213563,6 +213682,41 @@
       "normalizedAlias": "提灯鲨",
       "cardId": "15004",
       "cardName": "灯笼鲨",
+      "language": "zh"
+    },
+    {
+      "alias": "レイズ・ムーンの翼 ラピ",
+      "normalizedAlias": "レイズ・ム-ンの翼 ラピ",
+      "cardId": "23545",
+      "cardName": "レイズ・ムーンの翼 ラピ",
+      "language": "ja"
+    },
+    {
+      "alias": "盈彩月夜之翼 菈碧",
+      "normalizedAlias": "盈彩月夜之翼 菈碧",
+      "cardId": "23545",
+      "cardName": "レイズ・ムーンの翼 ラピ",
+      "language": "zh"
+    },
+    {
+      "alias": "Lapi, the Wings of Raise Moon",
+      "normalizedAlias": "lapi, the wings of raise moon",
+      "cardId": "23545",
+      "cardName": "レイズ・ムーンの翼 ラピ",
+      "language": "en"
+    },
+    {
+      "alias": "加辉瑞月之翼 拉琵",
+      "normalizedAlias": "加辉瑞月之翼 拉琵",
+      "cardId": "23545",
+      "cardName": "レイズ・ムーンの翼 ラピ",
+      "language": "zh"
+    },
+    {
+      "alias": "升月之翼 拉比",
+      "normalizedAlias": "升月之翼 拉比",
+      "cardId": "23545",
+      "cardName": "レイズ・ムーンの翼 ラピ",
       "language": "zh"
     },
     {
@@ -223870,6 +224024,13 @@
       "language": "zh"
     },
     {
+      "alias": "彼岸花·莉莉帕",
+      "normalizedAlias": "彼岸花·莉莉帕",
+      "cardId": "22069",
+      "cardName": "リコリス・リリィパー",
+      "language": "zh"
+    },
+    {
       "alias": "光道魔术师 莱拉",
       "normalizedAlias": "光道魔术师 莱拉",
       "cardId": "7592",
@@ -225802,8 +225963,8 @@
       "language": "zh"
     },
     {
-      "alias": "Mad Tempest Xenovader△ Ploutonion",
-      "normalizedAlias": "mad tempest xenovader△ ploutonion",
+      "alias": "Trirealm Rift Savage Storms",
+      "normalizedAlias": "trirealm rift savage storms",
       "cardId": "23560",
       "cardName": "狂嵐異解△プルートニオン",
       "language": "en"
@@ -235840,6 +236001,13 @@
       "language": "zh"
     },
     {
+      "alias": "海晶少女 真实之心",
+      "normalizedAlias": "海晶少女 真实之心",
+      "cardId": "24019",
+      "cardName": "海晶乙女トゥルースハート",
+      "language": "zh"
+    },
+    {
       "alias": "海晶乙女ウルピス",
       "normalizedAlias": "海晶乙女ウルピス",
       "cardId": "24016",
@@ -239860,6 +240028,13 @@
     {
       "alias": "机睿的机械调整者",
       "normalizedAlias": "机睿的机械调整者",
+      "cardId": "22327",
+      "cardName": "機叡のメカチューナー",
+      "language": "zh"
+    },
+    {
+      "alias": "机睿之机械协调",
+      "normalizedAlias": "机睿之机械协调",
       "cardId": "22327",
       "cardName": "機叡のメカチューナー",
       "language": "zh"
@@ -273227,6 +273402,13 @@
       "language": "zh"
     },
     {
+      "alias": "异色眼凌驾龙",
+      "normalizedAlias": "异色眼凌驾龙",
+      "cardId": "23419",
+      "cardName": "Odd-Eyes Override Dragon",
+      "language": "zh"
+    },
+    {
       "alias": "异色眼灵摆龙",
       "normalizedAlias": "异色眼灵摆龙",
       "cardId": "11213",
@@ -304489,8 +304671,8 @@
       "language": "zh"
     },
     {
-      "alias": "Raise Moon Blade Shayna",
-      "normalizedAlias": "raise moon blade shayna",
+      "alias": "Sharna, the Blade of Raise Moon",
+      "normalizedAlias": "sharna, the blade of raise moon",
       "cardId": "23546",
       "cardName": "レイズ・ムーンの刃 シェーナ",
       "language": "en"
@@ -304510,41 +304692,6 @@
       "language": "zh"
     },
     {
-      "alias": "レイズ・ムーンの雅 キャロル",
-      "normalizedAlias": "レイズ・ム-ンの雅 キャロル",
-      "cardId": "23544",
-      "cardName": "レイズ・ムーンの雅 キャロル",
-      "language": "ja"
-    },
-    {
-      "alias": "盈彩月夜之雅 卡萝尔",
-      "normalizedAlias": "盈彩月夜之雅 卡萝尔",
-      "cardId": "23544",
-      "cardName": "レイズ・ムーンの雅 キャロル",
-      "language": "zh"
-    },
-    {
-      "alias": "Raise Moon Elegance Carol",
-      "normalizedAlias": "raise moon elegance carol",
-      "cardId": "23544",
-      "cardName": "レイズ・ムーンの雅 キャロル",
-      "language": "en"
-    },
-    {
-      "alias": "加辉瑞月之雅 卡萝尔",
-      "normalizedAlias": "加辉瑞月之雅 卡萝尔",
-      "cardId": "23544",
-      "cardName": "レイズ・ムーンの雅 キャロル",
-      "language": "zh"
-    },
-    {
-      "alias": "升月之雅 卡萝尔",
-      "normalizedAlias": "升月之雅 卡萝尔",
-      "cardId": "23544",
-      "cardName": "レイズ・ムーンの雅 キャロル",
-      "language": "zh"
-    },
-    {
       "alias": "レイズ・ムーンの望 スクイーズ－ジャックポット",
       "normalizedAlias": "レイズ・ム-ンの望 スクイ-ズ-ジャックポット",
       "cardId": "23550",
@@ -304559,8 +304706,8 @@
       "language": "zh"
     },
     {
-      "alias": "Raise Moon Hope Squeeze - Jackpot",
-      "normalizedAlias": "raise moon hope squeeze - jackpot",
+      "alias": "Squeeze, the Full Moon of Raise Moon - JACKPOT!",
+      "normalizedAlias": "squeeze, the full moon of raise moon - jackpot!",
       "cardId": "23550",
       "cardName": "レイズ・ムーンの望 スクイーズ－ジャックポット",
       "language": "en"
@@ -304580,41 +304727,6 @@
       "language": "zh"
     },
     {
-      "alias": "レイズ・ムーンの灯 クルーシェ",
-      "normalizedAlias": "レイズ・ム-ンの灯 クル-シェ",
-      "cardId": "23547",
-      "cardName": "レイズ・ムーンの灯 クルーシェ",
-      "language": "ja"
-    },
-    {
-      "alias": "盈彩月夜之灯 库露雪",
-      "normalizedAlias": "盈彩月夜之灯 库露雪",
-      "cardId": "23547",
-      "cardName": "レイズ・ムーンの灯 クルーシェ",
-      "language": "zh"
-    },
-    {
-      "alias": "Raise Moon Lamp Croucier",
-      "normalizedAlias": "raise moon lamp croucier",
-      "cardId": "23547",
-      "cardName": "レイズ・ムーンの灯 クルーシェ",
-      "language": "en"
-    },
-    {
-      "alias": "加辉瑞月之灯 库路西",
-      "normalizedAlias": "加辉瑞月之灯 库路西",
-      "cardId": "23547",
-      "cardName": "レイズ・ムーンの灯 クルーシェ",
-      "language": "zh"
-    },
-    {
-      "alias": "升月之灯 库露雪",
-      "normalizedAlias": "升月之灯 库露雪",
-      "cardId": "23547",
-      "cardName": "レイズ・ムーンの灯 クルーシェ",
-      "language": "zh"
-    },
-    {
       "alias": "レイズ・ムーンの朔 スクイーズ",
       "normalizedAlias": "レイズ・ム-ンの朔 スクイ-ズ",
       "cardId": "23548",
@@ -304629,8 +304741,8 @@
       "language": "zh"
     },
     {
-      "alias": "Raise Moon Starter Squeeze",
-      "normalizedAlias": "raise moon starter squeeze",
+      "alias": "Squeeze, the New Moon of Raise Moon",
+      "normalizedAlias": "squeeze, the new moon of raise moon",
       "cardId": "23548",
       "cardName": "レイズ・ムーンの朔 スクイーズ",
       "language": "en"
@@ -304647,41 +304759,6 @@
       "normalizedAlias": "升月之朔 斯龟兹",
       "cardId": "23548",
       "cardName": "レイズ・ムーンの朔 スクイーズ",
-      "language": "zh"
-    },
-    {
-      "alias": "レイズ・ムーンの翼 ラピ",
-      "normalizedAlias": "レイズ・ム-ンの翼 ラピ",
-      "cardId": "23545",
-      "cardName": "レイズ・ムーンの翼 ラピ",
-      "language": "ja"
-    },
-    {
-      "alias": "盈彩月夜之翼 菈碧",
-      "normalizedAlias": "盈彩月夜之翼 菈碧",
-      "cardId": "23545",
-      "cardName": "レイズ・ムーンの翼 ラピ",
-      "language": "zh"
-    },
-    {
-      "alias": "Raise Moon Wings Rapi",
-      "normalizedAlias": "raise moon wings rapi",
-      "cardId": "23545",
-      "cardName": "レイズ・ムーンの翼 ラピ",
-      "language": "en"
-    },
-    {
-      "alias": "加辉瑞月之翼 拉琵",
-      "normalizedAlias": "加辉瑞月之翼 拉琵",
-      "cardId": "23545",
-      "cardName": "レイズ・ムーンの翼 ラピ",
-      "language": "zh"
-    },
-    {
-      "alias": "升月之翼 拉比",
-      "normalizedAlias": "升月之翼 拉比",
-      "cardId": "23545",
-      "cardName": "レイズ・ムーンの翼 ラピ",
       "language": "zh"
     },
     {
@@ -334841,6 +334918,13 @@
       "language": "zh"
     },
     {
+      "alias": "丝绸爆弹蛾",
+      "normalizedAlias": "丝绸爆弹蛾",
+      "cardId": "22070",
+      "cardName": "シルクボムモース",
+      "language": "zh"
+    },
+    {
       "alias": "暗黒界の軍神 シルバ",
       "normalizedAlias": "暗黒界の軍神 シルバ",
       "cardId": "6504",
@@ -338320,8 +338404,8 @@
       "language": "zh"
     },
     {
-      "alias": "Sky Thunder Xenovader△ Yomi",
-      "normalizedAlias": "sky thunder xenovader△ yomi",
+      "alias": "Trirealm Rift Havocs",
+      "normalizedAlias": "trirealm rift havocs",
       "cardId": "23558",
       "cardName": "天霆異解△ヨミ",
       "language": "en"
@@ -349972,6 +350056,41 @@
       "normalizedAlias": "星逢的神篱",
       "cardId": "19203",
       "cardName": "星逢之神篱",
+      "language": "zh"
+    },
+    {
+      "alias": "レイズ・ムーンの星々",
+      "normalizedAlias": "レイズ・ム-ンの星々",
+      "cardId": "23551",
+      "cardName": "レイズ・ムーンの星々",
+      "language": "ja"
+    },
+    {
+      "alias": "盈彩月夜之群星",
+      "normalizedAlias": "盈彩月夜之群星",
+      "cardId": "23551",
+      "cardName": "レイズ・ムーンの星々",
+      "language": "zh"
+    },
+    {
+      "alias": "Stars of Raise Moon",
+      "normalizedAlias": "stars of raise moon",
+      "cardId": "23551",
+      "cardName": "レイズ・ムーンの星々",
+      "language": "en"
+    },
+    {
+      "alias": "加辉瑞月的群星",
+      "normalizedAlias": "加辉瑞月的群星",
+      "cardId": "23551",
+      "cardName": "レイズ・ムーンの星々",
+      "language": "zh"
+    },
+    {
+      "alias": "升月的群星",
+      "normalizedAlias": "升月的群星",
+      "cardId": "23551",
+      "cardName": "レイズ・ムーンの星々",
       "language": "zh"
     },
     {
@@ -364927,27 +365046,6 @@
       "language": "zh"
     },
     {
-      "alias": "挑発",
-      "normalizedAlias": "挑発",
-      "cardId": "6140",
-      "cardName": "挑発",
-      "language": "zh"
-    },
-    {
-      "alias": "挑衅",
-      "normalizedAlias": "挑衅",
-      "cardId": "6140",
-      "cardName": "挑発",
-      "language": "zh"
-    },
-    {
-      "alias": "Taunt",
-      "normalizedAlias": "taunt",
-      "cardId": "6140",
-      "cardName": "挑発",
-      "language": "en"
-    },
-    {
       "alias": "タウセネト・アジャト",
       "normalizedAlias": "タウセネト・アジャト",
       "cardId": "23535",
@@ -364962,8 +365060,8 @@
       "language": "zh"
     },
     {
-      "alias": "Tauzenet Wadjet",
-      "normalizedAlias": "tauzenet wadjet",
+      "alias": "Tau-Zenet Adjat",
+      "normalizedAlias": "tau-zenet adjat",
       "cardId": "23535",
       "cardName": "タウセネト・アジャト",
       "language": "en"
@@ -364988,6 +365086,27 @@
       "cardId": "23535",
       "cardName": "タウセネト・アジャト",
       "language": "ja"
+    },
+    {
+      "alias": "挑発",
+      "normalizedAlias": "挑発",
+      "cardId": "6140",
+      "cardName": "挑発",
+      "language": "zh"
+    },
+    {
+      "alias": "挑衅",
+      "normalizedAlias": "挑衅",
+      "cardId": "6140",
+      "cardName": "挑発",
+      "language": "zh"
+    },
+    {
+      "alias": "Taunt",
+      "normalizedAlias": "taunt",
+      "cardId": "6140",
+      "cardName": "挑発",
+      "language": "en"
     },
     {
       "alias": "泪冠哀歌・响彻的叛乱残叫",
@@ -368378,6 +368497,41 @@
       "language": "zh"
     },
     {
+      "alias": "レイズ・ムーンの煌めき",
+      "normalizedAlias": "レイズ・ム-ンの煌めき",
+      "cardId": "23553",
+      "cardName": "レイズ・ムーンの煌めき",
+      "language": "ja"
+    },
+    {
+      "alias": "盈彩月夜之辉煌",
+      "normalizedAlias": "盈彩月夜之辉煌",
+      "cardId": "23553",
+      "cardName": "レイズ・ムーンの煌めき",
+      "language": "zh"
+    },
+    {
+      "alias": "The Bright Lights of Raise Moon",
+      "normalizedAlias": "the bright lights of raise moon",
+      "cardId": "23553",
+      "cardName": "レイズ・ムーンの煌めき",
+      "language": "en"
+    },
+    {
+      "alias": "加辉瑞月的辉煌",
+      "normalizedAlias": "加辉瑞月的辉煌",
+      "cardId": "23553",
+      "cardName": "レイズ・ムーンの煌めき",
+      "language": "zh"
+    },
+    {
+      "alias": "升月的辉煌",
+      "normalizedAlias": "升月的辉煌",
+      "cardId": "23553",
+      "cardName": "レイズ・ムーンの煌めき",
+      "language": "zh"
+    },
+    {
       "alias": "深渊兽 阿尔白・洛斯",
       "normalizedAlias": "深渊兽 阿尔白・洛斯",
       "cardId": "17766",
@@ -370076,41 +370230,6 @@
       "normalizedAlias": "强欲的礼物",
       "cardId": "7235",
       "cardName": "強欲な贈り物",
-      "language": "zh"
-    },
-    {
-      "alias": "レイズ・ムーンの煌めき",
-      "normalizedAlias": "レイズ・ム-ンの煌めき",
-      "cardId": "23553",
-      "cardName": "レイズ・ムーンの煌めき",
-      "language": "ja"
-    },
-    {
-      "alias": "盈彩月夜之辉煌",
-      "normalizedAlias": "盈彩月夜之辉煌",
-      "cardId": "23553",
-      "cardName": "レイズ・ムーンの煌めき",
-      "language": "zh"
-    },
-    {
-      "alias": "The Glitter of Raise Moon",
-      "normalizedAlias": "the glitter of raise moon",
-      "cardId": "23553",
-      "cardName": "レイズ・ムーンの煌めき",
-      "language": "en"
-    },
-    {
-      "alias": "加辉瑞月的辉煌",
-      "normalizedAlias": "加辉瑞月的辉煌",
-      "cardId": "23553",
-      "cardName": "レイズ・ムーンの煌めき",
-      "language": "zh"
-    },
-    {
-      "alias": "升月的辉煌",
-      "normalizedAlias": "升月的辉煌",
-      "cardId": "23553",
-      "cardName": "レイズ・ムーンの煌めき",
       "language": "zh"
     },
     {
@@ -373073,41 +373192,6 @@
       "cardId": "5685",
       "cardName": "生命力吸収魔術",
       "language": "en"
-    },
-    {
-      "alias": "レイズ・ムーンの星々",
-      "normalizedAlias": "レイズ・ム-ンの星々",
-      "cardId": "23551",
-      "cardName": "レイズ・ムーンの星々",
-      "language": "ja"
-    },
-    {
-      "alias": "盈彩月夜之群星",
-      "normalizedAlias": "盈彩月夜之群星",
-      "cardId": "23551",
-      "cardName": "レイズ・ムーンの星々",
-      "language": "zh"
-    },
-    {
-      "alias": "The Stars of Raise Moon",
-      "normalizedAlias": "the stars of raise moon",
-      "cardId": "23551",
-      "cardName": "レイズ・ムーンの星々",
-      "language": "en"
-    },
-    {
-      "alias": "加辉瑞月的群星",
-      "normalizedAlias": "加辉瑞月的群星",
-      "cardId": "23551",
-      "cardName": "レイズ・ムーンの星々",
-      "language": "zh"
-    },
-    {
-      "alias": "升月的群星",
-      "normalizedAlias": "升月的群星",
-      "cardId": "23551",
-      "cardName": "レイズ・ムーンの星々",
-      "language": "zh"
     },
     {
       "alias": "イースター島のモアイ",
@@ -386396,6 +386480,76 @@
       "language": "en"
     },
     {
+      "alias": "緋ノ異解△ナラカ",
+      "normalizedAlias": "緋ノ異解△ナラカ",
+      "cardId": "23557",
+      "cardName": "緋ノ異解△ナラカ",
+      "language": "ja"
+    },
+    {
+      "alias": "绯之异解△奈落迦",
+      "normalizedAlias": "绯之异解△奈落迦",
+      "cardId": "23557",
+      "cardName": "緋ノ異解△ナラカ",
+      "language": "zh"
+    },
+    {
+      "alias": "Trirealm Rift Blaze",
+      "normalizedAlias": "trirealm rift blaze",
+      "cardId": "23557",
+      "cardName": "緋ノ異解△ナラカ",
+      "language": "en"
+    },
+    {
+      "alias": "绯之异解△ 那落迦",
+      "normalizedAlias": "绯之异解△ 那落迦",
+      "cardId": "23557",
+      "cardName": "緋ノ異解△ナラカ",
+      "language": "zh"
+    },
+    {
+      "alias": "绯之异解△那落迦",
+      "normalizedAlias": "绯之异解△那落迦",
+      "cardId": "23557",
+      "cardName": "緋ノ異解△ナラカ",
+      "language": "zh"
+    },
+    {
+      "alias": "碧ノ異解△トゥオネラ",
+      "normalizedAlias": "碧ノ異解△トゥオネラ",
+      "cardId": "23556",
+      "cardName": "碧ノ異解△トゥオネラ",
+      "language": "ja"
+    },
+    {
+      "alias": "碧之异解△屠奥内拉",
+      "normalizedAlias": "碧之异解△屠奥内拉",
+      "cardId": "23556",
+      "cardName": "碧ノ異解△トゥオネラ",
+      "language": "zh"
+    },
+    {
+      "alias": "Trirealm Rift Blizzards",
+      "normalizedAlias": "trirealm rift blizzards",
+      "cardId": "23556",
+      "cardName": "碧ノ異解△トゥオネラ",
+      "language": "en"
+    },
+    {
+      "alias": "碧之异解△ 图奥内拉",
+      "normalizedAlias": "碧之异解△ 图奥内拉",
+      "cardId": "23556",
+      "cardName": "碧ノ異解△トゥオネラ",
+      "language": "zh"
+    },
+    {
+      "alias": "碧之异解△图奥内拉",
+      "normalizedAlias": "碧之异解△图奥内拉",
+      "cardId": "23556",
+      "cardName": "碧ノ異解△トゥオネラ",
+      "language": "zh"
+    },
+    {
       "alias": "異解△福音",
       "normalizedAlias": "異解△福音",
       "cardId": "23562",
@@ -386410,11 +386564,137 @@
       "language": "zh"
     },
     {
-      "alias": "Trirealm Rift Gospel",
-      "normalizedAlias": "trirealm rift gospel",
+      "alias": "Trirealm Rift Delectation",
+      "normalizedAlias": "trirealm rift delectation",
       "cardId": "23562",
       "cardName": "異解△福音",
       "language": "en"
+    },
+    {
+      "alias": "天ノ異解△シェオル",
+      "normalizedAlias": "天ノ異解△シェオル",
+      "cardId": "23555",
+      "cardName": "天ノ異解△シェオル",
+      "language": "ja"
+    },
+    {
+      "alias": "天之异解△邪奥尔",
+      "normalizedAlias": "天之异解△邪奥尔",
+      "cardId": "23555",
+      "cardName": "天ノ異解△シェオル",
+      "language": "zh"
+    },
+    {
+      "alias": "Trirealm Rift Heavens",
+      "normalizedAlias": "trirealm rift heavens",
+      "cardId": "23555",
+      "cardName": "天ノ異解△シェオル",
+      "language": "en"
+    },
+    {
+      "alias": "天之异解△ 希屋尔",
+      "normalizedAlias": "天之异解△ 希屋尔",
+      "cardId": "23555",
+      "cardName": "天ノ異解△シェオル",
+      "language": "zh"
+    },
+    {
+      "alias": "天之异解△示俄勒",
+      "normalizedAlias": "天之异解△示俄勒",
+      "cardId": "23555",
+      "cardName": "天ノ異解△シェオル",
+      "language": "zh"
+    },
+    {
+      "alias": "虚ノ異解△ゲヘナ",
+      "normalizedAlias": "虚ノ異解△ゲヘナ",
+      "cardId": "23554",
+      "cardName": "虚ノ異解△ゲヘナ",
+      "language": "ja"
+    },
+    {
+      "alias": "虚之异解△盖赫纳",
+      "normalizedAlias": "虚之异解△盖赫纳",
+      "cardId": "23554",
+      "cardName": "虚ノ異解△ゲヘナ",
+      "language": "zh"
+    },
+    {
+      "alias": "Trirealm Rift Hollows",
+      "normalizedAlias": "trirealm rift hollows",
+      "cardId": "23554",
+      "cardName": "虚ノ異解△ゲヘナ",
+      "language": "en"
+    },
+    {
+      "alias": "虚之异解△ 矶汉拿",
+      "normalizedAlias": "虚之异解△ 矶汉拿",
+      "cardId": "23554",
+      "cardName": "虚ノ異解△ゲヘナ",
+      "language": "zh"
+    },
+    {
+      "alias": "虚之异解△革赫纳",
+      "normalizedAlias": "虚之异解△革赫纳",
+      "cardId": "23554",
+      "cardName": "虚ノ異解△ゲヘナ",
+      "language": "zh"
+    },
+    {
+      "alias": "異解△審判",
+      "normalizedAlias": "異解△審判",
+      "cardId": "23564",
+      "cardName": "異解△審判",
+      "language": "zh"
+    },
+    {
+      "alias": "异解△审判",
+      "normalizedAlias": "异解△审判",
+      "cardId": "23564",
+      "cardName": "異解△審判",
+      "language": "zh"
+    },
+    {
+      "alias": "Trirealm Rift Verdict",
+      "normalizedAlias": "trirealm rift verdict",
+      "cardId": "23564",
+      "cardName": "異解△審判",
+      "language": "en"
+    },
+    {
+      "alias": "異解△領域－ヴァルヴォルス",
+      "normalizedAlias": "異解△領域-ヴァルヴォルス",
+      "cardId": "23563",
+      "cardName": "異解△領域－ヴァルヴォルス",
+      "language": "ja"
+    },
+    {
+      "alias": "异解△领域－瓦尔涡罗斯",
+      "normalizedAlias": "异解△领域-瓦尔涡罗斯",
+      "cardId": "23563",
+      "cardName": "異解△領域－ヴァルヴォルス",
+      "language": "zh"
+    },
+    {
+      "alias": "Trirealm Rift Vilvortex",
+      "normalizedAlias": "trirealm rift vilvortex",
+      "cardId": "23563",
+      "cardName": "異解△領域－ヴァルヴォルス",
+      "language": "en"
+    },
+    {
+      "alias": "异解△领域-魔之异界域",
+      "normalizedAlias": "异解△领域-魔之异界域",
+      "cardId": "23563",
+      "cardName": "異解△領域－ヴァルヴォルス",
+      "language": "zh"
+    },
+    {
+      "alias": "异解△领域-瓦尔沃尔斯",
+      "normalizedAlias": "异解△领域-瓦尔沃尔斯",
+      "cardId": "23563",
+      "cardName": "異解△領域－ヴァルヴォルス",
+      "language": "zh"
     },
     {
       "alias": "伟魔三贤之书",
@@ -414438,202 +414718,6 @@
       "language": "zh"
     },
     {
-      "alias": "異解△審判",
-      "normalizedAlias": "異解△審判",
-      "cardId": "23564",
-      "cardName": "異解△審判",
-      "language": "zh"
-    },
-    {
-      "alias": "异解△审判",
-      "normalizedAlias": "异解△审判",
-      "cardId": "23564",
-      "cardName": "異解△審判",
-      "language": "zh"
-    },
-    {
-      "alias": "Xenovader△ Judgment",
-      "normalizedAlias": "xenovader△ judgment",
-      "cardId": "23564",
-      "cardName": "異解△審判",
-      "language": "en"
-    },
-    {
-      "alias": "異解△領域－ヴァルヴォルス",
-      "normalizedAlias": "異解△領域-ヴァルヴォルス",
-      "cardId": "23563",
-      "cardName": "異解△領域－ヴァルヴォルス",
-      "language": "ja"
-    },
-    {
-      "alias": "异解△领域－瓦尔涡罗斯",
-      "normalizedAlias": "异解△领域-瓦尔涡罗斯",
-      "cardId": "23563",
-      "cardName": "異解△領域－ヴァルヴォルス",
-      "language": "zh"
-    },
-    {
-      "alias": "Xenovader△ Territory - Valvols",
-      "normalizedAlias": "xenovader△ territory - valvols",
-      "cardId": "23563",
-      "cardName": "異解△領域－ヴァルヴォルス",
-      "language": "en"
-    },
-    {
-      "alias": "异解△领域-魔之异界域",
-      "normalizedAlias": "异解△领域-魔之异界域",
-      "cardId": "23563",
-      "cardName": "異解△領域－ヴァルヴォルス",
-      "language": "zh"
-    },
-    {
-      "alias": "异解△领域-瓦尔沃尔斯",
-      "normalizedAlias": "异解△领域-瓦尔沃尔斯",
-      "cardId": "23563",
-      "cardName": "異解△領域－ヴァルヴォルス",
-      "language": "zh"
-    },
-    {
-      "alias": "碧ノ異解△トゥオネラ",
-      "normalizedAlias": "碧ノ異解△トゥオネラ",
-      "cardId": "23556",
-      "cardName": "碧ノ異解△トゥオネラ",
-      "language": "ja"
-    },
-    {
-      "alias": "碧之异解△屠奥内拉",
-      "normalizedAlias": "碧之异解△屠奥内拉",
-      "cardId": "23556",
-      "cardName": "碧ノ異解△トゥオネラ",
-      "language": "zh"
-    },
-    {
-      "alias": "Xenovader△ of Blue Tuonela",
-      "normalizedAlias": "xenovader△ of blue tuonela",
-      "cardId": "23556",
-      "cardName": "碧ノ異解△トゥオネラ",
-      "language": "en"
-    },
-    {
-      "alias": "碧之异解△ 图奥内拉",
-      "normalizedAlias": "碧之异解△ 图奥内拉",
-      "cardId": "23556",
-      "cardName": "碧ノ異解△トゥオネラ",
-      "language": "zh"
-    },
-    {
-      "alias": "碧之异解△图奥内拉",
-      "normalizedAlias": "碧之异解△图奥内拉",
-      "cardId": "23556",
-      "cardName": "碧ノ異解△トゥオネラ",
-      "language": "zh"
-    },
-    {
-      "alias": "虚ノ異解△ゲヘナ",
-      "normalizedAlias": "虚ノ異解△ゲヘナ",
-      "cardId": "23554",
-      "cardName": "虚ノ異解△ゲヘナ",
-      "language": "ja"
-    },
-    {
-      "alias": "虚之异解△盖赫纳",
-      "normalizedAlias": "虚之异解△盖赫纳",
-      "cardId": "23554",
-      "cardName": "虚ノ異解△ゲヘナ",
-      "language": "zh"
-    },
-    {
-      "alias": "Xenovader△ of Emptiness Gehenna",
-      "normalizedAlias": "xenovader△ of emptiness gehenna",
-      "cardId": "23554",
-      "cardName": "虚ノ異解△ゲヘナ",
-      "language": "en"
-    },
-    {
-      "alias": "虚之异解△ 矶汉拿",
-      "normalizedAlias": "虚之异解△ 矶汉拿",
-      "cardId": "23554",
-      "cardName": "虚ノ異解△ゲヘナ",
-      "language": "zh"
-    },
-    {
-      "alias": "虚之异解△革赫纳",
-      "normalizedAlias": "虚之异解△革赫纳",
-      "cardId": "23554",
-      "cardName": "虚ノ異解△ゲヘナ",
-      "language": "zh"
-    },
-    {
-      "alias": "緋ノ異解△ナラカ",
-      "normalizedAlias": "緋ノ異解△ナラカ",
-      "cardId": "23557",
-      "cardName": "緋ノ異解△ナラカ",
-      "language": "ja"
-    },
-    {
-      "alias": "绯之异解△奈落迦",
-      "normalizedAlias": "绯之异解△奈落迦",
-      "cardId": "23557",
-      "cardName": "緋ノ異解△ナラカ",
-      "language": "zh"
-    },
-    {
-      "alias": "Xenovader△ of Scarlet Naraka",
-      "normalizedAlias": "xenovader△ of scarlet naraka",
-      "cardId": "23557",
-      "cardName": "緋ノ異解△ナラカ",
-      "language": "en"
-    },
-    {
-      "alias": "绯之异解△ 那落迦",
-      "normalizedAlias": "绯之异解△ 那落迦",
-      "cardId": "23557",
-      "cardName": "緋ノ異解△ナラカ",
-      "language": "zh"
-    },
-    {
-      "alias": "绯之异解△那落迦",
-      "normalizedAlias": "绯之异解△那落迦",
-      "cardId": "23557",
-      "cardName": "緋ノ異解△ナラカ",
-      "language": "zh"
-    },
-    {
-      "alias": "天ノ異解△シェオル",
-      "normalizedAlias": "天ノ異解△シェオル",
-      "cardId": "23555",
-      "cardName": "天ノ異解△シェオル",
-      "language": "ja"
-    },
-    {
-      "alias": "天之异解△邪奥尔",
-      "normalizedAlias": "天之异解△邪奥尔",
-      "cardId": "23555",
-      "cardName": "天ノ異解△シェオル",
-      "language": "zh"
-    },
-    {
-      "alias": "Xenovader△ of Sky Sheol",
-      "normalizedAlias": "xenovader△ of sky sheol",
-      "cardId": "23555",
-      "cardName": "天ノ異解△シェオル",
-      "language": "en"
-    },
-    {
-      "alias": "天之异解△ 希屋尔",
-      "normalizedAlias": "天之异解△ 希屋尔",
-      "cardId": "23555",
-      "cardName": "天ノ異解△シェオル",
-      "language": "zh"
-    },
-    {
-      "alias": "天之异解△示俄勒",
-      "normalizedAlias": "天之异解△示俄勒",
-      "cardId": "23555",
-      "cardName": "天ノ異解△シェオル",
-      "language": "zh"
-    },
-    {
       "alias": "相克的魔术师",
       "normalizedAlias": "相克的魔术师",
       "cardId": "11787",
@@ -417441,6 +417525,13 @@
       "language": "zh"
     },
     {
+      "alias": "炎幻星 尤玛古阿",
+      "normalizedAlias": "炎幻星 尤玛古阿",
+      "cardId": "23298",
+      "cardName": "Yomagna the Fire Phantom",
+      "language": "zh"
+    },
+    {
       "alias": "黄泉へ渡る船",
       "normalizedAlias": "黄泉へ渡る船",
       "cardId": "5521",
@@ -420059,8 +420150,8 @@
       "language": "zh"
     },
     {
-      "alias": "Zenet Per Akh",
-      "normalizedAlias": "zenet per akh",
+      "alias": "Zenet Per Aarkh",
+      "normalizedAlias": "zenet per aarkh",
       "cardId": "23538",
       "cardName": "光帰への契り",
       "language": "en"
@@ -420101,8 +420192,8 @@
       "language": "zh"
     },
     {
-      "alias": "Zenet Prophet - Amenhotep",
-      "normalizedAlias": "zenet prophet - amenhotep",
+      "alias": "Zenet Revelator Amenhotep",
+      "normalizedAlias": "zenet revelator amenhotep",
       "cardId": "23533",
       "cardName": "セネトの啓示者－アメンホテプ",
       "language": "en"
@@ -420122,8 +420213,8 @@
       "language": "zh"
     },
     {
-      "alias": "Zenet Prophet - Nefertari",
-      "normalizedAlias": "zenet prophet - nefertari",
+      "alias": "Zenet Revelator Nefertari",
+      "normalizedAlias": "zenet revelator nefertari",
       "cardId": "23532",
       "cardName": "セネトの啓示者－ネフェルタリ",
       "language": "en"
@@ -420150,8 +420241,8 @@
       "language": "zh"
     },
     {
-      "alias": "Zenet Thunderfall",
-      "normalizedAlias": "zenet thunderfall",
+      "alias": "Zenet Thunder Fall",
+      "normalizedAlias": "zenet thunder fall",
       "cardId": "23542",
       "cardName": "光器の降雷",
       "language": "en"
@@ -420192,8 +420283,8 @@
       "language": "zh"
     },
     {
-      "alias": "Zenetmes Nekhbet",
-      "normalizedAlias": "zenetmes nekhbet",
+      "alias": "Zenet-Mose Nekhbet",
+      "normalizedAlias": "zenet-mose nekhbet",
       "cardId": "23536",
       "cardName": "セネトメス・ネクベト",
       "language": "en"
@@ -420234,8 +420325,8 @@
       "language": "zh"
     },
     {
-      "alias": "Zenetnakht Sphinx",
-      "normalizedAlias": "zenetnakht sphinx",
+      "alias": "Zenet-Nakhte Sphinx",
+      "normalizedAlias": "zenet-nakhte sphinx",
       "cardId": "23534",
       "cardName": "セネトナクト・スフィンクス",
       "language": "en"

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-24T05:31:46.909Z",
+  "generatedAt": "2026-11-25T04:37:13.804Z",
   "records": [
     {
       "id": "21385",
@@ -484,10 +484,10 @@
       "name": "眠らない街の『レイズ・ムーン』",
       "cnName": "未眠之城的『盈彩月夜』",
       "jaName": "眠らない街の『レイズ・ムーン』",
-      "enName": "\"Raise Moon\" the City that Never Sleeps",
+      "enName": "Raise Moon - The City that Never Sleeps",
       "aliases": [
         "眠らない街の『レイズ・ムーン』",
-        "\"Raise Moon\" the City that Never Sleeps",
+        "Raise Moon - The City that Never Sleeps",
         "未眠之城的『盈彩月夜』",
         "不眠街市的『加辉瑞月』",
         "不眠城的『升月』"
@@ -1490,10 +1490,10 @@
       "name": "光帰の旅－『セネト』",
       "cnName": "归光之旅-『塞尼特』",
       "jaName": "光帰の旅－『セネト』",
-      "enName": "A Journey Back to the Light - \"Zenet\"",
+      "enName": "Return Journey to the Light \"Zenet\"",
       "aliases": [
         "光帰の旅－『セネト』",
-        "A Journey Back to the Light - \"Zenet\"",
+        "Return Journey to the Light \"Zenet\"",
         "归光之旅-『塞尼特』",
         "光归之旅-『塞尼特』",
         "归光之旅－『塞尼特』"
@@ -6741,6 +6741,13 @@
           "name": "溟渊方界神 深渊之伐格楼达",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24010"
+        },
+        {
+          "name": "溟渊方界神 深渊之伐格楼达",
+          "source": "baige",
+          "sourceField": "cn_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "24010"
         }
@@ -15268,6 +15275,13 @@
           "sourceField": "nwbbs_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "24009"
+        },
+        {
+          "name": "燎炎方界神 狱焰之阿尔底提亚",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24009"
         }
       ],
       "released": true,
@@ -22462,10 +22476,10 @@
       "name": "光器還魂の儀",
       "cnName": "光器还魂之仪",
       "jaName": "光器還魂の儀",
-      "enName": "Am Duazenet",
+      "enName": "Amduat Zenet",
       "aliases": [
         "光器還魂の儀",
-        "Am Duazenet",
+        "Amduat Zenet",
         "光器还魂之仪",
         "塞尼特·光器还魂之仪",
         "塞尼特・光器还魂之仪"
@@ -40914,6 +40928,13 @@
           "name": "水波海龙@海晶少女",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24017"
+        },
+        {
+          "name": "水波海龙@海晶少女",
+          "source": "baige",
+          "sourceField": "cn_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "24017"
         }
@@ -116902,10 +116923,10 @@
       "name": "葬嶺異解△ヴェルヘイム",
       "cnName": "葬岭异解△危尔海姆",
       "jaName": "葬嶺異解△ヴェルヘイム",
-      "enName": "Burial Summit Xenovader△ Helheim",
+      "enName": "Trirealm Rift Gorging Gorge",
       "aliases": [
         "葬嶺異解△ヴェルヘイム",
-        "Burial Summit Xenovader△ Helheim",
+        "Trirealm Rift Gorging Gorge",
         "葬岭异解△危尔海姆",
         "葬岭异解△ 弗尔海姆",
         "葬岭异解△威尔海姆"
@@ -125595,6 +125616,83 @@
       ],
       "monsterProperties": [
         "Machine",
+        "Effect"
+      ]
+    },
+    {
+      "id": "23544",
+      "name": "レイズ・ムーンの雅 キャロル",
+      "cnName": "盈彩月夜之雅 卡萝尔",
+      "jaName": "レイズ・ムーンの雅 キャロル",
+      "enName": "Carol, the Elegance of Raise Moon",
+      "aliases": [
+        "レイズ・ムーンの雅 キャロル",
+        "Carol, the Elegance of Raise Moon",
+        "盈彩月夜之雅 卡萝尔",
+        "加辉瑞月之雅 卡萝尔",
+        "升月之雅 卡萝尔"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "盈彩月夜之雅 卡萝尔",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23544"
+        },
+        {
+          "name": "加辉瑞月之雅 卡萝尔",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23544"
+        },
+        {
+          "name": "升月之雅 卡萝尔",
+          "source": "baige",
+          "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23544"
+        },
+        {
+          "name": "盈彩月夜之雅 卡萝尔",
+          "source": "baige",
+          "sourceField": "sc_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23544"
+        },
+        {
+          "name": "盈彩月夜之雅 卡萝尔",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23544"
+        }
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Zombie",
+      "attribute": "dark",
+      "attack": 1400,
+      "defense": 1400,
+      "atk": 1400,
+      "def": 1400,
+      "level": 7,
+      "propertyIds": [
+        "32",
+        "4"
+      ],
+      "properties": [
+        "Zombie",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "32",
+        "4"
+      ],
+      "monsterProperties": [
+        "Zombie",
         "Effect"
       ]
     },
@@ -137341,7 +137439,8 @@
         "Chevreuil, Hunting Scout of the Deep Forest",
         "密林的狩猎者 狍",
         "密林狩猎者修弗鲁依由",
-        "密林的狩猎者 野狍"
+        "密林的狩猎者 野狍",
+        "密林狩猎者须鲁依"
       ],
       "chineseNameSources": [
         {
@@ -137369,6 +137468,13 @@
           "name": "密林的狩猎者 野狍",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "22067"
+        },
+        {
+          "name": "密林狩猎者须鲁依",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "22067"
         }
@@ -161806,7 +161912,8 @@
         "Crimson Nova Trinity the Dark Cubic Lord",
         "暗黑方界邪神 深红之挪婆·三神一体",
         "暗黑方界邪神 深红新星三位一体",
-        "暗黑方界邪神 深红新星之挪婆·三重合体"
+        "暗黑方界邪神 深红新星之挪婆·三重合体",
+        "暗黑方界邪神 深红新星・三相"
       ],
       "chineseNameSources": [
         {
@@ -161834,6 +161941,13 @@
           "name": "暗黑方界邪神 深红新星之挪婆·三重合体",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "12523"
+        },
+        {
+          "name": "暗黑方界邪神 深红新星・三相",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "12523"
         }
@@ -233242,7 +233356,8 @@
       "aliases": [
         "Distrust Paranoia",
         "不信妄想症",
-        "猜忌妄想"
+        "猜忌妄想",
+        "猜疑神 帕拉诺亚"
       ],
       "chineseNameSources": [
         {
@@ -233261,6 +233376,13 @@
         },
         {
           "name": "Distrust Paranoia",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23297"
+        },
+        {
+          "name": "猜疑神 帕拉诺亚",
           "source": "baige",
           "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
@@ -233326,7 +233448,8 @@
         "創世方界超神ディヴァイン・アニマ・インフィニティ",
         "Divine Anima Infinity the Creation Cubic Overlord",
         "创世方界超神 无穷圣魂",
-        "创世方界超神 天神之魂天·无穷"
+        "创世方界超神 天神之魂天·无穷",
+        "创世方界超神 圣辉神魂・无量"
       ],
       "chineseNameSources": [
         {
@@ -233340,6 +233463,20 @@
           "name": "创世方界超神 天神之魂天·无穷",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24011"
+        },
+        {
+          "name": "创世方界超神 天神之魂天·无穷",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24011"
+        },
+        {
+          "name": "创世方界超神 圣辉神魂・无量",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "24011"
         }
@@ -283035,10 +283172,10 @@
       "name": "虚蝕異解△ジャハンナム",
       "cnName": "虚蚀异解△灾罕纳姆",
       "jaName": "虚蝕異解△ジャハンナム",
-      "enName": "Emptiness Devouring Xenovader△ Jahannam",
+      "enName": "Trirealm Rift Darkness",
       "aliases": [
         "虚蝕異解△ジャハンナム",
-        "Emptiness Devouring Xenovader△ Jahannam",
+        "Trirealm Rift Darkness",
         "虚蚀异解△灾罕纳姆",
         "虚蚀异解△ 哲罕南",
         "虚蚀异解△哲罕南"
@@ -325055,7 +325192,8 @@
       "aliases": [
         "魔術師の空華",
         "Fleeting Flower of the Magician",
-        "魔术师的空华"
+        "魔术师的空华",
+        "魔术师之空华"
       ],
       "chineseNameSources": [
         {
@@ -325088,6 +325226,13 @@
         },
         {
           "name": "魔术师的空华",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "22071"
+        },
+        {
+          "name": "魔术师之空华",
           "source": "baige",
           "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
@@ -366592,7 +366737,8 @@
         "ゴーストリック・マスター アルカード",
         "Ghostrick Master Alucard",
         "鬼计之主 阿鲁卡德",
-        "鬼计妖魔之主 阿鲁卡德"
+        "鬼计妖魔之主 阿鲁卡德",
+        "鬼计主宰 阿尔卡德"
       ],
       "chineseNameSources": [
         {
@@ -366606,6 +366752,20 @@
           "name": "鬼计妖魔之主 阿鲁卡德",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24025"
+        },
+        {
+          "name": "鬼计妖魔之主 阿鲁卡德",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24025"
+        },
+        {
+          "name": "鬼计主宰 阿尔卡德",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "24025"
         }
@@ -430263,7 +430423,8 @@
         "Hunting Horn",
         "狩猎之角笛",
         "狩猎笛",
-        "狩猎的号角"
+        "狩猎的号角",
+        "狩猎号角"
       ],
       "chineseNameSources": [
         {
@@ -430291,6 +430452,13 @@
           "name": "狩猎的号角",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "22068"
+        },
+        {
+          "name": "狩猎号角",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "22068"
         }
@@ -481157,6 +481325,83 @@
       "cardType": "spell"
     },
     {
+      "id": "23547",
+      "name": "レイズ・ムーンの灯 クルーシェ",
+      "cnName": "盈彩月夜之灯 库露雪",
+      "jaName": "レイズ・ムーンの灯 クルーシェ",
+      "enName": "Kulshe, the Beacon of Raise Moon",
+      "aliases": [
+        "レイズ・ムーンの灯 クルーシェ",
+        "Kulshe, the Beacon of Raise Moon",
+        "盈彩月夜之灯 库露雪",
+        "加辉瑞月之灯 库路西",
+        "升月之灯 库露雪"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "盈彩月夜之灯 库露雪",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23547"
+        },
+        {
+          "name": "加辉瑞月之灯 库路西",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23547"
+        },
+        {
+          "name": "升月之灯 库露雪",
+          "source": "baige",
+          "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23547"
+        },
+        {
+          "name": "盈彩月夜之灯 库露雪",
+          "source": "baige",
+          "sourceField": "sc_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23547"
+        },
+        {
+          "name": "盈彩月夜之灯 库露雪",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23547"
+        }
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Dragon",
+      "attribute": "fire",
+      "attack": 2800,
+      "defense": 700,
+      "atk": 2800,
+      "def": 700,
+      "level": 7,
+      "propertyIds": [
+        "21",
+        "4"
+      ],
+      "properties": [
+        "Dragon",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "21",
+        "4"
+      ],
+      "monsterProperties": [
+        "Dragon",
+        "Effect"
+      ]
+    },
+    {
       "id": "23516",
       "name": "Kumenyo, the Nine-Hued Deer",
       "cnName": "九色鹿 九面妖",
@@ -486494,6 +486739,83 @@
       ],
       "monsterProperties": [
         "Fish",
+        "Effect"
+      ]
+    },
+    {
+      "id": "23545",
+      "name": "レイズ・ムーンの翼 ラピ",
+      "cnName": "盈彩月夜之翼 菈碧",
+      "jaName": "レイズ・ムーンの翼 ラピ",
+      "enName": "Lapi, the Wings of Raise Moon",
+      "aliases": [
+        "レイズ・ムーンの翼 ラピ",
+        "Lapi, the Wings of Raise Moon",
+        "盈彩月夜之翼 菈碧",
+        "加辉瑞月之翼 拉琵",
+        "升月之翼 拉比"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "盈彩月夜之翼 菈碧",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23545"
+        },
+        {
+          "name": "加辉瑞月之翼 拉琵",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23545"
+        },
+        {
+          "name": "升月之翼 拉比",
+          "source": "baige",
+          "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23545"
+        },
+        {
+          "name": "盈彩月夜之翼 菈碧",
+          "source": "baige",
+          "sourceField": "sc_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23545"
+        },
+        {
+          "name": "盈彩月夜之翼 菈碧",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23545"
+        }
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Beast",
+      "attribute": "earth",
+      "attack": 700,
+      "defense": 2100,
+      "atk": 700,
+      "def": 2100,
+      "level": 7,
+      "propertyIds": [
+        "3",
+        "4"
+      ],
+      "properties": [
+        "Beast",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "3",
+        "4"
+      ],
+      "monsterProperties": [
+        "Beast",
         "Effect"
       ]
     },
@@ -510122,7 +510444,8 @@
         "リコリス・リリィパー",
         "Lycoris Lilyreaper",
         "石蒜花死神",
-        "红镰华"
+        "红镰华",
+        "彼岸花·莉莉帕"
       ],
       "chineseNameSources": [
         {
@@ -510157,6 +510480,13 @@
           "name": "红镰华",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "22069"
+        },
+        {
+          "name": "彼岸花·莉莉帕",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "22069"
         }
@@ -514600,10 +514930,10 @@
       "name": "狂嵐異解△プルートニオン",
       "cnName": "狂岚异解△普戮托尼翁",
       "jaName": "狂嵐異解△プルートニオン",
-      "enName": "Mad Tempest Xenovader△ Ploutonion",
+      "enName": "Trirealm Rift Savage Storms",
       "aliases": [
         "狂嵐異解△プルートニオン",
-        "Mad Tempest Xenovader△ Ploutonion",
+        "Trirealm Rift Savage Storms",
         "狂岚异解△普戮托尼翁",
         "狂岚异解△ 普鲁托尼翁",
         "狂岚异解△普路同之域"
@@ -537362,7 +537692,8 @@
         "海晶乙女トゥルースハート",
         "Marincess Truth Heart",
         "海晶少女 真理心",
-        "海晶少女 真晶心"
+        "海晶少女 真晶心",
+        "海晶少女 真实之心"
       ],
       "chineseNameSources": [
         {
@@ -537376,6 +537707,20 @@
           "name": "海晶少女 真晶心",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24019"
+        },
+        {
+          "name": "海晶少女 真实之心",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24019"
+        },
+        {
+          "name": "海晶少女 真实之心",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "24019"
         }
@@ -546969,7 +547314,8 @@
         "Mechanical Mechanic",
         "机睿之腹内强化调整员",
         "机睿的机械调整师",
-        "机睿的机械调整者"
+        "机睿的机械调整者",
+        "机睿之机械协调"
       ],
       "chineseNameSources": [
         {
@@ -546997,6 +547343,13 @@
           "name": "机睿的机械调整者",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "22327"
+        },
+        {
+          "name": "机睿之机械协调",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "22327"
         }
@@ -622766,7 +623119,8 @@
       "aliases": [
         "Odd-Eyes Override Dragon",
         "异色眼超驭龙",
-        "异色眼重写龙"
+        "异色眼重写龙",
+        "异色眼凌驾龙"
       ],
       "chineseNameSources": [
         {
@@ -622785,6 +623139,13 @@
         },
         {
           "name": "Odd-Eyes Override Dragon",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23419"
+        },
+        {
+          "name": "异色眼凌驾龙",
           "source": "baige",
           "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
@@ -673275,6 +673636,13 @@
           "sourceField": "nwbbs_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "24008"
+        },
+        {
+          "name": "无穷方界器 生祖",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24008"
         }
       ],
       "released": true,
@@ -694048,10 +694416,10 @@
       "name": "レイズ・ムーンの刃 シェーナ",
       "cnName": "盈彩月夜之刃 希耶娜",
       "jaName": "レイズ・ムーンの刃 シェーナ",
-      "enName": "Raise Moon Blade Shayna",
+      "enName": "Sharna, the Blade of Raise Moon",
       "aliases": [
         "レイズ・ムーンの刃 シェーナ",
-        "Raise Moon Blade Shayna",
+        "Sharna, the Blade of Raise Moon",
         "盈彩月夜之刃 希耶娜",
         "加辉瑞月之刃 谢娜",
         "升月之刃 雪娜"
@@ -694121,91 +694489,14 @@
       ]
     },
     {
-      "id": "23544",
-      "name": "レイズ・ムーンの雅 キャロル",
-      "cnName": "盈彩月夜之雅 卡萝尔",
-      "jaName": "レイズ・ムーンの雅 キャロル",
-      "enName": "Raise Moon Elegance Carol",
-      "aliases": [
-        "レイズ・ムーンの雅 キャロル",
-        "Raise Moon Elegance Carol",
-        "盈彩月夜之雅 卡萝尔",
-        "加辉瑞月之雅 卡萝尔",
-        "升月之雅 卡萝尔"
-      ],
-      "chineseNameSources": [
-        {
-          "name": "盈彩月夜之雅 卡萝尔",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23544"
-        },
-        {
-          "name": "加辉瑞月之雅 卡萝尔",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23544"
-        },
-        {
-          "name": "升月之雅 卡萝尔",
-          "source": "baige",
-          "sourceField": "cnocg_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23544"
-        },
-        {
-          "name": "盈彩月夜之雅 卡萝尔",
-          "source": "baige",
-          "sourceField": "sc_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23544"
-        },
-        {
-          "name": "盈彩月夜之雅 卡萝尔",
-          "source": "baige",
-          "sourceField": "md_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23544"
-        }
-      ],
-      "released": true,
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Zombie",
-      "attribute": "dark",
-      "attack": 1400,
-      "defense": 1400,
-      "atk": 1400,
-      "def": 1400,
-      "level": 7,
-      "propertyIds": [
-        "32",
-        "4"
-      ],
-      "properties": [
-        "Zombie",
-        "Effect"
-      ],
-      "monsterPropertyIds": [
-        "32",
-        "4"
-      ],
-      "monsterProperties": [
-        "Zombie",
-        "Effect"
-      ]
-    },
-    {
       "id": "23550",
       "name": "レイズ・ムーンの望 スクイーズ－ジャックポット",
       "cnName": "盈彩月夜之望 斯奎兹-千金大奖",
       "jaName": "レイズ・ムーンの望 スクイーズ－ジャックポット",
-      "enName": "Raise Moon Hope Squeeze - Jackpot",
+      "enName": "Squeeze, the Full Moon of Raise Moon - JACKPOT!",
       "aliases": [
         "レイズ・ムーンの望 スクイーズ－ジャックポット",
-        "Raise Moon Hope Squeeze - Jackpot",
+        "Squeeze, the Full Moon of Raise Moon - JACKPOT!",
         "盈彩月夜之望 斯奎兹-千金大奖",
         "盈彩月夜之望 斯奎兹－千金大奖",
         "加辉瑞月之望 斯奎兹-头彩奖池",
@@ -694280,91 +694571,14 @@
       ]
     },
     {
-      "id": "23547",
-      "name": "レイズ・ムーンの灯 クルーシェ",
-      "cnName": "盈彩月夜之灯 库露雪",
-      "jaName": "レイズ・ムーンの灯 クルーシェ",
-      "enName": "Raise Moon Lamp Croucier",
-      "aliases": [
-        "レイズ・ムーンの灯 クルーシェ",
-        "Raise Moon Lamp Croucier",
-        "盈彩月夜之灯 库露雪",
-        "加辉瑞月之灯 库路西",
-        "升月之灯 库露雪"
-      ],
-      "chineseNameSources": [
-        {
-          "name": "盈彩月夜之灯 库露雪",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23547"
-        },
-        {
-          "name": "加辉瑞月之灯 库路西",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23547"
-        },
-        {
-          "name": "升月之灯 库露雪",
-          "source": "baige",
-          "sourceField": "cnocg_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23547"
-        },
-        {
-          "name": "盈彩月夜之灯 库露雪",
-          "source": "baige",
-          "sourceField": "sc_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23547"
-        },
-        {
-          "name": "盈彩月夜之灯 库露雪",
-          "source": "baige",
-          "sourceField": "md_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23547"
-        }
-      ],
-      "released": true,
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Dragon",
-      "attribute": "fire",
-      "attack": 2800,
-      "defense": 700,
-      "atk": 2800,
-      "def": 700,
-      "level": 7,
-      "propertyIds": [
-        "21",
-        "4"
-      ],
-      "properties": [
-        "Dragon",
-        "Effect"
-      ],
-      "monsterPropertyIds": [
-        "21",
-        "4"
-      ],
-      "monsterProperties": [
-        "Dragon",
-        "Effect"
-      ]
-    },
-    {
       "id": "23548",
       "name": "レイズ・ムーンの朔 スクイーズ",
       "cnName": "盈彩月夜之朔 斯奎兹",
       "jaName": "レイズ・ムーンの朔 スクイーズ",
-      "enName": "Raise Moon Starter Squeeze",
+      "enName": "Squeeze, the New Moon of Raise Moon",
       "aliases": [
         "レイズ・ムーンの朔 スクイーズ",
-        "Raise Moon Starter Squeeze",
+        "Squeeze, the New Moon of Raise Moon",
         "盈彩月夜之朔 斯奎兹",
         "加辉瑞月之朔 斯奎兹",
         "升月之朔 斯龟兹"
@@ -694430,83 +694644,6 @@
       ],
       "monsterProperties": [
         "Aqua",
-        "Effect"
-      ]
-    },
-    {
-      "id": "23545",
-      "name": "レイズ・ムーンの翼 ラピ",
-      "cnName": "盈彩月夜之翼 菈碧",
-      "jaName": "レイズ・ムーンの翼 ラピ",
-      "enName": "Raise Moon Wings Rapi",
-      "aliases": [
-        "レイズ・ムーンの翼 ラピ",
-        "Raise Moon Wings Rapi",
-        "盈彩月夜之翼 菈碧",
-        "加辉瑞月之翼 拉琵",
-        "升月之翼 拉比"
-      ],
-      "chineseNameSources": [
-        {
-          "name": "盈彩月夜之翼 菈碧",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23545"
-        },
-        {
-          "name": "加辉瑞月之翼 拉琵",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23545"
-        },
-        {
-          "name": "升月之翼 拉比",
-          "source": "baige",
-          "sourceField": "cnocg_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23545"
-        },
-        {
-          "name": "盈彩月夜之翼 菈碧",
-          "source": "baige",
-          "sourceField": "sc_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23545"
-        },
-        {
-          "name": "盈彩月夜之翼 菈碧",
-          "source": "baige",
-          "sourceField": "md_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23545"
-        }
-      ],
-      "released": true,
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Beast",
-      "attribute": "earth",
-      "attack": 700,
-      "defense": 2100,
-      "atk": 700,
-      "def": 2100,
-      "level": 7,
-      "propertyIds": [
-        "3",
-        "4"
-      ],
-      "properties": [
-        "Beast",
-        "Effect"
-      ],
-      "monsterPropertyIds": [
-        "3",
-        "4"
-      ],
-      "monsterProperties": [
-        "Beast",
         "Effect"
       ]
     },
@@ -764435,7 +764572,8 @@
         "Silk Bomb Moth",
         "丝绸炸弹蚕蛾",
         "丝绸炸弹蛾",
-        "吐丝炸弹蛾"
+        "吐丝炸弹蛾",
+        "丝绸爆弹蛾"
       ],
       "chineseNameSources": [
         {
@@ -764470,6 +764608,13 @@
           "name": "吐丝炸弹蛾",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "22070"
+        },
+        {
+          "name": "丝绸爆弹蛾",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "22070"
         }
@@ -772447,10 +772592,10 @@
       "name": "天霆異解△ヨミ",
       "cnName": "天霆异解△幽谜",
       "jaName": "天霆異解△ヨミ",
-      "enName": "Sky Thunder Xenovader△ Yomi",
+      "enName": "Trirealm Rift Havocs",
       "aliases": [
         "天霆異解△ヨミ",
-        "Sky Thunder Xenovader△ Yomi",
+        "Trirealm Rift Havocs",
         "天霆异解△幽谜",
         "天霆异解△ 黄泉",
         "天霆异解△黄泉"
@@ -799014,6 +799159,60 @@
       ]
     },
     {
+      "id": "23551",
+      "name": "レイズ・ムーンの星々",
+      "cnName": "盈彩月夜之群星",
+      "jaName": "レイズ・ムーンの星々",
+      "enName": "Stars of Raise Moon",
+      "aliases": [
+        "レイズ・ムーンの星々",
+        "Stars of Raise Moon",
+        "盈彩月夜之群星",
+        "加辉瑞月的群星",
+        "升月的群星"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "盈彩月夜之群星",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23551"
+        },
+        {
+          "name": "加辉瑞月的群星",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23551"
+        },
+        {
+          "name": "升月的群星",
+          "source": "baige",
+          "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23551"
+        },
+        {
+          "name": "盈彩月夜之群星",
+          "source": "baige",
+          "sourceField": "sc_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23551"
+        },
+        {
+          "name": "盈彩月夜之群星",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23551"
+        }
+      ],
+      "released": true,
+      "type": "spell",
+      "cardType": "spell"
+    },
+    {
       "id": "21408",
       "name": "スターシップ・アジャスト・プレーン",
       "cnName": "星舰调节机",
@@ -824342,6 +824541,13 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "18150"
+        },
+        {
+          "name": "深渊的相剑龙",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "18150"
         }
       ],
       "released": true,
@@ -833939,59 +834145,14 @@
       ]
     },
     {
-      "id": "6140",
-      "name": "挑発",
-      "cnName": "挑衅",
-      "jaName": "挑発",
-      "enName": "Taunt",
-      "aliases": [
-        "挑発",
-        "Taunt",
-        "挑衅"
-      ],
-      "chineseNameSources": [
-        {
-          "name": "挑衅",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "6140"
-        },
-        {
-          "name": "挑衅",
-          "source": "baige",
-          "sourceField": "md_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "6140"
-        },
-        {
-          "name": "挑衅",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "6140"
-        },
-        {
-          "name": "挑衅",
-          "source": "baige",
-          "sourceField": "cnocg_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "6140"
-        }
-      ],
-      "released": true,
-      "type": "trap",
-      "cardType": "trap"
-    },
-    {
       "id": "23535",
       "name": "タウセネト・アジャト",
       "cnName": "塔乌塞尼特·阿贾特",
       "jaName": "タウセネト・アジャト",
-      "enName": "Tauzenet Wadjet",
+      "enName": "Tau-Zenet Adjat",
       "aliases": [
         "タウセネト・アジャト",
-        "Tauzenet Wadjet",
+        "Tau-Zenet Adjat",
         "塔乌塞尼特·阿贾特",
         "塔沃塞尼特·瓦吉特",
         "冥土塞尼特·阿贾特",
@@ -834064,6 +834225,51 @@
         "Ritual",
         "Effect"
       ]
+    },
+    {
+      "id": "6140",
+      "name": "挑発",
+      "cnName": "挑衅",
+      "jaName": "挑発",
+      "enName": "Taunt",
+      "aliases": [
+        "挑発",
+        "Taunt",
+        "挑衅"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "挑衅",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "6140"
+        },
+        {
+          "name": "挑衅",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "6140"
+        },
+        {
+          "name": "挑衅",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "6140"
+        },
+        {
+          "name": "挑衅",
+          "source": "baige",
+          "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "6140"
+        }
+      ],
+      "released": true,
+      "type": "trap",
+      "cardType": "trap"
     },
     {
       "id": "17475",
@@ -842119,6 +842325,60 @@
       ]
     },
     {
+      "id": "23553",
+      "name": "レイズ・ムーンの煌めき",
+      "cnName": "盈彩月夜之辉煌",
+      "jaName": "レイズ・ムーンの煌めき",
+      "enName": "The Bright Lights of Raise Moon",
+      "aliases": [
+        "レイズ・ムーンの煌めき",
+        "The Bright Lights of Raise Moon",
+        "盈彩月夜之辉煌",
+        "加辉瑞月的辉煌",
+        "升月的辉煌"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "盈彩月夜之辉煌",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23553"
+        },
+        {
+          "name": "加辉瑞月的辉煌",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23553"
+        },
+        {
+          "name": "升月的辉煌",
+          "source": "baige",
+          "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23553"
+        },
+        {
+          "name": "盈彩月夜之辉煌",
+          "source": "baige",
+          "sourceField": "sc_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23553"
+        },
+        {
+          "name": "盈彩月夜之辉煌",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23553"
+        }
+      ],
+      "released": true,
+      "type": "trap",
+      "cardType": "trap"
+    },
+    {
       "id": "17766",
       "name": "深渊兽 阿尔白・洛斯",
       "cnName": "深渊兽 阿尔白・洛斯",
@@ -846147,60 +846407,6 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "7235"
-        }
-      ],
-      "released": true,
-      "type": "trap",
-      "cardType": "trap"
-    },
-    {
-      "id": "23553",
-      "name": "レイズ・ムーンの煌めき",
-      "cnName": "盈彩月夜之辉煌",
-      "jaName": "レイズ・ムーンの煌めき",
-      "enName": "The Glitter of Raise Moon",
-      "aliases": [
-        "レイズ・ムーンの煌めき",
-        "The Glitter of Raise Moon",
-        "盈彩月夜之辉煌",
-        "加辉瑞月的辉煌",
-        "升月的辉煌"
-      ],
-      "chineseNameSources": [
-        {
-          "name": "盈彩月夜之辉煌",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23553"
-        },
-        {
-          "name": "加辉瑞月的辉煌",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23553"
-        },
-        {
-          "name": "升月的辉煌",
-          "source": "baige",
-          "sourceField": "cnocg_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23553"
-        },
-        {
-          "name": "盈彩月夜之辉煌",
-          "source": "baige",
-          "sourceField": "sc_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23553"
-        },
-        {
-          "name": "盈彩月夜之辉煌",
-          "source": "baige",
-          "sourceField": "md_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23553"
         }
       ],
       "released": true,
@@ -852759,60 +852965,6 @@
       "released": true,
       "type": "trap",
       "cardType": "trap"
-    },
-    {
-      "id": "23551",
-      "name": "レイズ・ムーンの星々",
-      "cnName": "盈彩月夜之群星",
-      "jaName": "レイズ・ムーンの星々",
-      "enName": "The Stars of Raise Moon",
-      "aliases": [
-        "レイズ・ムーンの星々",
-        "The Stars of Raise Moon",
-        "盈彩月夜之群星",
-        "加辉瑞月的群星",
-        "升月的群星"
-      ],
-      "chineseNameSources": [
-        {
-          "name": "盈彩月夜之群星",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23551"
-        },
-        {
-          "name": "加辉瑞月的群星",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23551"
-        },
-        {
-          "name": "升月的群星",
-          "source": "baige",
-          "sourceField": "cnocg_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23551"
-        },
-        {
-          "name": "盈彩月夜之群星",
-          "source": "baige",
-          "sourceField": "sc_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23551"
-        },
-        {
-          "name": "盈彩月夜之群星",
-          "source": "baige",
-          "sourceField": "md_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23551"
-        }
-      ],
-      "released": true,
-      "type": "spell",
-      "cardType": "spell"
     },
     {
       "id": "4521",
@@ -882723,14 +882875,168 @@
       ]
     },
     {
+      "id": "23557",
+      "name": "緋ノ異解△ナラカ",
+      "cnName": "绯之异解△奈落迦",
+      "jaName": "緋ノ異解△ナラカ",
+      "enName": "Trirealm Rift Blaze",
+      "aliases": [
+        "緋ノ異解△ナラカ",
+        "Trirealm Rift Blaze",
+        "绯之异解△奈落迦",
+        "绯之异解△ 那落迦",
+        "绯之异解△那落迦"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "绯之异解△奈落迦",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23557"
+        },
+        {
+          "name": "绯之异解△ 那落迦",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23557"
+        },
+        {
+          "name": "绯之异解△那落迦",
+          "source": "baige",
+          "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23557"
+        },
+        {
+          "name": "绯之异解△奈落迦",
+          "source": "baige",
+          "sourceField": "sc_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23557"
+        },
+        {
+          "name": "绯之异解△奈落迦",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23557"
+        }
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Psychic",
+      "attribute": "fire",
+      "attack": 1700,
+      "defense": 400,
+      "atk": 1700,
+      "def": 400,
+      "level": 4,
+      "propertyIds": [
+        "33",
+        "4"
+      ],
+      "properties": [
+        "Psychic",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "33",
+        "4"
+      ],
+      "monsterProperties": [
+        "Psychic",
+        "Effect"
+      ]
+    },
+    {
+      "id": "23556",
+      "name": "碧ノ異解△トゥオネラ",
+      "cnName": "碧之异解△屠奥内拉",
+      "jaName": "碧ノ異解△トゥオネラ",
+      "enName": "Trirealm Rift Blizzards",
+      "aliases": [
+        "碧ノ異解△トゥオネラ",
+        "Trirealm Rift Blizzards",
+        "碧之异解△屠奥内拉",
+        "碧之异解△ 图奥内拉",
+        "碧之异解△图奥内拉"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "碧之异解△屠奥内拉",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23556"
+        },
+        {
+          "name": "碧之异解△ 图奥内拉",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23556"
+        },
+        {
+          "name": "碧之异解△图奥内拉",
+          "source": "baige",
+          "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23556"
+        },
+        {
+          "name": "碧之异解△屠奥内拉",
+          "source": "baige",
+          "sourceField": "sc_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23556"
+        },
+        {
+          "name": "碧之异解△屠奥内拉",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23556"
+        }
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Psychic",
+      "attribute": "water",
+      "attack": 300,
+      "defense": 2000,
+      "atk": 300,
+      "def": 2000,
+      "level": 3,
+      "propertyIds": [
+        "33",
+        "4"
+      ],
+      "properties": [
+        "Psychic",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "33",
+        "4"
+      ],
+      "monsterProperties": [
+        "Psychic",
+        "Effect"
+      ]
+    },
+    {
       "id": "23562",
       "name": "異解△福音",
       "cnName": "异解△福音",
       "jaName": "異解△福音",
-      "enName": "Trirealm Rift Gospel",
+      "enName": "Trirealm Rift Delectation",
       "aliases": [
         "異解△福音",
-        "Trirealm Rift Gospel",
+        "Trirealm Rift Delectation",
         "异解△福音"
       ],
       "chineseNameSources": [
@@ -882775,6 +883081,273 @@
       "cardType": "spell",
       "properties": [
         "continuous"
+      ]
+    },
+    {
+      "id": "23555",
+      "name": "天ノ異解△シェオル",
+      "cnName": "天之异解△邪奥尔",
+      "jaName": "天ノ異解△シェオル",
+      "enName": "Trirealm Rift Heavens",
+      "aliases": [
+        "天ノ異解△シェオル",
+        "Trirealm Rift Heavens",
+        "天之异解△邪奥尔",
+        "天之异解△ 希屋尔",
+        "天之异解△示俄勒"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "天之异解△邪奥尔",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23555"
+        },
+        {
+          "name": "天之异解△ 希屋尔",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23555"
+        },
+        {
+          "name": "天之异解△示俄勒",
+          "source": "baige",
+          "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23555"
+        },
+        {
+          "name": "天之异解△邪奥尔",
+          "source": "baige",
+          "sourceField": "sc_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23555"
+        },
+        {
+          "name": "天之异解△邪奥尔",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23555"
+        }
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Psychic",
+      "attribute": "light",
+      "attack": 1200,
+      "defense": 200,
+      "atk": 1200,
+      "def": 200,
+      "level": 2,
+      "propertyIds": [
+        "33",
+        "4"
+      ],
+      "properties": [
+        "Psychic",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "33",
+        "4"
+      ],
+      "monsterProperties": [
+        "Psychic",
+        "Effect"
+      ]
+    },
+    {
+      "id": "23554",
+      "name": "虚ノ異解△ゲヘナ",
+      "cnName": "虚之异解△盖赫纳",
+      "jaName": "虚ノ異解△ゲヘナ",
+      "enName": "Trirealm Rift Hollows",
+      "aliases": [
+        "虚ノ異解△ゲヘナ",
+        "Trirealm Rift Hollows",
+        "虚之异解△盖赫纳",
+        "虚之异解△ 矶汉拿",
+        "虚之异解△革赫纳"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "虚之异解△盖赫纳",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23554"
+        },
+        {
+          "name": "虚之异解△ 矶汉拿",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23554"
+        },
+        {
+          "name": "虚之异解△革赫纳",
+          "source": "baige",
+          "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23554"
+        },
+        {
+          "name": "虚之异解△盖赫纳",
+          "source": "baige",
+          "sourceField": "sc_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23554"
+        },
+        {
+          "name": "虚之异解△盖赫纳",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23554"
+        }
+      ],
+      "released": true,
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Psychic",
+      "attribute": "dark",
+      "attack": 100,
+      "defense": 1000,
+      "atk": 100,
+      "def": 1000,
+      "level": 1,
+      "propertyIds": [
+        "33",
+        "4"
+      ],
+      "properties": [
+        "Psychic",
+        "Effect"
+      ],
+      "monsterPropertyIds": [
+        "33",
+        "4"
+      ],
+      "monsterProperties": [
+        "Psychic",
+        "Effect"
+      ]
+    },
+    {
+      "id": "23564",
+      "name": "異解△審判",
+      "cnName": "异解△审判",
+      "jaName": "異解△審判",
+      "enName": "Trirealm Rift Verdict",
+      "aliases": [
+        "異解△審判",
+        "Trirealm Rift Verdict",
+        "异解△审判"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "异解△审判",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23564"
+        },
+        {
+          "name": "异解△审判",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23564"
+        },
+        {
+          "name": "异解△审判",
+          "source": "baige",
+          "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23564"
+        },
+        {
+          "name": "异解△审判",
+          "source": "baige",
+          "sourceField": "sc_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23564"
+        },
+        {
+          "name": "异解△审判",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23564"
+        }
+      ],
+      "released": true,
+      "type": "trap",
+      "cardType": "trap",
+      "properties": [
+        "continuous"
+      ]
+    },
+    {
+      "id": "23563",
+      "name": "異解△領域－ヴァルヴォルス",
+      "cnName": "异解△领域-瓦尔涡罗斯",
+      "jaName": "異解△領域－ヴァルヴォルス",
+      "enName": "Trirealm Rift Vilvortex",
+      "aliases": [
+        "異解△領域－ヴァルヴォルス",
+        "Trirealm Rift Vilvortex",
+        "异解△领域-瓦尔涡罗斯",
+        "异解△领域-魔之异界域",
+        "异解△领域-瓦尔沃尔斯",
+        "异解△领域－瓦尔涡罗斯"
+      ],
+      "chineseNameSources": [
+        {
+          "name": "异解△领域-瓦尔涡罗斯",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23563"
+        },
+        {
+          "name": "异解△领域-魔之异界域",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23563"
+        },
+        {
+          "name": "异解△领域-瓦尔沃尔斯",
+          "source": "baige",
+          "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23563"
+        },
+        {
+          "name": "异解△领域－瓦尔涡罗斯",
+          "source": "baige",
+          "sourceField": "sc_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23563"
+        },
+        {
+          "name": "异解△领域－瓦尔涡罗斯",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23563"
+        }
+      ],
+      "released": true,
+      "type": "spell",
+      "cardType": "spell",
+      "properties": [
+        "field"
       ]
     },
     {
@@ -945893,427 +946466,6 @@
       ]
     },
     {
-      "id": "23564",
-      "name": "異解△審判",
-      "cnName": "异解△审判",
-      "jaName": "異解△審判",
-      "enName": "Xenovader△ Judgment",
-      "aliases": [
-        "異解△審判",
-        "Xenovader△ Judgment",
-        "异解△审判"
-      ],
-      "chineseNameSources": [
-        {
-          "name": "异解△审判",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23564"
-        },
-        {
-          "name": "异解△审判",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23564"
-        },
-        {
-          "name": "异解△审判",
-          "source": "baige",
-          "sourceField": "cnocg_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23564"
-        },
-        {
-          "name": "异解△审判",
-          "source": "baige",
-          "sourceField": "sc_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23564"
-        },
-        {
-          "name": "异解△审判",
-          "source": "baige",
-          "sourceField": "md_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23564"
-        }
-      ],
-      "released": true,
-      "type": "trap",
-      "cardType": "trap",
-      "properties": [
-        "continuous"
-      ]
-    },
-    {
-      "id": "23563",
-      "name": "異解△領域－ヴァルヴォルス",
-      "cnName": "异解△领域-瓦尔涡罗斯",
-      "jaName": "異解△領域－ヴァルヴォルス",
-      "enName": "Xenovader△ Territory - Valvols",
-      "aliases": [
-        "異解△領域－ヴァルヴォルス",
-        "Xenovader△ Territory - Valvols",
-        "异解△领域-瓦尔涡罗斯",
-        "异解△领域-魔之异界域",
-        "异解△领域-瓦尔沃尔斯",
-        "异解△领域－瓦尔涡罗斯"
-      ],
-      "chineseNameSources": [
-        {
-          "name": "异解△领域-瓦尔涡罗斯",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23563"
-        },
-        {
-          "name": "异解△领域-魔之异界域",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23563"
-        },
-        {
-          "name": "异解△领域-瓦尔沃尔斯",
-          "source": "baige",
-          "sourceField": "cnocg_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23563"
-        },
-        {
-          "name": "异解△领域－瓦尔涡罗斯",
-          "source": "baige",
-          "sourceField": "sc_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23563"
-        },
-        {
-          "name": "异解△领域－瓦尔涡罗斯",
-          "source": "baige",
-          "sourceField": "md_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23563"
-        }
-      ],
-      "released": true,
-      "type": "spell",
-      "cardType": "spell",
-      "properties": [
-        "field"
-      ]
-    },
-    {
-      "id": "23556",
-      "name": "碧ノ異解△トゥオネラ",
-      "cnName": "碧之异解△屠奥内拉",
-      "jaName": "碧ノ異解△トゥオネラ",
-      "enName": "Xenovader△ of Blue Tuonela",
-      "aliases": [
-        "碧ノ異解△トゥオネラ",
-        "Xenovader△ of Blue Tuonela",
-        "碧之异解△屠奥内拉",
-        "碧之异解△ 图奥内拉",
-        "碧之异解△图奥内拉"
-      ],
-      "chineseNameSources": [
-        {
-          "name": "碧之异解△屠奥内拉",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23556"
-        },
-        {
-          "name": "碧之异解△ 图奥内拉",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23556"
-        },
-        {
-          "name": "碧之异解△图奥内拉",
-          "source": "baige",
-          "sourceField": "cnocg_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23556"
-        },
-        {
-          "name": "碧之异解△屠奥内拉",
-          "source": "baige",
-          "sourceField": "sc_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23556"
-        },
-        {
-          "name": "碧之异解△屠奥内拉",
-          "source": "baige",
-          "sourceField": "md_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23556"
-        }
-      ],
-      "released": true,
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Psychic",
-      "attribute": "water",
-      "attack": 300,
-      "defense": 2000,
-      "atk": 300,
-      "def": 2000,
-      "level": 3,
-      "propertyIds": [
-        "33",
-        "4"
-      ],
-      "properties": [
-        "Psychic",
-        "Effect"
-      ],
-      "monsterPropertyIds": [
-        "33",
-        "4"
-      ],
-      "monsterProperties": [
-        "Psychic",
-        "Effect"
-      ]
-    },
-    {
-      "id": "23554",
-      "name": "虚ノ異解△ゲヘナ",
-      "cnName": "虚之异解△盖赫纳",
-      "jaName": "虚ノ異解△ゲヘナ",
-      "enName": "Xenovader△ of Emptiness Gehenna",
-      "aliases": [
-        "虚ノ異解△ゲヘナ",
-        "Xenovader△ of Emptiness Gehenna",
-        "虚之异解△盖赫纳",
-        "虚之异解△ 矶汉拿",
-        "虚之异解△革赫纳"
-      ],
-      "chineseNameSources": [
-        {
-          "name": "虚之异解△盖赫纳",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23554"
-        },
-        {
-          "name": "虚之异解△ 矶汉拿",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23554"
-        },
-        {
-          "name": "虚之异解△革赫纳",
-          "source": "baige",
-          "sourceField": "cnocg_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23554"
-        },
-        {
-          "name": "虚之异解△盖赫纳",
-          "source": "baige",
-          "sourceField": "sc_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23554"
-        },
-        {
-          "name": "虚之异解△盖赫纳",
-          "source": "baige",
-          "sourceField": "md_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23554"
-        }
-      ],
-      "released": true,
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Psychic",
-      "attribute": "dark",
-      "attack": 100,
-      "defense": 1000,
-      "atk": 100,
-      "def": 1000,
-      "level": 1,
-      "propertyIds": [
-        "33",
-        "4"
-      ],
-      "properties": [
-        "Psychic",
-        "Effect"
-      ],
-      "monsterPropertyIds": [
-        "33",
-        "4"
-      ],
-      "monsterProperties": [
-        "Psychic",
-        "Effect"
-      ]
-    },
-    {
-      "id": "23557",
-      "name": "緋ノ異解△ナラカ",
-      "cnName": "绯之异解△奈落迦",
-      "jaName": "緋ノ異解△ナラカ",
-      "enName": "Xenovader△ of Scarlet Naraka",
-      "aliases": [
-        "緋ノ異解△ナラカ",
-        "Xenovader△ of Scarlet Naraka",
-        "绯之异解△奈落迦",
-        "绯之异解△ 那落迦",
-        "绯之异解△那落迦"
-      ],
-      "chineseNameSources": [
-        {
-          "name": "绯之异解△奈落迦",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23557"
-        },
-        {
-          "name": "绯之异解△ 那落迦",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23557"
-        },
-        {
-          "name": "绯之异解△那落迦",
-          "source": "baige",
-          "sourceField": "cnocg_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23557"
-        },
-        {
-          "name": "绯之异解△奈落迦",
-          "source": "baige",
-          "sourceField": "sc_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23557"
-        },
-        {
-          "name": "绯之异解△奈落迦",
-          "source": "baige",
-          "sourceField": "md_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23557"
-        }
-      ],
-      "released": true,
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Psychic",
-      "attribute": "fire",
-      "attack": 1700,
-      "defense": 400,
-      "atk": 1700,
-      "def": 400,
-      "level": 4,
-      "propertyIds": [
-        "33",
-        "4"
-      ],
-      "properties": [
-        "Psychic",
-        "Effect"
-      ],
-      "monsterPropertyIds": [
-        "33",
-        "4"
-      ],
-      "monsterProperties": [
-        "Psychic",
-        "Effect"
-      ]
-    },
-    {
-      "id": "23555",
-      "name": "天ノ異解△シェオル",
-      "cnName": "天之异解△邪奥尔",
-      "jaName": "天ノ異解△シェオル",
-      "enName": "Xenovader△ of Sky Sheol",
-      "aliases": [
-        "天ノ異解△シェオル",
-        "Xenovader△ of Sky Sheol",
-        "天之异解△邪奥尔",
-        "天之异解△ 希屋尔",
-        "天之异解△示俄勒"
-      ],
-      "chineseNameSources": [
-        {
-          "name": "天之异解△邪奥尔",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23555"
-        },
-        {
-          "name": "天之异解△ 希屋尔",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23555"
-        },
-        {
-          "name": "天之异解△示俄勒",
-          "source": "baige",
-          "sourceField": "cnocg_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23555"
-        },
-        {
-          "name": "天之异解△邪奥尔",
-          "source": "baige",
-          "sourceField": "sc_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23555"
-        },
-        {
-          "name": "天之异解△邪奥尔",
-          "source": "baige",
-          "sourceField": "md_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23555"
-        }
-      ],
-      "released": true,
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Psychic",
-      "attribute": "light",
-      "attack": 1200,
-      "defense": 200,
-      "atk": 1200,
-      "def": 200,
-      "level": 2,
-      "propertyIds": [
-        "33",
-        "4"
-      ],
-      "properties": [
-        "Psychic",
-        "Effect"
-      ],
-      "monsterPropertyIds": [
-        "33",
-        "4"
-      ],
-      "monsterProperties": [
-        "Psychic",
-        "Effect"
-      ]
-    },
-    {
       "id": "11787",
       "name": "相克的魔术师",
       "cnName": "相克的魔术师",
@@ -951781,7 +951933,8 @@
       "aliases": [
         "Yomagna the Fire Phantom",
         "幻影火精 约马格努",
-        "炎之幻影 幽魔马格纳"
+        "炎之幻影 幽魔马格纳",
+        "炎幻星 尤玛古阿"
       ],
       "chineseNameSources": [
         {
@@ -951800,6 +951953,13 @@
         },
         {
           "name": "Yomagna the Fire Phantom",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23298"
+        },
+        {
+          "name": "炎幻星 尤玛古阿",
           "source": "baige",
           "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
@@ -957730,10 +957890,10 @@
       "name": "光帰への契り",
       "cnName": "归光之契",
       "jaName": "光帰への契り",
-      "enName": "Zenet Per Akh",
+      "enName": "Zenet Per Aarkh",
       "aliases": [
         "光帰への契り",
-        "Zenet Per Akh",
+        "Zenet Per Aarkh",
         "归光之契",
         "对光归之契",
         "塞尼特·光归之契",
@@ -957785,10 +957945,10 @@
       "name": "セネトの啓示者－アメンホテプ",
       "cnName": "塞尼特的启示者-阿蒙霍特普",
       "jaName": "セネトの啓示者－アメンホテプ",
-      "enName": "Zenet Prophet - Amenhotep",
+      "enName": "Zenet Revelator Amenhotep",
       "aliases": [
         "セネトの啓示者－アメンホテプ",
-        "Zenet Prophet - Amenhotep",
+        "Zenet Revelator Amenhotep",
         "塞尼特的启示者-阿蒙霍特普",
         "塞尼特的启示者－阿蒙霍特普"
       ],
@@ -957861,10 +958021,10 @@
       "name": "セネトの啓示者－ネフェルタリ",
       "cnName": "塞尼特的启示者-奈菲尔塔利",
       "jaName": "セネトの啓示者－ネフェルタリ",
-      "enName": "Zenet Prophet - Nefertari",
+      "enName": "Zenet Revelator Nefertari",
       "aliases": [
         "セネトの啓示者－ネフェルタリ",
-        "Zenet Prophet - Nefertari",
+        "Zenet Revelator Nefertari",
         "塞尼特的启示者-奈菲尔塔利",
         "塞尼特的启示者－奈菲尔塔利",
         "塞尼特的启示者-奈费尔塔利"
@@ -957938,10 +958098,10 @@
       "name": "光器の降雷",
       "cnName": "光器之降雷",
       "jaName": "光器の降雷",
-      "enName": "Zenet Thunderfall",
+      "enName": "Zenet Thunder Fall",
       "aliases": [
         "光器の降雷",
-        "Zenet Thunderfall",
+        "Zenet Thunder Fall",
         "光器之降雷",
         "光器的降雷",
         "塞尼特·光器之降雷",
@@ -957996,10 +958156,10 @@
       "name": "セネトメス・ネクベト",
       "cnName": "塞尼特摩斯·尼库贝特",
       "jaName": "セネトメス・ネクベト",
-      "enName": "Zenetmes Nekhbet",
+      "enName": "Zenet-Mose Nekhbet",
       "aliases": [
         "セネトメス・ネクベト",
-        "Zenetmes Nekhbet",
+        "Zenet-Mose Nekhbet",
         "塞尼特摩斯·尼库贝特",
         "塞尼特摩斯·奈赫贝特",
         "塞尼特之嗣·涅赫贝特",
@@ -958078,10 +958238,10 @@
       "name": "セネトナクト・スフィンクス",
       "cnName": "塞尼特纳赫特·斯芬克斯",
       "jaName": "セネトナクト・スフィンクス",
-      "enName": "Zenetnakht Sphinx",
+      "enName": "Zenet-Nakhte Sphinx",
       "aliases": [
         "セネトナクト・スフィンクス",
-        "Zenetnakht Sphinx",
+        "Zenet-Nakhte Sphinx",
         "塞尼特纳赫特·斯芬克斯",
         "塞尼特纳赫特・斯芬克斯",
         "塞尼特胜利者·斯芬克斯"

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-24T05:31:46.909Z",
+  "generatedAt": "2026-11-25T04:37:13.804Z",
   "records": [
     {
       "id": "21385",
@@ -526,18 +526,18 @@
       "name": "眠らない街の『レイズ・ムーン』",
       "cnName": "未眠之城的『盈彩月夜』",
       "jaName": "眠らない街の『レイズ・ムーン』",
-      "enName": "\"Raise Moon\" the City that Never Sleeps",
+      "enName": "Raise Moon - The City that Never Sleeps",
       "effectText": "①：自分フィールドのレベル７の「レイズ・ムーン」モンスターはそれぞれ１ターンに１度だけ効果では破壊されない。\n②：１ターンに１度、以下の効果から１つを選択して発動できる。\n●自分の手札を１枚選んでデッキの一番上か一番下に戻す。その後、自分は１枚ドローする。\n●自分フィールドに魔法使い族の「レイズ・ムーン」Xモンスターが存在する場合に発動できる。自分は１枚ドローする。\n③：自分・相手のエンドフェイズに発動する。自分の墓地・除外状態の「レイズ・ムーン」カードを全てデッキに戻す。",
       "released": true,
       "aliases": [
         "眠らない街の『レイズ・ムーン』",
-        "\"Raise Moon\" the City that Never Sleeps",
+        "Raise Moon - The City that Never Sleeps",
         "未眠之城的『盈彩月夜』",
         "不眠街市的『加辉瑞月』",
         "不眠城的『升月』"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23552",
-      "updatedAt": "2026-11-19T02:45:57.840Z",
+      "updatedAt": "2026-11-25T04:34:22.490Z",
       "chineseNameSources": [
         {
           "name": "未眠之城的『盈彩月夜』",
@@ -1583,18 +1583,18 @@
       "name": "光帰の旅－『セネト』",
       "cnName": "归光之旅-『塞尼特』",
       "jaName": "光帰の旅－『セネト』",
-      "enName": "A Journey Back to the Light - \"Zenet\"",
+      "enName": "Return Journey to the Light \"Zenet\"",
       "effectText": "このカード名のカードは１ターンに１枚しか発動できない。\n①：自分の手札・デッキ・フィールド（表側表示）・墓地の通常モンスターカードを以下の数だけ選び、お互いに確認する。その後、その数によって以下の効果を適用する。この効果で手札のカードを確認した場合、さらに自分は１枚ドローできる。\n●２枚：効果モンスターを除く、レベル８以下の融合モンスター１体をEXデッキから通常モンスターカード扱いで特殊召喚する。\n●３枚：デッキの「セネト」モンスター１体または自分の墓地の通常モンスター１体を特殊召喚する。",
       "released": true,
       "aliases": [
         "光帰の旅－『セネト』",
-        "A Journey Back to the Light - \"Zenet\"",
+        "Return Journey to the Light \"Zenet\"",
         "归光之旅-『塞尼特』",
         "光归之旅-『塞尼特』",
         "归光之旅－『塞尼特』"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23539",
-      "updatedAt": "2026-11-19T02:45:58.009Z",
+      "updatedAt": "2026-11-25T04:34:22.713Z",
       "chineseNameSources": [
         {
           "name": "归光之旅-『塞尼特』",
@@ -7139,7 +7139,7 @@
         "溟渊方界神 深渊之伐格楼达"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/24010",
-      "updatedAt": "2026-11-22T01:33:16.256Z",
+      "updatedAt": "2026-11-25T04:34:23.523Z",
       "chineseNameSources": [
         {
           "name": "溟渊方界神 深渊伐萝陀",
@@ -7152,6 +7152,13 @@
           "name": "溟渊方界神 深渊之伐格楼达",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24010"
+        },
+        {
+          "name": "溟渊方界神 深渊之伐格楼达",
+          "source": "baige",
+          "sourceField": "cn_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "24010"
         }
@@ -16073,7 +16080,7 @@
         "燎炎方界神 狱焰之阿尔底提亚"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/24009",
-      "updatedAt": "2026-11-22T01:33:17.167Z",
+      "updatedAt": "2026-11-25T04:34:24.782Z",
       "chineseNameSources": [
         {
           "name": "燎炎方界神 狱焰之阿底提",
@@ -16086,6 +16093,13 @@
           "name": "燎炎方界神 狱焰之阿尔底提亚",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24009"
+        },
+        {
+          "name": "燎炎方界神 狱焰之阿尔底提亚",
+          "source": "baige",
+          "sourceField": "cn_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "24009"
         }
@@ -23567,18 +23581,18 @@
       "name": "光器還魂の儀",
       "cnName": "光器还魂之仪",
       "jaName": "光器還魂の儀",
-      "enName": "Am Duazenet",
+      "enName": "Amduat Zenet",
       "effectText": "このカード名のカードは１ターンに１枚しか発動できない。\n①：レベルの合計が儀式召喚するモンスターのレベル以上になるように、自分の手札・デッキ・フィールド（表側表示）の通常モンスターカードを墓地へ送り（同名カードは１枚まで）、自分の手札・墓地から「セネト」儀式モンスター１体を儀式召喚する。その後、そのモンスターに自分の墓地から通常モンスター１体を装備魔法カード扱いで装備できる。\n②：自分フィールドの通常モンスターカードが戦闘・効果で破壊される場合、代わりに墓地のこのカードを除外できる。",
       "released": true,
       "aliases": [
         "光器還魂の儀",
-        "Am Duazenet",
+        "Amduat Zenet",
         "光器还魂之仪",
         "塞尼特·光器还魂之仪",
         "塞尼特・光器还魂之仪"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23540",
-      "updatedAt": "2026-11-19T02:45:59.363Z",
+      "updatedAt": "2026-11-25T04:34:25.773Z",
       "chineseNameSources": [
         {
           "name": "光器还魂之仪",
@@ -42987,7 +43001,7 @@
         "水波海龙@海晶少女"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/24017",
-      "updatedAt": "2026-11-22T01:33:19.946Z",
+      "updatedAt": "2026-11-25T04:34:28.598Z",
       "chineseNameSources": [
         {
           "name": "水海龙@海晶少女",
@@ -43000,6 +43014,13 @@
           "name": "水波海龙@海晶少女",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24017"
+        },
+        {
+          "name": "水波海龙@海晶少女",
+          "source": "baige",
+          "sourceField": "cn_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "24017"
         }
@@ -122631,18 +122652,18 @@
       "name": "葬嶺異解△ヴェルヘイム",
       "cnName": "葬岭异解△危尔海姆",
       "jaName": "葬嶺異解△ヴェルヘイム",
-      "enName": "Burial Summit Xenovader△ Helheim",
+      "enName": "Trirealm Rift Gorging Gorge",
       "effectText": "このカード名の①の効果は１ターンに１度しか使用できない。\n①：自分・相手のメインフェイズに、手札のこのカードを相手に見せて発動できる。このカードを裏側で除外し、レベル６モンスター以外の自分の除外状態（裏側）の「異解△」モンスター１体を特殊召喚する。\n②：このカードが召喚・特殊召喚した場合に発動する。自分のデッキの上からカード６枚を裏側で除外する。\n③：このカードがモンスターゾーンに存在する限り、自分フィールドの他の「異解△」カードは相手の効果では破壊されず、相手はそれらを効果の対象にできない。",
       "released": true,
       "aliases": [
         "葬嶺異解△ヴェルヘイム",
-        "Burial Summit Xenovader△ Helheim",
+        "Trirealm Rift Gorging Gorge",
         "葬岭异解△危尔海姆",
         "葬岭异解△ 弗尔海姆",
         "葬岭异解△威尔海姆"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23559",
-      "updatedAt": "2026-11-19T02:46:05.586Z",
+      "updatedAt": "2026-11-25T04:34:39.747Z",
       "chineseNameSources": [
         {
           "name": "葬岭异解△危尔海姆",
@@ -131732,6 +131753,86 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "19480"
+        }
+      ]
+    },
+    {
+      "id": "23544",
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Zombie",
+      "monsterPropertyIds": [
+        "32",
+        "4"
+      ],
+      "monsterProperties": [
+        "Zombie",
+        "Effect"
+      ],
+      "propertyIds": [
+        "32",
+        "4"
+      ],
+      "properties": [
+        "Zombie",
+        "Effect"
+      ],
+      "attack": 1400,
+      "atk": 1400,
+      "defense": 1400,
+      "def": 1400,
+      "level": 7,
+      "attribute": "dark",
+      "name": "レイズ・ムーンの雅 キャロル",
+      "cnName": "盈彩月夜之雅 卡萝尔",
+      "jaName": "レイズ・ムーンの雅 キャロル",
+      "enName": "Carol, the Elegance of Raise Moon",
+      "effectText": "①：このカードをドローした時、このカードを相手に見せて発動できる。このカードを特殊召喚する。\n②：このカードはリリースなしで召喚できる。この方法で召喚したこのカードの元々の攻撃力は７００になる。\n③：このカードが手札から召喚・特殊召喚した場合に発動できる（この効果を発動するターン、自分はドロー以外の方法でデッキからカードを手札に加える事ができない）。自分は１枚ドローする。この効果の発動後、ターン終了時まで自分は光属性XモンスターしかEXデッキから特殊召喚できない。",
+      "released": true,
+      "aliases": [
+        "レイズ・ムーンの雅 キャロル",
+        "Carol, the Elegance of Raise Moon",
+        "盈彩月夜之雅 卡萝尔",
+        "加辉瑞月之雅 卡萝尔",
+        "升月之雅 卡萝尔"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/23544",
+      "updatedAt": "2026-11-25T04:34:41.098Z",
+      "chineseNameSources": [
+        {
+          "name": "盈彩月夜之雅 卡萝尔",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23544"
+        },
+        {
+          "name": "加辉瑞月之雅 卡萝尔",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23544"
+        },
+        {
+          "name": "升月之雅 卡萝尔",
+          "source": "baige",
+          "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23544"
+        },
+        {
+          "name": "盈彩月夜之雅 卡萝尔",
+          "source": "baige",
+          "sourceField": "sc_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23544"
+        },
+        {
+          "name": "盈彩月夜之雅 卡萝尔",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23544"
         }
       ]
     },
@@ -144076,6 +144177,7 @@
       "level": 7,
       "attribute": "earth",
       "name": "密林の狩猟者シュヴルイユ",
+      "cnName": "密林的狩猎者 狍",
       "jaName": "密林の狩猟者シュヴルイユ",
       "enName": "Chevreuil, Hunting Scout of the Deep Forest",
       "effectText": "レベル５以上の戦士族・地属性モンスター＋戦士族・地属性モンスター\nこのカード名の②の効果は１ターンに１度しか使用できない。\n①：このカードはモンスターゾーンに存在する限り、自分・相手のメインフェイズの間、相手が発動した効果を受けない。\n②：他の自分の戦士族・地属性モンスターが戦闘で相手モンスターを破壊した時に発動できる。自分の墓地・除外状態の戦士族・地属性モンスター１体を特殊召喚する。\n③：攻撃可能な相手モンスターは、自分フィールドの攻撃力が一番高いモンスターを攻撃しなければならない。",
@@ -144085,11 +144187,11 @@
         "Chevreuil, Hunting Scout of the Deep Forest",
         "密林的狩猎者 狍",
         "密林狩猎者修弗鲁依由",
-        "密林的狩猎者 野狍"
+        "密林的狩猎者 野狍",
+        "密林狩猎者须鲁依"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/22067",
-      "updatedAt": "2026-09-12T21:06:12.248Z",
-      "cnName": "密林的狩猎者 狍",
+      "updatedAt": "2026-11-25T04:34:42.835Z",
       "chineseNameSources": [
         {
           "name": "密林的狩猎者 狍",
@@ -144116,6 +144218,13 @@
           "name": "密林的狩猎者 野狍",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "22067"
+        },
+        {
+          "name": "密林狩猎者须鲁依",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "22067"
         }
@@ -169752,10 +169861,11 @@
         "Crimson Nova Trinity the Dark Cubic Lord",
         "暗黑方界邪神 深红之挪婆·三神一体",
         "暗黑方界邪神 深红新星三位一体",
-        "暗黑方界邪神 深红新星之挪婆·三重合体"
+        "暗黑方界邪神 深红新星之挪婆·三重合体",
+        "暗黑方界邪神 深红新星・三相"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/12523",
-      "updatedAt": "2026-11-20T02:33:15.968Z",
+      "updatedAt": "2026-11-25T04:34:46.473Z",
       "chineseNameSources": [
         {
           "name": "暗黑方界邪神 深红之挪婆·三神一体",
@@ -169782,6 +169892,13 @@
           "name": "暗黑方界邪神 深红新星之挪婆·三重合体",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "12523"
+        },
+        {
+          "name": "暗黑方界邪神 深红新星・三相",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "12523"
         }
@@ -244668,10 +244785,11 @@
       "aliases": [
         "Distrust Paranoia",
         "不信妄想症",
-        "猜忌妄想"
+        "猜忌妄想",
+        "猜疑神 帕拉诺亚"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23297",
-      "updatedAt": "2026-11-19T02:46:13.294Z",
+      "updatedAt": "2026-11-25T04:34:56.970Z",
       "chineseNameSources": [
         {
           "name": "不信妄想症",
@@ -244689,6 +244807,13 @@
         },
         {
           "name": "Distrust Paranoia",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23297"
+        },
+        {
+          "name": "猜疑神 帕拉诺亚",
           "source": "baige",
           "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
@@ -244785,10 +244910,11 @@
         "創世方界超神ディヴァイン・アニマ・インフィニティ",
         "Divine Anima Infinity the Creation Cubic Overlord",
         "创世方界超神 无穷圣魂",
-        "创世方界超神 天神之魂天·无穷"
+        "创世方界超神 天神之魂天·无穷",
+        "创世方界超神 圣辉神魂・无量"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/24011",
-      "updatedAt": "2026-11-22T01:33:40.668Z",
+      "updatedAt": "2026-11-25T04:34:56.990Z",
       "chineseNameSources": [
         {
           "name": "创世方界超神 无穷圣魂",
@@ -244801,6 +244927,20 @@
           "name": "创世方界超神 天神之魂天·无穷",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24011"
+        },
+        {
+          "name": "创世方界超神 天神之魂天·无穷",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24011"
+        },
+        {
+          "name": "创世方界超神 圣辉神魂・无量",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "24011"
         }
@@ -296883,18 +297023,18 @@
       "name": "虚蝕異解△ジャハンナム",
       "cnName": "虚蚀异解△灾罕纳姆",
       "jaName": "虚蝕異解△ジャハンナム",
-      "enName": "Emptiness Devouring Xenovader△ Jahannam",
+      "enName": "Trirealm Rift Darkness",
       "effectText": "①：このカードが召喚・特殊召喚した場合に発動する。自分のデッキの上からカード８枚を裏側で除外する。\n②：除外状態（裏側）のカードの数によって、このカードは以下の効果を得る。\n●１０枚以上：このカードは戦闘では破壊されない。\n●２０枚以上：自分・相手ターンに１度、フィールドのカード１枚を対象として発動できる。そのカードを破壊する。\n●３０枚以上：相手エンドフェイズに発動できる。自分の除外状態（裏側）のカード１枚を手札に加える。\n●４０枚以上：自分・相手のドローフェイズはスキップされる。",
       "released": true,
       "aliases": [
         "虚蝕異解△ジャハンナム",
-        "Emptiness Devouring Xenovader△ Jahannam",
+        "Trirealm Rift Darkness",
         "虚蚀异解△灾罕纳姆",
         "虚蚀异解△ 哲罕南",
         "虚蚀异解△哲罕南"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23561",
-      "updatedAt": "2026-10-26T01:50:04.966Z",
+      "updatedAt": "2026-11-25T04:35:04.174Z",
       "chineseNameSources": [
         {
           "name": "虚蚀异解△灾罕纳姆",
@@ -340938,10 +341078,11 @@
       "aliases": [
         "魔術師の空華",
         "Fleeting Flower of the Magician",
-        "魔术师的空华"
+        "魔术师的空华",
+        "魔术师之空华"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/22071",
-      "updatedAt": "2026-11-19T02:46:19.379Z",
+      "updatedAt": "2026-11-25T04:35:10.432Z",
       "chineseNameSources": [
         {
           "name": "魔术师的空华",
@@ -340973,6 +341114,13 @@
         },
         {
           "name": "魔术师的空华",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "22071"
+        },
+        {
+          "name": "魔术师之空华",
           "source": "baige",
           "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
@@ -384460,10 +384608,11 @@
         "ゴーストリック・マスター アルカード",
         "Ghostrick Master Alucard",
         "鬼计之主 阿鲁卡德",
-        "鬼计妖魔之主 阿鲁卡德"
+        "鬼计妖魔之主 阿鲁卡德",
+        "鬼计主宰 阿尔卡德"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/24025",
-      "updatedAt": "2026-11-22T01:33:54.822Z",
+      "updatedAt": "2026-11-25T04:35:16.473Z",
       "chineseNameSources": [
         {
           "name": "鬼计之主 阿鲁卡德",
@@ -384476,6 +384625,20 @@
           "name": "鬼计妖魔之主 阿鲁卡德",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24025"
+        },
+        {
+          "name": "鬼计妖魔之主 阿鲁卡德",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24025"
+        },
+        {
+          "name": "鬼计主宰 阿尔卡德",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "24025"
         }
@@ -451093,6 +451256,7 @@
         "quickplay"
       ],
       "name": "ハンティングホーン",
+      "cnName": "狩猎之角笛",
       "jaName": "ハンティングホーン",
       "enName": "Hunting Horn",
       "effectText": "このカード名のカードは１ターンに１枚しか発動できず、このカードを発動するターン、自分は戦士族・地属性モンスターでしか攻撃宣言できない。\n①：自分の手札・フィールドの戦士族モンスターを融合素材とし、戦士族・地属性の融合モンスター１体を融合召喚する。このカードをバトルフェイズに発動した場合、さらにこの効果で手札から融合素材とした数まで相手フィールドのモンスターを選ぶ事ができる。選んだモンスターの攻撃力はバトルフェイズ終了時まで半分になる。",
@@ -451102,11 +451266,11 @@
         "Hunting Horn",
         "狩猎之角笛",
         "狩猎笛",
-        "狩猎的号角"
+        "狩猎的号角",
+        "狩猎号角"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/22068",
-      "updatedAt": "2026-09-12T21:06:43.819Z",
-      "cnName": "狩猎之角笛",
+      "updatedAt": "2026-11-25T04:35:25.670Z",
       "chineseNameSources": [
         {
           "name": "狩猎之角笛",
@@ -451133,6 +451297,13 @@
           "name": "狩猎的号角",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "22068"
+        },
+        {
+          "name": "狩猎号角",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "22068"
         }
@@ -504408,6 +504579,86 @@
       ]
     },
     {
+      "id": "23547",
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Dragon",
+      "monsterPropertyIds": [
+        "21",
+        "4"
+      ],
+      "monsterProperties": [
+        "Dragon",
+        "Effect"
+      ],
+      "propertyIds": [
+        "21",
+        "4"
+      ],
+      "properties": [
+        "Dragon",
+        "Effect"
+      ],
+      "attack": 2800,
+      "atk": 2800,
+      "defense": 700,
+      "def": 700,
+      "level": 7,
+      "attribute": "fire",
+      "name": "レイズ・ムーンの灯 クルーシェ",
+      "cnName": "盈彩月夜之灯 库露雪",
+      "jaName": "レイズ・ムーンの灯 クルーシェ",
+      "enName": "Kulshe, the Beacon of Raise Moon",
+      "effectText": "このカード名の③の効果は１ターンに１度しか使用できない。\n①：このカードをドローした時、このカードを相手に見せて発動できる。このカードを特殊召喚する。\n②：このカードの①の効果で特殊召喚した場合、相手フィールドの魔法・罠カード１枚を対象として発動できる。そのカードをデッキの一番下に戻す。\n③：このカードを手札から捨てて発動できる（この効果を発動するターン、自分はドロー以外の方法でデッキからカードを手札に加える事ができない）。自分は１枚ドローする。",
+      "released": true,
+      "aliases": [
+        "レイズ・ムーンの灯 クルーシェ",
+        "Kulshe, the Beacon of Raise Moon",
+        "盈彩月夜之灯 库露雪",
+        "加辉瑞月之灯 库路西",
+        "升月之灯 库露雪"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/23547",
+      "updatedAt": "2026-11-25T04:35:33.093Z",
+      "chineseNameSources": [
+        {
+          "name": "盈彩月夜之灯 库露雪",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23547"
+        },
+        {
+          "name": "加辉瑞月之灯 库路西",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23547"
+        },
+        {
+          "name": "升月之灯 库露雪",
+          "source": "baige",
+          "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23547"
+        },
+        {
+          "name": "盈彩月夜之灯 库露雪",
+          "source": "baige",
+          "sourceField": "sc_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23547"
+        },
+        {
+          "name": "盈彩月夜之灯 库露雪",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23547"
+        }
+      ]
+    },
+    {
       "id": "23516",
       "type": "monster",
       "cardType": "monster",
@@ -509993,6 +510244,86 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "15004"
+        }
+      ]
+    },
+    {
+      "id": "23545",
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Beast",
+      "monsterPropertyIds": [
+        "3",
+        "4"
+      ],
+      "monsterProperties": [
+        "Beast",
+        "Effect"
+      ],
+      "propertyIds": [
+        "3",
+        "4"
+      ],
+      "properties": [
+        "Beast",
+        "Effect"
+      ],
+      "attack": 700,
+      "atk": 700,
+      "defense": 2100,
+      "def": 2100,
+      "level": 7,
+      "attribute": "earth",
+      "name": "レイズ・ムーンの翼 ラピ",
+      "cnName": "盈彩月夜之翼 菈碧",
+      "jaName": "レイズ・ムーンの翼 ラピ",
+      "enName": "Lapi, the Wings of Raise Moon",
+      "effectText": "①：このカードをドローした時、このカードを相手に見せて発動できる。このカードを特殊召喚する。\n②：このカードが手札から召喚・特殊召喚した場合に発動できる（この効果を発動するターン、自分はドロー以外の方法でデッキからカードを手札に加える事ができない）。自分は１枚ドローする。この効果の発動後、ターン終了時まで自分は光属性XモンスターしかEXデッキから特殊召喚できない。\n③：相手ターンに１度、発動できる。光属性・ランク７のXモンスター１体のX召喚を行う。",
+      "released": true,
+      "aliases": [
+        "レイズ・ムーンの翼 ラピ",
+        "Lapi, the Wings of Raise Moon",
+        "盈彩月夜之翼 菈碧",
+        "加辉瑞月之翼 拉琵",
+        "升月之翼 拉比"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/23545",
+      "updatedAt": "2026-11-25T04:35:33.867Z",
+      "chineseNameSources": [
+        {
+          "name": "盈彩月夜之翼 菈碧",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23545"
+        },
+        {
+          "name": "加辉瑞月之翼 拉琵",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23545"
+        },
+        {
+          "name": "升月之翼 拉比",
+          "source": "baige",
+          "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23545"
+        },
+        {
+          "name": "盈彩月夜之翼 菈碧",
+          "source": "baige",
+          "sourceField": "sc_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23545"
+        },
+        {
+          "name": "盈彩月夜之翼 菈碧",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23545"
         }
       ]
     },
@@ -534819,10 +535150,11 @@
         "リコリス・リリィパー",
         "Lycoris Lilyreaper",
         "石蒜花死神",
-        "红镰华"
+        "红镰华",
+        "彼岸花·莉莉帕"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/22069",
-      "updatedAt": "2026-10-26T23:04:58.290Z",
+      "updatedAt": "2026-11-25T04:35:37.404Z",
       "chineseNameSources": [
         {
           "name": "红镰华",
@@ -534856,6 +535188,13 @@
           "name": "红镰华",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "22069"
+        },
+        {
+          "name": "彼岸花·莉莉帕",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "22069"
         }
@@ -539497,18 +539836,18 @@
       "name": "狂嵐異解△プルートニオン",
       "cnName": "狂岚异解△普戮托尼翁",
       "jaName": "狂嵐異解△プルートニオン",
-      "enName": "Mad Tempest Xenovader△ Ploutonion",
+      "enName": "Trirealm Rift Savage Storms",
       "effectText": "このカード名の①の効果は１ターンに１度しか使用できない。\n①：自分・相手ターンに、手札のこのカードと手札の「異解△」カード１枚を相手に見せて発動できる。その２枚を裏側で除外し、自分は２枚ドローする。\n②：このカードが召喚・特殊召喚した場合に発動する。自分のデッキの上からカード７枚を裏側で除外する。\n③：自分・相手ターンに１度、発動できる。自分の除外状態（裏側）の「異解△」モンスター１体をデッキに戻す。その後、そのモンスターと属性が同じ相手フィールドのモンスター１体をデッキに戻す事ができる。",
       "released": true,
       "aliases": [
         "狂嵐異解△プルートニオン",
-        "Mad Tempest Xenovader△ Ploutonion",
+        "Trirealm Rift Savage Storms",
         "狂岚异解△普戮托尼翁",
         "狂岚异解△ 普鲁托尼翁",
         "狂岚异解△普路同之域"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23560",
-      "updatedAt": "2026-11-19T02:46:31.856Z",
+      "updatedAt": "2026-11-25T04:35:38.032Z",
       "chineseNameSources": [
         {
           "name": "狂岚异解△普戮托尼翁",
@@ -563383,10 +563722,11 @@
         "海晶乙女トゥルースハート",
         "Marincess Truth Heart",
         "海晶少女 真理心",
-        "海晶少女 真晶心"
+        "海晶少女 真晶心",
+        "海晶少女 真实之心"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/24019",
-      "updatedAt": "2026-11-22T01:34:13.041Z",
+      "updatedAt": "2026-11-25T04:35:41.387Z",
       "chineseNameSources": [
         {
           "name": "海晶少女 真理心",
@@ -563399,6 +563739,20 @@
           "name": "海晶少女 真晶心",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24019"
+        },
+        {
+          "name": "海晶少女 真实之心",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24019"
+        },
+        {
+          "name": "海晶少女 真实之心",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "24019"
         }
@@ -573428,6 +573782,7 @@
       "level": 3,
       "attribute": "wind",
       "name": "機叡のメカチューナー",
+      "cnName": "机睿之腹内强化调整员",
       "jaName": "機叡のメカチューナー",
       "enName": "Mechanical Mechanic",
       "effectText": "このカード名の①②の効果はそれぞれ１ターンに１度しか使用できない。\n①：フィールドゾーンにカードが存在する場合に発動できる。このカードを手札から特殊召喚する。\n②：自分フィールドの表側表示の魔法・罠カード１枚を対象として発動できる。そのカードを破壊し、デッキから攻撃力０の機械族・風属性モンスター１体を手札に加える。このターン、自分は機械族モンスターしかEXデッキから特殊召喚できない。\n③：他の自分の機械族モンスターが戦闘を行う攻撃宣言時に発動できる。その自分のモンスターのレベルを１つ上げるか下げる。",
@@ -573437,11 +573792,11 @@
         "Mechanical Mechanic",
         "机睿之腹内强化调整员",
         "机睿的机械调整师",
-        "机睿的机械调整者"
+        "机睿的机械调整者",
+        "机睿之机械协调"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/22327",
-      "updatedAt": "2026-09-12T21:06:56.376Z",
-      "cnName": "机睿之腹内强化调整员",
+      "updatedAt": "2026-11-25T04:35:42.750Z",
       "chineseNameSources": [
         {
           "name": "机睿之腹内强化调整员",
@@ -573468,6 +573823,13 @@
           "name": "机睿的机械调整者",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "22327"
+        },
+        {
+          "name": "机睿之机械协调",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "22327"
         }
@@ -652820,10 +653182,11 @@
       "aliases": [
         "Odd-Eyes Override Dragon",
         "异色眼超驭龙",
-        "异色眼重写龙"
+        "异色眼重写龙",
+        "异色眼凌驾龙"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23419",
-      "updatedAt": "2026-11-19T02:46:38.895Z",
+      "updatedAt": "2026-11-25T04:35:53.624Z",
       "chineseNameSources": [
         {
           "name": "异色眼超驭龙",
@@ -652841,6 +653204,13 @@
         },
         {
           "name": "Odd-Eyes Override Dragon",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23419"
+        },
+        {
+          "name": "异色眼凌驾龙",
           "source": "baige",
           "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
@@ -705985,7 +706355,7 @@
         "无穷方界器 生祖"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/24008",
-      "updatedAt": "2026-11-22T01:34:27.480Z",
+      "updatedAt": "2026-11-25T04:36:01.203Z",
       "chineseNameSources": [
         {
           "name": "无穷方界器 地天",
@@ -705998,6 +706368,13 @@
           "name": "无穷方界器 生祖",
           "source": "baige",
           "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "24008"
+        },
+        {
+          "name": "无穷方界器 生祖",
+          "source": "baige",
+          "sourceField": "cn_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "24008"
         }
@@ -727776,18 +728153,18 @@
       "name": "レイズ・ムーンの刃 シェーナ",
       "cnName": "盈彩月夜之刃 希耶娜",
       "jaName": "レイズ・ムーンの刃 シェーナ",
-      "enName": "Raise Moon Blade Shayna",
+      "enName": "Sharna, the Blade of Raise Moon",
       "effectText": "このカード名の③の効果は１ターンに１度しか使用できない。\n①：このカードをドローした時、このカードを相手に見せて発動できる。このカードを特殊召喚する。\n②：このカードの①の効果で特殊召喚した場合、相手フィールドのモンスター１体を対象として発動できる。そのモンスターをデッキの一番下に戻す。\n③：このカードを手札から捨てて発動できる（この効果を発動するターン、自分はドロー以外の方法でデッキからカードを手札に加える事ができない）。自分は１枚ドローする。",
       "released": true,
       "aliases": [
         "レイズ・ムーンの刃 シェーナ",
-        "Raise Moon Blade Shayna",
+        "Sharna, the Blade of Raise Moon",
         "盈彩月夜之刃 希耶娜",
         "加辉瑞月之刃 谢娜",
         "升月之刃 雪娜"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23546",
-      "updatedAt": "2026-11-19T02:46:43.728Z",
+      "updatedAt": "2026-11-25T04:36:04.251Z",
       "chineseNameSources": [
         {
           "name": "盈彩月夜之刃 希耶娜",
@@ -727827,86 +728204,6 @@
       ]
     },
     {
-      "id": "23544",
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Zombie",
-      "monsterPropertyIds": [
-        "32",
-        "4"
-      ],
-      "monsterProperties": [
-        "Zombie",
-        "Effect"
-      ],
-      "propertyIds": [
-        "32",
-        "4"
-      ],
-      "properties": [
-        "Zombie",
-        "Effect"
-      ],
-      "attack": 1400,
-      "atk": 1400,
-      "defense": 1400,
-      "def": 1400,
-      "level": 7,
-      "attribute": "dark",
-      "name": "レイズ・ムーンの雅 キャロル",
-      "cnName": "盈彩月夜之雅 卡萝尔",
-      "jaName": "レイズ・ムーンの雅 キャロル",
-      "enName": "Raise Moon Elegance Carol",
-      "effectText": "①：このカードをドローした時、このカードを相手に見せて発動できる。このカードを特殊召喚する。\n②：このカードはリリースなしで召喚できる。この方法で召喚したこのカードの元々の攻撃力は７００になる。\n③：このカードが手札から召喚・特殊召喚した場合に発動できる（この効果を発動するターン、自分はドロー以外の方法でデッキからカードを手札に加える事ができない）。自分は１枚ドローする。この効果の発動後、ターン終了時まで自分は光属性XモンスターしかEXデッキから特殊召喚できない。",
-      "released": true,
-      "aliases": [
-        "レイズ・ムーンの雅 キャロル",
-        "Raise Moon Elegance Carol",
-        "盈彩月夜之雅 卡萝尔",
-        "加辉瑞月之雅 卡萝尔",
-        "升月之雅 卡萝尔"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/23544",
-      "updatedAt": "2026-11-19T02:46:43.725Z",
-      "chineseNameSources": [
-        {
-          "name": "盈彩月夜之雅 卡萝尔",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23544"
-        },
-        {
-          "name": "加辉瑞月之雅 卡萝尔",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23544"
-        },
-        {
-          "name": "升月之雅 卡萝尔",
-          "source": "baige",
-          "sourceField": "cnocg_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23544"
-        },
-        {
-          "name": "盈彩月夜之雅 卡萝尔",
-          "source": "baige",
-          "sourceField": "sc_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23544"
-        },
-        {
-          "name": "盈彩月夜之雅 卡萝尔",
-          "source": "baige",
-          "sourceField": "md_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23544"
-        }
-      ]
-    },
-    {
       "id": "23550",
       "type": "monster",
       "cardType": "monster",
@@ -727940,19 +728237,19 @@
       "name": "レイズ・ムーンの望 スクイーズ－ジャックポット",
       "cnName": "盈彩月夜之望 斯奎兹-千金大奖",
       "jaName": "レイズ・ムーンの望 スクイーズ－ジャックポット",
-      "enName": "Raise Moon Hope Squeeze - Jackpot",
+      "enName": "Squeeze, the Full Moon of Raise Moon - JACKPOT!",
       "effectText": "レベル７モンスター×２体以上\nこのカード名の②の効果は１ターンに１度しか使用できない。\n①：相手モンスターは他のモンスターを攻撃対象に選択できない。\n②：このカードがX召喚した場合、または手札からモンスターが特殊召喚された場合、このカードのX素材を任意の数だけ取り除いて発動できる。その数だけ相手フィールドのカードを好きな順番でデッキの下に戻す。\n③：ドロー以外の方法で相手によって相手のカードがデッキから離れる度に発動できる。相手のデッキの一番上のカードをこのカードのX素材にする。",
       "released": true,
       "aliases": [
         "レイズ・ムーンの望 スクイーズ－ジャックポット",
-        "Raise Moon Hope Squeeze - Jackpot",
+        "Squeeze, the Full Moon of Raise Moon - JACKPOT!",
         "盈彩月夜之望 斯奎兹-千金大奖",
         "盈彩月夜之望 斯奎兹－千金大奖",
         "加辉瑞月之望 斯奎兹-头彩奖池",
         "升月之望 斯龟兹-头奖"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23550",
-      "updatedAt": "2026-10-26T01:50:10.793Z",
+      "updatedAt": "2026-11-25T04:36:04.283Z",
       "chineseNameSources": [
         {
           "name": "盈彩月夜之望 斯奎兹-千金大奖",
@@ -727992,86 +728289,6 @@
       ]
     },
     {
-      "id": "23547",
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Dragon",
-      "monsterPropertyIds": [
-        "21",
-        "4"
-      ],
-      "monsterProperties": [
-        "Dragon",
-        "Effect"
-      ],
-      "propertyIds": [
-        "21",
-        "4"
-      ],
-      "properties": [
-        "Dragon",
-        "Effect"
-      ],
-      "attack": 2800,
-      "atk": 2800,
-      "defense": 700,
-      "def": 700,
-      "level": 7,
-      "attribute": "fire",
-      "name": "レイズ・ムーンの灯 クルーシェ",
-      "cnName": "盈彩月夜之灯 库露雪",
-      "jaName": "レイズ・ムーンの灯 クルーシェ",
-      "enName": "Raise Moon Lamp Croucier",
-      "effectText": "このカード名の③の効果は１ターンに１度しか使用できない。\n①：このカードをドローした時、このカードを相手に見せて発動できる。このカードを特殊召喚する。\n②：このカードの①の効果で特殊召喚した場合、相手フィールドの魔法・罠カード１枚を対象として発動できる。そのカードをデッキの一番下に戻す。\n③：このカードを手札から捨てて発動できる（この効果を発動するターン、自分はドロー以外の方法でデッキからカードを手札に加える事ができない）。自分は１枚ドローする。",
-      "released": true,
-      "aliases": [
-        "レイズ・ムーンの灯 クルーシェ",
-        "Raise Moon Lamp Croucier",
-        "盈彩月夜之灯 库露雪",
-        "加辉瑞月之灯 库路西",
-        "升月之灯 库露雪"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/23547",
-      "updatedAt": "2026-11-19T02:46:43.730Z",
-      "chineseNameSources": [
-        {
-          "name": "盈彩月夜之灯 库露雪",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23547"
-        },
-        {
-          "name": "加辉瑞月之灯 库路西",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23547"
-        },
-        {
-          "name": "升月之灯 库露雪",
-          "source": "baige",
-          "sourceField": "cnocg_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23547"
-        },
-        {
-          "name": "盈彩月夜之灯 库露雪",
-          "source": "baige",
-          "sourceField": "sc_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23547"
-        },
-        {
-          "name": "盈彩月夜之灯 库露雪",
-          "source": "baige",
-          "sourceField": "md_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23547"
-        }
-      ]
-    },
-    {
       "id": "23548",
       "type": "monster",
       "cardType": "monster",
@@ -728101,18 +728318,18 @@
       "name": "レイズ・ムーンの朔 スクイーズ",
       "cnName": "盈彩月夜之朔 斯奎兹",
       "jaName": "レイズ・ムーンの朔 スクイーズ",
-      "enName": "Raise Moon Starter Squeeze",
+      "enName": "Squeeze, the New Moon of Raise Moon",
       "effectText": "このカードの効果を発動するデュエル中、自分はドロー以外の方法でデッキからカードを手札に加える事ができない。\n①：自分・相手ターンに、このカードを手札から捨て、以下の効果から１つを選択して発動できる（このカード名の以下の効果はそれぞれ１ターンに１度しか選択できない）。\n●このターン中、ドロー以外の方法で相手の手札にカードが加わる度に、自分は１枚ドローする。この効果の発動後、次のターンの終了時まで自分はランク７のXモンスターしかEXデッキから特殊召喚できない。\n●自分は１枚ドローする。",
       "released": true,
       "aliases": [
         "レイズ・ムーンの朔 スクイーズ",
-        "Raise Moon Starter Squeeze",
+        "Squeeze, the New Moon of Raise Moon",
         "盈彩月夜之朔 斯奎兹",
         "加辉瑞月之朔 斯奎兹",
         "升月之朔 斯龟兹"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23548",
-      "updatedAt": "2026-11-19T02:46:43.738Z",
+      "updatedAt": "2026-11-25T04:36:04.276Z",
       "chineseNameSources": [
         {
           "name": "盈彩月夜之朔 斯奎兹",
@@ -728148,86 +728365,6 @@
           "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23548"
-        }
-      ]
-    },
-    {
-      "id": "23545",
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Beast",
-      "monsterPropertyIds": [
-        "3",
-        "4"
-      ],
-      "monsterProperties": [
-        "Beast",
-        "Effect"
-      ],
-      "propertyIds": [
-        "3",
-        "4"
-      ],
-      "properties": [
-        "Beast",
-        "Effect"
-      ],
-      "attack": 700,
-      "atk": 700,
-      "defense": 2100,
-      "def": 2100,
-      "level": 7,
-      "attribute": "earth",
-      "name": "レイズ・ムーンの翼 ラピ",
-      "cnName": "盈彩月夜之翼 菈碧",
-      "jaName": "レイズ・ムーンの翼 ラピ",
-      "enName": "Raise Moon Wings Rapi",
-      "effectText": "①：このカードをドローした時、このカードを相手に見せて発動できる。このカードを特殊召喚する。\n②：このカードが手札から召喚・特殊召喚した場合に発動できる（この効果を発動するターン、自分はドロー以外の方法でデッキからカードを手札に加える事ができない）。自分は１枚ドローする。この効果の発動後、ターン終了時まで自分は光属性XモンスターしかEXデッキから特殊召喚できない。\n③：相手ターンに１度、発動できる。光属性・ランク７のXモンスター１体のX召喚を行う。",
-      "released": true,
-      "aliases": [
-        "レイズ・ムーンの翼 ラピ",
-        "Raise Moon Wings Rapi",
-        "盈彩月夜之翼 菈碧",
-        "加辉瑞月之翼 拉琵",
-        "升月之翼 拉比"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/23545",
-      "updatedAt": "2026-11-19T02:46:43.739Z",
-      "chineseNameSources": [
-        {
-          "name": "盈彩月夜之翼 菈碧",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23545"
-        },
-        {
-          "name": "加辉瑞月之翼 拉琵",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23545"
-        },
-        {
-          "name": "升月之翼 拉比",
-          "source": "baige",
-          "sourceField": "cnocg_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23545"
-        },
-        {
-          "name": "盈彩月夜之翼 菈碧",
-          "source": "baige",
-          "sourceField": "sc_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23545"
-        },
-        {
-          "name": "盈彩月夜之翼 菈碧",
-          "source": "baige",
-          "sourceField": "md_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23545"
         }
       ]
     },
@@ -801672,10 +801809,11 @@
         "Silk Bomb Moth",
         "丝绸炸弹蚕蛾",
         "丝绸炸弹蛾",
-        "吐丝炸弹蛾"
+        "吐丝炸弹蛾",
+        "丝绸爆弹蛾"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/22070",
-      "updatedAt": "2026-10-26T23:05:01.992Z",
+      "updatedAt": "2026-11-25T04:36:14.703Z",
       "chineseNameSources": [
         {
           "name": "丝绸炸弹蛾",
@@ -801709,6 +801847,13 @@
           "name": "吐丝炸弹蛾",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "22070"
+        },
+        {
+          "name": "丝绸爆弹蛾",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "22070"
         }
@@ -810077,18 +810222,18 @@
       "name": "天霆異解△ヨミ",
       "cnName": "天霆异解△幽谜",
       "jaName": "天霆異解△ヨミ",
-      "enName": "Sky Thunder Xenovader△ Yomi",
+      "enName": "Trirealm Rift Havocs",
       "effectText": "このカード名の①の効果は１ターンに１度しか使用できない。\n①：手札のこのカードを相手に見せて発動できる。このカードを裏側で除外し、レベル５モンスター以外の自分の除外状態（裏側）の「異解△」カード１枚を手札に加える。\n②：このカードが召喚・特殊召喚した場合に発動する。自分のデッキの上からカード５枚を裏側で除外する。\n③：１ターンに１度、相手がモンスターの効果を発動した時に発動できる。そのモンスターと同じ属性の自分の除外状態（裏側）の「異解△」モンスター１体をデッキに戻し、その発動を無効にする。",
       "released": true,
       "aliases": [
         "天霆異解△ヨミ",
-        "Sky Thunder Xenovader△ Yomi",
+        "Trirealm Rift Havocs",
         "天霆异解△幽谜",
         "天霆异解△ 黄泉",
         "天霆异解△黄泉"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23558",
-      "updatedAt": "2026-11-19T02:46:49.017Z",
+      "updatedAt": "2026-11-25T04:36:15.900Z",
       "chineseNameSources": [
         {
           "name": "天霆异解△幽谜",
@@ -838018,6 +838163,63 @@
       ]
     },
     {
+      "id": "23551",
+      "type": "spell",
+      "cardType": "spell",
+      "name": "レイズ・ムーンの星々",
+      "cnName": "盈彩月夜之群星",
+      "jaName": "レイズ・ムーンの星々",
+      "enName": "Stars of Raise Moon",
+      "effectText": "①：デッキから「レイズ・ムーンの星々」以外の「レイズ・ムーン」カード１枚を選び、デッキの一番上に置く（このターン、このカード名のこの効果で同名カードを選べない）。このカードの発動後、ターン終了時までお互いにドロー以外の方法でデッキからカードを手札に加える事はできない。\n②：墓地のこのカードを除外し、以下の効果から１つを選択して発動できる。\n●お互いはそれぞれ１枚ドローする。\n●自分フィールドに魔法使い族の「レイズ・ムーン」Xモンスターが存在する場合に発動できる。自分は１枚ドローする。",
+      "released": true,
+      "aliases": [
+        "レイズ・ムーンの星々",
+        "Stars of Raise Moon",
+        "盈彩月夜之群星",
+        "加辉瑞月的群星",
+        "升月的群星"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/23551",
+      "updatedAt": "2026-11-25T04:36:20.019Z",
+      "chineseNameSources": [
+        {
+          "name": "盈彩月夜之群星",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23551"
+        },
+        {
+          "name": "加辉瑞月的群星",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23551"
+        },
+        {
+          "name": "升月的群星",
+          "source": "baige",
+          "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23551"
+        },
+        {
+          "name": "盈彩月夜之群星",
+          "source": "baige",
+          "sourceField": "sc_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23551"
+        },
+        {
+          "name": "盈彩月夜之群星",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23551"
+        }
+      ]
+    },
+    {
       "id": "21408",
       "type": "monster",
       "cardType": "monster",
@@ -864570,7 +864772,7 @@
         "深渊之相剑龙"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/18150",
-      "updatedAt": "2026-10-26T01:50:12.666Z",
+      "updatedAt": "2026-11-25T04:36:23.698Z",
       "chineseNameSources": [
         {
           "name": "深渊之相剑龙",
@@ -864604,6 +864806,13 @@
           "name": "深渊之相剑龙",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "18150"
+        },
+        {
+          "name": "深渊的相剑龙",
+          "source": "baige",
+          "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "18150"
         }
@@ -874655,6 +874864,91 @@
       ]
     },
     {
+      "id": "23535",
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Zombie",
+      "monsterPropertyIds": [
+        "32",
+        "27",
+        "4"
+      ],
+      "monsterProperties": [
+        "Zombie",
+        "Ritual",
+        "Effect"
+      ],
+      "propertyIds": [
+        "32",
+        "27",
+        "4"
+      ],
+      "properties": [
+        "Zombie",
+        "Ritual",
+        "Effect"
+      ],
+      "attack": 3200,
+      "atk": 3200,
+      "defense": 2500,
+      "def": 2500,
+      "level": 8,
+      "attribute": "dark",
+      "name": "タウセネト・アジャト",
+      "cnName": "塔乌塞尼特·阿贾特",
+      "jaName": "タウセネト・アジャト",
+      "enName": "Tau-Zenet Adjat",
+      "effectText": "「セネト」カードにより降臨\nこのカード名の①③の効果はそれぞれ１ターンに１度しか使用できない。\n①：このカードを手札から捨てて発動できる。デッキから「タウセネト・アジャト」以外の「セネト」カード１枚を墓地へ送る。\n②：装備カードを装備しているこのカードは効果では破壊されない。\n③：自分・相手ターンに、自分フィールドの表側表示の通常モンスターカードを３枚まで墓地へ送り、その数だけ相手フィールドのカードを対象として発動できる。そのカードを手札に戻す。その後、自分の墓地から通常モンスター１体を特殊召喚できる。",
+      "released": true,
+      "aliases": [
+        "タウセネト・アジャト",
+        "Tau-Zenet Adjat",
+        "塔乌塞尼特·阿贾特",
+        "塔沃塞尼特·瓦吉特",
+        "冥土塞尼特·阿贾特",
+        "塔乌塞尼特・阿贾特"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/23535",
+      "updatedAt": "2026-11-25T04:36:25.139Z",
+      "chineseNameSources": [
+        {
+          "name": "塔乌塞尼特·阿贾特",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23535"
+        },
+        {
+          "name": "塔沃塞尼特·瓦吉特",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23535"
+        },
+        {
+          "name": "冥土塞尼特·阿贾特",
+          "source": "baige",
+          "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23535"
+        },
+        {
+          "name": "塔乌塞尼特・阿贾特",
+          "source": "baige",
+          "sourceField": "sc_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23535"
+        },
+        {
+          "name": "塔乌塞尼特・阿贾特",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23535"
+        }
+      ]
+    },
+    {
       "id": "6140",
       "type": "trap",
       "cardType": "trap",
@@ -874699,91 +874993,6 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "6140"
-        }
-      ]
-    },
-    {
-      "id": "23535",
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Zombie",
-      "monsterPropertyIds": [
-        "32",
-        "27",
-        "4"
-      ],
-      "monsterProperties": [
-        "Zombie",
-        "Ritual",
-        "Effect"
-      ],
-      "propertyIds": [
-        "32",
-        "27",
-        "4"
-      ],
-      "properties": [
-        "Zombie",
-        "Ritual",
-        "Effect"
-      ],
-      "attack": 3200,
-      "atk": 3200,
-      "defense": 2500,
-      "def": 2500,
-      "level": 8,
-      "attribute": "dark",
-      "name": "タウセネト・アジャト",
-      "cnName": "塔乌塞尼特·阿贾特",
-      "jaName": "タウセネト・アジャト",
-      "enName": "Tauzenet Wadjet",
-      "effectText": "「セネト」カードにより降臨\nこのカード名の①③の効果はそれぞれ１ターンに１度しか使用できない。\n①：このカードを手札から捨てて発動できる。デッキから「タウセネト・アジャト」以外の「セネト」カード１枚を墓地へ送る。\n②：装備カードを装備しているこのカードは効果では破壊されない。\n③：自分・相手ターンに、自分フィールドの表側表示の通常モンスターカードを３枚まで墓地へ送り、その数だけ相手フィールドのカードを対象として発動できる。そのカードを手札に戻す。その後、自分の墓地から通常モンスター１体を特殊召喚できる。",
-      "released": true,
-      "aliases": [
-        "タウセネト・アジャト",
-        "Tauzenet Wadjet",
-        "塔乌塞尼特·阿贾特",
-        "塔沃塞尼特·瓦吉特",
-        "冥土塞尼特·阿贾特",
-        "塔乌塞尼特・阿贾特"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/23535",
-      "updatedAt": "2026-11-19T02:46:53.204Z",
-      "chineseNameSources": [
-        {
-          "name": "塔乌塞尼特·阿贾特",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23535"
-        },
-        {
-          "name": "塔沃塞尼特·瓦吉特",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23535"
-        },
-        {
-          "name": "冥土塞尼特·阿贾特",
-          "source": "baige",
-          "sourceField": "cnocg_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23535"
-        },
-        {
-          "name": "塔乌塞尼特・阿贾特",
-          "source": "baige",
-          "sourceField": "sc_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23535"
-        },
-        {
-          "name": "塔乌塞尼特・阿贾特",
-          "source": "baige",
-          "sourceField": "md_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23535"
         }
       ]
     },
@@ -883228,6 +883437,63 @@
       ]
     },
     {
+      "id": "23553",
+      "type": "trap",
+      "cardType": "trap",
+      "name": "レイズ・ムーンの煌めき",
+      "cnName": "盈彩月夜之辉煌",
+      "jaName": "レイズ・ムーンの煌めき",
+      "enName": "The Bright Lights of Raise Moon",
+      "effectText": "このカード名の、②の効果は１ターンに１度しか使用できず、①②の効果を発動するデュエル中、自分はドロー以外の方法でデッキからカードを手札に加える事ができない。\n①：EXデッキから「レイズ・ムーン」Xモンスター１体を特殊召喚し、このカードをそのX素材にする。その後、自分の墓地の「レイズ・ムーン」カードを全てデッキに戻す事ができる。\n②：墓地のこのカードを除外して発動できる。自分は１枚ドローする。",
+      "released": true,
+      "aliases": [
+        "レイズ・ムーンの煌めき",
+        "The Bright Lights of Raise Moon",
+        "盈彩月夜之辉煌",
+        "加辉瑞月的辉煌",
+        "升月的辉煌"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/23553",
+      "updatedAt": "2026-11-25T04:36:26.321Z",
+      "chineseNameSources": [
+        {
+          "name": "盈彩月夜之辉煌",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23553"
+        },
+        {
+          "name": "加辉瑞月的辉煌",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23553"
+        },
+        {
+          "name": "升月的辉煌",
+          "source": "baige",
+          "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23553"
+        },
+        {
+          "name": "盈彩月夜之辉煌",
+          "source": "baige",
+          "sourceField": "sc_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23553"
+        },
+        {
+          "name": "盈彩月夜之辉煌",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23553"
+        }
+      ]
+    },
+    {
       "id": "17766",
       "type": "monster",
       "cardType": "monster",
@@ -887457,63 +887723,6 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "7235"
-        }
-      ]
-    },
-    {
-      "id": "23553",
-      "type": "trap",
-      "cardType": "trap",
-      "name": "レイズ・ムーンの煌めき",
-      "cnName": "盈彩月夜之辉煌",
-      "jaName": "レイズ・ムーンの煌めき",
-      "enName": "The Glitter of Raise Moon",
-      "effectText": "このカード名の、②の効果は１ターンに１度しか使用できず、①②の効果を発動するデュエル中、自分はドロー以外の方法でデッキからカードを手札に加える事ができない。\n①：EXデッキから「レイズ・ムーン」Xモンスター１体を特殊召喚し、このカードをそのX素材にする。その後、自分の墓地の「レイズ・ムーン」カードを全てデッキに戻す事ができる。\n②：墓地のこのカードを除外して発動できる。自分は１枚ドローする。",
-      "released": true,
-      "aliases": [
-        "レイズ・ムーンの煌めき",
-        "The Glitter of Raise Moon",
-        "盈彩月夜之辉煌",
-        "加辉瑞月的辉煌",
-        "升月的辉煌"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/23553",
-      "updatedAt": "2026-11-19T02:46:54.017Z",
-      "chineseNameSources": [
-        {
-          "name": "盈彩月夜之辉煌",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23553"
-        },
-        {
-          "name": "加辉瑞月的辉煌",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23553"
-        },
-        {
-          "name": "升月的辉煌",
-          "source": "baige",
-          "sourceField": "cnocg_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23553"
-        },
-        {
-          "name": "盈彩月夜之辉煌",
-          "source": "baige",
-          "sourceField": "sc_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23553"
-        },
-        {
-          "name": "盈彩月夜之辉煌",
-          "source": "baige",
-          "sourceField": "md_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23553"
         }
       ]
     },
@@ -894416,63 +894625,6 @@
           "sourceField": "cnocg_n",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "5685"
-        }
-      ]
-    },
-    {
-      "id": "23551",
-      "type": "spell",
-      "cardType": "spell",
-      "name": "レイズ・ムーンの星々",
-      "cnName": "盈彩月夜之群星",
-      "jaName": "レイズ・ムーンの星々",
-      "enName": "The Stars of Raise Moon",
-      "effectText": "①：デッキから「レイズ・ムーンの星々」以外の「レイズ・ムーン」カード１枚を選び、デッキの一番上に置く（このターン、このカード名のこの効果で同名カードを選べない）。このカードの発動後、ターン終了時までお互いにドロー以外の方法でデッキからカードを手札に加える事はできない。\n②：墓地のこのカードを除外し、以下の効果から１つを選択して発動できる。\n●お互いはそれぞれ１枚ドローする。\n●自分フィールドに魔法使い族の「レイズ・ムーン」Xモンスターが存在する場合に発動できる。自分は１枚ドローする。",
-      "released": true,
-      "aliases": [
-        "レイズ・ムーンの星々",
-        "The Stars of Raise Moon",
-        "盈彩月夜之群星",
-        "加辉瑞月的群星",
-        "升月的群星"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/23551",
-      "updatedAt": "2026-11-19T02:46:54.503Z",
-      "chineseNameSources": [
-        {
-          "name": "盈彩月夜之群星",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23551"
-        },
-        {
-          "name": "加辉瑞月的群星",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23551"
-        },
-        {
-          "name": "升月的群星",
-          "source": "baige",
-          "sourceField": "cnocg_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23551"
-        },
-        {
-          "name": "盈彩月夜之群星",
-          "source": "baige",
-          "sourceField": "sc_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23551"
-        },
-        {
-          "name": "盈彩月夜之群星",
-          "source": "baige",
-          "sourceField": "md_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23551"
         }
       ]
     },
@@ -925851,6 +926003,166 @@
       ]
     },
     {
+      "id": "23557",
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Psychic",
+      "monsterPropertyIds": [
+        "33",
+        "4"
+      ],
+      "monsterProperties": [
+        "Psychic",
+        "Effect"
+      ],
+      "propertyIds": [
+        "33",
+        "4"
+      ],
+      "properties": [
+        "Psychic",
+        "Effect"
+      ],
+      "attack": 1700,
+      "atk": 1700,
+      "defense": 400,
+      "def": 400,
+      "level": 4,
+      "attribute": "fire",
+      "name": "緋ノ異解△ナラカ",
+      "cnName": "绯之异解△奈落迦",
+      "jaName": "緋ノ異解△ナラカ",
+      "enName": "Trirealm Rift Blaze",
+      "effectText": "このカード名の①③の効果はそれぞれ１ターンに１度しか使用できない。\n①：相手がモンスターを特殊召喚した場合に発動できる。このカードを手札から特殊召喚する。\n②：このカードが召喚・特殊召喚した場合に発動する。自分のデッキの上からカード４枚を裏側で除外する。\n③：相手メインフェイズに発動できる。自分の除外状態（裏側）のレベル５以上の「異解△」モンスター１体を特殊召喚する。このターン、自分は「異解△」カード以外のカードの効果を発動できない。",
+      "released": true,
+      "aliases": [
+        "緋ノ異解△ナラカ",
+        "Trirealm Rift Blaze",
+        "绯之异解△奈落迦",
+        "绯之异解△ 那落迦",
+        "绯之异解△那落迦"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/23557",
+      "updatedAt": "2026-11-25T04:36:32.484Z",
+      "chineseNameSources": [
+        {
+          "name": "绯之异解△奈落迦",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23557"
+        },
+        {
+          "name": "绯之异解△ 那落迦",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23557"
+        },
+        {
+          "name": "绯之异解△那落迦",
+          "source": "baige",
+          "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23557"
+        },
+        {
+          "name": "绯之异解△奈落迦",
+          "source": "baige",
+          "sourceField": "sc_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23557"
+        },
+        {
+          "name": "绯之异解△奈落迦",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23557"
+        }
+      ]
+    },
+    {
+      "id": "23556",
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Psychic",
+      "monsterPropertyIds": [
+        "33",
+        "4"
+      ],
+      "monsterProperties": [
+        "Psychic",
+        "Effect"
+      ],
+      "propertyIds": [
+        "33",
+        "4"
+      ],
+      "properties": [
+        "Psychic",
+        "Effect"
+      ],
+      "attack": 300,
+      "atk": 300,
+      "defense": 2000,
+      "def": 2000,
+      "level": 3,
+      "attribute": "water",
+      "name": "碧ノ異解△トゥオネラ",
+      "cnName": "碧之异解△屠奥内拉",
+      "jaName": "碧ノ異解△トゥオネラ",
+      "enName": "Trirealm Rift Blizzards",
+      "effectText": "このカード名の①③の効果はそれぞれ１ターンに１度しか使用できない。\n①：このカードが手札に存在し、相手フィールドのモンスターの数が自分フィールドのモンスターより多い場合に発動できる。このカードを特殊召喚する。\n②：このカードが召喚・特殊召喚した場合に発動する。自分のデッキの上からカード３枚を裏側で除外する。\n③：自分メインフェイズに発動できる。自分の除外状態（裏側）のレベル５以上の「異解△」モンスター１体を特殊召喚する。このターン、自分は「異解△」カード以外のカードの効果を発動できない。",
+      "released": true,
+      "aliases": [
+        "碧ノ異解△トゥオネラ",
+        "Trirealm Rift Blizzards",
+        "碧之异解△屠奥内拉",
+        "碧之异解△ 图奥内拉",
+        "碧之异解△图奥内拉"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/23556",
+      "updatedAt": "2026-11-25T04:36:32.502Z",
+      "chineseNameSources": [
+        {
+          "name": "碧之异解△屠奥内拉",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23556"
+        },
+        {
+          "name": "碧之异解△ 图奥内拉",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23556"
+        },
+        {
+          "name": "碧之异解△图奥内拉",
+          "source": "baige",
+          "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23556"
+        },
+        {
+          "name": "碧之异解△屠奥内拉",
+          "source": "baige",
+          "sourceField": "sc_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23556"
+        },
+        {
+          "name": "碧之异解△屠奥内拉",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23556"
+        }
+      ]
+    },
+    {
       "id": "23562",
       "type": "spell",
       "cardType": "spell",
@@ -925861,16 +926173,16 @@
       "name": "異解△福音",
       "cnName": "异解△福音",
       "jaName": "異解△福音",
-      "enName": "Trirealm Rift Gospel",
+      "enName": "Trirealm Rift Delectation",
       "effectText": "自分のデッキの上・墓地から合計５枚のカードを裏側で除外してこのカードを発動できる。\nこのカード名の②の効果は１ターンに１度しか使用できない。\n①：このカードが魔法＆罠ゾーンに存在する限り、自分は通常召喚に加えて１度だけ、自分メインフェイズに「異解△」モンスター１体を召喚できる。\n②：自分メインフェイズに発動できる。自分フィールドの元々のレべルが４以下の「異解△」モンスター１体を裏側で除外し、自分の除外状態（裏側）のレベル５以上の「異解△」モンスター１体を特殊召喚する。",
       "released": true,
       "aliases": [
         "異解△福音",
-        "Trirealm Rift Gospel",
+        "Trirealm Rift Delectation",
         "异解△福音"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23562",
-      "updatedAt": "2026-11-19T02:46:56.524Z",
+      "updatedAt": "2026-11-25T04:36:32.500Z",
       "chineseNameSources": [
         {
           "name": "异解△福音",
@@ -925906,6 +926218,287 @@
           "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "23562"
+        }
+      ]
+    },
+    {
+      "id": "23555",
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Psychic",
+      "monsterPropertyIds": [
+        "33",
+        "4"
+      ],
+      "monsterProperties": [
+        "Psychic",
+        "Effect"
+      ],
+      "propertyIds": [
+        "33",
+        "4"
+      ],
+      "properties": [
+        "Psychic",
+        "Effect"
+      ],
+      "attack": 1200,
+      "atk": 1200,
+      "defense": 200,
+      "def": 200,
+      "level": 2,
+      "attribute": "light",
+      "name": "天ノ異解△シェオル",
+      "cnName": "天之异解△邪奥尔",
+      "jaName": "天ノ異解△シェオル",
+      "enName": "Trirealm Rift Heavens",
+      "effectText": "このカード名の①③の効果はそれぞれ１ターンに１度しか使用できない。\n①：このカードが手札に存在し、自分フィールドに「異解△」モンスターが存在する場合に発動できる。このカードを特殊召喚する。\n②：このカードが召喚・特殊召喚した場合に発動する。自分のデッキの上からカード２枚を裏側で除外する。\n③：自分メインフェイズに発動できる。自分の除外状態（裏側）の「異解△」魔法・罠カードを２枚まで手札に加える（同名カードは１枚まで）。このターン、自分は「異解△」カード以外のカードの効果を発動できない。",
+      "released": true,
+      "aliases": [
+        "天ノ異解△シェオル",
+        "Trirealm Rift Heavens",
+        "天之异解△邪奥尔",
+        "天之异解△ 希屋尔",
+        "天之异解△示俄勒"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/23555",
+      "updatedAt": "2026-11-25T04:36:32.499Z",
+      "chineseNameSources": [
+        {
+          "name": "天之异解△邪奥尔",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23555"
+        },
+        {
+          "name": "天之异解△ 希屋尔",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23555"
+        },
+        {
+          "name": "天之异解△示俄勒",
+          "source": "baige",
+          "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23555"
+        },
+        {
+          "name": "天之异解△邪奥尔",
+          "source": "baige",
+          "sourceField": "sc_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23555"
+        },
+        {
+          "name": "天之异解△邪奥尔",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23555"
+        }
+      ]
+    },
+    {
+      "id": "23554",
+      "type": "monster",
+      "cardType": "monster",
+      "race": "Psychic",
+      "monsterPropertyIds": [
+        "33",
+        "4"
+      ],
+      "monsterProperties": [
+        "Psychic",
+        "Effect"
+      ],
+      "propertyIds": [
+        "33",
+        "4"
+      ],
+      "properties": [
+        "Psychic",
+        "Effect"
+      ],
+      "attack": 100,
+      "atk": 100,
+      "defense": 1000,
+      "def": 1000,
+      "level": 1,
+      "attribute": "dark",
+      "name": "虚ノ異解△ゲヘナ",
+      "cnName": "虚之异解△盖赫纳",
+      "jaName": "虚ノ異解△ゲヘナ",
+      "enName": "Trirealm Rift Hollows",
+      "effectText": "このカード名の①③の効果はそれぞれ１ターンに１度しか使用できない。\n①：このカードが手札に存在し、自分フィールドにモンスターが存在しない場合に発動できる。このカードを特殊召喚する。\n②：このカードが召喚・特殊召喚した場合に発動する。自分のデッキの上からカード１枚を裏側で除外する。\n③：自分メインフェイズに発動できる。「虚ノ異解△ゲヘナ」以外の自分の除外状態（裏側）の「異解△」モンスターを２体まで手札に加える（同名カードは１枚まで）。このターン、自分は「異解△」カード以外のカードの効果を発動できない。",
+      "released": true,
+      "aliases": [
+        "虚ノ異解△ゲヘナ",
+        "Trirealm Rift Hollows",
+        "虚之异解△盖赫纳",
+        "虚之异解△ 矶汉拿",
+        "虚之异解△革赫纳"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/23554",
+      "updatedAt": "2026-11-25T04:36:32.500Z",
+      "chineseNameSources": [
+        {
+          "name": "虚之异解△盖赫纳",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23554"
+        },
+        {
+          "name": "虚之异解△ 矶汉拿",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23554"
+        },
+        {
+          "name": "虚之异解△革赫纳",
+          "source": "baige",
+          "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23554"
+        },
+        {
+          "name": "虚之异解△盖赫纳",
+          "source": "baige",
+          "sourceField": "sc_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23554"
+        },
+        {
+          "name": "虚之异解△盖赫纳",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23554"
+        }
+      ]
+    },
+    {
+      "id": "23564",
+      "type": "trap",
+      "cardType": "trap",
+      "property": "continuous",
+      "properties": [
+        "continuous"
+      ],
+      "name": "異解△審判",
+      "cnName": "异解△审判",
+      "jaName": "異解△審判",
+      "enName": "Trirealm Rift Verdict",
+      "effectText": "①：相手がモンスターを召喚・特殊召喚した場合、その内の１体を対象として発動できる。そのモンスターと同じ属性を持つ自分の除外状態（裏側）の「異解△」モンスター１体を選び、手札に加えるか特殊召喚する（このターン、このカード名のこの効果で同じ属性のモンスターを選べない）。このターン、自分は「異解△」カード以外のカードの効果を発動できない。\n②：自分のデッキの枚数が０枚の場合、自分の「異解△」モンスターが相手モンスターと戦闘を行うダメージ計算時に１度、発動できる。その相手モンスターの攻撃力を０にする。",
+      "released": true,
+      "aliases": [
+        "異解△審判",
+        "Trirealm Rift Verdict",
+        "异解△审判"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/23564",
+      "updatedAt": "2026-11-25T04:36:32.500Z",
+      "chineseNameSources": [
+        {
+          "name": "异解△审判",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23564"
+        },
+        {
+          "name": "异解△审判",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23564"
+        },
+        {
+          "name": "异解△审判",
+          "source": "baige",
+          "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23564"
+        },
+        {
+          "name": "异解△审判",
+          "source": "baige",
+          "sourceField": "sc_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23564"
+        },
+        {
+          "name": "异解△审判",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23564"
+        }
+      ]
+    },
+    {
+      "id": "23563",
+      "type": "spell",
+      "cardType": "spell",
+      "property": "field",
+      "properties": [
+        "field"
+      ],
+      "name": "異解△領域－ヴァルヴォルス",
+      "cnName": "异解△领域-瓦尔涡罗斯",
+      "jaName": "異解△領域－ヴァルヴォルス",
+      "enName": "Trirealm Rift Vilvortex",
+      "effectText": "自分のデッキの上・墓地から合計５枚のカードを裏側で除外してこのカードを発動できる。\nこのカード名の①の効果は１ターンに１度しか使用できない。\n①：自分メインフェイズに発動できる。「異解△領域－ヴァルヴォルス」以外の自分の除外状態（裏側）の「異解△」カード１枚を手札に加える。\n②：自分フィールドにレベル５以上の「異解△」モンスターが存在し、自分のデッキの枚数が０枚である限り、自分ターンの間、相手はカードの効果を発動できない。",
+      "released": true,
+      "aliases": [
+        "異解△領域－ヴァルヴォルス",
+        "Trirealm Rift Vilvortex",
+        "异解△领域-瓦尔涡罗斯",
+        "异解△领域-魔之异界域",
+        "异解△领域-瓦尔沃尔斯",
+        "异解△领域－瓦尔涡罗斯"
+      ],
+      "sourceUrl": "https://db.ygoresources.com/data/card/23563",
+      "updatedAt": "2026-11-25T04:36:32.548Z",
+      "chineseNameSources": [
+        {
+          "name": "异解△领域-瓦尔涡罗斯",
+          "source": "baige",
+          "sourceField": "cn_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23563"
+        },
+        {
+          "name": "异解△领域-魔之异界域",
+          "source": "baige",
+          "sourceField": "nwbbs_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23563"
+        },
+        {
+          "name": "异解△领域-瓦尔沃尔斯",
+          "source": "baige",
+          "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23563"
+        },
+        {
+          "name": "异解△领域－瓦尔涡罗斯",
+          "source": "baige",
+          "sourceField": "sc_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23563"
+        },
+        {
+          "name": "异解△领域－瓦尔涡罗斯",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23563"
         }
       ]
     },
@@ -992086,447 +992679,6 @@
       ]
     },
     {
-      "id": "23564",
-      "type": "trap",
-      "cardType": "trap",
-      "property": "continuous",
-      "properties": [
-        "continuous"
-      ],
-      "name": "異解△審判",
-      "cnName": "异解△审判",
-      "jaName": "異解△審判",
-      "enName": "Xenovader△ Judgment",
-      "effectText": "①：相手がモンスターを召喚・特殊召喚した場合、その内の１体を対象として発動できる。そのモンスターと同じ属性を持つ自分の除外状態（裏側）の「異解△」モンスター１体を選び、手札に加えるか特殊召喚する（このターン、このカード名のこの効果で同じ属性のモンスターを選べない）。このターン、自分は「異解△」カード以外のカードの効果を発動できない。\n②：自分のデッキの枚数が０枚の場合、自分の「異解△」モンスターが相手モンスターと戦闘を行うダメージ計算時に１度、発動できる。その相手モンスターの攻撃力を０にする。",
-      "released": true,
-      "aliases": [
-        "異解△審判",
-        "Xenovader△ Judgment",
-        "异解△审判"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/23564",
-      "updatedAt": "2026-11-19T02:47:00.718Z",
-      "chineseNameSources": [
-        {
-          "name": "异解△审判",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23564"
-        },
-        {
-          "name": "异解△审判",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23564"
-        },
-        {
-          "name": "异解△审判",
-          "source": "baige",
-          "sourceField": "cnocg_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23564"
-        },
-        {
-          "name": "异解△审判",
-          "source": "baige",
-          "sourceField": "sc_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23564"
-        },
-        {
-          "name": "异解△审判",
-          "source": "baige",
-          "sourceField": "md_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23564"
-        }
-      ]
-    },
-    {
-      "id": "23563",
-      "type": "spell",
-      "cardType": "spell",
-      "property": "field",
-      "properties": [
-        "field"
-      ],
-      "name": "異解△領域－ヴァルヴォルス",
-      "cnName": "异解△领域-瓦尔涡罗斯",
-      "jaName": "異解△領域－ヴァルヴォルス",
-      "enName": "Xenovader△ Territory - Valvols",
-      "effectText": "自分のデッキの上・墓地から合計５枚のカードを裏側で除外してこのカードを発動できる。\nこのカード名の①の効果は１ターンに１度しか使用できない。\n①：自分メインフェイズに発動できる。「異解△領域－ヴァルヴォルス」以外の自分の除外状態（裏側）の「異解△」カード１枚を手札に加える。\n②：自分フィールドにレベル５以上の「異解△」モンスターが存在し、自分のデッキの枚数が０枚である限り、自分ターンの間、相手はカードの効果を発動できない。",
-      "released": true,
-      "aliases": [
-        "異解△領域－ヴァルヴォルス",
-        "Xenovader△ Territory - Valvols",
-        "异解△领域-瓦尔涡罗斯",
-        "异解△领域-魔之异界域",
-        "异解△领域-瓦尔沃尔斯",
-        "异解△领域－瓦尔涡罗斯"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/23563",
-      "updatedAt": "2026-11-19T02:47:00.721Z",
-      "chineseNameSources": [
-        {
-          "name": "异解△领域-瓦尔涡罗斯",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23563"
-        },
-        {
-          "name": "异解△领域-魔之异界域",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23563"
-        },
-        {
-          "name": "异解△领域-瓦尔沃尔斯",
-          "source": "baige",
-          "sourceField": "cnocg_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23563"
-        },
-        {
-          "name": "异解△领域－瓦尔涡罗斯",
-          "source": "baige",
-          "sourceField": "sc_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23563"
-        },
-        {
-          "name": "异解△领域－瓦尔涡罗斯",
-          "source": "baige",
-          "sourceField": "md_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23563"
-        }
-      ]
-    },
-    {
-      "id": "23556",
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Psychic",
-      "monsterPropertyIds": [
-        "33",
-        "4"
-      ],
-      "monsterProperties": [
-        "Psychic",
-        "Effect"
-      ],
-      "propertyIds": [
-        "33",
-        "4"
-      ],
-      "properties": [
-        "Psychic",
-        "Effect"
-      ],
-      "attack": 300,
-      "atk": 300,
-      "defense": 2000,
-      "def": 2000,
-      "level": 3,
-      "attribute": "water",
-      "name": "碧ノ異解△トゥオネラ",
-      "cnName": "碧之异解△屠奥内拉",
-      "jaName": "碧ノ異解△トゥオネラ",
-      "enName": "Xenovader△ of Blue Tuonela",
-      "effectText": "このカード名の①③の効果はそれぞれ１ターンに１度しか使用できない。\n①：このカードが手札に存在し、相手フィールドのモンスターの数が自分フィールドのモンスターより多い場合に発動できる。このカードを特殊召喚する。\n②：このカードが召喚・特殊召喚した場合に発動する。自分のデッキの上からカード３枚を裏側で除外する。\n③：自分メインフェイズに発動できる。自分の除外状態（裏側）のレベル５以上の「異解△」モンスター１体を特殊召喚する。このターン、自分は「異解△」カード以外のカードの効果を発動できない。",
-      "released": true,
-      "aliases": [
-        "碧ノ異解△トゥオネラ",
-        "Xenovader△ of Blue Tuonela",
-        "碧之异解△屠奥内拉",
-        "碧之异解△ 图奥内拉",
-        "碧之异解△图奥内拉"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/23556",
-      "updatedAt": "2026-11-19T02:47:00.733Z",
-      "chineseNameSources": [
-        {
-          "name": "碧之异解△屠奥内拉",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23556"
-        },
-        {
-          "name": "碧之异解△ 图奥内拉",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23556"
-        },
-        {
-          "name": "碧之异解△图奥内拉",
-          "source": "baige",
-          "sourceField": "cnocg_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23556"
-        },
-        {
-          "name": "碧之异解△屠奥内拉",
-          "source": "baige",
-          "sourceField": "sc_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23556"
-        },
-        {
-          "name": "碧之异解△屠奥内拉",
-          "source": "baige",
-          "sourceField": "md_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23556"
-        }
-      ]
-    },
-    {
-      "id": "23554",
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Psychic",
-      "monsterPropertyIds": [
-        "33",
-        "4"
-      ],
-      "monsterProperties": [
-        "Psychic",
-        "Effect"
-      ],
-      "propertyIds": [
-        "33",
-        "4"
-      ],
-      "properties": [
-        "Psychic",
-        "Effect"
-      ],
-      "attack": 100,
-      "atk": 100,
-      "defense": 1000,
-      "def": 1000,
-      "level": 1,
-      "attribute": "dark",
-      "name": "虚ノ異解△ゲヘナ",
-      "cnName": "虚之异解△盖赫纳",
-      "jaName": "虚ノ異解△ゲヘナ",
-      "enName": "Xenovader△ of Emptiness Gehenna",
-      "effectText": "このカード名の①③の効果はそれぞれ１ターンに１度しか使用できない。\n①：このカードが手札に存在し、自分フィールドにモンスターが存在しない場合に発動できる。このカードを特殊召喚する。\n②：このカードが召喚・特殊召喚した場合に発動する。自分のデッキの上からカード１枚を裏側で除外する。\n③：自分メインフェイズに発動できる。「虚ノ異解△ゲヘナ」以外の自分の除外状態（裏側）の「異解△」モンスターを２体まで手札に加える（同名カードは１枚まで）。このターン、自分は「異解△」カード以外のカードの効果を発動できない。",
-      "released": true,
-      "aliases": [
-        "虚ノ異解△ゲヘナ",
-        "Xenovader△ of Emptiness Gehenna",
-        "虚之异解△盖赫纳",
-        "虚之异解△ 矶汉拿",
-        "虚之异解△革赫纳"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/23554",
-      "updatedAt": "2026-11-19T02:47:00.735Z",
-      "chineseNameSources": [
-        {
-          "name": "虚之异解△盖赫纳",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23554"
-        },
-        {
-          "name": "虚之异解△ 矶汉拿",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23554"
-        },
-        {
-          "name": "虚之异解△革赫纳",
-          "source": "baige",
-          "sourceField": "cnocg_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23554"
-        },
-        {
-          "name": "虚之异解△盖赫纳",
-          "source": "baige",
-          "sourceField": "sc_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23554"
-        },
-        {
-          "name": "虚之异解△盖赫纳",
-          "source": "baige",
-          "sourceField": "md_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23554"
-        }
-      ]
-    },
-    {
-      "id": "23557",
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Psychic",
-      "monsterPropertyIds": [
-        "33",
-        "4"
-      ],
-      "monsterProperties": [
-        "Psychic",
-        "Effect"
-      ],
-      "propertyIds": [
-        "33",
-        "4"
-      ],
-      "properties": [
-        "Psychic",
-        "Effect"
-      ],
-      "attack": 1700,
-      "atk": 1700,
-      "defense": 400,
-      "def": 400,
-      "level": 4,
-      "attribute": "fire",
-      "name": "緋ノ異解△ナラカ",
-      "cnName": "绯之异解△奈落迦",
-      "jaName": "緋ノ異解△ナラカ",
-      "enName": "Xenovader△ of Scarlet Naraka",
-      "effectText": "このカード名の①③の効果はそれぞれ１ターンに１度しか使用できない。\n①：相手がモンスターを特殊召喚した場合に発動できる。このカードを手札から特殊召喚する。\n②：このカードが召喚・特殊召喚した場合に発動する。自分のデッキの上からカード４枚を裏側で除外する。\n③：相手メインフェイズに発動できる。自分の除外状態（裏側）のレベル５以上の「異解△」モンスター１体を特殊召喚する。このターン、自分は「異解△」カード以外のカードの効果を発動できない。",
-      "released": true,
-      "aliases": [
-        "緋ノ異解△ナラカ",
-        "Xenovader△ of Scarlet Naraka",
-        "绯之异解△奈落迦",
-        "绯之异解△ 那落迦",
-        "绯之异解△那落迦"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/23557",
-      "updatedAt": "2026-11-19T02:47:00.736Z",
-      "chineseNameSources": [
-        {
-          "name": "绯之异解△奈落迦",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23557"
-        },
-        {
-          "name": "绯之异解△ 那落迦",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23557"
-        },
-        {
-          "name": "绯之异解△那落迦",
-          "source": "baige",
-          "sourceField": "cnocg_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23557"
-        },
-        {
-          "name": "绯之异解△奈落迦",
-          "source": "baige",
-          "sourceField": "sc_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23557"
-        },
-        {
-          "name": "绯之异解△奈落迦",
-          "source": "baige",
-          "sourceField": "md_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23557"
-        }
-      ]
-    },
-    {
-      "id": "23555",
-      "type": "monster",
-      "cardType": "monster",
-      "race": "Psychic",
-      "monsterPropertyIds": [
-        "33",
-        "4"
-      ],
-      "monsterProperties": [
-        "Psychic",
-        "Effect"
-      ],
-      "propertyIds": [
-        "33",
-        "4"
-      ],
-      "properties": [
-        "Psychic",
-        "Effect"
-      ],
-      "attack": 1200,
-      "atk": 1200,
-      "defense": 200,
-      "def": 200,
-      "level": 2,
-      "attribute": "light",
-      "name": "天ノ異解△シェオル",
-      "cnName": "天之异解△邪奥尔",
-      "jaName": "天ノ異解△シェオル",
-      "enName": "Xenovader△ of Sky Sheol",
-      "effectText": "このカード名の①③の効果はそれぞれ１ターンに１度しか使用できない。\n①：このカードが手札に存在し、自分フィールドに「異解△」モンスターが存在する場合に発動できる。このカードを特殊召喚する。\n②：このカードが召喚・特殊召喚した場合に発動する。自分のデッキの上からカード２枚を裏側で除外する。\n③：自分メインフェイズに発動できる。自分の除外状態（裏側）の「異解△」魔法・罠カードを２枚まで手札に加える（同名カードは１枚まで）。このターン、自分は「異解△」カード以外のカードの効果を発動できない。",
-      "released": true,
-      "aliases": [
-        "天ノ異解△シェオル",
-        "Xenovader△ of Sky Sheol",
-        "天之异解△邪奥尔",
-        "天之异解△ 希屋尔",
-        "天之异解△示俄勒"
-      ],
-      "sourceUrl": "https://db.ygoresources.com/data/card/23555",
-      "updatedAt": "2026-11-19T02:47:00.748Z",
-      "chineseNameSources": [
-        {
-          "name": "天之异解△邪奥尔",
-          "source": "baige",
-          "sourceField": "cn_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23555"
-        },
-        {
-          "name": "天之异解△ 希屋尔",
-          "source": "baige",
-          "sourceField": "nwbbs_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23555"
-        },
-        {
-          "name": "天之异解△示俄勒",
-          "source": "baige",
-          "sourceField": "cnocg_n",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23555"
-        },
-        {
-          "name": "天之异解△邪奥尔",
-          "source": "baige",
-          "sourceField": "sc_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23555"
-        },
-        {
-          "name": "天之异解△邪奥尔",
-          "source": "baige",
-          "sourceField": "md_name",
-          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
-          "sourceRecordId": "23555"
-        }
-      ]
-    },
-    {
       "id": "11787",
       "type": "monster",
       "cardType": "monster",
@@ -998307,10 +998459,11 @@
       "aliases": [
         "Yomagna the Fire Phantom",
         "幻影火精 约马格努",
-        "炎之幻影 幽魔马格纳"
+        "炎之幻影 幽魔马格纳",
+        "炎幻星 尤玛古阿"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23298",
-      "updatedAt": "2026-11-19T02:47:01.134Z",
+      "updatedAt": "2026-11-25T04:36:42.626Z",
       "chineseNameSources": [
         {
           "name": "幻影火精 约马格努",
@@ -998328,6 +998481,13 @@
         },
         {
           "name": "Yomagna the Fire Phantom",
+          "source": "baige",
+          "sourceField": "md_name",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "23298"
+        },
+        {
+          "name": "炎幻星 尤玛古阿",
           "source": "baige",
           "sourceField": "md_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
@@ -1004522,19 +1004682,19 @@
       "name": "光帰への契り",
       "cnName": "归光之契",
       "jaName": "光帰への契り",
-      "enName": "Zenet Per Akh",
+      "enName": "Zenet Per Aarkh",
       "effectText": "このカード名の①②の効果はそれぞれ１ターンに１度しか使用できない。\n①：デッキから「セネト」モンスター１体を手札に加える。\n②：このカードが墓地に存在する状態で、自分が「セネト」儀式モンスターを手札から捨てた場合、このカードを除外して発動できる。捨てたモンスターの攻撃力以下の攻撃力を持つ、効果モンスター以外の融合モンスター１体をEXデッキから通常モンスターカード扱いで特殊召喚する。このターン、この効果で特殊召喚したモンスターは直接攻撃できず、自分はアンデット族以外のモンスターの効果を発動できない。",
       "released": true,
       "aliases": [
         "光帰への契り",
-        "Zenet Per Akh",
+        "Zenet Per Aarkh",
         "归光之契",
         "对光归之契",
         "塞尼特·光归之契",
         "塞尼特・归光之契"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23538",
-      "updatedAt": "2026-11-19T02:47:01.510Z",
+      "updatedAt": "2026-11-25T04:36:43.481Z",
       "chineseNameSources": [
         {
           "name": "归光之契",
@@ -1004603,17 +1004763,17 @@
       "name": "セネトの啓示者－アメンホテプ",
       "cnName": "塞尼特的启示者-阿蒙霍特普",
       "jaName": "セネトの啓示者－アメンホテプ",
-      "enName": "Zenet Prophet - Amenhotep",
+      "enName": "Zenet Revelator Amenhotep",
       "effectText": "このカード名の①②の効果はそれぞれ１ターンに１度しか使用できない。\n①：このカードが召喚・特殊召喚した場合、このカードを墓地へ送って発動できる。自分の手札・デッキ・フィールド（表側表示）・墓地の通常モンスターカードを２枚まで選び、お互いに確認する。その後、その数だけデッキから「セネト」罠カードを自分フィールドにセットする。\n②：墓地のこのカードを除外し、自分の墓地の通常モンスターを３体まで対象として発動できる。そのモンスターをデッキに戻す。",
       "released": true,
       "aliases": [
         "セネトの啓示者－アメンホテプ",
-        "Zenet Prophet - Amenhotep",
+        "Zenet Revelator Amenhotep",
         "塞尼特的启示者-阿蒙霍特普",
         "塞尼特的启示者－阿蒙霍特普"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23533",
-      "updatedAt": "2026-11-19T02:47:01.522Z",
+      "updatedAt": "2026-11-25T04:36:43.482Z",
       "chineseNameSources": [
         {
           "name": "塞尼特的启示者-阿蒙霍特普",
@@ -1004682,18 +1004842,18 @@
       "name": "セネトの啓示者－ネフェルタリ",
       "cnName": "塞尼特的启示者-奈菲尔塔利",
       "jaName": "セネトの啓示者－ネフェルタリ",
-      "enName": "Zenet Prophet - Nefertari",
+      "enName": "Zenet Revelator Nefertari",
       "effectText": "このカード名の①②の効果はそれぞれ１ターンに１度しか使用できない。\n①：このカードが召喚・特殊召喚した場合、このカードを墓地へ送って発動できる。自分の手札・デッキ・フィールド（表側表示）・墓地の通常モンスターカードを２枚まで選び、お互いに確認する。その後、その数だけデッキから「セネト」魔法カードを自分フィールドにセットする。\n②：相手ターンに、墓地のこのカードを除外して発動できる。自分の墓地から通常モンスター１体を装備魔法カード扱いで自分フィールドの儀式モンスター１体に装備する。",
       "released": true,
       "aliases": [
         "セネトの啓示者－ネフェルタリ",
-        "Zenet Prophet - Nefertari",
+        "Zenet Revelator Nefertari",
         "塞尼特的启示者-奈菲尔塔利",
         "塞尼特的启示者－奈菲尔塔利",
         "塞尼特的启示者-奈费尔塔利"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23532",
-      "updatedAt": "2026-10-26T01:50:14.568Z",
+      "updatedAt": "2026-11-25T04:36:43.490Z",
       "chineseNameSources": [
         {
           "name": "塞尼特的启示者-奈菲尔塔利",
@@ -1004743,19 +1004903,19 @@
       "name": "光器の降雷",
       "cnName": "光器之降雷",
       "jaName": "光器の降雷",
-      "enName": "Zenet Thunderfall",
+      "enName": "Zenet Thunder Fall",
       "effectText": "このカード名の①②の効果はそれぞれ１ターンに１度しか使用できない。\n①：自分フィールドに通常モンスターか「セネト」儀式モンスターが存在し、相手が魔法・罠カードを発動した時に発動できる。その発動を無効にし破壊する。\n②：自分フィールドの通常モンスターカードの攻撃力の合計が３０００より高い場合、墓地のこのカードを除外して発動できる。自分のデッキ・墓地から「光器の降雷」以外の「セネト」魔法・罠カード１枚を自分フィールドにセットする。",
       "released": true,
       "aliases": [
         "光器の降雷",
-        "Zenet Thunderfall",
+        "Zenet Thunder Fall",
         "光器之降雷",
         "光器的降雷",
         "塞尼特·光器之降雷",
         "塞尼特・光器之降雷"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23542",
-      "updatedAt": "2026-11-19T02:47:01.523Z",
+      "updatedAt": "2026-11-25T04:36:43.503Z",
       "chineseNameSources": [
         {
           "name": "光器之降雷",
@@ -1004828,19 +1004988,19 @@
       "name": "セネトメス・ネクベト",
       "cnName": "塞尼特摩斯·尼库贝特",
       "jaName": "セネトメス・ネクベト",
-      "enName": "Zenetmes Nekhbet",
+      "enName": "Zenet-Mose Nekhbet",
       "effectText": "「セネト」カードにより降臨\nこのカード名の①③の効果はそれぞれ１ターンに１度しか使用できない。\n①：このカードを手札から捨てて発動できる。自分の墓地から「セネトメス・ネクベト」以外の「セネト」カード１枚を手札に加える。\n②：装備カードを装備しているこのカードは戦闘では破壊されない。\n③：自分・相手ターンに発動できる。自分の魔法＆罠ゾーンの表側表示の通常モンスターカード１枚を特殊召喚し、自分フィールドのこのカードを攻撃力２５００アップの装備魔法カード扱いでそのモンスターに装備する。",
       "released": true,
       "aliases": [
         "セネトメス・ネクベト",
-        "Zenetmes Nekhbet",
+        "Zenet-Mose Nekhbet",
         "塞尼特摩斯·尼库贝特",
         "塞尼特摩斯·奈赫贝特",
         "塞尼特之嗣·涅赫贝特",
         "塞尼特摩斯・尼库贝特"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23536",
-      "updatedAt": "2026-11-19T02:47:01.533Z",
+      "updatedAt": "2026-11-25T04:36:43.509Z",
       "chineseNameSources": [
         {
           "name": "塞尼特摩斯·尼库贝特",
@@ -1004913,18 +1005073,18 @@
       "name": "セネトナクト・スフィンクス",
       "cnName": "塞尼特纳赫特·斯芬克斯",
       "jaName": "セネトナクト・スフィンクス",
-      "enName": "Zenetnakht Sphinx",
+      "enName": "Zenet-Nakhte Sphinx",
       "effectText": "「セネト」カードにより降臨\nこのカード名の①③の効果はそれぞれ１ターンに１度しか使用できない。\n①：このカードを手札から捨てて発動できる。デッキから「セネトナクト・スフィンクス」以外の「セネト」カード１枚を手札に加える。\n②：装備カードを装備しているこのカードは相手が発動した効果を受けない。\n③：自分・相手ターンに、自分フィールドの表側表示の通常モンスターカード１枚を墓地へ送って発動できる。相手フィールドのモンスターを全て裏側守備表示にする。その後、自分の墓地から通常モンスター１体を特殊召喚できる。",
       "released": true,
       "aliases": [
         "セネトナクト・スフィンクス",
-        "Zenetnakht Sphinx",
+        "Zenet-Nakhte Sphinx",
         "塞尼特纳赫特·斯芬克斯",
         "塞尼特纳赫特・斯芬克斯",
         "塞尼特胜利者·斯芬克斯"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/23534",
-      "updatedAt": "2026-10-26T01:50:14.570Z",
+      "updatedAt": "2026-11-25T04:36:43.525Z",
       "chineseNameSources": [
         {
           "name": "塞尼特纳赫特·斯芬克斯",
