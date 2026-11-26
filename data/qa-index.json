@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-25T04:37:13.804Z",
+  "generatedAt": "2026-11-26T03:47:51.845Z",
   "records": [
     {
       "id": "ygoresources-qa-24345",
@@ -6247,7 +6247,7 @@
       "question": "「<<18917>>」の効果の発動や、発動した効果が無効になったターン、同じ『●』の効果を選択してこれらの効果を再度発動できますか?",
       "rawQuestion": "「<<18917>>」の効果の発動や、発動した効果が無効になったターン、同じ『●』の効果を選択してこれらの効果を再度発動できますか?",
       "rawDetailedQuestion": "自分は「<<18917>>」の1の効果を発動しましたが、その効果の発動や発動した効果が無効になりました。\n\nそのターン、同じ『●』の効果を選択して「<<18917>>」の効果を再度発動できますか?",
-      "answer": "できません。\n\n「<<18917>>」のテキストには『このカード名の以下の効果はそれぞれ1ターンに1度しか選択できない』と記載されていますので、1の効果を再度発動することはできますが、同じ『●』を選択することはできません。\n(効果の発動や効果が無効になった場合でも、『●』の選択は行ったことになります。)\n\n以下の効果についても同様です。\nモンスター効果\n「<<23159>>」1\n「<<17037>>」1\n「<<22991>>」1\n「<<22538>>」2\n「<<22549>>」2\n「<<22555>>」2\n「<<22541>>」2\n「<<22524>>」1\n\n魔法カード\n「<<23503>>」\n「<<23374>>」\n「<<22733>>」\n「<<22155>>」\n「<<22156>>」\n「<<22167>>」1\n「<<21059>>」\n「<<21827>>」\n「<<21828>>」\n「<<21829>>」\n「<<21834>>」\n「<<21831>>」\n「<<16094>>」\n「<<21074>>」\n「<<21075>>」\n「<<21835>>」\n「<<20788>>」\n「<<21374>>」\n「<<20236>>」\n「<<20281>>」\n「<<20934>>」\n「<<18517>>」\n「<<21832>>」2\n「<<21479>>」\n「<<19233>>」\n\n罠カード\n「<<21487>>」\n「<<19210>>」\n「<<18920>>」\n「<<19528>>」\n「<<22582>>」1\n「<<16299>>」",
+      "answer": "できません。\n\n「<<18917>>」のテキストには『このカード名の以下の効果はそれぞれ1ターンに1度しか選択できない』と記載されていますので、1の効果を再度発動することはできますが、同じ『●』を選択することはできません。\n(効果の発動や効果が無効になった場合でも、『●』の選択は行ったことになります。)\n\n以下の効果についても同様です。\nモンスター効果\n「<<23159>>」1\n「<<17037>>」1\n「<<22991>>」2\n「<<22538>>」2\n「<<22549>>」2\n「<<22555>>」2\n「<<22541>>」2\n「<<22524>>」1\n\n魔法カード\n「<<23503>>」\n「<<23374>>」\n「<<22733>>」\n「<<22155>>」\n「<<22156>>」\n「<<22167>>」1\n「<<21059>>」\n「<<21827>>」\n「<<21828>>」\n「<<21829>>」\n「<<21834>>」\n「<<21831>>」\n「<<16094>>」\n「<<21074>>」\n「<<21075>>」\n「<<21835>>」\n「<<20788>>」\n「<<21374>>」\n「<<20236>>」\n「<<20281>>」\n「<<20934>>」\n「<<18517>>」\n「<<21832>>」2\n「<<21479>>」\n「<<19233>>」\n\n罠カード\n「<<21487>>」\n「<<19210>>」\n「<<18920>>」\n「<<19528>>」\n「<<22582>>」1\n「<<16299>>」",
       "cards": [
         "無効",
         "7"
@@ -6300,7 +6300,7 @@
       "keywords": [
         "魔法"
       ],
-      "text": "「<<18917>>」の効果の発動や、発動した効果が無効になったターン、同じ『●』の効果を選択してこれらの効果を再度発動できますか?\n自分は「<<18917>>」の1の効果を発動しましたが、その効果の発動や発動した効果が無効になりました。\n\nそのターン、同じ『●』の効果を選択して「<<18917>>」の効果を再度発動できますか?\n「<<18917>>」の効果の発動や、発動した効果が無効になったターン、同じ『●』の効果を選択してこれらの効果を再度発動できますか?\nできません。\n\n「<<18917>>」のテキストには『このカード名の以下の効果はそれぞれ1ターンに1度しか選択できない』と記載されていますので、1の効果を再度発動することはできますが、同じ『●』を選択することはできません。\n(効果の発動や効果が無効になった場合でも、『●』の選択は行ったことになります。)\n\n以下の効果についても同様です。\nモンスター効果\n「<<23159>>」1\n「<<17037>>」1\n「<<22991>>」1\n「<<22538>>」2\n「<<22549>>」2\n「<<22555>>」2\n「<<22541>>」2\n「<<22524>>」1\n\n魔法カード\n「<<23503>>」\n「<<23374>>」\n「<<22733>>」\n「<<22155>>」\n「<<22156>>」\n「<<22167>>」1\n「<<21059>>」\n「<<21827>>」\n「<<21828>>」\n「<<21829>>」\n「<<21834>>」\n「<<21831>>」\n「<<16094>>」\n「<<21074>>」\n「<<21075>>」\n「<<21835>>」\n「<<20788>>」\n「<<21374>>」\n「<<20236>>」\n「<<20281>>」\n「<<20934>>」\n「<<18517>>」\n「<<21832>>」2\n「<<21479>>」\n「<<19233>>」\n\n罠カード\n「<<21487>>」\n「<<19210>>」\n「<<18920>>」\n「<<19528>>」\n「<<22582>>」1\n「<<16299>>」",
+      "text": "「<<18917>>」の効果の発動や、発動した効果が無効になったターン、同じ『●』の効果を選択してこれらの効果を再度発動できますか?\n自分は「<<18917>>」の1の効果を発動しましたが、その効果の発動や発動した効果が無効になりました。\n\nそのターン、同じ『●』の効果を選択して「<<18917>>」の効果を再度発動できますか?\n「<<18917>>」の効果の発動や、発動した効果が無効になったターン、同じ『●』の効果を選択してこれらの効果を再度発動できますか?\nできません。\n\n「<<18917>>」のテキストには『このカード名の以下の効果はそれぞれ1ターンに1度しか選択できない』と記載されていますので、1の効果を再度発動することはできますが、同じ『●』を選択することはできません。\n(効果の発動や効果が無効になった場合でも、『●』の選択は行ったことになります。)\n\n以下の効果についても同様です。\nモンスター効果\n「<<23159>>」1\n「<<17037>>」1\n「<<22991>>」2\n「<<22538>>」2\n「<<22549>>」2\n「<<22555>>」2\n「<<22541>>」2\n「<<22524>>」1\n\n魔法カード\n「<<23503>>」\n「<<23374>>」\n「<<22733>>」\n「<<22155>>」\n「<<22156>>」\n「<<22167>>」1\n「<<21059>>」\n「<<21827>>」\n「<<21828>>」\n「<<21829>>」\n「<<21834>>」\n「<<21831>>」\n「<<16094>>」\n「<<21074>>」\n「<<21075>>」\n「<<21835>>」\n「<<20788>>」\n「<<21374>>」\n「<<20236>>」\n「<<20281>>」\n「<<20934>>」\n「<<18517>>」\n「<<21832>>」2\n「<<21479>>」\n「<<19233>>」\n\n罠カード\n「<<21487>>」\n「<<19210>>」\n「<<18920>>」\n「<<19528>>」\n「<<22582>>」1\n「<<16299>>」",
       "sourceId": "23977",
       "sourceName": "YGOResources DB",
       "sourceUrl": "https://db.ygoresources.com/data/qa/23977",
@@ -126217,7 +126217,17 @@
       "sourceUrl": "https://db.ygoresources.com/data/qa/293",
       "questionLocale": "ja",
       "detailedQuestionLocale": "ja",
-      "answerLocale": "ja"
+      "answerLocale": "ja",
+      "questionLocales": {
+        "en": {
+          "title": "I activated the effect of <<13684>> by Tributing another DARK monster on my field, and added <<13683>> from my Deck to my hand. In this case, can I then activate the effect of <<13683>> that Special Summons it?",
+          "question": "I activated the effect of <<13684>> by Tributing another DARK monster on my field, and added <<13683>> from my Deck to my hand. In this case, can I then activate the effect of <<13683>> that Special Summons it?"
+        },
+        "ja": {
+          "title": "「<<13684>>」のモンスター効果で「<<13683>>」を手札に加えた場合、その手札に加えた「<<13683>>」を特殊召喚できますか?",
+          "question": "自分は「<<13684>>」の『2:自分フィールドの闇属性モンスター1体をリリースして発動できる。自分はデッキから1枚ドローする。この効果を発動するためにこのカード以外の闇属性モンスターをリリースした場合、ドローする代わりにデッキから守備力2000以上の闇属性モンスター1体を手札に加える事ができる』モンスター効果を発動し、デッキから「<<13683>>」を手札に加えました。\n\nこの場合、手札に加えた「<<13683>>」の『1:このカードが手札・墓地に存在し、自分フィールドの闇属性モンスターがリリースされた場合に発動できる。このカードを特殊召喚する』効果を発動する事はできますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-294",
@@ -135702,7 +135712,17 @@
       "sourceUrl": "https://db.ygoresources.com/data/qa/7021",
       "questionLocale": "ja",
       "detailedQuestionLocale": "ja",
-      "answerLocale": "ja"
+      "answerLocale": "ja",
+      "questionLocales": {
+        "en": {
+          "title": "If my opponent's face-up Attack Position <<12487>> attacks my face-up Defense Position <<13742>>, how much battle damage is inflicted?",
+          "question": "If my opponent's face-up Attack Position <<12487>> attacks my face-up Defense Position <<13742>>, how much battle damage is inflicted?"
+        },
+        "ja": {
+          "title": "表側守備表示の「<<13742>>」が相手の「<<12487>>」に攻撃された場合、それぞれのモンスター効果はどのように適用されますか?",
+          "question": "相手のモンスターゾーンに「<<12487>>」が表側攻撃表示で存在し、自分のモンスターゾーンに「<<13742>>」が表側守備表示で存在しています。\n\nこの状況で、相手の「<<12487>>」が自分の「<<13742>>」を攻撃した場合、それぞれのモンスター効果が適用される事によって、戦闘ダメージはどうなりますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-7023",
@@ -142849,7 +142869,17 @@
       "sourceUrl": "https://db.ygoresources.com/data/qa/7841",
       "questionLocale": "ja",
       "detailedQuestionLocale": "ja",
-      "answerLocale": "ja"
+      "answerLocale": "ja",
+      "questionLocales": {
+        "en": {
+          "title": "Can I activate the effect of <<13680>> targeting a Token in my Monster Zone?",
+          "question": "Can I activate the effect of <<13680>> targeting a Sky Striker Ace Token in my Monster Zone?"
+        },
+        "ja": {
+          "title": "自分フィールドのモンスタートークンを対象として、「<<13680>>」の効果を発動できますか?",
+          "question": "自分のモンスターゾーンに「<<13674>>」の効果によって特殊召喚された「閃刀姫トークン」が存在しています。\n\nその「閃刀姫トークン」を対象として、「<<13680>>」の『1:このカード以外の自分フィールドのカード1枚を対象として発動できる。自分のデッキの上からカードを3枚めくる。その中から「閃刀」カード1枚を選んで手札に加える事ができる。残りのカードはデッキに戻す。「閃刀」カードがめくられた場合、さらに対象のカードを墓地へ送る』効果を発動する事はできますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-7842",
@@ -144141,7 +144171,17 @@
       "sourceUrl": "https://db.ygoresources.com/data/qa/7993",
       "questionLocale": "ja",
       "detailedQuestionLocale": "ja",
-      "answerLocale": "ja"
+      "answerLocale": "ja",
+      "questionLocales": {
+        "en": {
+          "title": "There are 2 copies of <<13679>> in my Spell & Trap Zone, and 2 Ojama Tokens in my Monster Zone. After activating and applying the effect of the first <<13679>>, which prevents my opponent from activating cards or effects in response to my Spell Cards' activations, can I activate that effect of the second copy?",
+          "question": "There are 2 copies of <<13679>> in my Spell & Trap Zone, and 2 Ojama Tokens in my Monster Zone. After activating and applying the effect of the first <<13679>>, which prevents my opponent from activating cards or effects in response to my Spell Cards' activations, can I activate that effect of the second copy?"
+        },
+        "ja": {
+          "title": "「<<13679>>」の効果が既に適用されているターン、2枚目の「<<13679>>」の効果を発動できますか?",
+          "question": "自分の魔法&罠ゾーンに2枚の「<<13679>>」が表側表示で存在し、自分のモンスターゾーンには2体の「おジャマトークン」が守備表示で存在しています。\n\nこの状況で、自分が1枚目の「<<13679>>」の『1:1ターンに1度、このカード以外の自分フィールドのカード1枚を対象として発動できる。このターン、自分の魔法カードの発動に対して相手は魔法・罠・モンスターの効果を発動できない。さらに、対象のカードは墓地へ送られる』効果を適用したターン、自分は2枚目の「<<13679>>」の『1:1ターンに1度、このカード以外の自分フィールドのカード1枚を対象として発動できる。このターン、自分の魔法カードの発動に対して相手は魔法・罠・モンスターの効果を発動できない。さらに、対象のカードは墓地へ送られる』効果も発動する事はできますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-7995",
@@ -145650,7 +145690,17 @@
       "sourceUrl": "https://db.ygoresources.com/data/qa/8130",
       "questionLocale": "ja",
       "detailedQuestionLocale": "ja",
-      "answerLocale": "ja"
+      "answerLocale": "ja",
+      "questionLocales": {
+        "en": {
+          "title": "If <<13616>> is activated, can <<4826>> be chained to it?",
+          "question": "If <<13616>> is activated, can <<4826>> be chained to it?"
+        },
+        "ja": {
+          "title": "「<<13616>>」のカードの発動にチェーンして「<<4826>>」を発動できますか?",
+          "question": "「<<13616>>」の『1:自分の墓地に魔法・罠カードが存在しない場合に発動できる。自分はデッキから2枚ドローする。このカードの発動後、このデュエル中に自分は「<<13616>>」以外の魔法・罠カードの効果を発動できない』効果の発動にチェーンして、「<<4826>>」を発動する事はできますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-8131",
@@ -146290,7 +146340,17 @@
       "sourceUrl": "https://db.ygoresources.com/data/qa/8161",
       "questionLocale": "ja",
       "detailedQuestionLocale": "ja",
-      "answerLocale": "ja"
+      "answerLocale": "ja",
+      "questionLocales": {
+        "en": {
+          "title": "I activate <<13675>> and take control of my opponent's <<13668>>. Afterward, when that <<13668>> battles a monster in my opponent's Monster Zone, it is destroyed by battle and sent to my opponent's Graveyard. At this time, if <<13670>> is in each player's Graveyard, can either player activate its effect that Special Summons it?",
+          "question": "I activate <<13675>> and take control of my opponent's <<13668>>. Afterward, when that <<13668>> battles a monster in my opponent's Monster Zone, it is destroyed by battle and sent to my opponent's Graveyard. At this time, if <<13670>> is in each player's Graveyard, can either player activate its effect that Special Summons it?"
+        },
+        "ja": {
+          "title": "元々の持ち主が相手の「<<13668>>」が戦闘によって自分のモンスターゾーンで破壊された場合、墓地の「<<13670>>」のモンスター効果を発動できますか?",
+          "question": "「<<13675>>」の『1:自分のメインモンスターゾーンにモンスターが存在しない場合、フィールドの効果モンスター1体を対象として発動できる。そのモンスターの効果をターン終了時まで無効にする。その後、自分の墓地に魔法カードが3枚以上存在する場合、そのモンスターのコントロールをエンドフェイズまで得る事ができる』効果によって、元々の持ち主が相手の「<<13668>>」のコントロールを得ています。\n\nその後、その「<<13668>>」と相手のモンスターゾーンに存在するモンスターが戦闘を行い、「<<13668>>」が破壊され相手の墓地へ送られました。\n\nこの時、自分と相手の墓地にそれぞれ「<<13670>>」が存在する場合、『2:このカードが墓地に存在する状態で、自分フィールドの表側表示の「閃刀姫」リンクモンスターが相手の効果でフィールドから離れた場合、または戦闘で破壊された場合に発動できる。このカードを特殊召喚する』モンスター効果を発動する事ができるプレイヤーは自分と相手のどちらになりますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-8163",
@@ -147406,7 +147466,17 @@
       "sourceUrl": "https://db.ygoresources.com/data/qa/8227",
       "questionLocale": "ja",
       "detailedQuestionLocale": "ja",
-      "answerLocale": "ja"
+      "answerLocale": "ja",
+      "questionLocales": {
+        "en": {
+          "title": "Can <<13677>> be activated while <<7858>>'s effect is applying?",
+          "question": "<<7858>> is face-up in my opponent's Spell & Trap Zone, and its effect that prevents players from banishing cards is applying. In this situation, can I activate <<13677>>?"
+        },
+        "ja": {
+          "title": "「<<7858>>」の効果が適用されている場合、「<<13677>>」を発動できますか?",
+          "question": "相手の魔法&罠ゾーンに「<<7858>>」が表側表示で存在し、『1:このカードが魔法&罠ゾーンに存在する限り、お互いにカードを除外できない』効果が適用されている状況です。\n\nこの状況で、自分は「<<13677>>」を発動する事はできますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-8229",
@@ -161703,7 +161773,17 @@
       "sourceUrl": "https://db.ygoresources.com/data/qa/9583",
       "questionLocale": "ja",
       "detailedQuestionLocale": "ja",
-      "answerLocale": "ja"
+      "answerLocale": "ja",
+      "questionLocales": {
+        "en": {
+          "title": "A <<13644>> that was Special Summoned by its own effect is face-up in my Monster Zone. In this situation, when activating the effect of a <<13645>> in my Graveyard, can I send that <<13644>> to the Graveyard as the cost?",
+          "question": "A <<13644>> that was Special Summoned by its own effect is face-up in my Monster Zone. In this situation, when activating the effect of a <<13645>> in my Graveyard, can I send that <<13644>> to the Graveyard as the cost?"
+        },
+        "ja": {
+          "title": "自身のモンスター効果によって特殊召喚されている「<<13644>>」をコストとして、墓地の「<<13645>>」のモンスター効果を発動できますか?",
+          "question": "自身の『2:このカードが墓地に存在する場合、手札及び自分フィールドの表側表示のカードの中から、「ヴァンパイア」カード1枚を墓地へ送って発動できる。このカードを特殊召喚する。この効果で特殊召喚したこのカードは、フィールドから離れた場合に除外される』モンスター効果によって特殊召喚された「<<13644>>」が自分のモンスターゾーンに表側表示で存在しています。\n\nこの状況で、自分は墓地の「<<13645>>」の『2:このカードが墓地に存在する場合、手札及び自分フィールドの表側表示のカードの中から、「ヴァンパイア」カード1枚を墓地へ送って発動できる。このカードを特殊召喚する。この効果で特殊召喚したこのカードは、フィールドから離れた場合に除外される 』モンスター効果を発動する際に、コストとして、その「<<13644>>」を選ぶ事はできますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-9584",
@@ -167610,7 +167690,17 @@
       "sourceUrl": "https://db.ygoresources.com/data/qa/10305",
       "questionLocale": "ja",
       "detailedQuestionLocale": "ja",
-      "answerLocale": "ja"
+      "answerLocale": "ja",
+      "questionLocales": {
+        "en": {
+          "title": "During my Main Phase, I activate the effect of <<13652>>, which allows me to Normal Summon a \"Vampire\" monster this turn in addition to my Normal Summon/Set. Afterward, if that <<13652>> is destroyed by <<4909>> before I perform the additional Normal Summon, can I still use the effect?",
+          "question": "During my Main Phase, I activate the effect of <<13652>>, which allows me to Normal Summon a \"Vampire\" monster this turn in addition to my Normal Summon/Set. Afterward, if that <<13652>> is destroyed by <<4909>> before I perform the additional Normal Summon, can I still use the effect?"
+        },
+        "ja": {
+          "title": "「<<13652>>」の効果発動後、モンスターの召喚を行う前に、「<<13652>>」が破壊された場合、その効果はどうなりますか?",
+          "question": "自分の「<<13652>>」の『1:1ターンに1度、500LPを払って発動できる。このターン自分は通常召喚に加えて1度だけ、自分メインフェイズに「ヴァンパイア」モンスター1体を召喚できる』効果を発動し、まだその効果によってモンスターの召喚を行っていないターンです。\n\nその状況で、モンスターの召喚を行う前に「<<13652>>」が相手の「<<4909>>」の効果によって破壊された場合、自分は「<<13652>>」の効果による召喚は行えなくなりますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-10306",
@@ -169065,7 +169155,17 @@
       "sourceUrl": "https://db.ygoresources.com/data/qa/10437",
       "questionLocale": "ja",
       "detailedQuestionLocale": "ja",
-      "answerLocale": "ja"
+      "answerLocale": "ja",
+      "questionLocales": {
+        "en": {
+          "title": "During my Draw Phase, when I activate the effect of <<13665>> that adds a \"Fur Hire\" monster from my Deck to my hand, my opponent chains <<4909>> and destroys <<13665>>. In this case, can I perform my normal draw?",
+          "question": "During my Draw Phase, when I activate the effect of <<13665>> that adds a \"Fur Hire\" monster from my Deck to my hand, my opponent chains <<4909>> and destroys <<13665>>. In this case, can I perform my normal draw?"
+        },
+        "ja": {
+          "title": "ドローフェイズに発動した「<<13665>>」の効果が、相手の「<<4909>>」の効果によって破壊された事で処理を行えなかった場合、自分は通常のドローを行えますか?",
+          "question": "自分の「<<13665>>」の『1:自分ドローフェイズのドロー前に発動できる。このターン通常のドローを行う代わりに、デッキから「空牙団」モンスター1体を手札に加える』効果の発動にチェーンして、相手が「<<4909>>」を発動した事によって、「<<13665>>」が破壊されました。\n\nこの場合、自分は通常のドローを行う事はできますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-10439",
@@ -169966,7 +170066,17 @@
       "sourceUrl": "https://db.ygoresources.com/data/qa/10595",
       "questionLocale": "ja",
       "detailedQuestionLocale": "ja",
-      "answerLocale": "ja"
+      "answerLocale": "ja",
+      "questionLocales": {
+        "en": {
+          "title": "Can I Special Summon <<12998>> from the Extra Deck with the effect of <<13634>> ?",
+          "question": "Can I Special Summon <<12998>> from the Extra Deck with the effect of <<13634>> ?"
+        },
+        "ja": {
+          "title": "「<<13634>>」の効果によって、エクストラデッキから「<<12998>>」を特殊召喚できますか?",
+          "question": "「<<13634>>」の『1:セットされているこのカードが相手の効果でフィールドから離れ、墓地へ送られた場合または除外された場合に発動できる。デッキ・EXデッキからモンスター1体を特殊召喚する』効果によって特殊召喚するモンスターとして、エクストラデッキの「<<12998>>」を選ぶ事はできますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-10596",
@@ -170571,7 +170681,17 @@
       "sourceUrl": "https://db.ygoresources.com/data/qa/10632",
       "questionLocale": "ja",
       "detailedQuestionLocale": "ja",
-      "answerLocale": "ja"
+      "answerLocale": "ja",
+      "questionLocales": {
+        "en": {
+          "title": "I activate <<4817>> and take control of my opponent's <<13167>>. In this situation, can I activate <<13617>> and target that <<13167>>?",
+          "question": "I activate <<4817>> and take control of my opponent's <<13167>>. In this situation, can I activate <<13617>> and target that <<13167>>?"
+        },
+        "ja": {
+          "title": "自分のモンスターゾーンに存在する、元々の持ち主が相手のリンクモンスターを対象として「<<13617>>」を発動できますか?",
+          "question": "「<<4817>>」の『1:相手フィールドのモンスター1体を対象として発動できる。そのモンスターのコントロールをエンドフェイズまで得る。この効果でコントロールを得たモンスターは攻撃宣言できず、リリースできない』効果によってコントロールを得た、元々の持ち主が相手の「<<13167>>」が自分のメインモンスターゾーンに表側表示で存在しています。\n\nこの状況で、自分はその「<<13167>>」を対象として、「<<13617>>」の『1:自分のフィールド・墓地のリンクモンスター1体を対象として発動できる。そのモンスターを持ち主のEXデッキに戻し、そのリンクマーカーの数だけ、自分はデッキからドローする。その後、ドローした数だけ手札を選んで好きな順番でデッキの下に戻す』効果を発動する事はできますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-10635",
@@ -179203,7 +179323,17 @@
       "sourceUrl": "https://db.ygoresources.com/data/qa/11555",
       "questionLocale": "ja",
       "detailedQuestionLocale": "ja",
-      "answerLocale": "ja"
+      "answerLocale": "ja",
+      "questionLocales": {
+        "en": {
+          "title": "During my Main Phase, my opponent activates the effect of their <<13670>> and Special Summons <<13669>> from the Extra Deck. If I activate <<4817>> and take control of that <<13669>>, can I activate its effect that adds a \"Sky Striker\" Spell Card from my Deck to my hand?",
+          "question": "During my Main Phase, my opponent activates the effect of their <<13670>> and Special Summons <<13669>> from the Extra Deck. If I activate <<4817>> and take control of that <<13669>>, can I activate its effect that adds a \"Sky Striker\" Spell Card from my Deck to my hand?"
+        },
+        "ja": {
+          "title": "そのターンに相手が特殊召喚した「<<13669>>」のコントロールを自分が得た場合、エンドフェイズに「<<13669>>」のモンスター効果はどのように発動と処理が行えますか?",
+          "question": "自分のターンのメインフェイズに、相手が「<<13670>>」の『1:このカードをリリースして発動できる。EXデッキから「閃刀姫」モンスター1体をEXモンスターゾーンに特殊召喚する。この効果は相手ターンでも発動できる』モンスター効果によって、「<<13669>>」を特殊召喚しました。\n\nそのターンに自分が「<<4817>>」の『1:相手フィールドのモンスター1体を対象として発動できる。そのモンスターのコントロールをエンドフェイズまで得る。この効果でコントロールを得たモンスターは攻撃宣言できず、リリースできない』効果を発動し、「<<13669>>」のコントロールを得た場合、『2:このカードを特殊召喚したターンのエンドフェイズに発動できる。デッキから、同名カードが自分の墓地に存在しない「閃刀」魔法カード1枚を手札に加える』モンスター効果の発動と処理はどのように行いますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-11557",
@@ -201108,7 +201238,17 @@
       "sourceUrl": "https://db.ygoresources.com/data/qa/13232",
       "questionLocale": "ja",
       "detailedQuestionLocale": "ja",
-      "answerLocale": "ja"
+      "answerLocale": "ja",
+      "questionLocales": {
+        "en": {
+          "title": "There are 3 or more Spell Cards in my Graveyard, and only 1 card in my Deck. In this situation, can I activate <<13671>>?",
+          "question": "There are 3 or more Spell Cards in my Graveyard, and only 1 card in my Deck. In this situation, can I activate <<13671>>?"
+        },
+        "ja": {
+          "title": "自分のデッキの枚数が1枚のみの場合、「<<13671>>」を発動できますか?",
+          "question": "自分の墓地に魔法カードが3枚以上存在しており、自分のデッキのカードの残り枚数が1枚という状況です。\n\nこの状況で、自分は「<<13671>>」の『1:自分のメインモンスターゾーンにモンスターが存在しない場合に発動できる。デッキから「<<13671>>」以外の「閃刀」カード1枚を手札に加える。その後、自分の墓地に魔法カードが3枚以上存在する場合、自分はデッキから1枚ドローできる』効果を発動する事はできますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-13233",
@@ -210686,7 +210826,17 @@
       "sourceUrl": "https://db.ygoresources.com/data/qa/13812",
       "questionLocale": "ja",
       "detailedQuestionLocale": "ja",
-      "answerLocale": "ja"
+      "answerLocale": "ja",
+      "questionLocales": {
+        "en": {
+          "title": "My opponent activates the effect of <<12708>> and Special Summons 2 additional copies of <<12708>> from their hand/Deck/Graveyard. In this case, can I activate <<13630>>?",
+          "question": "My opponent activates the effect of <<12708>> and Special Summons 2 additional copies of <<12708>> from their hand/Deck/Graveyard. In this case, can I activate <<13630>>?"
+        },
+        "ja": {
+          "title": "相手が「<<12708>>」のモンスター効果によって2体の同名カードの特殊召喚に成功した時、自分は「<<13630>>」を発動できますか?",
+          "question": "相手が「<<12708>>」の『2:手札を2枚まで捨てて発動できる。捨てた数だけ自分の手札・デッキ・墓地から「<<12708>>」を選んで特殊召喚する。この効果の発動後、ターン終了時まで自分は「D-HERO」モンスターしか召喚・特殊召喚できない』モンスター効果を発動し、手札・デッキ・墓地から2体の「<<12708>>」の特殊召喚に成功しました。\n\nこの時、自分は、「<<13630>>」の『1:相手がデッキ・墓地からモンスターを特殊召喚した時に発動できる。そのモンスターを裏側表示で除外する』効果を発動する事はできますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-13813",
@@ -211706,7 +211856,17 @@
       "sourceUrl": "https://db.ygoresources.com/data/qa/13862",
       "questionLocale": "ja",
       "detailedQuestionLocale": "ja",
-      "answerLocale": "ja"
+      "answerLocale": "ja",
+      "questionLocales": {
+        "en": {
+          "title": "A <<13656>> and 2 copies of <<13662>> are face-up in my opponent's Monster Zone. In this situation, when my monster attacks, which of my opponent's monsters can be targeted for the attack?",
+          "question": "A <<13656>> and 2 copies of <<13662>> are face-up in my opponent's Monster Zone. In this situation, when my monster attacks, which of my opponent's monsters can be targeted for the attack?"
+        },
+        "ja": {
+          "title": "「<<13662>>」が2体存在する場合、どのモンスターも攻撃対象に選択できなくなりますか?",
+          "question": "表側守備表示の「<<13656>>」1体と、表側攻撃表示の「<<13662>>」2体が相手のモンスターゾーンに表側表示で存在しています。\n\nこの状況で、自分のモンスターが攻撃を行う場合、どのモンスターを攻撃対象に選択できますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-13863",
@@ -226024,7 +226184,17 @@
       "sourceUrl": "https://db.ygoresources.com/data/qa/14741",
       "questionLocale": "ja",
       "detailedQuestionLocale": "ja",
-      "answerLocale": "ja"
+      "answerLocale": "ja",
+      "questionLocales": {
+        "en": {
+          "title": "When my opponent's monster declares an attack, I activate the effect of <<12441>> in my Graveyard by banishing 7 cards as the cost, including cards on my field and in my hand. At this time, if I have no cards on my field and no other cards in my hand, can I activate the effect of <<13639>>?",
+          "question": "When my opponent's monster declares an attack, I activate the effect of <<12441>> in my Graveyard by banishing 7 cards as the cost, including cards on my field and in my hand. At this time, if I have no cards on my field and no other cards in my hand, can I activate the effect of <<13639>>?"
+        },
+        "ja": {
+          "title": "攻撃宣言時に、墓地の「<<12441>>」のモンスター効果を発動した事で、自分フィールドにカードが存在せず、自分の手札が「<<13639>>」1枚のみとなる場合、チェーンして「<<13639>>」のモンスター効果を発動できますか?",
+          "question": "相手モンスターの攻撃宣言時に、自分は墓地の「<<12441>>」の『2:このカードが墓地に存在する場合、自分の手札・フィールド・墓地からこのカード以外のカード7枚を除外して発動できる。このカードを墓地から特殊召喚する。この効果は相手ターンでも発動できる』モンスター効果を発動し、コストとして、自分の手札と自分フィールドのカードを含む7枚のカードを除外しました。\n\nこれによって、自分のフィールドにカードが存在せず、自分の手札が「<<13639>>」1枚のみの状態となった場合、手札の「<<13639>>」の『1:自分フィールドにカードが存在せず、自分の手札がこのカード1枚のみの場合、相手モンスターの攻撃宣言時にこのカードを手札から捨てて発動できる。相手フィールドのカードを全て破壊する。その後、自分はデッキからモンスター1体を特殊召喚できる』モンスター効果を発動する事はできますか?"
+        }
+      }
     },
     {
       "id": "ygoresources-qa-14742",
@@ -828483,7 +828653,7 @@
       "keywords": [
         "魔法"
       ],
-      "text": "魔女工艺・代理掌门 FAQ 1\n【1の効果について】\nモンスターゾーンで発動できる誘発即時効果です。\n自分か相手が融合モンスター以外の魔法使い族モンスターの効果を発動した時、または自分か相手が魔法カードの効果を発動した時に、直接チェーンして発動できます。(カードの発動を伴わない魔法カードの効果の発動にチェーンして発動することもできます。)\nこの効果を発動する際に『●』を1つ選択し、その『●』の効果として発動できます。ただし、このターンに既に、このカードや自分の他の「<<17037>>」が選択した『●』は選択できません。\nダメージステップには発動できません。\n同一チェーン上で複数回発動することもできます。"
+      "text": "魔女工艺・代理掌门 FAQ 1\n【1の効果について】\nモンスターゾーンで発動できる誘発即時効果です。\n自分か相手が融合モンスター以外の魔法使い族モンスターの効果を発動した時、または自分か相手が魔法カードの効果を発動した時に、直接チェーンして発動できます。(例えば、自分が魔法カードを発動した時、相手にチェーンの確認を行い、相手が効果を発動しなければ、自分がこの効果をチェーンして発動できます。カードの発動を伴わない魔法カードの効果の発動にチェーンして発動することもできます。)\nフィールド魔法、永続魔法、装備魔法カードのカードの発動のみを行った時や、ペンデュラムゾーンにペンデュラムモンスターカードを置いて発動した時でも、この効果を発動できる条件は満たされます。(魔法カードの発動のみを行った時でも、魔法カードの効果を発動したことになります。)\nこの効果を発動する際に『●』を1つ選択し、その『●』の効果として発動できます。ただし、このターンに既に、このカードや自分の他の「<<17037>>」が選択した『●』は選択できません。\nダメージステップには発動できません。\n同一チェーン上で複数回発動することもできます。"
     },
     {
       "id": "card-faq-23168-1",
