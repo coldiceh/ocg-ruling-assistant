@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-27T03:48:47.403Z",
+  "generatedAt": "2026-11-28T03:33:26.084Z",
   "records": [
     {
       "alias": "“K9刑侦案件”",
@@ -6910,6 +6910,13 @@
       "cardId": "8754",
       "cardName": "黒魔力の精製者",
       "language": "en"
+    },
+    {
+      "alias": "黑魔力的精制者",
+      "normalizedAlias": "黑魔力的精制者",
+      "cardId": "8754",
+      "cardName": "黒魔力の精製者",
+      "language": "zh"
     },
     {
       "alias": "アルケミー・サイクル",
@@ -62527,6 +62534,13 @@
       "language": "en"
     },
     {
+      "alias": "地狱凯萨龙",
+      "normalizedAlias": "地狱凯萨龙",
+      "cardId": "7196",
+      "cardName": "ヘルカイザー・ドラゴン",
+      "language": "zh"
+    },
+    {
       "alias": "ヘル・ポリマー",
       "normalizedAlias": "ヘル・ポリマ-",
       "cardId": "6493",
@@ -93525,6 +93539,13 @@
     {
       "alias": "魔法骑士 防御者",
       "normalizedAlias": "魔法骑士 防御者",
+      "cardId": "8134",
+      "cardName": "魔導騎士 ディフェンダー",
+      "language": "zh"
+    },
+    {
+      "alias": "魔导骑士 防卫者",
+      "normalizedAlias": "魔导骑士 防卫者",
       "cardId": "8134",
       "cardName": "魔導騎士 ディフェンダー",
       "language": "zh"
@@ -131790,6 +131811,13 @@
       "cardId": "5323",
       "cardName": "ならず者傭兵部隊",
       "language": "en"
+    },
+    {
+      "alias": "无赖者佣兵部队",
+      "normalizedAlias": "无赖者佣兵部队",
+      "cardId": "5323",
+      "cardName": "ならず者傭兵部隊",
+      "language": "zh"
     },
     {
       "alias": "魔神火炎炮－艾格佐德之炎",
@@ -208666,6 +208694,13 @@
       "language": "zh"
     },
     {
+      "alias": "骑士 戴・古雷法",
+      "normalizedAlias": "骑士 戴・古雷法",
+      "cardId": "10769",
+      "cardName": "騎士デイ・グレファー",
+      "language": "ja"
+    },
+    {
       "alias": "铠龙圣骑",
       "normalizedAlias": "铠龙圣骑",
       "cardId": "15728",
@@ -219311,6 +219346,13 @@
       "cardId": "5217",
       "cardName": "ライトニング・ボルテックス",
       "language": "en"
+    },
+    {
+      "alias": "闪电漩涡",
+      "normalizedAlias": "闪电漩涡",
+      "cardId": "5217",
+      "cardName": "ライトニング・ボルテックス",
+      "language": "zh"
     },
     {
       "alias": "ライトニング・ウォリアー",
@@ -231337,6 +231379,13 @@
       "cardId": "7660",
       "cardName": "ゲイシャドウ",
       "language": "en"
+    },
+    {
+      "alias": "艺者暗影",
+      "normalizedAlias": "艺者暗影",
+      "cardId": "7660",
+      "cardName": "ゲイシャドウ",
+      "language": "zh"
     },
     {
       "alias": "白之少女",
@@ -348419,6 +348468,13 @@
       "cardId": "5345",
       "cardName": "スタンピング・クラッシュ",
       "language": "en"
+    },
+    {
+      "alias": "践踏粉碎",
+      "normalizedAlias": "践踏粉碎",
+      "cardId": "5345",
+      "cardName": "スタンピング・クラッシュ",
+      "language": "zh"
     },
     {
       "alias": "スタンド・イン",

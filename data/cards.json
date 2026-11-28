@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-27T03:48:47.403Z",
+  "generatedAt": "2026-11-28T03:33:26.084Z",
   "records": [
     {
       "id": "21385",
@@ -15945,6 +15945,7 @@
       "level": 4,
       "attribute": "wind",
       "name": "黒魔力の精製者",
+      "cnName": "黑魔力精制者",
       "jaName": "黒魔力の精製者",
       "enName": "Alchemist of Black Spells",
       "effectText": "①：１ターンに１度、自分フィールドの魔力カウンターを置く事ができるカード１枚を対象として発動できる。自分フィールドの攻撃表示のこのカードを表側守備表示にし、対象の自分のカードに魔力カウンターを１つ置く。",
@@ -15952,11 +15953,11 @@
       "aliases": [
         "黒魔力の精製者",
         "Alchemist of Black Spells",
-        "黑魔力精制者"
+        "黑魔力精制者",
+        "黑魔力的精制者"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/8754",
-      "updatedAt": "2026-09-12T21:05:58.868Z",
-      "cnName": "黑魔力精制者",
+      "updatedAt": "2026-11-28T03:32:05.061Z",
       "chineseNameSources": [
         {
           "name": "黑魔力精制者",
@@ -15983,6 +15984,13 @@
           "name": "黑魔力精制者",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "8754"
+        },
+        {
+          "name": "黑魔力的精制者",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "8754"
         }
@@ -73825,6 +73833,7 @@
         "continuous"
       ],
       "name": "勇気の旗印",
+      "cnName": "勇气的旗印",
       "jaName": "勇気の旗印",
       "enName": "Banner of Courage",
       "effectText": "①：このカードが魔法＆罠ゾーンに存在する限り、自分フィールドのモンスターの攻撃力は、自分バトルフェイズの間だけ２００アップする。",
@@ -73836,8 +73845,7 @@
         "勇气的旗帜"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/5538",
-      "updatedAt": "2026-09-12T21:06:04.935Z",
-      "cnName": "勇气的旗印",
+      "updatedAt": "2026-11-28T03:32:08.683Z",
       "chineseNameSources": [
         {
           "name": "勇气的旗印",
@@ -73864,6 +73872,13 @@
           "name": "勇气的旗帜",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "5538"
+        },
+        {
+          "name": "勇气的旗印",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "5538"
         }
@@ -149115,6 +149130,7 @@
       "level": 6,
       "attribute": "fire",
       "name": "ヘルカイザー・ドラゴン",
+      "cnName": "地狱帝王龙",
       "jaName": "ヘルカイザー・ドラゴン",
       "enName": "Chthonian Emperor Dragon",
       "effectText": "①：このカードはフィールド・墓地に存在する限り、通常モンスターとして扱う。\n②：フィールドの通常モンスター扱いのこのカードを通常召喚としてもう１度召喚できる。その場合、以下の効果を持つ効果モンスターとなる。\n●このカードは１度のバトルフェイズ中に２回攻撃できる。",
@@ -149122,11 +149138,11 @@
       "aliases": [
         "ヘルカイザー・ドラゴン",
         "Chthonian Emperor Dragon",
-        "地狱帝王龙"
+        "地狱帝王龙",
+        "地狱凯萨龙"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/7196",
-      "updatedAt": "2026-09-12T21:06:12.766Z",
-      "cnName": "地狱帝王龙",
+      "updatedAt": "2026-11-28T03:32:13.356Z",
       "chineseNameSources": [
         {
           "name": "地狱帝王龙",
@@ -149153,6 +149169,13 @@
           "name": "地狱帝王龙",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "7196"
+        },
+        {
+          "name": "地狱凯萨龙",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "7196"
         }
@@ -158295,6 +158318,7 @@
       "level": 4,
       "attribute": "fire",
       "name": "コマンド・ナイト",
+      "cnName": "指挥骑士",
       "jaName": "コマンド・ナイト",
       "enName": "Command Knight",
       "effectText": "①：このカードがモンスターゾーンに存在する限り、自分フィールドの戦士族モンスターの攻撃力は４００アップする。\n②：自分フィールドに他のモンスターが存在する限り、相手モンスターはこのカードを攻撃対象に選択できない。",
@@ -158306,8 +158330,7 @@
         "指令骑士"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/5017",
-      "updatedAt": "2026-09-12T21:06:13.694Z",
-      "cnName": "指挥骑士",
+      "updatedAt": "2026-11-28T03:32:13.919Z",
       "chineseNameSources": [
         {
           "name": "指挥骑士",
@@ -158334,6 +158357,13 @@
           "name": "指令骑士",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "5017"
+        },
+        {
+          "name": "指令骑士",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "5017"
         }
@@ -223554,6 +223584,7 @@
       "level": 4,
       "attribute": "light",
       "name": "魔導騎士 ディフェンダー",
+      "cnName": "魔导骑士 防御者",
       "jaName": "魔導騎士 ディフェンダー",
       "enName": "Defender, the Magical Knight",
       "effectText": "①：このカードが召喚した場合に発動する。このカードに魔力カウンターを１つ置く（最大１つまで）。\n②：１ターンに１度、フィールドの魔法使い族モンスターが破壊される場合、代わりにその数だけ自分フィールドの魔力カウンターを取り除く事ができる。",
@@ -223562,11 +223593,11 @@
         "魔導騎士 ディフェンダー",
         "Defender, the Magical Knight",
         "魔导骑士 防御者",
-        "魔法骑士 防御者"
+        "魔法骑士 防御者",
+        "魔导骑士 防卫者"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/8134",
-      "updatedAt": "2026-09-12T21:06:20.444Z",
-      "cnName": "魔导骑士 防御者",
+      "updatedAt": "2026-11-28T03:32:17.946Z",
       "chineseNameSources": [
         {
           "name": "魔导骑士 防御者",
@@ -223593,6 +223624,13 @@
           "name": "魔导骑士 防御者",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "8134"
+        },
+        {
+          "name": "魔导骑士 防卫者",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "8134"
         }
@@ -313263,6 +313301,7 @@
       "level": 4,
       "attribute": "earth",
       "name": "ならず者傭兵部隊",
+      "cnName": "流氓佣兵部队",
       "jaName": "ならず者傭兵部隊",
       "enName": "Exiled Force",
       "effectText": "①：このカードをリリースし、フィールドのモンスター１体を対象として発動できる。そのモンスターを破壊する。",
@@ -313270,11 +313309,11 @@
       "aliases": [
         "ならず者傭兵部隊",
         "Exiled Force",
-        "流氓佣兵部队"
+        "流氓佣兵部队",
+        "无赖者佣兵部队"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/5323",
-      "updatedAt": "2026-09-12T21:06:29.681Z",
-      "cnName": "流氓佣兵部队",
+      "updatedAt": "2026-11-28T03:32:23.510Z",
       "chineseNameSources": [
         {
           "name": "流氓佣兵部队",
@@ -313301,6 +313340,13 @@
           "name": "流氓佣兵部队",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "5323"
+        },
+        {
+          "name": "无赖者佣兵部队",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "5323"
         }
@@ -356187,6 +356233,7 @@
       "type": "spell",
       "cardType": "spell",
       "name": "融合徴兵",
+      "cnName": "融合征兵",
       "jaName": "融合徴兵",
       "enName": "Fusion Conscription",
       "effectText": "このカード名のカードは１ターンに１枚しか発動できない。\n①：EXデッキの融合モンスター１体を相手に見せ、そのモンスターにカード名が記された融合素材モンスター１体を自分のデッキ・墓地から手札に加える。このカードの発動後、ターン終了時まで自分はこの効果で手札に加えたモンスター及びその同名モンスターを通常召喚・特殊召喚できず、そのモンスター効果を発動できない。",
@@ -356197,8 +356244,7 @@
         "融合征兵"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11728",
-      "updatedAt": "2026-09-12T21:06:34.211Z",
-      "cnName": "融合征兵",
+      "updatedAt": "2026-11-28T03:32:26.201Z",
       "chineseNameSources": [
         {
           "name": "融合征兵",
@@ -356225,6 +356271,13 @@
           "name": "融合征兵",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "11728"
+        },
+        {
+          "name": "融合征兵",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "11728"
         }
@@ -498056,6 +498109,7 @@
       "level": 4,
       "attribute": "light",
       "name": "騎士デイ・グレファー",
+      "cnName": "骑士 迪·格雷法",
       "jaName": "騎士デイ・グレファー",
       "enName": "Knight Day Grepher",
       "effectText": "①：このカードはフィールド・墓地に存在する限り、通常モンスターとして扱う。\n②：フィールドの通常モンスター扱いのこのカードを通常召喚としてもう１度召喚できる。その場合、以下の効果を持つ効果モンスターとなる。\n●自分エンドフェイズに、自分の墓地の装備魔法カード１枚を対象として発動できる（このカード名のこの効果は１ターンに１度しか使用できない）。そのカードを手札に加える。",
@@ -498064,11 +498118,11 @@
         "騎士デイ・グレファー",
         "Knight Day Grepher",
         "骑士 迪·格雷法",
-        "骑士 迪格雷法"
+        "骑士 迪格雷法",
+        "骑士 戴・古雷法"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/10769",
-      "updatedAt": "2026-09-12T21:06:48.611Z",
-      "cnName": "骑士 迪·格雷法",
+      "updatedAt": "2026-11-28T03:32:34.828Z",
       "chineseNameSources": [
         {
           "name": "骑士 迪·格雷法",
@@ -498095,6 +498149,13 @@
           "name": "骑士 迪·格雷法",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "10769"
+        },
+        {
+          "name": "骑士 戴・古雷法",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "10769"
         }
@@ -523521,6 +523582,7 @@
       "type": "spell",
       "cardType": "spell",
       "name": "ライトニング・ボルテックス",
+      "cnName": "闪电旋涡",
       "jaName": "ライトニング・ボルテックス",
       "enName": "Lightning Vortex",
       "effectText": "①：手札を１枚捨てて発動できる。相手フィールドの表側表示モンスターを全て破壊する。",
@@ -523528,11 +523590,11 @@
       "aliases": [
         "ライトニング・ボルテックス",
         "Lightning Vortex",
-        "闪电旋涡"
+        "闪电旋涡",
+        "闪电漩涡"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/5217",
-      "updatedAt": "2026-09-12T21:06:51.218Z",
-      "cnName": "闪电旋涡",
+      "updatedAt": "2026-11-28T03:32:36.430Z",
       "chineseNameSources": [
         {
           "name": "闪电旋涡",
@@ -523559,6 +523621,13 @@
           "name": "闪电旋涡",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "5217"
+        },
+        {
+          "name": "闪电漩涡",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "5217"
         }
@@ -552536,6 +552605,7 @@
       "level": 4,
       "attribute": "dark",
       "name": "ゲイシャドウ",
+      "cnName": "艺妓之影",
       "jaName": "ゲイシャドウ",
       "enName": "Maiden of Macabre",
       "effectText": "①：このカードが戦闘で相手モンスターを破壊した場合に発動する。このカードに魔力カウンターを１つ置く。\n②：このカードの攻撃力は、このカードの魔力カウンターの数×２００アップする。",
@@ -552543,11 +552613,11 @@
       "aliases": [
         "ゲイシャドウ",
         "Maiden of Macabre",
-        "艺妓之影"
+        "艺妓之影",
+        "艺者暗影"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/7660",
-      "updatedAt": "2026-09-12T21:06:54.292Z",
-      "cnName": "艺妓之影",
+      "updatedAt": "2026-11-28T03:32:38.229Z",
       "chineseNameSources": [
         {
           "name": "艺妓之影",
@@ -552574,6 +552644,13 @@
           "name": "艺妓之影",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "7660"
+        },
+        {
+          "name": "艺者暗影",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "7660"
         }
@@ -691665,6 +691742,7 @@
         "continuous"
       ],
       "name": "漆黒のパワーストーン",
+      "cnName": "漆黑的能量石",
       "jaName": "漆黒のパワーストーン",
       "enName": "Pitch-Black Power Stone",
       "effectText": "このカードを発動する場合、このカードに魔力カウンターを３つ置いて発動する。\n①：自分ターンに１度、魔力カウンターを置く事ができるフィールドの他のカード１枚を対象として発動できる。このカードの魔力カウンターを１つ取り除き、対象のカードに魔力カウンターを１つ置く。\n②：このカードの魔力カウンターが全て取り除かれた場合にこのカードは破壊される。",
@@ -691676,8 +691754,7 @@
         "漆黑的魔力石"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/5668",
-      "updatedAt": "2026-09-12T21:07:08.457Z",
-      "cnName": "漆黑的能量石",
+      "updatedAt": "2026-11-28T03:32:46.685Z",
       "chineseNameSources": [
         {
           "name": "漆黑的能量石",
@@ -691704,6 +691781,13 @@
           "name": "漆黑的能量石",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "5668"
+        },
+        {
+          "name": "漆黑的能量石",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "5668"
         }
@@ -737165,6 +737249,7 @@
       "level": 4,
       "attribute": "fire",
       "name": "朱雀の召喚士",
+      "cnName": "朱雀召唤士",
       "jaName": "朱雀の召喚士",
       "enName": "Red Sparrow Summoner",
       "effectText": "①：このカードが相手モンスターの攻撃で破壊され墓地へ送られた時に発動できる。デッキから攻撃力１５００以下の戦士族モンスター１体を攻撃表示で特殊召喚する。",
@@ -737176,8 +737261,7 @@
         "朱雀的召唤士"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/11143",
-      "updatedAt": "2026-09-12T21:07:13.294Z",
-      "cnName": "朱雀召唤士",
+      "updatedAt": "2026-11-28T03:32:49.554Z",
       "chineseNameSources": [
         {
           "name": "朱雀召唤士",
@@ -737204,6 +737288,13 @@
           "name": "朱雀召唤士",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "11143"
+        },
+        {
+          "name": "朱雀召唤士",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "11143"
         }
@@ -790060,6 +790151,7 @@
         "counter"
       ],
       "name": "盗賊の七つ道具",
+      "cnName": "盗贼的七道具",
       "jaName": "盗賊の七つ道具",
       "enName": "Seven Tools of the Bandit",
       "effectText": "①：罠カードが発動した時、１０００LPを払って発動できる。その発動を無効にし破壊する。",
@@ -790070,8 +790162,7 @@
         "盗贼的七道具"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/4863",
-      "updatedAt": "2026-09-12T21:07:18.761Z",
-      "cnName": "盗贼的七道具",
+      "updatedAt": "2026-11-28T03:32:52.834Z",
       "chineseNameSources": [
         {
           "name": "盗贼的七道具",
@@ -790098,6 +790189,13 @@
           "name": "盗贼的七道具",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "4863"
+        },
+        {
+          "name": "盗贼的七道具",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "4863"
         }
@@ -799402,6 +799500,7 @@
         "quickplay"
       ],
       "name": "収縮",
+      "cnName": "收缩",
       "jaName": "収縮",
       "enName": "Shrink",
       "effectText": "①：フィールドの表側表示モンスター１体を対象として発動できる。そのモンスターの元々の攻撃力はターン終了時まで半分になる。",
@@ -799412,8 +799511,7 @@
         "收缩"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/5355",
-      "updatedAt": "2026-09-12T21:07:19.750Z",
-      "cnName": "收缩",
+      "updatedAt": "2026-11-28T03:32:53.421Z",
       "chineseNameSources": [
         {
           "name": "收缩",
@@ -799440,6 +799538,13 @@
           "name": "收缩",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "5355"
+        },
+        {
+          "name": "收缩",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "5355"
         }
@@ -834082,6 +834187,7 @@
       "type": "spell",
       "cardType": "spell",
       "name": "スタンピング・クラッシュ",
+      "cnName": "粉碎践踏",
       "jaName": "スタンピング・クラッシュ",
       "enName": "Stamping Destruction",
       "effectText": "①：自分フィールドにドラゴン族モンスターが存在する場合、フィールドの魔法・罠カード１枚を対象として発動できる。そのカードを破壊し、そのコントローラーに５００ダメージを与える。",
@@ -834089,11 +834195,11 @@
       "aliases": [
         "スタンピング・クラッシュ",
         "Stamping Destruction",
-        "粉碎践踏"
+        "粉碎践踏",
+        "践踏粉碎"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/5345",
-      "updatedAt": "2026-09-12T21:07:23.504Z",
-      "cnName": "粉碎践踏",
+      "updatedAt": "2026-11-28T03:32:55.667Z",
       "chineseNameSources": [
         {
           "name": "粉碎践踏",
@@ -834120,6 +834226,13 @@
           "name": "粉碎践踏",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "5345"
+        },
+        {
+          "name": "践踏粉碎",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "5345"
         }
@@ -834417,6 +834530,7 @@
         "quickplay"
       ],
       "name": "スター・チェンジャー",
+      "cnName": "星级变化",
       "jaName": "スター・チェンジャー",
       "enName": "Star Changer",
       "effectText": "①：フィールドの表側表示モンスター１体を対象とし、以下の効果から１つを選択して発動できる。\n●対象のモンスターのレベルを１つ上げる。\n●対象のモンスターのレベルを１つ下げる。",
@@ -834429,8 +834543,7 @@
         "星之变化术"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/9676",
-      "updatedAt": "2026-09-12T21:07:23.559Z",
-      "cnName": "星级变化",
+      "updatedAt": "2026-11-28T03:32:55.689Z",
       "chineseNameSources": [
         {
           "name": "星级变化",
@@ -834457,6 +834570,13 @@
           "name": "星之变化术",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "9676"
+        },
+        {
+          "name": "星级变换",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "9676"
         }
@@ -931586,6 +931706,7 @@
       "level": 4,
       "attribute": "dark",
       "name": "ツイン・ブレイカー",
+      "cnName": "双剑破坏者",
       "jaName": "ツイン・ブレイカー",
       "enName": "Twin-Sword Marauder",
       "effectText": "①：このカードが守備表示モンスターを攻撃した場合、その守備力を攻撃力が超えた分だけ相手に戦闘ダメージを与える。\n②：このカードが守備表示モンスターに攻撃を行った場合、もう１度だけ続けて攻撃できる。",
@@ -931596,8 +931717,7 @@
         "双剑破坏者"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/8009",
-      "updatedAt": "2026-09-12T21:07:33.625Z",
-      "cnName": "双剑破坏者",
+      "updatedAt": "2026-11-28T03:33:01.729Z",
       "chineseNameSources": [
         {
           "name": "双剑破坏者",
@@ -931624,6 +931744,13 @@
           "name": "双剑破坏者",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "8009"
+        },
+        {
+          "name": "双剑破坏者",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "8009"
         }
@@ -932882,6 +933009,7 @@
       "level": 8,
       "attribute": "fire",
       "name": "タイラント・ドラゴン",
+      "cnName": "暴君龙",
       "jaName": "タイラント・ドラゴン",
       "enName": "Tyrant Dragon",
       "effectText": "自分か相手がこのカードをカードの効果で墓地から特殊召喚する際に、そのプレイヤーは自身のフィールドのドラゴン族モンスター１体をリリースしなければならない。\n①：相手フィールドにモンスターが存在する限り、このカードは１度のバトルフェイズ中に２回攻撃できる。\n②：このカードがモンスターゾーンに存在する限り、このカードを対象とする罠カードの効果は無効化され破壊される。",
@@ -932892,8 +933020,7 @@
         "暴君龙"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/5333",
-      "updatedAt": "2026-09-12T21:07:33.775Z",
-      "cnName": "暴君龙",
+      "updatedAt": "2026-11-28T03:33:01.808Z",
       "chineseNameSources": [
         {
           "name": "暴君龙",
@@ -932920,6 +933047,13 @@
           "name": "暴君龙",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "5333"
+        },
+        {
+          "name": "暴君龙",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "5333"
         }
@@ -992859,6 +992993,7 @@
         "continuous"
       ],
       "name": "心鎮壷",
+      "cnName": "心镇壶",
       "jaName": "心鎮壷",
       "enName": "Xing Zhen Hu",
       "effectText": "フィールドの裏側表示の魔法・罠カード２枚を対象としてこのカードを発動できる。\n①：このカードが魔法＆罠ゾーンに存在する限り、対象の魔法・罠カードは発動できない。",
@@ -992869,8 +993004,7 @@
         "心镇壶"
       ],
       "sourceUrl": "https://db.ygoresources.com/data/card/6218",
-      "updatedAt": "2026-09-12T21:07:40.021Z",
-      "cnName": "心镇壶",
+      "updatedAt": "2026-11-28T03:33:05.524Z",
       "chineseNameSources": [
         {
           "name": "心镇壶",
@@ -992897,6 +993031,13 @@
           "name": "心镇壶",
           "source": "baige",
           "sourceField": "cnocg_n",
+          "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
+          "sourceRecordId": "6218"
+        },
+        {
+          "name": "心镇壶",
+          "source": "baige",
+          "sourceField": "sc_name",
           "sourceUrl": "https://ygocdb.com/api/v0/cards.zip",
           "sourceRecordId": "6218"
         }
